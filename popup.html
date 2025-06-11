@@ -11,7 +11,7 @@
     </title>
 </head>
 
-<body>
+<body class="p-layout">
     <!-- Puppertino and icons CSS -->
 
     <div class="shortcut-container">
@@ -52,66 +52,67 @@
                                 <div class="p-card-header i18n" data-i18n="card_header_scrolling">
                                     Scroll
                                 </div>
-
-                                <!-- Scroll Up One Message -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_up_one__">
-                                        <span class="i18n" data-i18n="label_scroll_up_one">Scroll Up One Message</span>
+                                <div class="p-card-content">
+                                    <!-- Scroll Up One Message -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_up_one__">
+                                            <span class="i18n" data-i18n="label_scroll_up_one">Scroll Up One Message</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyScrollUpOneMessage" maxlength="1"
+                                                name="shortcutKeyScrollUpOneMessage" type="text" value="a" />
+                                        </div>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyScrollUpOneMessage" maxlength="1"
-                                            name="shortcutKeyScrollUpOneMessage" type="text" value="a" />
+    
+                                    <!-- Scroll Down One Message -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_down_one__">
+                                            <span class="i18n" data-i18n="label_scroll_down_one">Scroll Down One
+                                                Message</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyScrollDownOneMessage" maxlength="1"
+                                                name="shortcutKeyScrollDownOneMessage" type="text" value="f" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Scroll Down One Message -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_down_one__">
-                                        <span class="i18n" data-i18n="label_scroll_down_one">Scroll Down One
-                                            Message</span>
+    
+                                    <!-- Scroll to Top -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_top__">
+                                            <span class="i18n" data-i18n="label_scroll_top">Scroll to Top</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyScrollToTop" maxlength="1"
+                                                name="shortcutKeyScrollToTop" type="text" value="t" />
+                                        </div>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyScrollDownOneMessage" maxlength="1"
-                                            name="shortcutKeyScrollDownOneMessage" type="text" value="f" />
+    
+                                    <!-- Scroll to Bottom -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_bottom__">
+                                            <span class="i18n" data-i18n="label_scroll_bottom">Scroll to Bottom</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyClickNativeScrollToBottom" maxlength="1"
+                                                name="shortcutKeyClickNativeScrollToBottom" type="text" value="z" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Scroll to Top -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_top__">
-                                        <span class="i18n" data-i18n="label_scroll_top">Scroll to Top</span>
+    
+                                    <!-- PgUp/PgDown Takeover -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_pgup_pgdown__">
+                                            <span class="i18n" data-i18n="label_pgup_pgdown">PgUp/PgDown Takeover</span>
+                                        </div>
+                                        <label class="p-form-switch">
+                                            <input checked id="pageUpDownTakeover" name="pageUpDownTakeover"
+                                                type="checkbox" />
+                                            <span></span>
+                                        </label>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyScrollToTop" maxlength="1"
-                                            name="shortcutKeyScrollToTop" type="text" value="t" />
-                                    </div>
-                                </div>
-
-                                <!-- Scroll to Bottom -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_scroll_bottom__">
-                                        <span class="i18n" data-i18n="label_scroll_bottom">Scroll to Bottom</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyClickNativeScrollToBottom" maxlength="1"
-                                            name="shortcutKeyClickNativeScrollToBottom" type="text" value="z" />
-                                    </div>
-                                </div>
-
-                                <!-- PgUp/PgDown Takeover -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_pgup_pgdown__">
-                                        <span class="i18n" data-i18n="label_pgup_pgdown">PgUp/PgDown Takeover</span>
-                                    </div>
-                                    <label class="p-form-switch">
-                                        <input checked id="pageUpDownTakeover" name="pageUpDownTakeover"
-                                            type="checkbox" />
-                                        <span></span>
-                                    </label>
                                 </div>
                             </div>
 
@@ -120,51 +121,52 @@
                                 <div class="p-card-header" data-i18n="label_model_tools">
                                     Model + Tools
                                 </div>
-
-                                <!-- Pick Model -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_pick_model_plain__">
-                                        <span class="i18n" data-i18n="label_pickModel">Pick Model</span>
+                                <div class="p-card-content">
+                                    <!-- Pick Model -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_pick_model_plain__">
+                                            <span class="i18n" data-i18n="label_pickModel">Pick Model</span>
+                                        </div>
+                                        <div class="mp-options" style="gap: 2rem; margin-top: 0;">
+                                            <label class="mp-option tooltip" data-tooltip="__MSG_tt_use_alt_for_picker__"
+                                                style="gap:2px;">
+                                                <span class="mp-option-text i18n" data-i18n="label_use_alt">Alt +
+                                                    1,2,3,4,5</span>
+                                                <input checked id="useAltForModelSwitcherRadio"
+                                                    name="useAltOrControlForModelSelection" type="radio" />
+                                            </label>
+                                            <label class="mp-option tooltip"
+                                                data-tooltip="__MSG_tt_use_control_for_picker__" style="gap:2px;">
+                                                <span class="mp-option-text i18n" data-i18n="label_use_control">Control +
+                                                    1,2,3,4,5</span>
+                                                <input id="useControlForModelSwitcherRadio"
+                                                    name="useAltOrControlForModelSelection" type="radio" />
+                                            </label>
+                                        </div>
                                     </div>
-                                    <div class="mp-options" style="gap: 2rem; margin-top: 0;">
-                                        <label class="mp-option tooltip" data-tooltip="__MSG_tt_use_alt_for_picker__"
-                                            style="gap:2px;">
-                                            <span class="mp-option-text i18n" data-i18n="label_use_alt">Alt +
-                                                1,2,3,4,5</span>
-                                            <input checked id="useAltForModelSwitcherRadio"
-                                                name="useAltOrControlForModelSelection" type="radio" />
-                                        </label>
-                                        <label class="mp-option tooltip"
-                                            data-tooltip="__MSG_tt_use_control_for_picker__" style="gap:2px;">
-                                            <span class="mp-option-text i18n" data-i18n="label_use_control">Control +
-                                                1,2,3,4,5</span>
-                                            <input id="useControlForModelSwitcherRadio"
-                                                name="useAltOrControlForModelSelection" type="radio" />
-                                        </label>
+    
+                                    <!-- Show Model Picker -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_showModelPicker_plain__">
+                                            <span class="i18n" data-i18n="label_showModelPicker">Show Model Picker</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyToggleModelSelector" maxlength="1"
+                                                name="shortcutKeyToggleModelSelector" type="text" value="/" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Show Model Picker -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_showModelPicker_plain__">
-                                        <span class="i18n" data-i18n="label_showModelPicker">Show Model Picker</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyToggleModelSelector" maxlength="1"
-                                            name="shortcutKeyToggleModelSelector" type="text" value="/" />
-                                    </div>
-                                </div>
-
-                                <!-- Search the Web -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_search_web__">
-                                        <span class="i18n" data-i18n="label_search_web">Search the Web</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeySearchWeb" maxlength="1"
-                                            name="shortcutKeySearchWeb" type="text" value="q" />
+    
+                                    <!-- Search the Web -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_search_web__">
+                                            <span class="i18n" data-i18n="label_search_web">Search the Web</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeySearchWeb" maxlength="1"
+                                                name="shortcutKeySearchWeb" type="text" value="q" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -173,78 +175,79 @@
                                 <div class="p-card-header i18n" data-i18n="label_copy">
                                     Copy
                                 </div>
-                            
-                                <!-- Copy Lowest Shortcut -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_copy_lowest__">
-                                        <span class="i18n" data-i18n="label_copy_lowest">Copy</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <input class="key-input" id="shortcutKeyCopyLowest" name="shortcutKeyCopyLowest"  type="text" value="c" />
-                                    </div>
-                                </div>
-                            
-                                <!-- Select Then Copy Shortcut -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_select_copy__">
-                                        <span class="i18n" data-i18n="label_select_copy">Select &amp; Copy</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <input class="key-input" id="selectThenCopy" name="selectThenCopy"  type="text" value="x" />
-                                    </div>
-                                </div>
-                            
-                                <!-- Remove Markdown on Copy Checkbox -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_strip_md__">
-                                        <span class="i18n" data-i18n="label_strip_md">Remove Markdown on Copy</span>
-                                    </div>
-                                    <label class="p-form-switch">
-                                        <input type="checkbox" id="removeMarkdownOnCopyCheckbox"
-                                            name="removeMarkdownOnCopyCheckbox" />
-                                        <span></span>
-                                    </label>
-                                </div>
-                            
-                                <!-- Select + Copy Behavior -->
-                                <div class="shortcut-item select-copy-row">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_select_copy_behavior__">
-                                        <span class="i18n" data-i18n="label_select_copy_behavior">Select + Copy Behavior</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <div class="p-segmented-controls message-selection-group" role="radiogroup"
-                                            aria-labelledby="label_select_copy_behavior">
-                                            <a href="#" class="p-segment active tooltip"
-                                                data-setting="selectMessagesSentByUserOrChatGptCheckbox"
-                                                data-tooltip="__MSG_tt_select_all__">
-                                                <span class="material-symbols-outlined">forum</span>
-                                                <span class="segment-text">User&nbsp;&amp;&nbsp;Assistant</span>
-                                            </a>
-                                            <a href="#" class="p-segment tooltip"
-                                                data-setting="onlySelectAssistantCheckbox"
-                                                data-tooltip="__MSG_tt_select_assistant__">
-                                                <span class="material-symbols-outlined">3p</span>
-                                                <span class="segment-text">Assistant</span>
-                                            </a>
-                                            <a href="#" class="p-segment tooltip"
-                                                data-setting="onlySelectUserCheckbox"
-                                                data-tooltip="__MSG_tt_select_user__">
-                                                <span class="material-symbols-outlined">mode_comment</span>
-                                                <span class="segment-text">User</span>
-                                            </a>
+                                <div class="p-card-content">
+                                    <!-- Copy Lowest Shortcut -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_copy_lowest__">
+                                            <span class="i18n" data-i18n="label_copy_lowest">Copy</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <input class="key-input" id="shortcutKeyCopyLowest" name="shortcutKeyCopyLowest"  type="text" value="c" />
                                         </div>
                                     </div>
-                                </div>
-                            
-                                <!-- Disable Auto‑Copy after Selection -->
-                                <div class="shortcut-item shortcut-toggle-row auto-copy-toggle">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_disable_autocopy__">
-                                        <span class="i18n" data-i18n="label_disable_autocopy">Disable Auto‑Copy</span>
+                                
+                                    <!-- Select Then Copy Shortcut -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_select_copy__">
+                                            <span class="i18n" data-i18n="label_select_copy">Select &amp; Copy</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <input class="key-input" id="selectThenCopy" name="selectThenCopy"  type="text" value="x" />
+                                        </div>
                                     </div>
-                                    <label class="p-form-switch">
-                                        <input type="checkbox" id="disableCopyAfterSelectCheckbox" name="disableCopyAfterSelectCheckbox" />
-                                        <span></span>
-                                    </label>
+                                
+                                    <!-- Remove Markdown on Copy Checkbox -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_strip_md__">
+                                            <span class="i18n" data-i18n="label_strip_md">Remove Markdown on Copy</span>
+                                        </div>
+                                        <label class="p-form-switch">
+                                            <input type="checkbox" id="removeMarkdownOnCopyCheckbox"
+                                                name="removeMarkdownOnCopyCheckbox" />
+                                            <span></span>
+                                        </label>
+                                    </div>
+                                
+                                    <!-- Select + Copy Behavior -->
+                                    <div class="shortcut-item select-copy-row">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_select_copy_behavior__">
+                                            <span class="i18n" data-i18n="label_select_copy_behavior">Select + Copy Behavior</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <div class="p-segmented-controls message-selection-group" role="radiogroup"
+                                                aria-labelledby="label_select_copy_behavior">
+                                                <a href="#" class="p-segment active tooltip"
+                                                    data-setting="selectMessagesSentByUserOrChatGptCheckbox"
+                                                    data-tooltip="__MSG_tt_select_all__">
+                                                    <span class="material-symbols-outlined">forum</span>
+                                                    <span class="segment-text">User&nbsp;&amp;&nbsp;Assistant</span>
+                                                </a>
+                                                <a href="#" class="p-segment tooltip"
+                                                    data-setting="onlySelectAssistantCheckbox"
+                                                    data-tooltip="__MSG_tt_select_assistant__">
+                                                    <span class="material-symbols-outlined">3p</span>
+                                                    <span class="segment-text">Assistant</span>
+                                                </a>
+                                                <a href="#" class="p-segment tooltip"
+                                                    data-setting="onlySelectUserCheckbox"
+                                                    data-tooltip="__MSG_tt_select_user__">
+                                                    <span class="material-symbols-outlined">mode_comment</span>
+                                                    <span class="segment-text">User</span>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                
+                                    <!-- Disable Auto‑Copy after Selection -->
+                                    <div class="shortcut-item shortcut-toggle-row auto-copy-toggle">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_disable_autocopy__">
+                                            <span class="i18n" data-i18n="label_disable_autocopy">Disable Auto‑Copy</span>
+                                        </div>
+                                        <label class="p-form-switch">
+                                            <input type="checkbox" id="disableCopyAfterSelectCheckbox" name="disableCopyAfterSelectCheckbox" />
+                                            <span></span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -255,94 +258,95 @@
                                 <div class="p-card-header" data-i18n="label_chat_navigation">
                                     Chat Navigation
                                 </div>
-
-                                <!-- New Conversation -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_new_chat__">
-                                        <span class="i18n" data-i18n="label_new_chat">New Conversation</span>
+                                <div class="p-card-content">
+                                    <!-- New Conversation -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_new_chat__">
+                                            <span class="i18n" data-i18n="label_new_chat">New Conversation</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyNewConversation" maxlength="1"
+                                                name="shortcutKeyNewConversation" type="text" value="n" />
+                                        </div>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyNewConversation" maxlength="1"
-                                            name="shortcutKeyNewConversation" type="text" value="n" />
+    
+                                    <!-- Toggle Sidebar -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_toggle_sidebar__">
+                                            <span class="i18n" data-i18n="label_toggle_sidebar">Toggle Sidebar</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyToggleSidebar" maxlength="1"
+                                                name="shortcutKeyToggleSidebar" type="text" value="s" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Toggle Sidebar -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_toggle_sidebar__">
-                                        <span class="i18n" data-i18n="label_toggle_sidebar">Toggle Sidebar</span>
+    
+                                    <!-- Remember Sidebar Scroll Position -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip"
+                                            data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
+                                            <span class="i18n force-balance-break"
+                                                data-i18n="label_rememberSidebarScrollPositionCheckbox">
+                                                Remember Sidebar Scroll Position
+                                            </span>
+                                        </div>
+                                        <label class="p-form-switch tooltip"
+                                            data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
+                                            <input checked id="rememberSidebarScrollPositionCheckbox"
+                                                name="rememberSidebarScrollPositionCheckbox" type="checkbox" />
+                                            <span></span>
+                                        </label>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyToggleSidebar" maxlength="1"
-                                            name="shortcutKeyToggleSidebar" type="text" value="s" />
+    
+    
+                                    <!-- Focus Chat Input -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_focus_input__">
+                                            <span class="i18n" data-i18n="label_focus_input">Focus Chat Input</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyActivateInput" maxlength="1"
+                                                name="shortcutKeyActivateInput" type="text" value="w" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Remember Sidebar Scroll Position -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip"
-                                        data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
-                                        <span class="i18n force-balance-break"
-                                            data-i18n="label_rememberSidebarScrollPositionCheckbox">
-                                            Remember Sidebar Scroll Position
-                                        </span>
+    
+                                    <!-- Search Chats -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_search_chats__">
+                                            <span class="i18n" data-i18n="label_search_chats">Search Chats</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeySearchConversationHistory" maxlength="1"
+                                                name="shortcutKeySearchConversationHistory" type="text" value="k" />
+                                        </div>
                                     </div>
-                                    <label class="p-form-switch tooltip"
-                                        data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
-                                        <input checked id="rememberSidebarScrollPositionCheckbox"
-                                            name="rememberSidebarScrollPositionCheckbox" type="checkbox" />
-                                        <span></span>
-                                    </label>
-                                </div>
-
-
-                                <!-- Focus Chat Input -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_focus_input__">
-                                        <span class="i18n" data-i18n="label_focus_input">Focus Chat Input</span>
+    
+                                    <!-- Previous Thread -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_prev_thread__">
+                                            <span class="i18n" data-i18n="label_prev_thread">Go to Previous Thread</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyPreviousThread" maxlength="1"
+                                                name="shortcutKeyPreviousThread" type="text" value="j" />
+                                        </div>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyActivateInput" maxlength="1"
-                                            name="shortcutKeyActivateInput" type="text" value="w" />
-                                    </div>
-                                </div>
-
-                                <!-- Search Chats -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_search_chats__">
-                                        <span class="i18n" data-i18n="label_search_chats">Search Chats</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeySearchConversationHistory" maxlength="1"
-                                            name="shortcutKeySearchConversationHistory" type="text" value="k" />
-                                    </div>
-                                </div>
-
-                                <!-- Previous Thread -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_prev_thread__">
-                                        <span class="i18n" data-i18n="label_prev_thread">Go to Previous Thread</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyPreviousThread" maxlength="1"
-                                            name="shortcutKeyPreviousThread" type="text" value="j" />
-                                    </div>
-                                </div>
-
-                                <!-- Next Thread -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_next_thread__">
-                                        <span class="i18n" data-i18n="label_next_thread">Go to Next Thread</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyNextThread" maxlength="1"
-                                            name="shortcutKeyNextThread" type="text" value=";" />
+    
+                                    <!-- Next Thread -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_next_thread__">
+                                            <span class="i18n" data-i18n="label_next_thread">Go to Next Thread</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyNextThread" maxlength="1"
+                                                name="shortcutKeyNextThread" type="text" value=";" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -351,72 +355,73 @@
                                 <div class="p-card-header" data-i18n="label_message_actions">
                                     Message Actions
                                 </div>
-
-                                <!-- Send and Stop -->
-                                <!-- Send with Control+Enter -->
-                                <div class="shortcut-item shortcut-toggle-row">
-                                    <div class="toggle-label-col">
-                                        <span class="i18n" data-i18n="label_send_control_enter">
-                                            Send with Control+Enter
-                                        </span>
+                                <div class="p-card-content">
+                                    <!-- Send and Stop -->
+                                    <!-- Send with Control+Enter -->
+                                    <div class="shortcut-item shortcut-toggle-row">
+                                        <div class="toggle-label-col">
+                                            <span class="i18n" data-i18n="label_send_control_enter">
+                                                Send with Control+Enter
+                                            </span>
+                                        </div>
+                                        <div class="toggle-switch-col">
+                                            <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_send__">
+                                                <input checked id="enableSendWithControlEnterCheckbox"
+                                                    name="enableSendWithControlEnterCheckbox" type="checkbox" />
+                                                <span></span>
+                                            </label>
+                                        </div>
                                     </div>
-                                    <div class="toggle-switch-col">
-                                        <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_send__">
-                                            <input checked id="enableSendWithControlEnterCheckbox"
-                                                name="enableSendWithControlEnterCheckbox" type="checkbox" />
-                                            <span></span>
-                                        </label>
+                                    <div class="shortcut-item shortcut-toggle-row">
+                                        <div class="toggle-label-col">
+                                            <span class="i18n" data-i18n="label_stop_control_backspace">
+                                                Stop with Control+Backspace
+                                            </span>
+                                        </div>
+                                        <div class="toggle-switch-col">
+                                            <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_stop__">
+                                                <input checked id="enableStopWithControlBackspaceCheckbox"
+                                                    name="enableStopWithControlBackspaceCheckbox" type="checkbox" />
+                                                <span></span>
+                                            </label>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="shortcut-item shortcut-toggle-row">
-                                    <div class="toggle-label-col">
-                                        <span class="i18n" data-i18n="label_stop_control_backspace">
-                                            Stop with Control+Backspace
-                                        </span>
+    
+    
+                                    <!-- Regenerate Response -->
+                                    <div class="shortcut-item" style="position: relative;">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_regenerate__">
+                                            <span class="i18n" data-i18n="label_regenerate">Regenerate Response</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyRegenerate" maxlength="1"
+                                                name="shortcutKeyRegenerate" type="text" value="r" />
+                                        </div>
                                     </div>
-                                    <div class="toggle-switch-col">
-                                        <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_stop__">
-                                            <input checked id="enableStopWithControlBackspaceCheckbox"
-                                                name="enableStopWithControlBackspaceCheckbox" type="checkbox" />
-                                            <span></span>
-                                        </label>
+    
+                                    <!-- Edit Message -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_edit_msg__">
+                                            <span class="i18n" data-i18n="label_edit_msg">Edit Message</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyEdit" maxlength="1"
+                                                name="shortcutKeyEdit" type="text" value="e" />
+                                        </div>
                                     </div>
-                                </div>
-
-
-                                <!-- Regenerate Response -->
-                                <div class="shortcut-item" style="position: relative;">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_regenerate__">
-                                        <span class="i18n" data-i18n="label_regenerate">Regenerate Response</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyRegenerate" maxlength="1"
-                                            name="shortcutKeyRegenerate" type="text" value="r" />
-                                    </div>
-                                </div>
-
-                                <!-- Edit Message -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_edit_msg__">
-                                        <span class="i18n" data-i18n="label_edit_msg">Edit Message</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyEdit" maxlength="1"
-                                            name="shortcutKeyEdit" type="text" value="e" />
-                                    </div>
-                                </div>
-
-                                <!-- Send Edited Message -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_send_edit__">
-                                        <span class="i18n" data-i18n="label_send_edit">Send Edited Message</span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeySendEdit" maxlength="1"
-                                            name="shortcutKeySendEdit" type="text" value="d" />
+    
+                                    <!-- Send Edited Message -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_send_edit__">
+                                            <span class="i18n" data-i18n="label_send_edit">Send Edited Message</span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeySendEdit" maxlength="1"
+                                                name="shortcutKeySendEdit" type="text" value="d" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -424,59 +429,60 @@
                                 <div class="p-card-header" data-i18n="label_join_all">
                                     Join &amp; Copy
                                 </div>
-
-                                <!-- Join & Copy All Responses -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_all__">
-                                        <span class="i18n" data-i18n="label_join_all">
-                                            Join All Responses
-                                        </span>
+                                <div class="p-card-content">
+                                    <!-- Join & Copy All Responses -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_all__">
+                                            <span class="i18n" data-i18n="label_join_all">
+                                                Join All Responses
+                                            </span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyCopyAllResponses" maxlength="1"
+                                                name="shortcutKeyCopyAllResponses" type="text" value="[" />
+                                        </div>
                                     </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyCopyAllResponses" maxlength="1"
-                                            name="shortcutKeyCopyAllResponses" type="text" value="[" />
+    
+                                    <!-- Join & Copy Separator -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_separator__">
+                                            <span class="i18n" data-i18n="label_join_separator">
+                                                Join &amp; Copy Separator
+                                            </span>
+                                        </div>
+                                        <div class="icon-input-container">
+                                            <input class="material-input" id="copyAll-userSeparator"
+                                                name="copyAll-userSeparator" type="text" value="\n  \n --- --- --- \n \n" />
+                                        </div>
                                     </div>
-                                </div>
-
-                                <!-- Join & Copy Separator -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_separator__">
-                                        <span class="i18n" data-i18n="label_join_separator">
-                                            Join &amp; Copy Separator
-                                        </span>
+    
+                                    <!-- Join & Copy All Code Boxes -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_code__">
+                                            <span class="i18n" data-i18n="label_join_code">
+                                                Join &amp; Copy All Code Boxes
+                                            </span>
+                                        </div>
+                                        <div class="shortcut-keys">
+                                            <span class="key-text platform-alt-label">Alt +</span>
+                                            <input class="key-input" id="shortcutKeyCopyAllCodeBlocks" maxlength="1"
+                                                name="shortcutKeyCopyAllCodeBlocks" type="text" value="]" />
+                                        </div>
                                     </div>
-                                    <div class="icon-input-container">
-                                        <input class="material-input" id="copyAll-userSeparator"
-                                            name="copyAll-userSeparator" type="text" value="\n  \n --- --- --- \n \n" />
-                                    </div>
-                                </div>
-
-                                <!-- Join & Copy All Code Boxes -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_join_code__">
-                                        <span class="i18n" data-i18n="label_join_code">
-                                            Join &amp; Copy All Code Boxes
-                                        </span>
-                                    </div>
-                                    <div class="shortcut-keys">
-                                        <span class="key-text platform-alt-label">Alt +</span>
-                                        <input class="key-input" id="shortcutKeyCopyAllCodeBlocks" maxlength="1"
-                                            name="shortcutKeyCopyAllCodeBlocks" type="text" value="]" />
-                                    </div>
-                                </div>
-
-                                <!-- Code Box Separator -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_code_separator__">
-                                        <span class="i18n" data-i18n="label_code_separator">
-                                            Code Box Separator
-                                        </span>
-                                    </div>
-                                    <div class="icon-input-container">
-                                        <input class="material-input" id="copyCode-userSeparator"
-                                            name="copyCode-userSeparator" type="text"
-                                            value="\n  \n --- --- --- \n \n" />
+    
+                                    <!-- Code Box Separator -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label tooltip" data-tooltip="__MSG_tt_code_separator__">
+                                            <span class="i18n" data-i18n="label_code_separator">
+                                                Code Box Separator
+                                            </span>
+                                        </div>
+                                        <div class="icon-input-container">
+                                            <input class="material-input" id="copyCode-userSeparator"
+                                                name="copyCode-userSeparator" type="text"
+                                                value="\n  \n --- --- --- \n \n" />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -484,17 +490,18 @@
                                 <div class="p-card-header" data-i18n="label_interface_options">
                                     Interface Options
                                 </div>
-
-                                <!-- Hide Arrow Buttons -->
-                                <div class="shortcut-item">
-                                    <div class="shortcut-label">
-                                        <span class="i18n" data-i18n="label_hide_arrows">Hide Arrow Buttons</span>
-                                    </div>
-                                    <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_hide_arrows__">
-                                        <input id="hideArrowButtonsCheckbox" name="hideArrowButtonsCheckbox"
-                                            type="checkbox" />
-                                        <span></span>
-                                    </label>
+                                <div class="p-card-content">
+                                    <!-- Hide Arrow Buttons -->
+                                    <div class="shortcut-item">
+                                        <div class="shortcut-label">
+                                            <span class="i18n" data-i18n="label_hide_arrows">Hide Arrow Buttons</span>
+                                        </div>
+                                        <label class="p-form-switch tooltip" data-tooltip="__MSG_tt_hide_arrows__">
+                                            <input id="hideArrowButtonsCheckbox" name="hideArrowButtonsCheckbox"
+                                                type="checkbox" />
+                                            <span></span>
+                                        </label>
+                                </div>
                                 </div>
                             </div>
                         </div>
