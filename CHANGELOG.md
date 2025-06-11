@@ -2,6 +2,7 @@
 
 #### [6.15.2025]
 - Removed custom switch width to restore Puppertino default size.
+- Fixed top bar option label targeting correct checkbox.
 
 #### [6.14.2025]
 - Simplified card CSS to inherit Puppertino defaults.
