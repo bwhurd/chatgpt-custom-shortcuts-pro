@@ -2,15 +2,15 @@
 
 The full changelog and feature history is maintained here.
 
-#### [6.12.2025]
-- Applied Puppertino layout class to popup body and wrapped card contents for structured markup.
-
 #### [6.11.2025]
 - Adjusted shortcut card margins for improved spacing.
 - Switched tabs and copy-behavior controls to Puppertino scripts.
 - Switched settings cards to Puppertino `.p-card` markup and styling.
 - Adopted Puppertino form classes for switches and segmented controls.
 - Simplified popup CSS to use built-in Puppertino fonts and spacing.
+- Applied Puppertino layout class to popup body and wrapped card contents for structured markup.
+- Align popup font sizes with Puppertino layout tokens.
+- Restore default card spacing.
 
 #### [6.5.2025]
 - Permanently removed "Copy All" buttons; features remain accessible via keyboard shortcuts.

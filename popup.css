@@ -37,7 +37,7 @@ body {
     justify-content: center;
     align-items: flex-start;
     background: var(--bg-primary);
-    font-size: 14px;
+    font-size: 1.15rem;
 }
 
 
@@ -132,7 +132,7 @@ body {
 
 /* Title */
 h1 {
-    font-size: 1.25rem;
+    font-size: 2.25rem;
     font-weight: 500;
     text-align: center;
     margin-bottom: 1rem;
@@ -530,10 +530,6 @@ body {
     max-width: 100vw;
     margin: 0 auto 1.3rem auto;
     /* Centered and spaced from cards below */
-    background: none;
-    border: none;
-    box-shadow: none;
-    padding: 0;
 }
 
 .p-tabs {
@@ -543,36 +539,15 @@ body {
     width: 100%;
     /* Stretch inside .p-tabs-container, NOT page */
     gap: 0;
-    background: none;
-    border: none;
-    margin-bottom: 0;
 }
 
 .p-tab {
-    border-radius: 10px;
-    /* Remove/minimize borders for a modern look */
-    border: none;
     margin: 0 1.5px;
-    padding: 0.5em 1.8em;
-    /* Soft capsule, not huge */
-    min-width: 0;
     font-size: 1.01rem;
 }
 
-.p-tabs> :first-child {
-    border-radius: 12px 0 0 12px;
-}
-
-.p-tabs> :last-child {
-    border-radius: 0 12px 12px 0;
-}
 
 
-.p-tab.p-is-active {
-    color: #1e1e1e;
-    border-bottom: 2.5px solid #007aff;
-    background: #f8f7f5;
-}
 
 
 
@@ -583,8 +558,8 @@ body {
 
 
 .p-card-header {
-    font-size: 1.01rem;
-    font-weight: 600;
+    font-size: 1.34rem;
+    font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.7rem;
 }
@@ -626,11 +601,17 @@ body {
 
 /* Card spacing & layout */
 
+.p-card {
+    margin-top: 30px;
+    padding: 20px 0;
+    border-radius: 25px;
+}
+
 
 
 
 .p-card-header {
-    font-size: 1.09rem;
+    font-size: 1.34rem;
     font-weight: 700;
     margin-bottom: 0.85rem;
 }
