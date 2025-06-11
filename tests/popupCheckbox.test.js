@@ -56,6 +56,13 @@ function loadPopup(storage) {
     window.eval(popupJs);
     window.document.dispatchEvent(new window.Event('DOMContentLoaded', { bubbles: true, cancelable: true }));
 
+Object.keys(defaults).forEach(key => {
+    assert.ok(
+        ids.includes(key),
+        `Default defined but no checkbox with ID: ${key}`
+    );
+});
+
     return { window, storage };
 }
 
