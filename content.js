@@ -95,7 +95,7 @@ function applyVisibilitySettings(data) {
     const settingsMap = {
         moveTopBarToBottomCheckbox: false,
         pageUpDownTakeover: true,
-        hideArrowButtonsCheckbox: false,
+        hideArrowButtonsCheckbox: true,
         removeMarkdownOnCopyCheckbox: true,
         selectMessagesSentByUserOrChatGptCheckbox: true,
         onlySelectUserCheckbox: false,
@@ -120,6 +120,8 @@ function applyVisibilitySettings(data) {
 window.applyVisibilitySettings = applyVisibilitySettings;
 
 
+
+
 // =====================================
 // @note Sync Chrome Storage + UI State + Expose Global Variables
 // =====================================
@@ -142,7 +144,9 @@ window.applyVisibilitySettings = applyVisibilitySettings;
         'popupBottomBarOpacityValue',
         'useAltForModelSwitcherRadio',
         'useControlForModelSwitcherRadio',
-        'rememberSidebarScrollPositionCheckbox'
+        'rememberSidebarScrollPositionCheckbox',
+        'FadeSlimSidebarCheckbox',           // (checkbox state: true/false)
+        'popupSlimSidebarOpacityValue'       // (slider value: number)
     ], (data) => {
         applyVisibilitySettings(data);
     });
@@ -648,6 +652,12 @@ window.applyVisibilitySettings = applyVisibilitySettings;
                 .replace(/^````([^\n\S]*)([^\n`].*)$/gm, "````\n$2")
                 // Remove or comment out if you want to preserve triple+ line breaks exactly
                 .replace(/\n{3,}/g, "\n\n")
+                // Remove markdown escape for ~
+                .replace(/\\(?=~)/g, "")
+                // Simplify Link References
+                .replace(/\(\[.*?\]\[(.*?)\]\)/g, "[$1]")
+                //  Add two line breaks and Sources:
+                .replace(/^(\[1\]: http.*)$/m, "\n---\nSources:\n$1")
                 .trim();
         }
 
@@ -692,7 +702,7 @@ window.applyVisibilitySettings = applyVisibilitySettings;
             [shortcuts.shortcutKeyCopyAllResponses]: copyAll,
             [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
             [shortcuts.shortcutKeyCopyLowest]: () => {
-                const copyPath = 'M7 5C7 3.34315';
+                const copyPath = 'M12.668 10.667C12.668';
 
                 // Find all visible copy buttons (by SVG path)
                 const visibleButtons = Array.from(document.querySelectorAll('button')).filter(btn => {
@@ -734,13 +744,13 @@ window.applyVisibilitySettings = applyVisibilitySettings;
                             return navigator.clipboard.writeText(text);
                         })
                         .catch(() => {/* silent fail */ });
-                }, 500);
+                }, 100);
             },
             [shortcuts.shortcutKeyEdit]: () => {
                 setTimeout(() => {
                     try {
                         const allButtons = Array.from(
-                            document.querySelectorAll('button svg path[d^="M13.2929 4.29291"]')
+                            document.querySelectorAll('button svg path[d^="M11.3312 3.56837C12.7488"]')
                         ).map(svgPath => svgPath.closest('button'));
 
                         const composerBackground = document.getElementById('composer-background');
@@ -949,6 +959,7 @@ window.applyVisibilitySettings = applyVisibilitySettings;
 
                 // 2) if native toggle succeeded, stop
                 if (document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !== null) {
+                    if (typeof window.flashSlimSidebarBar === "function") window.flashSlimSidebarBar();
                     return;
                 }
 
@@ -958,6 +969,7 @@ window.applyVisibilitySettings = applyVisibilitySettings;
                 );
                 if (direct?.offsetParent !== null) {
                     direct.click();
+                    if (typeof window.flashSlimSidebarBar === "function") window.flashSlimSidebarBar();
                     return;
                 }
 
@@ -986,9 +998,13 @@ window.applyVisibilitySettings = applyVisibilitySettings;
                     const btn = el?.closest('button');
                     if (btn?.offsetParent !== null) {
                         btn.click();
+                        if (typeof window.flashSlimSidebarBar === "function") window.flashSlimSidebarBar();
                         return;
                     }
                 }
+
+                // 5) If nothing worked, still try to flash (may be visible already)
+                if (typeof window.flashSlimSidebarBar === "function") window.flashSlimSidebarBar();
             },
             [shortcuts.shortcutKeyActivateInput]: function activateInput() {
                 const selectors = [
@@ -1085,15 +1101,21 @@ window.applyVisibilitySettings = applyVisibilitySettings;
             [shortcuts.shortcutKeyPreviousThread]: () => {
                 /* ---- 1. find every “previous‑response” button via multiple selectors ---- */
                 const selectorList = [
-                    'button svg path[d*="L9.41421 12"]',           // existing stable fragment
-                    'button svg path[d^="M15.7071 4.29289"]',      // old SVG start
-                    'button svg path[d*="L9.41421 12L15.7"]'       // new SVG fragment
+                    'div.tabular-nums',
+                    'button svg path[d^="M11.5292 3.7793"]'
                 ];
-                const buttons = selectorList.flatMap(sel =>
-                    Array.from(document.querySelectorAll(sel))
-                        .map(p => p.closest('button'))
-                        .filter(Boolean)
-                );
+
+                const buttons = selectorList.flatMap(sel => {
+                    if (sel === 'div.tabular-nums') {
+                        return Array.from(document.querySelectorAll(sel))
+                            .map(el => el.previousElementSibling)
+                            .filter(el => el?.tagName === 'BUTTON');
+                    }
+                    return Array.from(document.querySelectorAll(sel))
+                        .map(el => el.closest('button'))
+                        .filter(Boolean);
+                });
+
                 if (!buttons.length) return;
 
                 /* ---- 2. choose the one farthest down‑page (latest turn) ---- */
@@ -1116,15 +1138,21 @@ window.applyVisibilitySettings = applyVisibilitySettings;
             [shortcuts.shortcutKeyNextThread]: () => {
                 /* ---- 1. find every “next‑response” button via multiple selectors ---- */
                 const selectorList = [
-                    'button[aria-label="Next response"]',
-                    'button svg path[d^="M8.29289 4.29289"]',  // old SVG fragment
-                    'button svg path[d*="L16.7071 11.2929"]'   // new SVG fragment
+                    'div.tabular-nums',
+                    'button svg path[d^="M7.52925 3.7793"]'
                 ];
-                const buttons = selectorList.flatMap(sel =>
-                    Array.from(document.querySelectorAll(sel))
+
+                const buttons = selectorList.flatMap(sel => {
+                    if (sel === 'div.tabular-nums') {
+                        return Array.from(document.querySelectorAll(sel))
+                            .map(el => el.nextElementSibling)
+                            .filter(el => el?.tagName === 'BUTTON');
+                    }
+                    return Array.from(document.querySelectorAll(sel))
                         .map(el => el.closest('button'))
-                        .filter(Boolean)
-                );
+                        .filter(Boolean);
+                });
+
                 if (!buttons.length) return;
 
                 /* ---- 2. dedupe ---- */
@@ -1270,7 +1298,7 @@ window.applyVisibilitySettings = applyVisibilitySettings;
                 window.toggleModelSelector();
             },
             [shortcuts.shortcutKeyRegenerate]: () => {
-                const REGEN_BTN_PATH = 'M3.06957 10.8763';
+                const REGEN_BTN_PATH = 'M3.502 16.6663V13.3333C3.502';
                 const MENU_BTN_SELECTOR = `button[id^="radix-"] svg path[d^="${REGEN_BTN_PATH}"]`;
                 const MENUITEM_SELECTOR = `div[role="menuitem"] svg path[d^="${REGEN_BTN_PATH}"]`;
 
@@ -1706,10 +1734,9 @@ div[data-id="hide-this-warning"] {
     mask-position: 0% 0% !important;
 }
 
-/* Hide upgrade button in sidebar Robust selector: fully hide 'View plans' section without impacting other elements */
-div[data-fill].__menu-item:has(svg.icon-md) {
-  display: none !important;
-}
+/* Hide upgrade button in sidebar Robust selector. Hide upgrade ad but not profile menu. Reference 101 */
+/* Hide the first .__menu-item with data-fill, but not the profile menu */
+
 
 /* Make the sidebar header shorter */
 div.bg-token-bg-elevated-secondary.sticky.top-0 {
@@ -1753,7 +1780,16 @@ nav.group\\/scrollport {
 overflow-x: hidden !important;
 }
 
+// Remove horizontal scrolling from sidebar
+nav.group\/scrollport.relative.flex.h-full.w-full.flex-1.flex-col.overflow-y-auto.transition-opacity.duration-500 {
+overflow-x:hidden!important;
+}
 
+aside {
+    padding-top: 0 !important;
+    top: 40px;
+    padding-bottom: 2px;
+}
 
 `;
     document.head.appendChild(style);
@@ -1826,9 +1862,22 @@ overflow-x: hidden !important;
         ({ moveTopBarToBottomCheckbox: enabled }) => {
             if (!enabled) return;
 
-            const isCodex = location.hostname.endsWith('chatgpt.com') &&
-                location.pathname.startsWith('/codex');
-            if (isCodex) return;
+            // Blacklist logic for specific paths/hostnames
+            const hostname = location.hostname.replace(/^www\./, '');
+            const pathname = location.pathname;
+
+            // Matches "*://chatgpt.com/gpts*"
+            const isGpts = hostname === 'chatgpt.com' && pathname.startsWith('/gpts');
+            // Matches "*://chatgpt.com/codex*"
+            const isCodex = hostname === 'chatgpt.com' && pathname.startsWith('/codex');
+            // Matches "*://chatgpt.com/g/*"
+            const isG = hostname === 'chatgpt.com' && pathname.startsWith('/g/');
+            // Matches "*://sora.chatgpt.com/*"
+            const isSora = hostname === 'sora.chatgpt.com';
+            // Matches "*://chatgpt.com/library/*"
+            const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
+
+            if (isGpts || isCodex || isG || isSora || isLibrary) return;
 
             setTimeout(function injectBottomBarStyles() {
 
@@ -1938,7 +1987,7 @@ overflow-x: hidden !important;
                             const composerContainer = composerForm.querySelector(".border-token-border-default") || composerForm;
 
                             injectBottomBar(topBarLeft, topBarRight, composerContainer);
-                            
+
 
                             // Grayscale Profile Button
                             waitForElement('button[data-testid="profile-button"]').then(profileButton => {
@@ -2260,6 +2309,8 @@ overflow-x: hidden !important;
                     #bottomBarContainer a:has(svg > path[d^="M2.6687"]),
                     #bottomBarContainer a:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
                     #bottomBarContainer button:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
+                    #bottomBarContainer button:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
+                    #bottomBarContainer a:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
                     #bottomBarContainer a:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
                     #bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"]) {
                     visibility: hidden !important;
@@ -2437,6 +2488,19 @@ overflow-x: hidden !important;
                         form.w-full[data-type="unified-composer"] {
                             margin-bottom: -1em;
                         }
+
+.bg-token-bg-elevated-secondary.sticky.bottom-0
+  .group.__menu-item:not([data-testid]) .truncate:contains("View plans") {
+    display: none !important;
+}
+
+/* Optionally, hide the whole promo block (not just the text): */
+.bg-token-bg-elevated-secondary.sticky.bottom-0
+  .group.__menu-item:not([data-testid]) {
+    display: none !important;
+}
+
+
                     `;
                     document.head.appendChild(style);
 
@@ -2564,8 +2628,30 @@ overflow-x: hidden !important;
                     )
                 );
 
+                {
+                    const bottomBar = document.getElementById('bottomBarContainer');
+                    if (bottomBar) {
+                        // Use the same fade timing logic as original
+                        clearTimeout(bottomBar._flashTimer);
+                        clearTimeout(bottomBar._fadeT);
+                        bottomBar.style.opacity = '1'; // show immediately
+
+                        // Idle opacity function (from main IIFE)
+                        const idleOpacity = () =>
+                            bottomBar.style.opacity = (typeof window.popupBottomBarOpacityValue === 'number'
+                                ? window.popupBottomBarOpacityValue : 0.6).toString();
+
+                        // Use 4000ms or your desired duration
+                        bottomBar._flashTimer = setTimeout(idleOpacity, 4000);
+                    }
+                }
                 setTimeout(() => clickItem(i), 500);
+
+
+
             };
+
+
 
             window.addEventListener(
                 'keydown',
@@ -2871,9 +2957,6 @@ overflow-x: hidden !important;
             padding-bottom: 3px !important;
         }
 
-        nav.group\/scrollport.relative.flex.h-full.w-full.flex-1.flex-col.overflow-y-auto.transition-opacity.duration-500 {
-        overflow-x:hidden!important;
-        }
 `;
         document.head.appendChild(style);
 
@@ -2921,4 +3004,177 @@ overflow-x: hidden !important;
         });
         watcher.observe(document.body, { childList: true, subtree: true });
     }
+})();
+
+
+
+// ====================================
+//  @note  SlimbarOpacity Fade IIFE
+// ====================================
+
+(function () {
+    chrome.storage.sync.get(
+        { fadeSlimSidebarEnabled: false },
+        ({ fadeSlimSidebarEnabled: enabled }) => {
+            if (!enabled) return;
+
+            async function waitForElement(selector, timeout = 12000, poll = 200) {
+                const start = Date.now();
+                let el;
+                while (!(el = document.querySelector(selector)) && (Date.now() - start < timeout)) {
+                    await new Promise(r => setTimeout(r, poll));
+                }
+                return el;
+            }
+
+            // ========== (A) One-time storage fetch/cached promise style ==========
+            let slimSidebarOpacityPromise;
+            function ensureSlimSidebarOpacityReady() {
+                if (slimSidebarOpacityPromise) return slimSidebarOpacityPromise;
+                slimSidebarOpacityPromise = new Promise((resolve) => {
+                    if (!chrome?.storage?.sync) {
+                        window.popupSlimSidebarOpacityValue_slimbar = 0.6;
+                        return resolve(window.popupSlimSidebarOpacityValue_slimbar);
+                    }
+                    try {
+                        chrome.storage.sync.get({ popupSlimSidebarOpacityValue: 0.6 }, (res) => {
+                            if (chrome.runtime.lastError) {
+                                window.popupSlimSidebarOpacityValue_slimbar = 0.6;
+                            } else {
+                                window.popupSlimSidebarOpacityValue_slimbar =
+                                    typeof res.popupSlimSidebarOpacityValue === 'number'
+                                        ? res.popupSlimSidebarOpacityValue
+                                        : 0.6;
+                            }
+                            resolve(window.popupSlimSidebarOpacityValue_slimbar);
+                        });
+                    } catch (e) {
+                        window.popupSlimSidebarOpacityValue_slimbar = 0.6;
+                        resolve(window.popupSlimSidebarOpacityValue_slimbar);
+                    }
+                });
+                return slimSidebarOpacityPromise;
+            }
+
+            (async function main() {
+                await ensureSlimSidebarOpacityReady();
+                const bar = await waitForElement('div#stage-sidebar-tiny-bar');
+                if (!bar) return;
+                bar.style.transition = 'opacity 0.5s';
+
+
+
+                let fadeT = null;
+                let isHovered = false;
+
+                function getIdleOpacity() {
+                    return typeof window.popupSlimSidebarOpacityValue_slimbar === 'number'
+                        ? window.popupSlimSidebarOpacityValue_slimbar
+                        : 0.6;
+                }
+
+                // ----------------- OPEN/CLOSE DETECTION -----------------
+                function isSidebarOpen() {
+                    // The tiny bar itself tells us: when the big sidebar is open
+                    // it acquires both 'pointer-events-none' class *and* an 'inert' attribute.
+                    return bar.classList.contains('pointer-events-none') || bar.hasAttribute('inert');
+                }
+
+
+                function updateTinyBarVisibility() {
+                    clearTimeout(fadeT);               // cancel any pending fade
+
+                    if (isSidebarOpen()) {
+                        bar.style.opacity = '0';       // hide while big sidebar open
+                    } else if (!isHovered) {
+                        // show bar for 2.5 s, then fade to idle
+                        bar.style.opacity = '1';
+                        fadeT = setTimeout(fadeToIdle, 2500);
+                    }
+                }
+
+                // 2️⃣ keep fadeToIdle() simple:
+                function fadeToIdle() {
+                    if (!isHovered && !isSidebarOpen()) {
+                        bar.style.opacity = getIdleOpacity().toString();
+                    }
+                }
+
+
+                // Observe the sidebar for open/close changes
+                const openCloseObserver = new MutationObserver(updateTinyBarVisibility);
+                openCloseObserver.observe(bar, {
+                    attributes: true,
+                    attributeFilter: ['class', 'inert']
+                });
+
+                // Initial state
+                updateTinyBarVisibility();
+                // --------------------------------------------------------
+
+
+
+                function fadeToIdle() {
+                    if (!isHovered) {
+                        bar.style.opacity = isSidebarOpen() ? '0' : getIdleOpacity().toString();
+                    }
+                }
+                function fadeToVisible() {
+                    bar.style.opacity = '1';
+                }
+
+                // Set initial state after delay (in case user never hovers)
+                fadeT = setTimeout(fadeToIdle, 2500);
+
+                // Hover logic
+                bar.addEventListener('mouseenter', () => {
+                    isHovered = true;
+                    clearTimeout(fadeT);
+                    fadeToVisible();
+                });
+                bar.addEventListener('mouseleave', () => {
+                    isHovered = false;
+                    clearTimeout(fadeT);
+                    fadeT = setTimeout(fadeToIdle, 2500);
+                });
+
+                // Expose a method to "flash" the slim bar (simulate hover)
+                // Expose a method to "flash" the slim bar (simulate hover)
+                window.flashSlimSidebarBar = (() => {
+                    let flashTimer = null;       // keeps overlapping flashes from colliding
+                    return function flashSlimSidebarBar(duration = 200) {
+                        if (!bar) return;
+
+                        clearTimeout(flashTimer);   // cancel any in-flight flash
+                        const prevHovered = isHovered;
+
+                        // Make the bar fully visible immediately
+                        isHovered = true;           // temporarily prevent idle fade
+                        bar.style.opacity = '1';
+
+                        flashTimer = setTimeout(() => {
+                            isHovered = prevHovered;   // restore previous hover state
+                            updateTinyBarVisibility(); // re-apply 0 or idle opacity as needed
+                        }, duration);                 // default 200 ms; tweak as you like
+                    };
+                })();
+
+
+                // Keep in sync with storage changes (slider move in popup)
+                chrome.storage.onChanged.addListener((changes, area) => {
+                    if (area !== 'sync') return;
+                    if ('popupSlimSidebarOpacityValue' in changes) {
+                        window.popupSlimSidebarOpacityValue_slimbar =
+                            typeof changes.popupSlimSidebarOpacityValue.newValue === 'number'
+                                ? changes.popupSlimSidebarOpacityValue.newValue
+                                : 0.6;
+                        // Only update opacity if not hovered
+                        if (!isHovered) {
+                            bar.style.opacity = isSidebarOpen() ? '0' : getIdleOpacity().toString();
+                        }
+                    }
+                });
+            })();
+        }
+    );
 })();

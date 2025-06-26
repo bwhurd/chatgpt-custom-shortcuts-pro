@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-   // If label forced on to two lines, balance the line break
+    // If label forced on to two lines, balance the line break
     /* Balance any label that *actually* wraps */
     function balanceWrappedLabels() {
         const labels = document.querySelectorAll('.shortcut-label .i18n');
@@ -198,10 +198,10 @@ document.addEventListener('DOMContentLoaded', function () {
             label.innerHTML = `${first}<br>${second}`;
         });
     }
-      
-      
 
-    
+
+
+
 
     function addTooltip(element) {
         element.addEventListener('mouseenter', () => {
@@ -219,21 +219,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         element.addEventListener('mouseleave', () => {
-            clearTimeout(fadeOutTimeout);
-            tooltipArea.innerHTML = '';
-
-            fadeOutTimeout = setTimeout(() => {
-                const anyHovered = [...document.querySelectorAll('[data-tooltip]:hover')].length > 0;
-                if (!anyHovered) {
-                    tooltipArea.style.opacity = '0';
-                    setTimeout(() => {
-                        if (tooltipArea.style.opacity === '0') {
-                            tooltipArea.style.display = 'none';
-                            tooltipShown = false;
-                        }
-                    }, 500);
-                }
-            }, 500);
+            tooltipArea.innerHTML = ''; // (optional: clear text, or keep last tooltip)
         });
     }
 
@@ -251,6 +237,7 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.storage.sync.get(
         [
             'hideArrowButtonsCheckbox',
+            'hideCornerButtonsCheckbox',
             'removeMarkdownOnCopyCheckbox',
             'moveTopBarToBottomCheckbox',
             'pageUpDownTakeover',
@@ -266,7 +253,8 @@ document.addEventListener('DOMContentLoaded', function () {
         ],
         function (data) {
             const defaults = {
-                hideArrowButtonsCheckbox: data.hideArrowButtonsCheckbox !== undefined ? data.hideArrowButtonsCheckbox : false,
+                hideArrowButtonsCheckbox: data.hideArrowButtonsCheckbox !== undefined ? data.hideArrowButtonsCheckbox : true, // hide arrows by default
+                hideCornerButtonsCheckbox: data.hideCornerButtonsCheckbox === undefined ? true : data.hideCornerButtonsCheckbox,
                 removeMarkdownOnCopyCheckbox: data.removeMarkdownOnCopyCheckbox !== undefined ? data.removeMarkdownOnCopyCheckbox : true, // Default to true
                 moveTopBarToBottomCheckbox: data.moveTopBarToBottomCheckbox !== undefined ? data.moveTopBarToBottomCheckbox : false, // Default to false
                 pageUpDownTakeover: data.pageUpDownTakeover !== undefined ? data.pageUpDownTakeover : true, // Default to true
@@ -283,20 +271,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Update the checkbox and radio button states in the popup based on stored or default values
             document.getElementById('hideArrowButtonsCheckbox').checked = defaults.hideArrowButtonsCheckbox;
+            document.getElementById('hideCornerButtonsCheckbox').checked = defaults.hideCornerButtonsCheckbox;
             document.getElementById('removeMarkdownOnCopyCheckbox').checked = defaults.removeMarkdownOnCopyCheckbox;
             document.getElementById('moveTopBarToBottomCheckbox').checked = defaults.moveTopBarToBottomCheckbox;
             document.getElementById('pageUpDownTakeover').checked = defaults.pageUpDownTakeover;
-            const selectionAnchors = document.querySelectorAll('.message-selection-group a');
-            let activeSelection = null;
-            if (defaults.selectMessagesSentByUserOrChatGptCheckbox) activeSelection = 'selectMessagesSentByUserOrChatGptCheckbox';
-            if (defaults.onlySelectUserCheckbox) activeSelection = 'onlySelectUserCheckbox';
-            if (defaults.onlySelectAssistantCheckbox) activeSelection = 'onlySelectAssistantCheckbox';
-            selectionAnchors.forEach(a => {
-                const isActive = a.dataset.setting === activeSelection;
-                a.classList.toggle('active', isActive);
-                const input = a.querySelector('input[type="radio"]');
-                if (input) input.checked = isActive;
-            });
+            document.getElementById('selectMessagesSentByUserOrChatGptCheckbox').checked = defaults.selectMessagesSentByUserOrChatGptCheckbox;
+            document.getElementById('onlySelectUserCheckbox').checked = defaults.onlySelectUserCheckbox;
+            document.getElementById('onlySelectAssistantCheckbox').checked = defaults.onlySelectAssistantCheckbox;
             document.getElementById('disableCopyAfterSelectCheckbox').checked = defaults.disableCopyAfterSelectCheckbox;
             document.getElementById('enableSendWithControlEnterCheckbox').checked = defaults.enableSendWithControlEnterCheckbox;
             document.getElementById('enableStopWithControlBackspaceCheckbox').checked = defaults.enableStopWithControlBackspaceCheckbox;
@@ -322,6 +303,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 let obj = {};
 
                 if ([
+                    'selectMessagesSentByUserOrChatGptCheckbox',
+                    'onlySelectUserCheckbox',
+                    'onlySelectAssistantCheckbox'
+                ].includes(storageKey)) {
+                    obj = {
+                        selectMessagesSentByUserOrChatGptCheckbox: false,
+                        onlySelectUserCheckbox: false,
+                        onlySelectAssistantCheckbox: false
+                    };
+                    obj[storageKey] = isChecked;
+                } else if ([
                     'useAltForModelSwitcherRadio',
                     'useControlForModelSwitcherRadio'
                 ].includes(storageKey)) {
@@ -333,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else {
                     obj[storageKey] = isChecked;
                 }
-                
+
 
                 chrome.storage.sync.set(obj, function () {
                     if (chrome.runtime.lastError) {
@@ -351,43 +343,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Apply the handler to each checkbox and radio button
     handleStateChange('hideArrowButtonsCheckbox', 'hideArrowButtonsCheckbox');
+    handleStateChange('hideCornerButtonsCheckbox', 'hideCornerButtonsCheckbox');
     handleStateChange('removeMarkdownOnCopyCheckbox', 'removeMarkdownOnCopyCheckbox');
     handleStateChange('moveTopBarToBottomCheckbox', 'moveTopBarToBottomCheckbox');
     handleStateChange('pageUpDownTakeover', 'pageUpDownTakeover');
+    handleStateChange('selectMessagesSentByUserOrChatGptCheckbox', 'selectMessagesSentByUserOrChatGptCheckbox');
+    handleStateChange('onlySelectUserCheckbox', 'onlySelectUserCheckbox');
+    handleStateChange('onlySelectAssistantCheckbox', 'onlySelectAssistantCheckbox');
     handleStateChange('disableCopyAfterSelectCheckbox', 'disableCopyAfterSelectCheckbox');
     handleStateChange('enableSendWithControlEnterCheckbox', 'enableSendWithControlEnterCheckbox');
     handleStateChange('enableStopWithControlBackspaceCheckbox', 'enableStopWithControlBackspaceCheckbox');
     handleStateChange('useAltForModelSwitcherRadio', 'useAltForModelSwitcherRadio');
     handleStateChange('useControlForModelSwitcherRadio', 'useControlForModelSwitcherRadio');
     handleStateChange('rememberSidebarScrollPositionCheckbox', 'rememberSidebarScrollPositionCheckbox');
-
-    document.querySelectorAll('.message-selection-group a').forEach(anchor => {
-        if (!anchor.dataset.listenerAttached) {
-            anchor.addEventListener('click', () => {
-                const key = anchor.dataset.setting;
-                const obj = {
-                    selectMessagesSentByUserOrChatGptCheckbox: false,
-                    onlySelectUserCheckbox: false,
-                    onlySelectAssistantCheckbox: false
-                };
-                obj[key] = true;
-                document.querySelectorAll('.message-selection-group a').forEach(a => {
-                    const isActive = a.dataset.setting === key;
-                    a.classList.toggle('active', isActive);
-                    const input = a.querySelector('input[type="radio"]');
-                    if (input) input.checked = isActive;
-                });
-                chrome.storage.sync.set(obj, () => {
-                    if (chrome.runtime.lastError) {
-                        console.error('Error saving option:', chrome.runtime.lastError);
-                    } else {
-                        showToast('Options saved. Reload page to apply changes.');
-                    }
-                });
-            });
-            anchor.dataset.listenerAttached = 'true';
-        }
-    });
 
     const shortcutKeys = [
         'shortcutKeyScrollUpOneMessage',
@@ -505,7 +473,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const sliderValueDisplay = document.getElementById('opacityValue');
     const previewIcon = document.getElementById('opacityPreviewIcon');
     const tooltipContainer = document.getElementById('opacity-tooltip-container');
-    
+
 
     chrome.storage.sync.get('popupBottomBarOpacityValue', ({ popupBottomBarOpacityValue }) => {
         const val = typeof popupBottomBarOpacityValue === 'number' ? popupBottomBarOpacityValue : 0.6;
@@ -516,6 +484,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function toggleOpacityUI(visible) {
         // Hide or show the entire tooltip + slider block (including pseudo-elements)
+        tooltipContainer.style.display = visible ? 'flex' : 'none';
+    }
+
+
+    // Fix: Ensure opacity UI reflects checkbox state from storage
+    function toggleOpacityUI(visible) {
         tooltipContainer.style.display = visible ? 'flex' : 'none';
     }
 
@@ -559,4 +533,67 @@ document.addEventListener('DOMContentLoaded', function () {
         balanceWrappedLabels();
     }, 50); // delay lets i18n/localization update labels first
 
+
+
+
+
+    // ===================== Fade Slim Sidebar =====================
+
+    const fadeSlimSidebarCheckbox = document.getElementById('FadeSlimSidebarCheckbox');
+    const slimSidebarSliderWrapper = document.getElementById('slimSidebar-opacity-slider-wrapper');
+    const slimSidebarSlider = document.getElementById('slimSidebarOpacitySlider');
+    const slimSidebarSliderValueDisplay = document.getElementById('slimSidebarOpacityValue');
+    const slimSidebarPreviewIcon = document.getElementById('slimSidebarOpacityPreviewIcon');
+    const slimSidebarTooltipContainer = document.getElementById('slimSidebar-opacity-tooltip-container');
+
+    // Get and set the slider value for popupSlimSidebarOpacityValue
+    chrome.storage.sync.get('popupSlimSidebarOpacityValue', ({ popupSlimSidebarOpacityValue }) => {
+        const val = typeof popupSlimSidebarOpacityValue === 'number' ? popupSlimSidebarOpacityValue : 0.6;
+        slimSidebarSlider.value = val;
+        slimSidebarSliderValueDisplay.textContent = val.toFixed(2);
+        slimSidebarPreviewIcon.style.opacity = val;
+    });
+
+    // Show/hide slider UI
+    function toggleSlimSidebarOpacityUI(visible) {
+        slimSidebarTooltipContainer.style.display = visible ? 'flex' : 'none';
+    }
+
+    // Set UI on load from storage for checkbox
+    chrome.storage.sync.get('fadeSlimSidebarEnabled', ({ fadeSlimSidebarEnabled }) => {
+        const isVisible = fadeSlimSidebarEnabled !== undefined ? fadeSlimSidebarEnabled : false;
+        fadeSlimSidebarCheckbox.checked = isVisible;
+        toggleSlimSidebarOpacityUI(isVisible);
+    });
+
+    fadeSlimSidebarCheckbox.addEventListener('change', () => {
+        const isChecked = fadeSlimSidebarCheckbox.checked;
+        toggleSlimSidebarOpacityUI(isChecked);
+        chrome.storage.sync.set({ fadeSlimSidebarEnabled: isChecked });
+    });
+
+    // Slider logic
+    let slimSidebarSliderTimeout;
+    slimSidebarSlider.addEventListener('input', () => {
+        const val = parseFloat(slimSidebarSlider.value);
+        slimSidebarSliderValueDisplay.textContent = val.toFixed(2);
+        slimSidebarPreviewIcon.style.opacity = val;
+
+        clearTimeout(slimSidebarSliderTimeout);
+        slimSidebarSliderTimeout = setTimeout(() => {
+            let numericVal = Number(slimSidebarSlider.value);
+            if (isNaN(numericVal)) numericVal = 0.6;
+
+            chrome.storage.sync.set({ popupSlimSidebarOpacityValue: numericVal }, function () {
+                if (chrome.runtime.lastError) {
+                    console.error('Storage set error:', chrome.runtime.lastError);
+                } else {
+                    showToast('Slim sidebar opacity saved. Reload page to apply changes.');
+                }
+            });
+        }, 500);
+    });
+
 });
+
+

@@ -1,66 +1,431 @@
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');
-@import url('https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined');
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import url(https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap);
+@import url(https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;600&display=swap);
+@import url(https://fonts.googleapis.com/icon?family=Material+Icons);
+@import url(https://fonts.googleapis.com/icon?family=Material+Icons+Outlined);
+@import url(https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined);
 
-/* Rely on Puppertino color tokens */
+:root {
+    --text-primary: #1e1e1e;
+    --text-secondary: #646464;
+    --border-light: #dfdfdc;
+    --bg-primary: #f4f3f1;
+    --bg-secondary: #f8f7f5;
+    --highlight-color: #3f51b5;
+}
 
-/* Base resets */
-* {
+*,
+body {
     margin: 0;
+}
+
+* {
     padding: 0;
     box-sizing: border-box;
 }
 
 body {
-
-  width: 100%;
-  min-height: 100vh;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-size: 1rem;
-  background: var(--p-silver-100);
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-}
-
-
-.shortcut-container {
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-
-
-/* Tooltip Area */
-.tooltip-area {
-    display: none;
-    /* Initially hidden */
-    opacity: 0;
-    transition: opacity 0.5s ease-in-out;
-    /* Smooth fade-out effect */
-    position: fixed;
-    bottom: 0;
-    left: 0;
     width: 100%;
-    height: 60px;
-    padding: 10px;
-    padding-top: 8px;
-    /* Reduce top padding slightly */
-    background-color: var(--p-silver-100);
-    color: var(--p-silver-700);
-    text-align: center;
-    line-height: 1.5;
-    border-top: 1px solid var(--p-silver-300);
-    font-size: 0.9rem;
-    font-weight: 400;
-    z-index: 100;
-    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: .5rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    line-height: 1.5 !important;
+}
+
+.key-input,
+.key-text,
+body,
+h1 {
     text-wrap: balance;
 }
 
+.key-input,
+.key-text,
+.shortcut-label,
+.tooltiptext,
+body,
+h1 {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-size: 14px;
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    text-size-adjust: 100%;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space-collapse: collapse;
+    unicode-bidi: isolate;
+    pointer-events: auto;
+}
 
-/* Tooltip */
+
+
+.tooltiptext {
+    text-wrap: balance;
+}
+
+h1 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+
+
+
+
+#toast-container .toast {
+    text-wrap: balance;
+}
+
+.blank-row {
+    grid-column: span 2;
+    height: 8px;
+}
+
+.disabled-section {
+    opacity: .2;
+    pointer-events: none;
+}
+
+.disabled-section .key-input {
+    background-color: #eee;
+    color: #aaa;
+    border-color: #ccc;
+    cursor: not-allowed;
+}
+
+.flash-highlight {
+    animation: pulse-highlight .6s ease-out 1.2s 1;
+}
+
+.full-width {
+    grid-column: span 2;
+}
+
+.icon-input-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.icon-input-container::after {
+    position: absolute;
+    left: .5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font: inherit;
+    color: #666;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 1;
+    transition: opacity .1s ease;
+}
+
+.icon-input-container:focus-within::after {
+    opacity: 0;
+}
+
+.key-input {
+    width: 50px;
+    height: 2rem;
+    border: 1px solid var(--border-light);
+    border-radius: 9999px;
+    text-align: center;
+    font-size: .9rem;
+    font-weight: 700;
+    background-color: var(--bg-primary);
+    color: var(--text-secondary);
+}
+
+.key-input:focus {
+    border-color: var(--highlight-color);
+    outline: 0;
+}
+
+.key-text {
+    font-size: .9rem;
+    font-weight: 600;
+}
+
+.material-checkbox {
+    width: 12px;
+    height: 12px;
+    cursor: pointer !important;
+}
+
+.material-radio {
+    width: 12px;
+    height: 12px;
+    cursor: pointer !important;
+}
+
+.material-icons-outlined {
+    font-size: 18px;
+    color: var(--text-secondary);
+}
+
+.material-input-long {
+    position: relative;
+    z-index: 1;
+    width: 6ch;
+    padding: .25rem .5rem;
+    border: 1px solid #ccc;
+    border-radius: 9999px;
+    background: 0 0;
+    box-sizing: border-box;
+    color: transparent;
+    transition: width .25s ease;
+}
+
+.material-input-long:focus {
+    width: 24ch;
+    color: inherit;
+    outline: 0;
+}
+
+.model-picker {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-left: 40px;
+}
+
+.model-picker-shortcut {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.mp-icons {
+    display: flex;
+    justify-content: center;
+    font-size: clamp(9px, 1.9vw, 12px);
+    line-height: 1;
+    scale: .7;
+}
+
+.mp-icons .material-symbols-outlined {
+    margin: 0-1px;
+    pointer-events: none;
+}
+
+.mp-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    font-size: 12px;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: .5rem;
+}
+
+.mp-option input[type=radio] {
+    width: 12px;
+    height: 12px;
+    align-items: center;
+    flex-direction: row;
+    accent-color: var(--highlight-color);
+}
+
+.mp-option-text {
+    text-align: center;
+    font-size: .75rem;
+    text-wrap: balance;
+    align-items: center;
+    flex-direction: row;
+}
+
+.mp-options {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    margin-top: 10px;
+    margin-bottom: 8px;
+}
+
+.new-emoji-indicator {
+    font-size: 1.5em;
+    line-height: 1;
+    user-select: none;
+    pointer-events: none;
+    opacity: .9;
+    transform: translateY(-1px);
+}
+
+.new-feature-tag {
+    font-size: .65rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: #2196f3;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: .5px;
+    line-height: 1;
+    user-select: none;
+}
+
+.opacity-slider-clipper {
+    height: 60px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.opacity-tooltip {
+    position: relative;
+    width: 60%;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.opacity-tooltip.tooltip:hover::after {
+    transform: scaleX(0) !important;
+}
+
+.opacity-tooltip.visible-opacity-slider::after {
+    transform-origin: left;
+    pointer-events: none;
+    content: "";
+    display: block;
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    transform: scaleX(0);
+    transition: transform .2s ease-in-out;
+}
+
+.opacity-tooltip.visible-opacity-slider:hover::after,
+.opacity-tooltip:hover::after {
+    transform: scaleX(1);
+}
+
+.opacity-tooltip::after {
+    content: none;
+    border: 0;
+}
+
+.p-form-switch {
+    --width: 80px;
+    cursor: pointer;
+    display: inline-block;
+    scale: .5;
+    transform-origin: right center;
+}
+
+.p-form-switch>input {
+    display: none;
+}
+
+.p-form-switch>input:checked+span {
+    background: #60c35b;
+}
+
+.p-form-switch>input:checked+span::after {
+    left: calc(100% - calc(var(--width)/1.8));
+}
+
+.p-form-switch>span {
+    background: #e0e0e0;
+    border: 1px solid #d3d3d3;
+    border-radius: 500px;
+    display: block;
+    height: calc(var(--width)/1.6);
+    position: relative;
+    transition: all .2s;
+    width: var(--width);
+}
+
+.p-form-switch>span::after {
+    background: #f9f9f9;
+    border-radius: 50%;
+    border: .5px solid rgba(0, 0, 0, .101987);
+    box-shadow: 0 3px 1px rgba(0, 0, 0, .1), 0 1px 1px rgba(0, 0, 0, .16), 0 3px 8px rgba(0, 0, 0, .15);
+    box-sizing: border-box;
+    content: "";
+    height: 84%;
+    left: 3%;
+    position: absolute;
+    top: 6.5%;
+    transition: all .2s;
+    width: 52.5%;
+}
+
+.shortcut-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.shortcut-container {
+    width: 800px;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, .1);
+    box-sizing: border-box;
+}
+
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.shortcut-item,
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+}
+
+.shortcut-item {
+    justify-content: space-between;
+    background-color: var(--bg-secondary);
+    padding: .75rem;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .05);
+    min-height: 3.5rem;
+}
+
+.shortcut-item .p-form-switch,
+.shortcut-item label.p-form-switch,
+.shortcut-item>.p-form-switch {
+    margin-left: auto;
+}
+
+.shortcut-keys {
+    gap: 5px;
+}
+
+.shortcut-label {
+    font-size: inherit;
+    color: var(--text-primary);
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.shortcut-label,
+.shortcut-label .i18n,
+.tooltip .i18n {
+    text-wrap: balance;
+}
+
 .tooltip {
     position: relative;
     display: inline;
@@ -68,24 +433,17 @@ body {
     border-bottom: none;
 }
 
-/* Apply underline directly to translatable inline text */
 .tooltip .i18n {
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
+    text-underline-offset: 4px;
     text-decoration-thickness: 1px;
     display: inline;
-    text-wrap: balance;
-}
-
-.shortcut-label .i18n {
-    text-wrap: balance;
 }
 
 .tooltip .tooltiptext {
     visibility: hidden;
     width: 120px;
-    background-color: var(--p-slate-700);
-    color: var(--p-silver-100);
+    background-color: #2a2b32;
+    color: #ececf1;
     text-align: left;
     border-radius: 6px;
     padding: 5px;
@@ -95,7 +453,29 @@ body {
     left: 50%;
     transform: translateX(-50%);
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity .3s;
+}
+
+.tooltip-area {
+    opacity: 0;
+    transition: opacity .5s ease-in-out;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60px;
+    padding: 8px 10px 10px;
+    background-color: #f5f5f5;
+    color: #616161;
+    text-align: center;
+    line-height: 1.5;
+    border-top: 1px solid #ccc;
+    font-size: .9rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 400;
+    z-index: 100;
+    box-shadow: 0-4px 8px rgba(0, 0, 0, .2);
+    text-wrap: balance;
 }
 
 .tooltip:hover .tooltiptext {
@@ -103,671 +483,239 @@ body {
     opacity: 1;
 }
 
-/* Title */
-h1 {
-  text-align: center;
-  margin-bottom: 1rem;
+.mp-option-text.i18n {
+    margin-right: .25rem;
 }
 
-/* Grid Layout */
-.shortcut-grid {
-    display: flex;
-    flex-direction: column;
-}
-
-.full-width,
-.blank-row {
-    display: none;
-    /* Not needed anymore */
-}
-
-
-/* Columns */
-.shortcut-column {
-    display: flex;
-    flex-direction: column;
-}
-
-/* Shortcut Block */
-.shortcut-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  min-height: 2.75rem;
-}
-
-/* Shortcut Name */
-.shortcut-label {
-  color: var(--p-dark-700);
-  font-weight: 500;
-  text-wrap: balance;
-}
-
-/* Key Input */
-.shortcut-keys {
-    display: flex;
-    align-items: center;
-}
-
-.key-text {
-  font-weight: bold;
-}
-
-
-
-/* Checkbox and Icon Container */
-
-
-
-.material-icons-outlined {
-    font-size: 18px;
-    color: var(--p-silver-700);
-}
-
-
-/* Key input (shortcut key) refinement */
-.key-input {
-    width: 38px;
-    height: 2rem;
-    font-size: 1em;
-    font-weight: 500;
-    padding: 0 10px;
-    min-width: 34px;
-    border: 1.2px solid var(--p-silver-300);
-    border-radius: 7px;
-    text-align: center;
-    background: var(--p-silver-100);
-    color: var(--p-dark-700);
-    margin-left: 2px;
-    vertical-align: middle;
-    transition: border-color .14s;
-}
-
-.key-input:focus {
-    border-color: var(--p-blueberry-500);
-    outline: none;
-}
-
-
-/* Button/toggle vertical centering in row */
-.p-card .shortcut-item>*:last-child {
-    display: flex;
-    align-items: center;
-    height: 100%;
-}
-
-/* For the input[type="text"] used in Join & Copy Separator, etc */
-.p-card input[type="text"].material-input {
-    width: 190px;
-    height: 1.8rem;
-    font-size: 0.93em;
-    border-radius: 7px;
-    border: 1px solid var(--p-silver-300);
-    background: var(--p-silver-100);
-    padding: 0 6px;
-    margin-left: 2px;
-}
-
-
-
-@keyframes pulse-highlight {
-    0% {
-        box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.6);
-    }
-
-    70% {
-        box-shadow: 0 0 0 10px rgba(33, 150, 243, 0);
-    }
-
-    100% {
-        box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
-    }
-}
-
-.flash-highlight {
-    animation: pulse-highlight 0.6s ease-out 1.2s 1;
-}
-
-.new-emoji-indicator {
-    font-size: 1.5em;
-    line-height: 1;
-    user-select: none;
-    pointer-events: none;
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-.new-feature-tag {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: white;
-    background-color: var(--p-blueberry-500);
-    /* Material blue */
-    padding: 2px 6px;
-    border-radius: 4px;
-    letter-spacing: 0.5px;
-    line-height: 1;
-    user-select: none;
-}
-
-
-
-#opacity-slider-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-
-
-
-#opacitySlider {
-    width: 100%;
+.opacity-slider::-webkit-slider-runnable-track,
+.opacity-slider::-moz-range-track {
     height: 4px;
-    appearance: none;
-    background: var(--p-silver-300);
-    border-radius: 4px;
-    outline: none;
+    border-radius: 2px;
+    background: #9e9e9e;
 }
 
-#opacitySlider::-webkit-slider-thumb {
-    appearance: none;
+.opacity-slider::-webkit-slider-thumb,
+.opacity-slider::-moz-range-thumb {
     width: 12px;
     height: 12px;
-    background: var(--p-blueberry-500);
     border-radius: 50%;
-    cursor: pointer;
-    margin-top: -4px;
+    background: #00bcd4;
+    border: none;
 }
 
-#opacityValue {
-    font-size: 10px;
-    margin-top: 1px;
-    text-align: center;
+.class-1 {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-#opacity-slider-wrapper:hover {
-
-    cursor: pointer;
+.class-2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    justify-content: flex-start;
 }
 
-/* Force SVG icon to respect its container dimensions */
-#opacityPreviewIcon {
+.class-3 {
+    flex: 0 0 auto;
+    margin-bottom: 4px;
+}
+
+.class-4 {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.class-5 {
+    width: 100%;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.class-6 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    transform: scale(1);
+    transform-origin: top center;
+    margin-left: 20px;
+    padding-right: 10px !important;
+}
+
+.class-7 {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.class-8 {
     width: 20px;
     height: 20px;
     display: block;
-    object-fit: contain;
-    flex-shrink: 0;
-    overflow: hidden;
+    opacity: 0.6;
 }
 
-/* Limit underline behavior to ONLY the opacity tooltip */
-.opacity-tooltip {
-    position: relative;
-    width: 60%;
-    /* Matches the slider width */
+.class-9 {
+    width: 85%;
 }
 
-/* Dotted underline positioned 2px below the tooltip content */
-
-
-.opacity-tooltip:hover::after {
-    transform: scaleX(1);
-}
-
-/* Add vertical spacing for .opacity-tooltip only */
-#opacity-slider-wrapper>div:first-child {
-    margin-bottom: 4px;
-    /* spacing between icon and slider */
-}
-
-#opacity-slider-wrapper>div:last-child {
-    padding-bottom: 2px;
-    /* or however much you want */
-}
-
-#opacitySlider {
-    margin-bottom: 4px;
-    /* spacing between slider and value line */
-}
-
-
-
-
-
-.opacity-tooltip.tooltip:hover::after {
-    transform: scaleX(0) !important;
-    /* Prevents the underline from appearing on hover */
-}
-
-/* Clipper: fixed height, hides overflow, centers inner vertically */
-.opacity-slider-clipper {
-    /* Enough height for the scaled stack (icon + slider + text)
-     60px is a suggestion. Adjust as needed to avoid clipping. */
-    height: 60px;
-
-    overflow: hidden;
+.class-10 {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 100%;
+    gap: 4px;
 }
 
-#opacity-slider-wrapper {
+.class-11 {
+    font-size: 11px;
+}
+
+.class-12 {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.class-13 {
+    position: relative;
+}
+
+.class-14 {
+    flex: 1;
+}
+
+.class-15 {
+    margin-bottom: 4px;
+}
+
+.class-16 {
+    line-height: 1.8 !important;
+}
+
+.class-17 {
+    margin-bottom: 2px;
+}
+
+.class-18 {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+}
+
+.class-19 {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1;
+    max-width: 400px;
+}
+
+.class-20 {
     display: flex;
     flex-direction: column;
     align-items: center;
-
-    /* Scale down entire stack if needed */
-    transform: scale(0.85);
-    transform-origin: top center;
+    gap: 8px;
+    cursor: pointer;
+    position: relative;
+    border-bottom: none !important;
 }
 
-
-/* Only show the tooltip underline if the slider is visible */
-.opacity-tooltip.visible-opacity-slider::after {
-    content: '';
-    display: block;
-    border-bottom: 1px dotted currentColor;
-    width: 100%;
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    transform: scaleX(0);
-    transition: transform 0.2s ease-in-out;
-    transform-origin: left;
-    pointer-events: none;
+.class-21 {
+    font-size: 20px;
 }
 
-.opacity-tooltip.visible-opacity-slider:hover::after {
-    transform: scaleX(1);
+.class-22 {
+    border-bottom: none !important;
 }
 
-
-
-.opacity-tooltip.visible-opacity-slider::after {
-    content: '';
-    display: block;
-    border-bottom: 1px dotted currentColor;
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 100%;
-    transform: scaleX(0);
-    transition: transform 0.2s ease-in-out;
+.class-23 {
+    width: 12px;
+    height: 12px;
 }
 
-.opacity-tooltip.visible-opacity-slider:hover::after {
-    transform: scaleX(1);
+.class-24 {
+    margin-left: auto;
 }
 
-
-.opacity-tooltip::after {
-    content: none;
-    border: none;
+.class-25 {
+    flex: 0 0 auto;
 }
 
-
-/*────────  Message‑Selection segmented switcher  ────────*/
-.message-selection-group {
+.class-26 {
+    flex: 1 1 auto;
     display: flex;
     justify-content: center;
-    border: 1.5px solid var(--p-silver-300);
-    border-radius: 13px;
-    background: var(--p-silver-100);
-    max-width: 420px;
+    align-items: center;
+}
+
+.class-27 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
     width: 100%;
-    margin: 4px auto 0 auto;
-    overflow: hidden;
+    transform: scale(1);
+    transform-origin: top center;
+    margin-left: 20px;
+    margin-right:-20px;
 }
 
-/* hide form controls */
-.message-selection-group input[type="radio"] {
-    display: none
+.class-28 {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
 }
 
-
-/*────────  Disable‑Auto‑Copy toggle row  ────────*/
-.auto-copy-toggle.shortcut-item {
+.class-29 {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: .2rem 0;
-    min-height: 36px;
+    gap: 6px;
+    cursor: pointer;
+    border-bottom: 1px dotted currentColor;
+    padding-bottom: 4px;
 }
 
-.auto-copy-toggle .toggle-label-col {
-  color: var(--p-dark-700);
-}
-
-#toast-container .toast {
-    text-wrap: balance;
-}
-
-
-.disabled-section {
-    opacity: 0.2;
-    pointer-events: none;
-}
-
-.disabled-section .key-input {
-    background-color: var(--p-silver-100);
-    color: var(--p-silver-500);
-    border-color: var(--p-silver-300);
-    cursor: not-allowed;
-}
-
-
-/* --- Remove horizontal scrollbars from popup window and all containers --- */
-.shortcut-container,
-.shortcut-grid {
-    overflow-x: hidden;
-}
-
-
-
-
-/* PRIMARY TABS */
-.p-tabs-container {
-    max-width: 100vw;
-}
-
-.p-tabs {
-    overflow-x: hidden;
-}
-
-.p-tab {
-    font-size: 1.01rem;
-}
-
-/* Utility classes for popup layout */
-.icon-middle {
-  vertical-align: middle;
-}
-
-.mp-options {
-  display: flex;
-  gap: 2rem;
-  margin-top: 0;
-}
-
-.mp-option {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.relative {
-  position: relative;
-}
-
-.flex-between {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-}
-
-.flex-static {
-  flex: 0 0 auto;
-}
-
-.mb-4px {
-  margin-bottom: 4px;
-}
-
-.flex-1-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.flex-column-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  max-width: 300px;
-  transform: scale(1);
-  transform-origin: top center;
-}
-
-.svg-small {
-  width: 20px;
-  height: 20px;
-  display: block;
-  opacity: 0.6;
-}
-
-.w-70 {
-  width: 70%;
-}
-
-.flex-gap-4 {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.icon-input-container {
-  flex-shrink: 0;
-}
-
-#panel-changelog {
-  padding: 0;
-  height: 400px;
-  overflow: hidden;
-}
-
-#panel-changelog .shortcut-container {
-  height: 100%;
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.changelog-frame {
-  border: 0;
-  width: 100%;
-  height: 100%;
-}
-
-
-
-
-
-
-
-.shortcut-section {
-    margin-bottom: 2rem;
-}
-
-
-.p-card-header {
-  font-weight: 600;
-  color: var(--p-silver-700);
-  text-transform: uppercase;
-  margin-bottom: 0.4rem;
-}
-
-.shortcut-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.45em 0;
-    border-bottom: 1px solid var(--p-silver-100);
-}
-
-.shortcut-row:last-child {
-    border-bottom: none;
-}
-
-.shortcut-keys {
+.class-30 {
     display: flex;
     align-items: center;
 }
 
-.shortcut-keys input[type="text"] {
-    width: 40px;
-    border-radius: 6px;
-    border: 1px solid var(--p-silver-300);
-    background: var(--p-silver-100);
-    text-align: center;
-    font-weight: 500;
-    color: var(--p-dark-700);
-    transition: border-color .13s;
+.class-31 {
+    display: none !important;
 }
 
-.shortcut-keys input[type="text"]:focus {
-    border-color: var(--p-blueberry-500);
-    outline: none;
-}
+@keyframes pulse-highlight {
+    0% {
+        box-shadow: 0 0 0 0 rgba(33, 150, 243, .6);
+    }
 
+    to {
+        box-shadow: 0 0 0 0 transparent;
+    }
 
-/* Card spacing & layout */
-
-
-.p-card {
-  background: #fff;
-  border-radius: 12px;
-  margin-bottom: 0.75rem;
-  padding: 0.75rem 0;
-}
-
-.p-card .shortcut-item {
-  padding: 0.5rem 1rem;
-}
-
-.p-card .shortcut-item:not(:last-child) {
-  border-bottom: 1px solid var(--p-bd-card);
-}
-/*────────  Cupertino‑style segmented control  ────────*/
-
-.shortcut-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 36px;
-    background: transparent;
-    padding: 0.19rem 0 0.16rem 0;
-    border: none;
-    margin-bottom: 1px;
-}
-
-.toggle-label-col {
-  color: var(--p-dark-700);
-}
-
-.toggle-switch-col {
-    display: flex;
-    align-items: center;
-    /* No justify-content; let flexbox push right */
-}
-
-.toggle-filler-col {
-    display: none;
-}
-  
-
-
-
-
-
-/*────────  Select + Copy Behavior row ────────*/
-/*────────  FINAL Select + Copy Behaviour polish  ────────*/
-
-/* row layout: label | pill‑group */
-.select-copy-row {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    align-items: center;
-}
-
-/* label column (no hard <br> tag needed) */
-.select-copy-row .shortcut-label {
-    white-space: normal;
-    /* allow natural wrapping */
-    line-height: 1.25;
-    font-weight: 500;
-}
-
-/* pill group: full width, no wrapping */
-.select-copy-row .message-selection-group {
-    display: flex;
-    flex: 1 1 auto;
-    flex-wrap: nowrap !important;
-    /* keep a single row */
-    max-width: 100%;
-}
-
-/* each pill shares 1/3 width */
-.message-selection-group .p-segment {
-    flex: 1 0 0;
-}
-
-
-/* kill any inset box‑shadow Puppertino adds */
-.message-selection-group .p-segment {
-    box-shadow: none !important
-}
-
-/* divider only between inactive neighbours */
-.message-selection-group .p-segment+.p-segment {
-    border-left: 1px solid var(--p-silver-300);
-}
-
-/* ACTIVE pill – solid blue fill, white icon/text */
-.message-selection-group .p-segment.p-is-active {
-    background: #007aff !important;
-    color: #fff !important;
-    font-weight: 600;
-    border-left: none;
-    /* erase divider over blue */
-}
-
-.message-selection-group .p-segment.p-is-active+.p-segment {
-    border-left: none;
-    /* no divider on its right edge either */
-}
-
-
-
-/* tiny type shrink for narrow screens */
-@media(max-width:520px) {
-    .message-selection-group .segment-text {
-        font-size: .70rem
+    70% {
+        box-shadow: 0 0 0 10px transparent;
     }
 }
 
-/* Font size overrides */
-body.p-layout {
-  font-size: 14px;
+
+h1 {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+        Roboto, "Helvetica Neue", Arial, sans-serif !important;
+
 }
-.p-layout h1 {
-  font-size: 22px;
-}
-.p-layout h2 {
-  font-size: 20px;
-}
-.p-layout h3 {
-  font-size: 18px;
-}
-.p-headline {
-  font-size: 17px;
-}
-.p-subhead {
-  font-size: 15px;
-}
-.p-callout {
-  font-size: 15px;
-}
-.p-footnote {
-  font-size: 13px;
-}
-.p-caption {
-  font-size: 12px;
+
+/* swap only if the font actually loads */
+html.gtp-loaded h1 {
+    font-family: 'GTPressuraBold',
+        -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+        Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-size: 50px!important;
 }

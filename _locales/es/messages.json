@@ -116,9 +116,6 @@
     "tt_send_top_bar": {
         "message": "Mueve el selector de modelo y encabezado abajo. Un pequeño pero útil ajuste."
     },
-    "tt_opacity_slider": {
-        "message": "Haz que la barra inferior sea visible siempre (derecha) o transparente (izquierda). Se muestra al pasar el cursor."
-    },
     "tt_copy_plain": {
         "message": "Activa el botón inferior nativo para copiar texto sin formato."
     },
@@ -229,5 +226,14 @@
     },
     "tt_rememberSidebarScrollPositionCheckbox": {
         "message": "Normalmente, la barra lateral vuelve arriba cuando la abres, cierras o recargas. Marca esto para regresar al mismo lugar."
+    },
+    "tt_opacity_slider": {
+        "message": "Mantener barra inferior visible siempre (derecha) u ocultar automáticamente (izquierda). Pasar cursor para mostrar."
+    },
+    "label_fade_slim_sidebar": {
+        "message": "Desvanecer barra lateral"
+    },
+    "tt_slim_opacity_slider": {
+        "message": "Desvanecer barra lateral. Pasar cursor para mostrar."
     }
 }

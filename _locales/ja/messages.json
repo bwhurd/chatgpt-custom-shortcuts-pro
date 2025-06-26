@@ -116,9 +116,6 @@
     "tt_send_top_bar": {
         "message": "モデル選択・上部バーを下に移動します。"
     },
-    "tt_opacity_slider": {
-        "message": "ボトムバーの透明度調整（左で非表示、右で常時表示）。マウスを乗せると表示。"
-    },
     "tt_copy_plain": {
         "message": "画面下のコピーを実行。テキストのみコピー。"
     },
@@ -229,5 +226,14 @@
     },
     "tt_rememberSidebarScrollPositionCheckbox": {
         "message": "通常、サイドバーは開閉や再読込すると最上部に戻ります。これをオンにすると前回の位置に戻ります。"
+    },
+    "tt_opacity_slider": {
+        "message": "下部バーを常に表示（右）または自動で隠す（左）。マウスを重ねて表示。"
+    },
+    "label_fade_slim_sidebar": {
+        "message": "サイドバーをフェード"
+    },
+    "tt_slim_opacity_slider": {
+        "message": "サイドバーをフェード。マウスを重ねて表示。"
     }
 }

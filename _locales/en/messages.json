@@ -117,7 +117,7 @@
         "message": "Check this box to move the model selector and header to the bottom. A small change that makes a big difference."
     },
     "tt_opacity_slider": {
-        "message": "Choose whether the bottom bar always stays visible (slider right) or fades to be less distracting (slider left = invisible). It will always show when you move your mouse over it."
+        "message": "Keep bottom bar always visible (right) or hide automatically (left). Hover mouse to reveal."
     },
     "tt_copy_plain": {
         "message": "Activate the lowest visible, native copy button. Copies any response as plain text."
@@ -207,13 +207,13 @@
         "message": "Switch ChatGPT Plus model using Alt or Control + number keys (1–5)"
     },
     "label_use_alt": {
-        "message": "Alt + 1,2,3,4,5"
+        "message": "Use Alt"
     },
     "tt_use_Alt_for_picker": {
         "message": "Select ChatGPT model using Alt+1 (4o), Alt+2 (o3), Alt+3 (o4-mini), Alt+4 (o4-mini-high), Alt+5 (4o-mini)"
     },
     "label_use_control": {
-        "message": "Control + 1,2,3,4,5"
+        "message": "Use Control"
     },
     "tt_use_Control_for_picker": {
         "message": "Select ChatGPT model using Control+1 (4o), Control+2 (o3), Control+3 (o4-mini), Control+4 (o4-mini-high), Control+5 (4o-mini)"
@@ -229,5 +229,11 @@
     },
     "tt_rememberSidebarScrollPositionCheckbox": {
         "message": "Normally, the sidebar scrolls back to the top when you open, close, or reload it. Check this box to return to the same spot in the sidebar."
+    },
+    "label_fade_slim_sidebar": {
+        "message": "Fade Slim Sidebar"
+    },
+    "tt_slim_opacity_slider": {
+        "message": "Fade the slim sidebar. Hover mouse to reveal."
     }
 }
