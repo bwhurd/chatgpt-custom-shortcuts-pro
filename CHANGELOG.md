@@ -1,5 +1,20 @@
 # Changelog
 
+#### [7.18.2025]
+Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that you click to quote ChatGPT in your response is unintentionally faded. Working on fix with next update.
+
++ NEW: The "edit message" shortcut has been improved. Pressing it multiple times now scrolls up through the conversation.
++ Improved user visual feedback for changing models and triggering buttons.
+- Fixed bug where login-menu button is tiny and hard to see when user has not yet logged in and the "Move Top Bar to Bottom" feature is enabled
+- Updated "Move Top Bar to Bottom" so user menu button is not hidden in the sidebar when this feature is enabled
+- Fixed "fade slim sidebar" bug where ghost image is seen after expanding the sidebar from the smaller version.|
+
+##### Control+Alt Modifier for Thread Navigation Added
+- By pressing the default alt+j to "Go to Previous Thread", you can activate the lowest visible previous thread button. If none are visible, it will scroll up to the next button and select it.
+- By using the default control+alt+j you can instead preview the next "Go to Previous Thread" selection. Adding control to this shortcut will scroll between available buttons and highlight them, but won't select them.  
+- The same behavior applies to the "Go to Next Thread" shortcut.
+
+
 #### [6.11.2025]
 - Adjusted shortcut card margins for improved spacing.
 - Switched tabs and copy-behavior controls to Puppertino scripts.
