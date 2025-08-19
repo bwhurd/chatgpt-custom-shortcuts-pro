@@ -1,5 +1,13 @@
 # Changelog
 
+Changes typically post to the chrome webstore a couple days after date in changelog. 
+
+#### [8.03.2025]
++ Added new shortcut to toggle temporary conversation
+- Fixed model selection for alt+6, alt+7, and alt+8
+- Fixed lowest edit button not being clicked with shortcut. 
+- Fixed Bug: When highlighting text to "reply to ChatGPT", the pop-up button that you click to quote ChatGPT in your response is unintentionally faded. Working on fix with next update.
+
 #### [7.18.2025]
 Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that you click to quote ChatGPT in your response is unintentionally faded. Working on fix with next update.
 

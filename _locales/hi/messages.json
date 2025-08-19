@@ -9,10 +9,10 @@
         "message": "ChatGPT कस्टम शॉर्टकट्स प्लस"
     },
     "label_scroll_up_one": {
-        "message": "एक मैसेज ऊपर स्क्रॉल करें"
+        "message": "एक संदेश ऊपर स्क्रॉल"
     },
     "label_scroll_down_one": {
-        "message": "एक मैसेज नीचे स्क्रॉल करें"
+        "message": "एक संदेश नीचे स्क्रॉल"
     },
     "label_scroll_top": {
         "message": "सबसे ऊपर जाएँ"
@@ -21,52 +21,52 @@
         "message": "सबसे नीचे जाएँ"
     },
     "label_pgup_pgdown": {
-        "message": "PgUp/PgDown नियंत्रण"
+        "message": "PgUp/PgDown रीमैप"
     },
     "label_send_top_bar": {
-        "message": "ऊपरी बार नीचे करें"
+        "message": "टॉप बार को नीचे करें"
     },
     "label_opacity": {
-        "message": "पारदर्शिता:"
+        "message": "अपारदर्शिता:"
     },
     "tag_new": {
         "message": "नया"
     },
     "label_copy": {
-        "message": "कॉपी करें"
+        "message": "कॉपी"
     },
     "label_strip_md": {
-        "message": "मार्कडाउन हटाकर कॉपी करें"
+        "message": "कॉपी करते समय Markdown हटाएँ"
     },
     "label_select_copy": {
         "message": "चयन + कॉपी"
     },
     "label_select_copy_behavior": {
-        "message": "चयन + कॉपी व्यवहार"
+        "message": "‘चयन + कॉपी’ मोड"
     },
     "label_new_chat": {
-        "message": "नई बातचीत"
+        "message": "नई चैट"
     },
     "label_focus_input": {
-        "message": "चैट इनपुट पर फोकस करें"
+        "message": "चैट इनपुट पर फोकस"
     },
     "label_toggle_sidebar": {
-        "message": "साइडबार दिखाएँ/छुपाएँ"
+        "message": "साइडबार दिखाएँ/छिपाएँ"
     },
     "label_toggle_sidebar_folders": {
-        "message": "साइडबार फोल्डर दिखाएँ/छुपाएँ"
+        "message": "साइडबार फ़ोल्डर — मरम्मत हेतु बंद"
     },
     "label_search_chats": {
         "message": "चैट खोजें"
     },
     "label_search_web": {
-        "message": "वेब खोजें"
+        "message": "वेब खोज"
     },
     "label_prev_thread": {
-        "message": "पिछला थ्रेड"
+        "message": "पिछले थ्रेड पर जाएँ"
     },
     "label_next_thread": {
-        "message": "अगला थ्रेड"
+        "message": "अगले थ्रेड पर जाएँ"
     },
     "label_send": {
         "message": "भेजें"
@@ -75,10 +75,10 @@
         "message": "रोकें"
     },
     "tt_send": {
-        "message": "संदेश Control + Enter से भेजने के लिए चेक करें। बंद करने के लिए अनचेक करें।"
+        "message": "सक्रिय करें ताकि Ctrl + Enter से संदेश भेजा जाए।"
     },
     "tt_stop": {
-        "message": "रिस्पॉन्स रोकने के लिए Control + Backspace सेट करें। बंद करने के लिए अनचेक करें।"
+        "message": "सक्रिय करें ताकि Ctrl + Backspace से उत्तर रुक जाए।"
     },
     "label_send_stop": {
         "message": "भेजें और रोकें"
@@ -87,153 +87,204 @@
         "message": "सभी जवाब जोड़ें और कॉपी करें"
     },
     "label_join_separator": {
-        "message": "जोड़ने का सेपरेटर"
+        "message": "जोड़/कॉपी विभाजक"
     },
     "label_join_code": {
-        "message": "सभी कोड बॉक्स जोड़ें और कॉपी करें"
+        "message": "सभी कोड ब्लॉक्स जोड़ें और कॉपी करें"
     },
     "label_code_separator": {
-        "message": "कोड बॉक्स सेपरेटर"
+        "message": "कोड ब्लॉक विभाजक"
     },
     "label_hide_arrows": {
-        "message": "ऊपर/नीचे बटन छुपाएँ"
+        "message": "तीर बटन छिपाएँ"
     },
     "tt_scroll_up_one": {
-        "message": "एक-एक संदेश ऊपर स्क्रॉल करें। बंद करने के लिए शॉर्टकट हटाएँ।"
+        "message": "हर बार एक संदेश ऊपर स्क्रॉल करता है।"
     },
     "tt_scroll_down_one": {
-        "message": "एक-एक संदेश नीचे स्क्रॉल करें।"
+        "message": "हर बार एक संदेश नीचे स्क्रॉल करता है।"
     },
     "tt_scroll_top": {
-        "message": "सबसे पहले मैसेज पर जाएँ।"
+        "message": "पहले संदेश तक स्क्रॉल करता है।"
     },
     "tt_scroll_bottom": {
-        "message": "मूल स्क्रॉल-टू-बॉटम बटन सक्रिय करें।"
+        "message": "सबसे नीचे तक स्क्रॉल करता है।"
     },
     "tt_pgup_pgdown": {
-        "message": "बातचीत में PgUp/PgDown से स्क्रॉल करें। बंद करने को अनचेक करें।"
+        "message": "सक्रिय करें ताकि PageUp/PageDown हमेशा बातचीत को स्क्रॉल करें।"
     },
     "tt_send_top_bar": {
-        "message": "बॉक्स को नीचे करने के लिए चेक करें। छोटी सेटिंग, बड़ा बदलाव।"
+        "message": "सक्रिय करें ताकि मॉडल सेलेक्टर संदेश बॉक्स के नीचे दिखे। छोटी स्क्रीन के लिए बढ़िया।"
+    },
+    "tt_opacity_slider": {
+        "message": "दाएँ स्लाइड करें ताकि नीचे की बार दिखती रहे। बाएँ स्लाइड करें ताकि होवर तक छिपी रहे।"
     },
     "tt_copy_plain": {
-        "message": "मूल कॉपी बटन (सबसे नीचे वाला) सक्रिय करें। प्रतिक्रिया साधारण टेक्स्ट में कॉपी होगी।"
+        "message": "सबसे नीचे दिख रहे नेटिव कॉपी बटन को दबाता है।"
     },
     "tt_strip_md": {
-        "message": "Alt+C से कॉपी करते समय मार्कडाउन (*, ###) हटाएँ। क्लिपबोर्ड अनुमति आवश्यक।"
+        "message": "सक्रिय करें: Alt+C से कॉपी टेक्स्ट में से Markdown के * और ### हटाए, कोड ब्लॉक जस के तस रहें। क्लिपबोर्ड एक्सेस चाहिए।"
     },
     "tt_select_copy": {
-        "message": "माउस से चयन और Ctrl+C दबाने जैसा। बार-बार दबाने पर मैसेज बदलते हैं।"
+        "message": "माउस से टेक्स्ट चुनकर Ctrl+C दबाने जैसा करता है। बार‑बार दबाएँ ताकि दिख रहे संदेशों पर क्रम से चले।"
     },
     "tt_select_copy_behavior": {
-        "message": "सभी मैसेज, केवल आपके, या केवल ChatGPT के मैसेज चुनें।"
+        "message": "किसी भी, सिर्फ अपने, या सिर्फ ChatGPT के संदेश चुनें।"
     },
     "tt_select_all": {
-        "message": "सभी दिख रहे मैसेज चुनें।"
+        "message": "सभी दिख रहे संदेशों पर क्रम से जाए।"
     },
     "tt_select_assistant": {
-        "message": "सिर्फ ChatGPT के संदेश चयन करें।"
+        "message": "सिर्फ ChatGPT के संदेश चुनें।"
     },
     "tt_select_user": {
-        "message": "सिर्फ आपके संदेश चयन करें।"
+        "message": "सिर्फ आपके भेजे संदेश चुनें।"
     },
     "tt_disable_autocopy": {
-        "message": "ऑटो-कॉपी बंद करने को चेक करें (केवल चयन होगा)।"
+        "message": "ऑटो‑कॉपी बंद करने के लिए चुनें (अब सिर्फ टेक्स्ट चुनेगा)।"
     },
     "tt_new_chat": {
         "message": "नई बातचीत शुरू करें।"
     },
     "tt_focus_input": {
-        "message": "चैट इनपुट बॉक्स चुनें।"
+        "message": "चैट इनपुट पर फोकस करें।"
     },
     "tt_toggle_sidebar": {
-        "message": "साइडबार दिखाएँ या छुपाएँ।"
-    },
-    "tt_toggle_sidebar_folders": {
-        "message": "साइडबार फोल्डर और GPT सूची दिखाएँ/छुपाएँ। सेटिंग सेव होगी।"
+        "message": "साइडबार दिखाएँ/छिपाएँ."
     },
     "tt_search_chats": {
-        "message": "चैट खोजें (साइडबार छिपे होने पर भी काम करता है)।"
+        "message": "चैट खोजें."
     },
     "tt_search_web": {
-        "message": "वेब खोज बटन टॉगल करें।"
+        "message": "वेब खोज टूल चालू/बंद करें."
     },
     "tt_prev_thread": {
-        "message": "वर्तमान वार्तालाप के पिछले थ्रेड पर जाएँ। सबसे नीचे < क्लिक होगा।"
+        "message": "‘<’ पर क्लिक करें. Control+Alt+शॉर्टकट से बिना क्लिक किए ‘<’ के बीच स्क्रॉल करें."
     },
     "tt_next_thread": {
-        "message": "वर्तमान वार्तालाप के अगले थ्रेड पर जाएँ। सबसे नीचे > क्लिक होगा।"
+        "message": "‘>’ पर क्लिक करें. Control+Alt+शॉर्टकट से बिना क्लिक किए ‘>’ के बीच स्क्रॉल करें."
     },
     "tt_edit_msg": {
-        "message": "पिछला संदेश संपादित करें। कई हों तो सबसे नीचे वाला होगा।"
+        "message": "सबसे नीचे दिख रहे यूज़र संदेश पर ‘Edit’ क्लिक करें. फिर दबाने पर उसके ऊपर वाले पर जाएँ."
     },
     "tt_send_edit": {
-        "message": "संपादन के बाद 'भेजें' दबाएँ।"
+        "message": "संदेश एडिट करने के बाद ‘Send’ पर क्लिक करें."
     },
     "label_edit_msg": {
-        "message": "संदेश बदलें"
+        "message": "संदेश एडिट करें"
     },
     "label_send_edit": {
-        "message": "भेजें"
+        "message": "एडिट किया संदेश भेजें"
     },
     "tt_join_all": {
-        "message": "सभी ChatGPT जवाब जोड़ें और क्लिपबोर्ड पर कॉपी करें। आपके मैसेज नहीं जुड़ेंगे।"
+        "message": "बातचीत में ChatGPT की सभी प्रतिक्रियाएँ जोड़कर क्लिपबोर्ड पर कॉपी करें. यूज़र का लिखा हिस्सा स्किप करता है."
     },
     "tt_join_separator": {
-        "message": "जुड़े संदेशों के बीच डालने वाला सेपरेटर। लाइन ब्रेक के लिए \\n लिखें।"
+        "message": "जुड़ी चीज़ों के बीच का सेपरेटर बदलें. लाइन ब्रेक के लिए स्पेस +\\n इस्तेमाल करें."
     },
     "tt_join_code": {
-        "message": "सारे कोड बॉक्स जोड़ें और कॉपी करें। आपके मैसेज शामिल नहीं होंगे।"
+        "message": "सभी कोड ब्लॉक जोड़कर क्लिपबोर्ड पर कॉपी करें. यूज़र इनपुट स्किप करता है."
     },
     "tt_code_separator": {
-        "message": "कोड बॉक्स को जोड़ने के लिए सेपरेटर। लाइन ब्रेक के लिए \\n लिखें।"
+        "message": "कोड ब्लॉकों के बीच का सेपरेटर बदलें. लाइन ब्रेक के लिए स्पेस + \\n इस्तेमाल करें."
     },
     "tt_hide_arrows": {
-        "message": "ऊपर-नीचे वाले एरो बटन छुपाएँ।"
+        "message": "ऊपर/नीचे वाले तीर बटन छिपाएँ."
     },
     "label_showModelPicker": {
-        "message": "मॉडल पिकर दिखाएं"
+        "message": "मॉडल पिकर दिखाएँ"
     },
     "tt_showModelPicker_plain": {
-        "message": "ChatGPT Plus मॉडल पिकर दिखाएं (4o, o3, o4-mini, o4-mini-high, 4o-mini)"
+        "message": "ChatGPT Plus का मॉडल पिकर दिखाएँ"
     },
     "label_pickModel": {
         "message": "मॉडल चुनें"
     },
     "tt_pick_model_plain": {
-        "message": "Alt या Control + नंबर (1–5) दबाकर ChatGPT Plus मॉडल बदलें"
+        "message": "Alt या Control के साथ शॉर्टकट से मॉडल बदलें. कोई भी नंबर क्लिक करके कस्टम शॉर्टकट सेट/क्लीयर करें."
     },
     "label_use_alt": {
         "message": "Alt इस्तेमाल करें"
     },
     "tt_use_Alt_for_picker": {
-        "message": "Alt+1 (4o), Alt+2 (o3), Alt+3 (o4-mini), Alt+4 (o4-mini-high), Alt+5 (4o-mini) से ChatGPT मॉडल चुनें"
+        "message": "Alt+शॉर्टकट से मॉडल बदलें. कोई भी नंबर क्लिक करके कस्टम शॉर्टकट सेट/क्लीयर करें."
     },
     "label_use_control": {
         "message": "Control इस्तेमाल करें"
     },
     "tt_use_Control_for_picker": {
-        "message": "Control+1 (4o), Control+2 (o3), Control+3 (o4-mini), Control+4 (o4-mini-high), Control+5 (4o-mini) से ChatGPT मॉडल चुनें"
+        "message": "Control+शॉर्टकट से मॉडल बदलें. कोई भी नंबर क्लिक करके कस्टम शॉर्टकट सेट/क्लीयर करें."
     },
     "tt_regenerate": {
-        "message": "सबसे नीचे दिखाई दे रहे रीजनरेट रिस्पॉन्स बटन पर क्लिक करता है।"
+        "message": "सबसे नीचे दिख रहे ‘Regenerate’ बटन पर क्लिक करता है."
     },
     "label_regenerate": {
-        "message": "रिस्पॉन्स फिर से बनाएँ"
+        "message": "जवाब फिर से बनाएं"
     },
     "label_rememberSidebarScrollPositionCheckbox": {
-        "message": "साइडबार स्क्रॉल स्थिति याद रखें"
+        "message": "साइडबार की स्क्रोल पोज़िशन याद रखें"
     },
     "tt_rememberSidebarScrollPositionCheckbox": {
-        "message": "आमतौर पर, साइडबार खोलने, बंद करने या रीलोड करने पर ऊपर चला जाता है। पिछली जगह लौटने के लिए इसे चुनें।"
-    },
-    "tt_opacity_slider": {
-        "message": "नीचे की पट्टी हमेशा दिखाएं (दाएं) या अपने आप छुपाएं (बाएं)। माउस ले जाने पर दिखेगी।"
+        "message": "इसे ऑन करें ताकि साइडबार की स्क्रोल स्थिति याद रहे."
     },
     "label_fade_slim_sidebar": {
-        "message": "स्लिम साइडबार फीका करें"
+        "message": "स्लिम साइडबार फेड"
     },
     "tt_slim_opacity_slider": {
-        "message": "स्लिम साइडबार फीका करें। माउस ले जाने पर दिखेगा।"
+        "message": "स्लिम साइडबार को फ़ेड करें। दिखाने के लिए कर्सर ले जाएँ."
+    },
+    "label_temp_chat": {
+        "message": "अस्थायी चैट"
+    },
+    "tt_temp_chat": {
+        "message": "अस्थायी चैट टॉगल करें (पहला संदेश भेजने से पहले उपलब्ध)."
+    },
+    "label_think_longer": {
+        "message": "गहराई से सोचें"
+    },
+    "tt_think_longer": {
+        "message": "केवल फ्री वर्ज़न में उपलब्ध। और गहरी तर्क-प्रक्रिया से अधिक विस्तृत जवाब पाएं."
+    },
+    "label_study": {
+        "message": "पढ़ें और सीखें"
+    },
+    "tt_study": {
+        "message": "स्टेप-दर-स्टेप समझाने, अवधारणाएँ जोड़ने और समझ मजबूत करने के लिए टॉगल करें."
+    },
+    "label_toggle_create_image": {
+        "message": "छवि बनाएं"
+    },
+    "tt_toggle_create_image": {
+        "message": "छवि बनाने वाला टूल ऑन/ऑफ करें."
+    },
+    "label_toggle_canvas": {
+        "message": "कैनवस"
+    },
+    "tt_toggle_canvas": {
+        "message": "कैनवस कार्यक्षेत्र ऑन/ऑफ करें."
+    },
+    "label_add_photos_files": {
+        "message": "फोटो/फाइल जोड़ें"
+    },
+    "tt_add_photos_files": {
+        "message": "संदेश में चित्र या फाइलें संलग्न करें."
+    },
+    "label_toggle_dictate": {
+        "message": "आवाज़ से लिखें"
+    },
+    "tt_toggle_dictate": {
+        "message": "एक बार दबाएँ: डिक्टेशन शुरू। फिर से दबाएँ: डिक्टेशन भेजें."
+    },
+    "label_cancel_dictation": {
+        "message": "डिक्टेशन रद्द करें"
+    },
+    "tt_cancel_dictation": {
+        "message": "बिना ट्रांसक्राइब किए चल रहा डिक्टेशन रद्द करें."
+    },
+    "label_share": {
+        "message": "साझा करें"
+    },
+    "tt_share": {
+        "message": "चैट साझा करने के लिए लिंक बनाएँ."
     }
 }

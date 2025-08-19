@@ -1,9 +1,9 @@
-{
+﻿{
     "manifest_version": 3,
     "name": "__MSG_app_name__",
     "default_locale": "en",
     "description": "__MSG_app_description__",
-    "version": "3.3.8.0",
+    "version": "3.8.0.0",
     "permissions": [
         "clipboardWrite",
         "storage"
@@ -26,7 +26,6 @@
     "content_scripts": [
         {
             "matches": [
-                "*://chat.openai.com/*",
                 "*://*.chatgpt.com/*"
             ],
             "js": [
@@ -38,5 +37,13 @@
             ],
             "run_at": "document_idle"
         }
-    ]
+    ],
+    "commands": {
+        "_execute_action": {
+            "suggested_key": {
+                "default": "Alt+U"
+            },
+            "description": "Show the popup"
+        }
+    }
 }

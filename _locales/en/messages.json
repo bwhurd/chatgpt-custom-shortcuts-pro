@@ -3,7 +3,7 @@
         "message": "ChatGPT Custom Shortcuts Pro"
     },
     "app_description": {
-        "message": "Custom keyboard shortcuts for ChatGPT: set keys to scroll up/down, copy, join responses, start a new chat, and toggle the sidebar."
+        "message": "ChatGPT Custom Shortcuts Pro adds keyboard shortcuts to scroll, copy, start new chats, toggle the sidebar, switch models, and more."
     },
     "popup_title": {
         "message": "ChatGPT Custom Shortcuts Pro"
@@ -60,7 +60,7 @@
         "message": "Search Chats"
     },
     "label_search_web": {
-        "message": "Search the Web"
+        "message": "Web Search Tool"
     },
     "label_prev_thread": {
         "message": "Go to Previous Thread"
@@ -75,10 +75,10 @@
         "message": "Stop"
     },
     "tt_send": {
-        "message": "Check to make Control + Enter send the message. Uncheck to disable."
+        "message": "Check to make Control + Enter send the message."
     },
     "tt_stop": {
-        "message": "Check to make Control + Backspace stop response generation. Uncheck to disable."
+        "message": "Check to make Control + Backspace stop response generation."
     },
     "label_send_stop": {
         "message": "Send and Stop"
@@ -99,34 +99,34 @@
         "message": "Hide Arrow Buttons"
     },
     "tt_scroll_up_one": {
-        "message": "Scroll up one message at a time. To disable any shortcut, delete the assigned letter."
+        "message": "Scrolls up one message at a time."
     },
     "tt_scroll_down_one": {
-        "message": "Scroll down one message at a time."
+        "message": "Scrolls down one message at a time."
     },
     "tt_scroll_top": {
-        "message": "Scroll up to the first message."
+        "message": "Scrolls up to the first message."
     },
     "tt_scroll_bottom": {
-        "message": "Activate the native scroll-to-bottom button."
+        "message": "Scrolls to the bottom."
     },
     "tt_pgup_pgdown": {
-        "message": "Check to make your keyboard's PageUp and PageDown keys scroll the conversation instead of the input box. Uncheck to disable."
+        "message": "Enable to make PageUp and PageDown always scroll the conversation."
     },
     "tt_send_top_bar": {
-        "message": "Check this box to move the model selector and header to the bottom. A small change that makes a big difference."
+        "message": "Enable to place the model selector below the message box. Great for small screens."
     },
     "tt_opacity_slider": {
-        "message": "Keep bottom bar always visible (right) or hide automatically (left). Hover mouse to reveal."
+        "message": "Slide right to keep the bottom bar visible. Slide left to hide it until you hover."
     },
     "tt_copy_plain": {
-        "message": "Activate the lowest visible, native copy button. Copies any response as plain text."
+        "message": "Activate the lowest visible, native copy button."
     },
     "tt_strip_md": {
-        "message": "Remove Markdown *s and ### from text copied with Alt+C. Requires clipboard access. Uncheck to disable."
+        "message": "Enable to remove Markdown * and ### from text copied with Alt+C, while leaving code boxes unchanged. Requires clipboard access."
     },
     "tt_select_copy": {
-        "message": "Simulates selecting text with mouse and pressing Ctrl+C. Press multiple times to cycle through visible messages."
+        "message": "Simulates mouse-selecting text and pressing Ctrl+C. Press repeatedly to cycle through visible messages."
     },
     "tt_select_copy_behavior": {
         "message": "Select any message, only yours, or only ChatGPT’s."
@@ -141,7 +141,7 @@
         "message": "Only select messages sent by you."
     },
     "tt_disable_autocopy": {
-        "message": "Check to disable auto-copy (i.e. it only selects the text)."
+        "message": "Check to disable auto-copy (i.e. now it only selects the text)."
     },
     "tt_new_chat": {
         "message": "Start a new conversation."
@@ -152,23 +152,20 @@
     "tt_toggle_sidebar": {
         "message": "Toggle the sidebar."
     },
-    "tt_toggle_sidebar_folders": {
-        "message": "Down for Repairs. Toggle sidebar folders and GPT list. Persists after reload."
-    },
     "tt_search_chats": {
-        "message": "Search chats (clicks native button, even if sidebar is hidden)."
+        "message": "Search chats."
     },
     "tt_search_web": {
-        "message": "Toggle Search the Web Button."
+        "message": "Toggle Search the Web tool."
     },
     "tt_prev_thread": {
-        "message": "Go to previous thread in current conversation. Clicks lowest visible < button."
+        "message": "Click '<'. Use Control+Alt+shortcut to scroll between '<' without clicking."
     },
     "tt_next_thread": {
-        "message": "Go to next thread in current conversation. Clicks lowest visible > button."
+        "message": "Click '>'. Use Control+Alt+shortcut to scroll between '>' without clicking."
     },
     "tt_edit_msg": {
-        "message": "Click edit on a previous message. If multiple, clicks lowest."
+        "message": "Click edit on the lowest visible user message. Press again to go to the next one up."
     },
     "tt_send_edit": {
         "message": "Click 'Send' after editing a message."
@@ -180,16 +177,16 @@
         "message": "Send Edited Message"
     },
     "tt_join_all": {
-        "message": "Joins all ChatGPT responses (excluding your messages) and copies to clipboard."
+        "message": "Join all ChatGPT responses in the conversation and copy to clipboard. Skips user input."
     },
     "tt_join_separator": {
-        "message": "Customize separator between joined items. Use \\n for line breaks."
+        "message": "Customize separator between joined items. Use a space +\\n for line breaks."
     },
     "tt_join_code": {
-        "message": "Joins all code blocks and copies to clipboard. Excludes user input."
+        "message": "Join all code blocks and copy to clipboard. Skips user input."
     },
     "tt_code_separator": {
-        "message": "Customize separator between code blocks. Use \\n for line breaks."
+        "message": "Customize separator between code blocks. Use a space + \\n for line breaks."
     },
     "tt_hide_arrows": {
         "message": "Hide the up and down arrow buttons."
@@ -198,25 +195,25 @@
         "message": "Show Model Picker"
     },
     "tt_showModelPicker_plain": {
-        "message": "Show the ChatGPT Plus model picker (4o, o3, o4-mini, o4-mini-high, 4o-mini)"
+        "message": "Show the ChatGPT Plus model picker"
     },
     "label_pickModel": {
         "message": "Pick Model"
     },
     "tt_pick_model_plain": {
-        "message": "Switch ChatGPT Plus model using Alt or Control + number keys (1–5)"
+        "message": "Switch ChatGPT models using Shortcut key with Alt or Control. Click any number to set or clear a custom shortcut."
     },
     "label_use_alt": {
         "message": "Use Alt"
     },
     "tt_use_Alt_for_picker": {
-        "message": "Select ChatGPT model using Alt+1 (4o), Alt+2 (o3), Alt+3 (o4-mini), Alt+4 (o4-mini-high), Alt+5 (4o-mini)"
+        "message": "Use Alt+Shortcut to switch models. Click any number to set or clear a custom shortcut."
     },
     "label_use_control": {
         "message": "Use Control"
     },
     "tt_use_Control_for_picker": {
-        "message": "Select ChatGPT model using Control+1 (4o), Control+2 (o3), Control+3 (o4-mini), Control+4 (o4-mini-high), Control+5 (4o-mini)"
+        "message": "Use Control+Shortcut to switch models. Click any number to set or clear a custom shortcut."
     },
     "tt_regenerate": {
         "message": "Clicks the lowest visible regenerate response button."
@@ -228,12 +225,66 @@
         "message": "Remember Sidebar Scroll Position"
     },
     "tt_rememberSidebarScrollPositionCheckbox": {
-        "message": "Normally, the sidebar scrolls back to the top when you open, close, or reload it. Check this box to return to the same spot in the sidebar."
+        "message": "Enable to remember the sidebar scroll position."
     },
     "label_fade_slim_sidebar": {
         "message": "Fade Slim Sidebar"
     },
     "tt_slim_opacity_slider": {
         "message": "Fade the slim sidebar. Hover mouse to reveal."
+    },
+    "label_temp_chat": {
+        "message": "Temporary Chat"
+    },
+    "tt_temp_chat": {
+        "message": "Toggle Temporary Chat (available before you send the first message.)"
+    },
+    "label_think_longer": {
+        "message": "Think Longer Tool"
+    },
+    "tt_think_longer": {
+        "message": "Only available in the free version. Engage deeper reasoning for a more thorough answer."
+    },
+    "label_study": {
+        "message": "Study and Learn Tool"
+    },
+    "tt_study": {
+        "message": "Toggle tool to explain step-by-step, link concepts, and reinforce understanding."
+    },
+    "label_toggle_create_image": {
+        "message": "Create Image Tool"
+    },
+    "tt_toggle_create_image": {
+        "message": "Toggle the image creation tool."
+    },
+    "label_toggle_canvas": {
+        "message": "Canvas Tool"
+    },
+    "tt_toggle_canvas": {
+        "message": "Toggle the canvas workspace tool."
+    },
+    "label_add_photos_files": {
+        "message": "Add Photos & Files Tool"
+    },
+    "tt_add_photos_files": {
+        "message": "Attach images or files to a message."
+    },
+    "label_toggle_dictate": {
+        "message": "Dictate"
+    },
+    "tt_toggle_dictate": {
+        "message": "Press once to start dictation. Press again to submit dictation."
+    },
+    "label_cancel_dictation": {
+        "message": "Cancel Dictation"
+    },
+    "tt_cancel_dictation": {
+        "message": "Cancel dictation in progress without transcribing."
+    },
+    "label_share": {
+        "message": "Share"
+    },
+    "tt_share": {
+        "message": "Create a link to share the conversation."
     }
 }
