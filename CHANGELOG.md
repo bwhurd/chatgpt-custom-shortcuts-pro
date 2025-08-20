@@ -1,6 +1,19 @@
 # Changelog
 
-Changes typically post to the chrome webstore a couple days after date in changelog. 
+Changes typically post to the chrome web store a couple days after date in changelog. 
+
+#### [8.20.2025]
++ Big update with lots of new functionality:
+  - Search filter in icon popup to quickly locate settings
+  - Import and export settings with a JSON file for backup and restore
+  - Support to use any key as shortcut (Insert, Mute, Arrow keys, most keys, etc.)
+  - Assign any key to model picker including system, media, and navigation keys (e.g., Insert, Mute, Arrow keys)
+  - Shortcuts to toggle most tools: Study and Learn, Create Image, Canvas, Add Photos & Files, Think Longer
+  - Shortcuts for: dictate, share
+  - Under the hood stuff: Changed tooltips to info icons, Add Photos & Files Tool, big updates to duplicate key logic and user dup modal popups
+  - Complete update to translations
++ Fixed "Remember Sidebar Scroll Position" so it works properly on reload
+  
 
 #### [8.03.2025]
 + Added new shortcut to toggle temporary conversation
