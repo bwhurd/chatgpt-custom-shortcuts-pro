@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "Створити посилання для спільного доступу до розмови."
-    },
-    "label_backup_restore": {
-        "message": "Резервне копіювання й відновлення"
-    },
-    "tt_backup_restore": {
-        "message": "Експортуйте або імпортуйте всі налаштування розширення."
-    },
-    "btn_export": {
-        "message": "Експорт"
-    },
-    "btn_import": {
-        "message": "Імпорт"
-    },
-    "tt_export": {
-        "message": "Збережіть налаштування у файл JSON."
-    },
-    "tt_import": {
-        "message": "Завантажте налаштування з файлу JSON."
-    },
-    "toast_export_success": {
-        "message": "Налаштування експортовано. Перевірте папку завантажень."
-    },
-    "toast_import_no_compatible": {
-        "message": "Сумісних налаштувань у файлі не знайдено."
-    },
-    "confirm_import_overwrite": {
-        "message": "Імпортувати налаштування з файлу та замінити поточні?"
-    },
-    "toast_import_failed": {
-        "message": "Помилка імпорту: $1"
-    },
-    "toast_import_complete": {
-        "message": "Імпорт завершено. Перезавантажте сторінку для застосування змін."
-    },
-    "toast_import_invalid": {
-        "message": "Недійсний файл. Імпорт скасовано."
     }
 }

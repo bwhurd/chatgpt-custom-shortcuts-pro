@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "Create a link to share the conversation."
-    },
-    "label_backup_restore": {
-        "message": "Backup & Restore Settings"
-    },
-    "tt_backup_restore": {
-        "message": "Export or import all extension settings."
-    },
-    "btn_export": {
-        "message": "Export"
-    },
-    "btn_import": {
-        "message": "Import"
-    },
-    "tt_export": {
-        "message": "Export your settings to a JSON file."
-    },
-    "tt_import": {
-        "message": "Import settings from a JSON file."
-    },
-    "toast_export_success": {
-        "message": "Settings exported to file. Check your downloads folder."
-    },
-    "toast_import_no_compatible": {
-        "message": "No compatible settings found in file."
-    },
-    "confirm_import_overwrite": {
-        "message": "Import settings from file and overwrite current values?"
-    },
-    "toast_import_failed": {
-        "message": "Import failed: $1"
-    },
-    "toast_import_complete": {
-        "message": "Import complete. Reload page to apply all changes."
-    },
-    "toast_import_invalid": {
-        "message": "Invalid file. Import aborted."
     }
 }

@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "Создать ссылку для обмена перепиской."
-    },
-    "label_backup_restore": {
-        "message": "Резервное копирование и восстановление"
-    },
-    "tt_backup_restore": {
-        "message": "Экспортируйте или импортируйте все настройки расширения."
-    },
-    "btn_export": {
-        "message": "Экспорт"
-    },
-    "btn_import": {
-        "message": "Импорт"
-    },
-    "tt_export": {
-        "message": "Сохраните настройки в файл JSON."
-    },
-    "tt_import": {
-        "message": "Загрузите настройки из файла JSON."
-    },
-    "toast_export_success": {
-        "message": "Настройки экспортированы. Проверьте папку загрузок."
-    },
-    "toast_import_no_compatible": {
-        "message": "В файле нет подходящих настроек."
-    },
-    "confirm_import_overwrite": {
-        "message": "Импортировать настройки из файла и заменить текущие?"
-    },
-    "toast_import_failed": {
-        "message": "Ошибка импорта: $1"
-    },
-    "toast_import_complete": {
-        "message": "Импорт завершён. Перезагрузите страницу для применения изменений."
-    },
-    "toast_import_invalid": {
-        "message": "Неверный файл. Импорт отменён."
     }
 }

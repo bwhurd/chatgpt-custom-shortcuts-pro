@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "Crea un enlace para compartir la conversación."
-    },
-    "label_backup_restore": {
-        "message": "Guardar y restaurar ajustes"
-    },
-    "tt_backup_restore": {
-        "message": "Exporta o importa todos los ajustes de la extensión."
-    },
-    "btn_export": {
-        "message": "Exportar"
-    },
-    "btn_import": {
-        "message": "Importar"
-    },
-    "tt_export": {
-        "message": "Exporta tus ajustes a un archivo JSON."
-    },
-    "tt_import": {
-        "message": "Importa ajustes desde un archivo JSON."
-    },
-    "toast_export_success": {
-        "message": "Ajustes exportados a un archivo. Revisa tu carpeta de descargas."
-    },
-    "toast_import_no_compatible": {
-        "message": "No se encontraron ajustes compatibles en el archivo."
-    },
-    "confirm_import_overwrite": {
-        "message": "¿Importar ajustes del archivo y sobrescribir los valores actuales?"
-    },
-    "toast_import_failed": {
-        "message": "Error al importar: $1"
-    },
-    "toast_import_complete": {
-        "message": "Importación completa. Recarga la página para aplicar todos los cambios."
-    },
-    "toast_import_invalid": {
-        "message": "Archivo no válido. Importación cancelada."
     }
 }

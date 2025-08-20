@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "会話を共有するリンクを作成。"
-    },
-    "label_backup_restore": {
-        "message": "設定のバックアップと復元"
-    },
-    "tt_backup_restore": {
-        "message": "拡張機能の設定をエクスポート/インポートします。"
-    },
-    "btn_export": {
-        "message": "エクスポート"
-    },
-    "btn_import": {
-        "message": "インポート"
-    },
-    "tt_export": {
-        "message": "設定をJSONファイルにエクスポートします。"
-    },
-    "tt_import": {
-        "message": "JSONファイルから設定をインポートします。"
-    },
-    "toast_export_success": {
-        "message": "設定をファイルにエクスポートしました。ダウンロードフォルダを確認してください。"
-    },
-    "toast_import_no_compatible": {
-        "message": "ファイルに互換性のある設定が見つかりません。"
-    },
-    "confirm_import_overwrite": {
-        "message": "ファイルから設定をインポートし、現在の値を上書きしますか？"
-    },
-    "toast_import_failed": {
-        "message": "インポートに失敗しました: $1"
-    },
-    "toast_import_complete": {
-        "message": "インポートが完了しました。すべての変更を反映するにはページを再読み込みしてください。"
-    },
-    "toast_import_invalid": {
-        "message": "無効なファイルです。インポートを中止しました。"
     }
 }

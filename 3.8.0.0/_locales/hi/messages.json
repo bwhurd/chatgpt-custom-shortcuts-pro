@@ -286,41 +286,5 @@
     },
     "tt_share": {
         "message": "चैट साझा करने के लिए लिंक बनाएँ."
-    },
-    "label_backup_restore": {
-        "message": "बैकअप और रिस्टोर सेटिंग्स"
-    },
-    "tt_backup_restore": {
-        "message": "एक्सटेंशन की सभी सेटिंग्स एक्सपोर्ट या इम्पोर्ट करें."
-    },
-    "btn_export": {
-        "message": "एक्सपोर्ट"
-    },
-    "btn_import": {
-        "message": "इम्पोर्ट"
-    },
-    "tt_export": {
-        "message": "अपनी सेटिंग्स को JSON फ़ाइल में एक्सपोर्ट करें."
-    },
-    "tt_import": {
-        "message": "JSON फ़ाइल से सेटिंग्स इम्पोर्ट करें."
-    },
-    "toast_export_success": {
-        "message": "सेटिंग्स फ़ाइल में एक्सपोर्ट हो गईं. अपना डाउनलोड्स फ़ोल्डर जांच करें."
-    },
-    "toast_import_no_compatible": {
-        "message": "फ़ाइल में संगत सेटिंग्स नहीं मिलीं."
-    },
-    "confirm_import_overwrite": {
-        "message": "फ़ाइल से सेटिंग्स इम्पोर्ट करके वर्तमान मान ओवरराइट करें?"
-    },
-    "toast_import_failed": {
-        "message": "इम्पोर्ट विफल: $1"
-    },
-    "toast_import_complete": {
-        "message": "इम्पोर्ट पूरा हुआ. सभी बदलाव लागू करने के लिए पेज दोबारा लोड करें."
-    },
-    "toast_import_invalid": {
-        "message": "अमान्य फ़ाइल. इम्पोर्ट रद्द किया गया."
     }
 }

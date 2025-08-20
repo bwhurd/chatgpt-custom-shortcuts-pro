@@ -3746,47 +3746,159 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active\:opacity
 
 // Auto-click "try again" when "Something went wrong" appears after switching from a foldered to non-foldered chat.
 // Batch checks during browser idle time to avoid main-thread contention. Wrap click logic in an idle callback and schedule it once per mutation burst.
-(() => {
-    const containerSel = 'div.flex.h-full.w-full.flex-col.items-center.justify-center.gap-4';
-    const btnSel = `${containerSel} button.btn-secondary`;
 
-    // 1) Inject fade CSS
-    const style = document.createElement('style');
-    style.textContent = `
-      ${containerSel} {
-        opacity: 0;
-        transition: opacity 200ms ease-in-out;
-      }
-      ${containerSel}.visible {
-        opacity: 1;
-      }
-    `;
-    document.head.append(style);
+(function () {
+    "use strict";
 
-    // 2) Centralized click + fade logic
-    let scheduled = false;
-    const handleNode = (node) => {
-        if (!(node instanceof HTMLElement) || !node.matches(containerSel)) return;
-        node.classList.add('visible');   // fade in
-        if (scheduled) return;
-        scheduled = true;
-        requestIdleCallback(() => {
-            node.querySelector(btnSel)?.click();
-            node.classList.remove('visible');  // fade out
-            scheduled = false;
-        });
-    };
+    chrome.storage.sync.get({ rememberSidebarScrollPositionCheckbox: false }, ({ rememberSidebarScrollPositionCheckbox: enabled }) => {
+        if (!enabled) return;
 
-    // 3) Initial pass in case it’s already there
-    document.querySelectorAll(containerSel).forEach(handleNode);
+        /* ——— constants ——— */
+        const SELECTOR = 'nav[aria-label="Chat history"]';
+        const BASE_KEY = '__chat_sidebar_scroll__';
+        const SAVE_THROTTLE = 60;
+        const FLICK_DELAY = 30; // ms between flicks
+        const STALL_TIMEOUT = 400; // ms w/o growth before wiggle
+        const MAX_RESTORE_TIME = 8000; // 8 seconds max
 
-    // 4) Watch for new ones
-    new MutationObserver(muts => {
-        for (let { addedNodes } of muts) {
-            addedNodes.forEach(handleNode);
+        /* ——— per‑tab ID ——— */
+        const TAB_ID_KEY = '__chat_sidebar_tab_id__';
+        let tabId;
+        try { tabId = sessionStorage.getItem(TAB_ID_KEY); } catch { }
+        if (!tabId) {
+            tabId = typeof crypto?.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : Date.now().toString(36) + Math.random().toString(36).slice(2);
+            try { sessionStorage.setItem(TAB_ID_KEY, tabId); } catch { }
         }
-    }).observe(document.body, { childList: true, subtree: true });
+        const STORAGE_KEY = `${BASE_KEY}_${tabId}`;
+
+        /* ——— storage helpers ——— */
+        const getPos = () => new Promise(res => {
+            try {
+                const s = sessionStorage.getItem(STORAGE_KEY);
+                if (s !== null) return res(Number(s) || 0);
+            } catch { }
+            try { chrome.storage.local.get([STORAGE_KEY], r => res(Number(r[STORAGE_KEY]) || 0)); } catch { res(0); }
+        });
+
+        const setPos = v => {
+            try { sessionStorage.setItem(STORAGE_KEY, v); } catch { }
+            try { chrome.storage.local.set({ [STORAGE_KEY]: v }); } catch { }
+        };
+
+        /* ——— tiny helpers ——— */
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const throttle = (fn, ms) => {
+            let last = 0, id = 0;
+            return (...a) => {
+                const now = Date.now();
+                const call = () => fn(...a);
+                if (now - last > ms) { last = now; call(); }
+                else if (!id) id = setTimeout(() => { id = 0; last = Date.now(); call(); }, ms - (now - last));
+            };
+        };
+
+        // ——— restore with time-based persistence ———
+        async function restore(container, wanted) {
+            if (!wanted) return;
+            if (container.__restoring) return;
+            container.__restoring = true;
+
+            let abort = false;
+            const stop = () => { abort = true; };
+            container.addEventListener('wheel', stop, { passive: true });
+            container.addEventListener('touchstart', stop, { passive: true });
+
+            await sleep(80);
+
+            const startTime = performance.now();
+            let lastH = container.scrollHeight;
+            let lastGrowth = performance.now();
+            let cyclesAtBottom = 0;
+
+            while (!abort && (performance.now() - startTime) < MAX_RESTORE_TIME) {
+                const maxReach = container.scrollHeight - container.clientHeight;
+
+                // If we can reach the wanted position, do so and break
+                if (maxReach >= wanted) {
+                    container.scrollTo({ top: wanted, behavior: 'smooth' });
+                    await sleep(200);
+                    break;
+                }
+
+                // Flick hard to bottom (overshooting by 2k px, in case lazy loader only triggers at the very bottom)
+                container.scrollTo({ top: container.scrollHeight + 2000, behavior: 'auto' });
+
+                await sleep(FLICK_DELAY);
+
+                const now = performance.now();
+                if (container.scrollHeight !== lastH) {
+                    lastH = container.scrollHeight;
+                    lastGrowth = now;
+                    cyclesAtBottom = 0;
+                } else if (now - lastGrowth > STALL_TIMEOUT) {
+                    // Try "wiggle" once or twice at the bottom to trigger loader in edge cases
+                    if (cyclesAtBottom < 2) {
+                        cyclesAtBottom++;
+                        container.scrollTo({ top: container.scrollHeight - 100, behavior: 'auto' });
+                        await sleep(FLICK_DELAY);
+                        container.scrollTo({ top: container.scrollHeight + 2000, behavior: 'auto' });
+                        await sleep(FLICK_DELAY);
+                        continue;
+                    }
+                    // After wiggle, just keep trying until MAX_RESTORE_TIME is reached
+                    lastGrowth = performance.now(); // reset growth timer after wiggle
+                }
+            }
+
+            container.removeEventListener('wheel', stop);
+            container.removeEventListener('touchstart', stop);
+            container.__restoring = false;
+        }
+
+        /* ——— attach to one sidebar ——— */
+        function attach(container) {
+            if (container.__scrollSyncAttached) return;
+            container.__scrollSyncAttached = true;
+
+            getPos().then(pos => {
+                restore(container, pos);
+                // Second attempt after UI transitions
+                setTimeout(() => restore(container, pos), 350);
+            });
+
+            container.addEventListener('scroll', throttle(() => {
+                if (!container.__restoring) setPos(container.scrollTop);
+            }, SAVE_THROTTLE), { passive: true });
+        }
+
+        /* ——— watch DOM for sidebars ——— */
+        function init() {
+            const el = document.querySelector(SELECTOR);
+            if (el) attach(el);
+        }
+
+        new MutationObserver(muts => {
+            for (const m of muts) {
+                for (const n of m.addedNodes) {
+                    if (n.nodeType !== 1) continue;
+                    if (n.matches?.(SELECTOR)) attach(n);
+                    else {
+                        const el = n.querySelector?.(SELECTOR);
+                        if (el) attach(el);
+                    }
+                }
+            }
+        }).observe(document.documentElement, { childList: true, subtree: true });
+
+        if (document.readyState === 'loading')
+            document.addEventListener('DOMContentLoaded', init, { once: true });
+        else
+            init();
+    });
 })();
+
 
 
 // ==============================================================
@@ -4696,5 +4808,3 @@ setTimeout(() => {
         };
     });
 })();
-
-
