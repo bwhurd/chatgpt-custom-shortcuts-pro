@@ -10,7 +10,7 @@ Changes typically post to the chrome web store a couple days after date in chang
   - Assign any key to model picker including system, media, and navigation keys (e.g., Insert, Mute, Arrow keys)
   - Shortcuts to toggle most tools: Study and Learn, Create Image, Canvas, Add Photos & Files, Think Longer
   - Shortcuts for: dictate, share
-  - Under the hood stuff: Changed tooltips to info icons, Add Photos & Files Tool, big updates to duplicate key logic and user dup modal popups
+  - Under the hood stuff: Changed tooltips to info icons, big updates to duplicate key logic and user dup modal popups
   - Complete update to translations
 + Fixed "Remember Sidebar Scroll Position" so it works properly on reload
   
