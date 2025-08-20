@@ -225,6 +225,53 @@ function isMacPlatform() {
     return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
 }
 
+// --- compat helpers to support both legacy chars and new codes ---
+function charToCode(ch) {
+    if (!ch) return '';
+    const raw = ch.trim();
+    const upper = raw.toUpperCase();
+    if (/^[A-Z]$/.test(upper)) return `Key${upper}`;
+    if (/^[0-9]$/.test(raw)) return `Digit${raw}`;
+    switch (raw) {
+        case '-': return 'Minus';
+        case '=': return 'Equal';
+        case '[': return 'BracketLeft';
+        case ']': return 'BracketRight';
+        case '\\': return 'Backslash';
+        case ';': return 'Semicolon';
+        case "'": return 'Quote';
+        case ',': return 'Comma';
+        case '.': return 'Period';
+        case '/': return 'Slash';
+        case '`': return 'Backquote';
+        case ' ': return 'Space';
+        default: return '';
+    }
+}
+
+function codeEquals(a, b) {
+    if (a === b) return true;
+    const A = a && a.match(/^(Digit|Numpad)([0-9])$/);
+    const B = b && b.match(/^(Digit|Numpad)([0-9])$/);
+    return !!(A && B && A[2] === B[2]);
+}
+
+/** Accepts either a legacy single char ('w') or a code ('KeyW') in storage. */
+function normalizeStoredToCode(stored) {
+    if (!stored) return '';
+    // New format already looks like a code
+    if (/^[A-Z][a-z]+/.test(stored)) return stored;
+    // Legacy single-character value
+    if (stored.length === 1) return charToCode(stored);
+    return '';
+}
+
+/** Returns true if the pressed key matches the stored shortcut key. */
+function matchesStoredKey(storedValue, e) {
+    const want = normalizeStoredToCode(storedValue);
+    if (!want) return false;
+    return codeEquals(want, e.code);
+}
 
 
 // =====================================
@@ -845,13 +892,20 @@ function isMacPlatform() {
     };
 
     const findMenuItemByPath = (iconPathPrefix) => {
-        const sel = `div[role="menuitemradio"] svg path[d^="${iconPathPrefix}"]`;
+        // Match both menuitem and menuitemradio for maximum compatibility
+        const sel = `div[role="menuitem"], div[role="menuitemradio"]`;
         for (const menu of getOpenMenus()) {
-            const path = menu.querySelector(sel);
-            if (path) return path.closest('div[role="menuitemradio"]');
+            // Find all possible menu items
+            const items = Array.from(menu.querySelectorAll(sel));
+            // For each item, check if its icon matches the prefix
+            for (const item of items) {
+                const path = item.querySelector(`svg path[d^="${iconPathPrefix}"]`);
+                if (path) return item;
+            }
         }
         return null;
     };
+
 
     const runActionByIcon = async (iconPathPrefix, delays = DELAYS) => {
         const opened = await openComposerMenuAndMore(delays);
@@ -930,7 +984,7 @@ function isMacPlatform() {
 
 
     // @note Keyboard shortcut defaults
-    chrome.storage.sync.get(['shortcutKeyScrollUpOneMessage', 'shortcutKeyScrollDownOneMessage', 'shortcutKeyCopyLowest', 'shortcutKeyEdit', 'shortcutKeySendEdit', 'shortcutKeyCopyAllResponses', 'shortcutKeyCopyAllCodeBlocks', 'shortcutKeyClickNativeScrollToBottom', 'shortcutKeyScrollToTop', 'shortcutKeyNewConversation', 'shortcutKeySearchConversationHistory', 'shortcutKeyToggleSidebar', 'shortcutKeyActivateInput', 'shortcutKeySearchWeb', 'shortcutKeyPreviousThread', 'shortcutKeyNextThread', 'selectThenCopy', 'shortcutKeyToggleSidebarFoldersButton', 'shortcutKeyClickSendButton', 'shortcutKeyClickStopButton', 'shortcutKeyToggleModelSelector', 'shortcutKeyRegenerate', 'altPageUp', 'altPageDown', 'shortcutKeyTemporaryChat', 'shortcutKeyStudy', 'shortcutKeyCreateImage', 'shortcutKeyToggleCanvas', 'shortcutKeyToggleDictate', 'shortcutKeyCancelDictation', 'shortcutKeyShare', 'shortcutKeyThinkLonger'], (data) => {
+    chrome.storage.sync.get(['shortcutKeyScrollUpOneMessage', 'shortcutKeyScrollDownOneMessage', 'shortcutKeyCopyLowest', 'shortcutKeyEdit', 'shortcutKeySendEdit', 'shortcutKeyCopyAllResponses', 'shortcutKeyCopyAllCodeBlocks', 'shortcutKeyClickNativeScrollToBottom', 'shortcutKeyScrollToTop', 'shortcutKeyNewConversation', 'shortcutKeySearchConversationHistory', 'shortcutKeyToggleSidebar', 'shortcutKeyActivateInput', 'shortcutKeySearchWeb', 'shortcutKeyPreviousThread', 'shortcutKeyNextThread', 'selectThenCopy', 'shortcutKeyToggleSidebarFoldersButton', 'shortcutKeyClickSendButton', 'shortcutKeyClickStopButton', 'shortcutKeyToggleModelSelector', 'shortcutKeyRegenerate', 'altPageUp', 'altPageDown', 'shortcutKeyTemporaryChat', 'shortcutKeyStudy', 'shortcutKeyCreateImage', 'shortcutKeyToggleCanvas', 'shortcutKeyToggleDictate', 'shortcutKeyCancelDictation', 'shortcutKeyShare', 'shortcutKeyThinkLonger', 'shortcutKeyAddPhotosFiles'], (data) => {
         const shortcutDefaults = {
             shortcutKeyScrollUpOneMessage: 'a',
             shortcutKeyScrollDownOneMessage: 'f',
@@ -964,6 +1018,7 @@ function isMacPlatform() {
             shortcutKeyCancelDictation: '',
             shortcutKeyShare: '',
             shortcutKeyThinkLonger: '',
+            shortcutKeyAddPhotosFiles: '',
         };
 
         const shortcuts = {};
@@ -1086,6 +1141,8 @@ function isMacPlatform() {
         };
 
         let dictateInProgress = false;
+
+
 
         // @note Alt Key Function Maps
         const keyFunctionMappingAlt = {
@@ -2445,6 +2502,34 @@ function isMacPlatform() {
         window.newConversation = keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
         window.globalScrollToBottom = keyFunctionMappingAlt[shortcuts.shortcutKeyClickNativeScrollToBottom];
 
+
+        // Robust helper for all shortcut styles, including number keys!
+        function matchesShortcutKey(setting, event) {
+            if (!setting || setting === '\u00A0') return false;
+
+            // If it's a single digit, match against key and code for both top-row and numpad
+            if (/^\d$/.test(setting)) {
+                return event.key === setting ||
+                    event.code === `Digit${setting}` ||
+                    event.code === `Numpad${setting}`;
+            }
+
+            // If the stored value is KeyboardEvent.code style
+            const isCodeStyle = /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(setting);
+            if (isCodeStyle) {
+                // Special handling for numbers saved as "Digit1", "Numpad1"
+                if (/^Digit(\d)$/.test(setting) || /^Numpad(\d)$/.test(setting)) {
+                    const num = setting.match(/\d/)[0];
+                    return event.code === setting || event.key === num;
+                }
+                // All other codes
+                return event.code === setting;
+            }
+
+            // Fallback: check event.key, case-insensitive
+            return event.key && event.key.toLowerCase() === setting.toLowerCase();
+        }
+
         document.addEventListener('keydown', (event) => {
             if (
                 event.isComposing ||                  // IME active (Hindi, Japanese)
@@ -2459,7 +2544,6 @@ function isMacPlatform() {
             const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
             const isAltPressed = event.altKey;
 
-            // Determine the intended key in a layout-independent way using event.key
             // Canonical key: use layout-aware key for text, keep exact for special keys
             let keyIdentifier = event.key.length === 1
                 ? event.key.toLowerCase()
@@ -2468,24 +2552,50 @@ function isMacPlatform() {
             // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
             if (isAltPressed) {
                 // Always open menu for Alt+W (or whatever your toggle key is)
-                if (!isCtrlPressed && keyIdentifier === modelToggleKey) {
+                if (!isCtrlPressed && (keyIdentifier === modelToggleKey || event.code === modelToggleKey)) {
                     event.preventDefault();
                     window.toggleModelSelector();
                     return;
                 }
 
-                // Only block Alt+1-5 if using Ctrl/Cmd for model switching
-                if (!isCtrlPressed && window.useAltForModelSwitcherRadio === false) {
-                    if (/^\d$/.test(keyIdentifier)) {
-                        // Only block Alt+1 through Alt+5, but NOT the toggle key
-                        return;
+                // If this is a digit (1-9 or 0), decide whether to intercept for model switching.
+                if (/^\d$/.test(keyIdentifier)) {
+                    const digit = keyIdentifier; // '0'..'9'
+
+                    // Get model codes cache safely (may be provided by ShortcutUtils)
+                    const modelCodes = (window.ShortcutUtils && typeof window.ShortcutUtils.getModelPickerCodesCache === 'function')
+                        ? window.ShortcutUtils.getModelPickerCodesCache()
+                        : [];
+
+                    // Find a model slot assigned to that digit (normalizes Digit/Numpad via codeEquals)
+                    const modelAssignedIndex = (window.ShortcutUtils && typeof window.ShortcutUtils.codeEquals === 'function')
+                        ? modelCodes.findIndex(c => window.ShortcutUtils.codeEquals(c, `Digit${digit}`))
+                        : -1;
+
+                    if (modelAssignedIndex !== -1) {
+                        // There is a model assigned to this digit.
+                        // Intercept it only if the model picker is configured to use Alt.
+                        if (window.useAltForModelSwitcherRadio === true) {
+                            // Intercept only when Alt is the chosen modifier for model switching.
+                            event.preventDefault();
+                            // Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
+                            if (typeof window.switchModelByIndex === 'function') {
+                                window.switchModelByIndex(modelAssignedIndex);
+                            } else {
+                                document.dispatchEvent(new CustomEvent('modelPickerNumber', { detail: { index: modelAssignedIndex, event } }));
+                            }
+                            return;
+                        }
+                        // If model picker uses Control, DO NOT intercept Alt+digit: let Alt mappings handle it.
+                    } else {
+                        // No model assigned to this digit: do NOT intercept — let Alt+digit fall through to other Alt handlers.
                     }
                 }
 
                 // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyPreviousThread
                 if (
                     isCtrlPressed &&
-                    keyIdentifier === shortcuts.shortcutKeyPreviousThread.toLowerCase() &&
+                    matchesShortcutKey(shortcuts.shortcutKeyPreviousThread, event) &&
                     keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]
                 ) {
                     event.preventDefault();
@@ -2496,7 +2606,7 @@ function isMacPlatform() {
                 // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyNextThread
                 if (
                     isCtrlPressed &&
-                    keyIdentifier === shortcuts.shortcutKeyNextThread.toLowerCase() &&
+                    matchesShortcutKey(shortcuts.shortcutKeyNextThread, event) &&
                     keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]
                 ) {
                     event.preventDefault();
@@ -2504,31 +2614,40 @@ function isMacPlatform() {
                     return;
                 }
 
-                // Normal Alt+Key shortcut
-                const altShortcut = keyFunctionMappingAlt[keyIdentifier];
-                if (altShortcut) {
+                // Normal Alt+Key shortcut: handle mapped Alt shortcuts.
+                // Note: digit keys that *were assigned to models* above were already handled and returned;
+                // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
+                let matchedAltKey = Object.keys(keyFunctionMappingAlt).find(
+                    k => matchesShortcutKey(k, event)
+                );
+                if (matchedAltKey) {
                     event.preventDefault();
-                    altShortcut({ previewOnly: false, event });
+                    keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
                     return;
                 }
             }
+
 
             // Handle Ctrl/Command‑based shortcuts (model‑menu **toggle** only)
             // Number‑key selection is left to the IIFE so we don’t duplicate logic.
             if (isCtrlPressed && !isAltPressed) {
 
                 // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
-                if (window.useControlForModelSwitcherRadio === true && keyIdentifier === modelToggleKey) {
+                if (window.useControlForModelSwitcherRadio === true && (keyIdentifier === modelToggleKey || event.code === modelToggleKey)) {
                     event.preventDefault();
                     window.toggleModelSelector();   // open / close the menu
                     return;                         // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
                 }
 
                 // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.) stays the same ↓
-                if (keyIdentifier in keyFunctionMappingCtrl) {
-                    if (isCtrlShortcutEnabled(keyIdentifier)) {
+                // Try both keyIdentifier and event.code for lookup
+                const ctrlShortcut =
+                    keyFunctionMappingCtrl[keyIdentifier] ||
+                    keyFunctionMappingCtrl[event.code];
+                if (ctrlShortcut) {
+                    if (isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code)) {
                         event.preventDefault();
-                        keyFunctionMappingCtrl[keyIdentifier]();
+                        ctrlShortcut();
                     }
                 }
             }
@@ -4687,5 +4806,91 @@ setTimeout(() => {
                 }
             }, dur);
         };
+    });
+})();
+
+
+
+// Restore default shift+up and shift+down when user is typing in the message box
+(function () {
+    chrome.storage.sync.get({ restoreShiftUpDownEnabled: false }, ({ restoreShiftUpDownEnabled: enabled }) => {
+        window._restoreShiftUpDownEnabled = enabled;
+        if (!enabled) return;
+
+        'use strict';
+
+        const SELECTOR_COMPOSER_FORM = 'form[data-type="unified-composer"]';
+        const SELECTOR_EDITABLES = '.ProseMirror, [contenteditable="true"], textarea, input[type="text"], input[type="search"]';
+
+        const isShiftArrow = (e) =>
+            e.shiftKey &&
+            !e.ctrlKey &&
+            !e.altKey &&
+            !e.metaKey &&
+            (e.key === 'ArrowUp' || e.key === 'ArrowDown');
+
+        const buildPath = (node) => {
+            const path = [];
+            while (node) {
+                path.push(node);
+                node = node.parentNode || node.host || null;
+            }
+            path.push(window);
+            return path;
+        };
+
+        const inActiveComposerEditable = (evt) => {
+            const path = (typeof evt.composedPath === 'function') ? evt.composedPath() : buildPath(evt.target);
+            for (const n of path) {
+                if (!n || n === window || n === document || n.nodeType !== 1) continue;
+                const el = n;
+                const form = el.closest?.(SELECTOR_COMPOSER_FORM);
+                if (!form) continue;
+                const editable = el.closest?.(SELECTOR_EDITABLES);
+                if (!editable) continue;
+                if (editable.isContentEditable || /^(TEXTAREA|INPUT)$/i.test(editable.tagName)) return true;
+            }
+            const a = document.activeElement;
+            return !!(a && a.closest?.(SELECTOR_COMPOSER_FORM) &&
+                (a.isContentEditable || /^(TEXTAREA|INPUT)$/i.test(a.tagName)));
+        };
+
+        const swallowShiftArrows = (e) => {
+            if (!isShiftArrow(e)) return;
+            if (!inActiveComposerEditable(e)) return;
+            // Allow native selection; just block app hotkeys
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+        };
+
+        const opts = { capture: true };
+        window.addEventListener('keydown', swallowShiftArrows, opts);
+        window.addEventListener('keyup', swallowShiftArrows, opts);
+
+        const bindEditable = (node) => {
+            if (!node || node._shiftArrowBound) return;
+            node.addEventListener('keydown', swallowShiftArrows, opts);
+            node.addEventListener('keyup', swallowShiftArrows, opts);
+            node._shiftArrowBound = true;
+        };
+
+        const scanAndBind = () => {
+            document.querySelectorAll(`${SELECTOR_COMPOSER_FORM} ${SELECTOR_EDITABLES}`).forEach(bindEditable);
+        };
+
+        scanAndBind();
+
+        const mo = new MutationObserver((muts) => {
+            for (const m of muts) {
+                if (m.type !== 'childList') continue;
+                for (const added of m.addedNodes) {
+                    if (added.nodeType !== 1) continue;
+                    if (added.matches?.(`${SELECTOR_COMPOSER_FORM} ${SELECTOR_EDITABLES}`)) bindEditable(added);
+                    added.querySelectorAll?.(`${SELECTOR_COMPOSER_FORM} ${SELECTOR_EDITABLES}`).forEach(bindEditable);
+                }
+            }
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener('unload', () => mo.disconnect());
     });
 })();

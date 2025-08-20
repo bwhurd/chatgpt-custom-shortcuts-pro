@@ -286,5 +286,11 @@
     },
     "tt_share": {
         "message": "Create a link to share the conversation."
+    },
+    "label_restore_shiftupdown": {
+        "message": "Shift+↑ + Shift+↓ Selects Text"
+    },
+    "tt_restore_shiftupdown": {
+        "message": "Blocks native \"Next Message\" and \"Previous Message\" shortcuts so you can select lines normally when typing."
     }
 }

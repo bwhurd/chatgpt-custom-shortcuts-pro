@@ -6,7 +6,15 @@ document.addEventListener('DOMContentLoaded', function () {
         titleElement.textContent = localizedTitle;
     }
 
-
+    function getModelPickerModifier() {
+        // Prefer DOM state (instant), fallback to storage defaults if needed
+        const ctrlEl = document.getElementById('useControlForModelSwitcherRadio');
+        const altEl = document.getElementById('useAltForModelSwitcherRadio');
+        if (ctrlEl && ctrlEl.checked) return 'ctrl';
+        if (altEl && altEl.checked) return 'alt';
+        // Fallback: assume alt if radios not present yet
+        return 'alt';
+    }
     // === Unified shortcut helpers (REPLACES 555) ================================
 
 
@@ -23,6 +31,7 @@ document.addEventListener('DOMContentLoaded', function () {
     window.prefs = prefs;
 
     // Display helper used by chips and hints (platform-aware)
+    // Letters are deliberately shown in lowercase for chips and modals.
     function displayFromCode(code) {
         if (!code || code === '' || code === '\u00A0') return '\u00A0';
 
@@ -34,8 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
         })();
 
-        // Letters (UI chips in this section show uppercase)
-        if (/^Key([A-Z])$/.test(code)) return code.slice(-1);
+        // Letters → lowercase
+        if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
 
         // Numbers (row + numpad)
         if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
@@ -75,10 +84,6 @@ document.addEventListener('DOMContentLoaded', function () {
         // Fallback: humanize the raw code (e.g., "IntlBackslash" → "Intl Backslash")
         return code.replace(/([a-z])([A-Z])/g, '$1 $2');
     }
-
-
-
-
 
     // Treat DigitX and NumpadX as equivalent
     function codeEquals(a, b) {
@@ -133,6 +138,48 @@ document.addEventListener('DOMContentLoaded', function () {
         return map;
     }
 
+    function gatherPopupConflictsForModelSwitch(targetMode) {
+        if (targetMode !== 'alt') return [];
+
+        const owners = [];
+        const seen = new Set();
+
+        const modelCodes = window.ShortcutUtils.getModelPickerCodesCache(); // 10 codes
+        const popupMap = getCurrentShortcutValues();                       // id -> raw char
+
+        Object.keys(popupMap).forEach(id => {
+            const ch = popupMap[id];
+            if (!ch) return;
+            const c2 = window.ShortcutUtils.charToCode(ch);
+            if (!c2) return;
+
+            // Find which model slot this collides with (Digit/Numpad normalized)
+            let collideIdx = -1;
+            for (let i = 0; i < modelCodes.length; i++) {
+                const mc = modelCodes[i];
+                if (mc && window.ShortcutUtils.codeEquals(mc, c2)) { collideIdx = i; break; }
+            }
+            if (collideIdx === -1) return;
+
+            const toLabel = (window.MODEL_NAMES && window.MODEL_NAMES[collideIdx]) ? window.MODEL_NAMES[collideIdx] : `Model slot ${collideIdx + 1}`;
+            if (!seen.has(id)) {
+                owners.push({
+                    type: 'shortcut',
+                    id,
+                    label: getShortcutLabelById(id),     // fromLabel
+                    keyCode: c2,
+                    keyLabel: displayFromCode(c2),       // "1", "2", "w", etc.
+                    targetLabel: toLabel                 // toLabel
+                });
+                seen.add(id);
+            }
+        });
+
+        return owners;
+    }
+
+
+
     // Overwrite the old slot with NBSP and clear UI field
     function overwriteOld(duplicateId) {
         shortcutKeyValues[duplicateId] = '\u00A0';
@@ -144,53 +191,118 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Save a popup input value (char or ''), mirror to DOM, optionally fire input
-    function saveShortcutValue(id, value, fireInput = false) {
-        const valToSave = value === '' ? '\u00A0' : value;
+    // Reentrancy guard per-field to avoid double modals/saves
+    window.__savingShortcutGuard = window.__savingShortcutGuard || Object.create(null);
 
-        // Attempt the write
-        chrome.storage.sync.set({ [id]: valToSave }, function () {
-            if (chrome.runtime && chrome.runtime.lastError) {
-                console.error('[saveShortcutValue] set error:', chrome.runtime.lastError);
-                if (typeof showToast === 'function') {
-                    showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
+    // Save a popup input value (char or code) with strict Alt+digit preflight vs chips
+    function saveShortcutValue(id, value, fireInput = false) {
+        if (window.__savingShortcutGuard[id]) return;                 // suppress re-entry
+        window.__savingShortcutGuard[id] = true;
+
+        const raw = value == null ? '' : String(value);
+        const valToSave = raw === '' ? '\u00A0' : raw;
+
+        // helper: clear guard safely
+        const clearGuard = () => { window.__savingShortcutGuard[id] = false; };
+
+        // helper: perform actual save + mirror UI + verify
+        function commit(v) {
+            chrome.storage.sync.set({ [id]: v }, () => {
+                if (chrome.runtime && chrome.runtime.lastError) {
+                    console.error('[saveShortcutValue] set error:', chrome.runtime.lastError);
+                    typeof showToast === 'function' && showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
+                    clearGuard(); return;
                 }
+                const inp = document.getElementById(id);
+                if (inp) {
+                    const shown = (v === '\u00A0') ? '' :
+                        (typeof codeToDisplayChar === 'function'
+                            ? codeToDisplayChar(v)
+                            : (typeof v === 'string' && v.length === 1 ? v : ''));
+                    inp.value = shown;
+                    if (fireInput) inp.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                chrome.storage.sync.get(id, (data) => {
+                    const persisted = data && Object.prototype.hasOwnProperty.call(data, id) ? data[id] : undefined;
+                    if (persisted !== v) {
+                        console.warn('[saveShortcutValue] verification mismatch', { expected: v, got: persisted });
+                        typeof showToast === 'function' && showToast('Save did not persist. Trying again…');
+                        chrome.storage.sync.set({ [id]: v }, () => {
+                            if (chrome.runtime && chrome.runtime.lastError) {
+                                console.error('[saveShortcutValue] retry error:', chrome.runtime.lastError);
+                                typeof showToast === 'function' && showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
+                            }
+                            clearGuard();
+                        });
+                    } else {
+                        clearGuard();
+                    }
+                });
+            });
+        }
+
+        // clears are simple
+        if (valToSave === '\u00A0') { commit(valToSave); return; }
+
+        // normalize to code if needed
+        const isCode = /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(valToSave);
+        const toCode = s => (window.ShortcutUtils?.charToCode ? window.ShortcutUtils.charToCode(s) : (typeof charToCode === 'function' ? charToCode(s) : ''));
+        const code = isCode ? valToSave : (raw.length === 1 ? toCode(raw) : '');
+
+        // STRICT PREFLIGHT REMOVED (handled upstream)
+        // We intentionally avoid prompting here to prevent double-modals.
+        // All duplicate checks/overwrites are performed by the input handler
+        // using ShortcutUtils.buildConflictsForCode and showDuplicateModal.
+        // This function now focuses on committing the final, conflict-free value.
+
+        // === Generic cross-system conflicts for non-digit / non-Alt cases ===
+        if (code && typeof window.ShortcutUtils?.buildConflictsForCode === 'function') {
+            const conflicts = window.ShortcutUtils.buildConflictsForCode(code, { type: 'shortcut', id });
+            if (conflicts.length) {
+                if (window.prefs?.autoOverwrite && window.ShortcutUtils?.clearOwners) {
+                    return window.ShortcutUtils.clearOwners(conflicts, () => commit(valToSave));
+                }
+                const keyLabel = window.ShortcutUtils?.displayFromCode ? window.ShortcutUtils.displayFromCode(code) : code;
+                const names = conflicts.map(c => c.label).join(', ');
+                const ask = window.showDuplicateModal || ((o, cb) => cb(window.confirm(`This key is assigned to ${o}. Assign here instead?`), false));
+                ask(names, (yes, remember) => {
+                    if (!yes) { clearGuard(); return; }
+                    if (remember) { window.prefs = window.prefs || {}; window.prefs.autoOverwrite = true; chrome.storage.sync.set({ autoOverwrite: true }); }
+                    if (window.ShortcutUtils?.clearOwners) window.ShortcutUtils.clearOwners(conflicts, () => commit(valToSave));
+                    else commit(valToSave);
+                }, { keyLabel, targetLabel: getShortcutLabelById(id), proceedText: 'Proceed with changes?' });
                 return;
             }
+        }
 
-            // Mirror to UI
-            const inp = document.getElementById(id);
-            if (inp) {
-                inp.value = (valToSave === '\u00A0' ? '' : valToSave);
-                if (fireInput) {
-                    inp.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            }
-
-            // Verify write to avoid silent drops (e.g., popup closing fast)
-            chrome.storage.sync.get(id, (data) => {
-                const persisted = data && Object.prototype.hasOwnProperty.call(data, id) ? data[id] : undefined;
-                if (persisted !== valToSave) {
-                    console.warn('[saveShortcutValue] verification mismatch', { expected: valToSave, got: persisted });
-                    if (typeof showToast === 'function') {
-                        showToast('Save did not persist. Trying again…');
-                    }
-                    // Retry once
-                    chrome.storage.sync.set({ [id]: valToSave }, () => {
-                        if (chrome.runtime && chrome.runtime.lastError) {
-                            console.error('[saveShortcutValue] retry error:', chrome.runtime.lastError);
-                            if (typeof showToast === 'function') {
-                                showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
-                            }
-                        }
-                    });
-                }
-            });
-        });
+        // no conflicts
+        commit(valToSave);
     }
-
-    // expose for 333
     window.saveShortcutValue = saveShortcutValue;
+
+
+
+
+
+
+    // ---------- Static model names for tooltips and picker UI ----------
+    const MODEL_NAMES = [
+        'GPT-5 Auto',          // Slot 1
+        'GPT-5 Fast',          // Slot 2
+        'GPT-5 Thinking Mini', // Slot 3
+        'GPT-5 Thinking',      // Slot 4
+        'GPT-5 Pro',           // Slot 5
+        'Legacy Models →',     // Slot 6
+        '4o',                  // Slot 7
+        '4.1',                 // Slot 8
+        'o3',                  // Slot 9
+        'o4-mini'              // Slot 0
+    ];
+    // Expose globally so other scopes (conflict builders, tooltips, modals) can read it
+    window.MODEL_NAMES = MODEL_NAMES;
+
+
+
 
     // ---------- Unified registry for model-picker codes ----------
     function getModelPickerCodesCache() {
@@ -246,74 +358,125 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /**
-     * Build list of owners that conflict with `code`.
-     * @param {string} code - KeyboardEvent.code (e.g., 'KeyM', 'Digit5', 'Slash')
-     * @param {object} selfOwner - { type: 'shortcut', id } OR { type: 'model', idx }
-     * @returns {Array<{type:'shortcut', id, label} | {type:'model', idx, label}>}
+     * Determine if a key code represents a collision in the current modifier domain.
+     * Only blocks keys if the modifier matches.
      */
+    function codeMatchesModifier(code, eventModifier) {
+        // code is like "Digit2" or "KeyK"
+        // eventModifier is "alt" or "ctrl"
+        // For model picker, we only care about code value,
+        // but the system only triggers on the chosen modifier.
+
+        // Always matches if no modifier is set (edge), otherwise only if current modifier is enabled.
+        if (!eventModifier) return true;
+        return true; // Since the chip code is just "Digit2", the actual shortcut is modelMod+"Digit2"
+        // We filter in the conflict builder instead.
+    }
+
+    /**
+       * Build list of owners that conflict with `code`.
+       * Rules:
+       * - Model ↔ Model: always conflict.
+       * - Popup ↔ Popup: always conflict.
+       * - Model ↔ Popup: conflict only when model picker uses Alt (no conflict when using Control).
+       * Digits on row and numpad are treated as equal.
+       */
     function buildConflictsForCode(code, selfOwner) {
         const conflicts = [];
-        const modelMod = getModelPickerModifier(); // 'alt' or 'ctrl'
+        const modelCodes = getModelPickerCodesCache();            // 10 slots
+        const MODEL_NAMES_SAFE = window.MODEL_NAMES || [];
+        const modelMod = typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
+        const ownerType = selfOwner && selfOwner.type ? selfOwner.type : null;
 
-        // Model slots (these belong to the model-picker domain)
-        const modelCodes = getModelPickerCodesCache();
+        // 1) Model slots
         modelCodes.forEach((c, i) => {
             if (!c) return;
-            const isSelf = selfOwner && selfOwner.type === 'model' && selfOwner.idx === i;
-            if (!isSelf && codeEquals(c, code)) {
-                const pretty = (window.MODEL_NAMES && window.MODEL_NAMES[i]) ? window.MODEL_NAMES[i] : `Pick Model ${i + 1}`;
-                // If the self owner is a popup shortcut (Alt domain) and model picker uses CTRL, ignore this "conflict"
-                if (selfOwner && selfOwner.type === 'shortcut' && modelMod === 'ctrl') {
-                    // no-op, not a real conflict
-                } else {
-                    conflicts.push({ type: 'model', idx: i, label: pretty });
-                }
+            const isSelfModel = ownerType === 'model' && selfOwner.idx === i;
+            if (isSelfModel) return;
+
+            if (codeEquals(c, code)) {
+                // If editing a popup shortcut and model picker is using Control,
+                // do NOT treat model chips as conflicts.
+                if (ownerType === 'shortcut' && modelMod !== 'alt') return;
+
+                conflicts.push({
+                    type: 'model',
+                    idx: i,
+                    label: MODEL_NAMES_SAFE[i] || `Model slot ${i + 1}`
+                });
             }
         });
 
-        // Other popup single-char shortcuts (Alt domain)
-        const map = getCurrentShortcutValues();
-        Object.keys(map).forEach(id => {
-            const ch = map[id];
-            const c2 = charToCode(ch);
-            if (!c2) return;
-            const isSelf = selfOwner && selfOwner.type === 'shortcut' && selfOwner.id === id;
-            if (!isSelf && codeEquals(c2, code)) {
-                // If the self owner is a model slot and model picker uses CTRL, ignore "conflicts" against popup (Alt) shortcuts
-                if (selfOwner && selfOwner.type === 'model' && modelMod === 'ctrl') {
-                    // no-op, not a real conflict
-                } else {
-                    conflicts.push({ type: 'shortcut', id, label: getShortcutLabelById(id) });
+        // 2) Popup inputs (single-char fields)
+        // Always detect popup↔popup duplicates when editing a popup shortcut.
+        // When editing a model chip: only cross-conflict with popups if model picker uses Alt.
+        const shouldCheckPopup =
+            ownerType !== 'model'               // editing popup or unknown
+            || modelMod === 'alt';              // editing model and model picker uses Alt
+
+        if (shouldCheckPopup) {
+            const map = getCurrentShortcutValues();
+            Object.keys(map).forEach(id => {
+                const ch = map[id];
+                if (!ch) return;
+                const c2 = charToCode(ch);
+                if (!c2) return;
+
+                const isSelfShortcut = ownerType === 'shortcut' && selfOwner.id === id;
+                if (isSelfShortcut) return;
+
+                if (codeEquals(c2, code)) {
+                    conflicts.push({
+                        type: 'shortcut',
+                        id,
+                        label: getShortcutLabelById(id)
+                    });
                 }
-            }
-        });
+            });
+        }
 
         return conflicts;
     }
 
 
     /**
-     * Clears owners (both sides) that currently hold a conflicting assignment.
-     * Calls `done` after model codes are persisted.
+     * Clear all conflicting owners immediately in the UI and persist.
+     * - Clears popup inputs without re-triggering their input handlers (avoids races)
+     * - Clears model slots and saves the 10-slot array if touched
      */
     function clearOwners(owners, done) {
-        const codes = getModelPickerCodesCache();
+        const codes = getModelPickerCodesCache().slice(0, 10);
         let modelTouched = false;
 
         owners.forEach(o => {
             if (o.type === 'shortcut') {
-                // clear popup input + storage
-                saveShortcutValue(o.id, '', true);
+                // 1) Clear the visible field right away
+                const inp = document.getElementById(o.id);
+                if (inp) inp.value = '';
+
+                // 2) Keep any local cache in sync (if present)
+                try {
+                    if (typeof shortcutKeyValues === 'object' && o.id in shortcutKeyValues) {
+                        shortcutKeyValues[o.id] = '';
+                    }
+                } catch (_) { }
+
+                // 3) Persist to storage (NBSP) without firing input handler
+                try { saveShortcutValue(o.id, '', false); } catch (_) { }
             } else if (o.type === 'model') {
-                codes[o.idx] = '';
-                modelTouched = true;
+                if (o.idx >= 0 && o.idx < codes.length) {
+                    codes[o.idx] = '';
+                    modelTouched = true;
+                }
             }
         });
 
+        const finish = () => { if (typeof done === 'function') done(); };
+
         if (modelTouched) {
-            saveModelPickerKeyCodes(codes, () => { if (typeof done === 'function') done(); });
+            saveModelPickerKeyCodes(codes, finish);
         } else {
-            if (typeof done === 'function') done();
+            finish();
         }
     }
 
@@ -852,30 +1015,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-    function showDuplicateModal(message, cb) {
-        const DONT_ASK_SHORTCUT_KEY = 'dontAskDuplicateShortcutModal';
+    function showDuplicateModal(messageOrData, cb, opts = {}) {
+        // opts:
+        //   keyLabel?: string (already lowercased if you want it lower)
+        //   targetLabel?: string (destination label)
+        //   lines?: Array<{ key: string, from: string, to: string }>  // for multi, per-item mapping
+        //   proceedText?: string
+        //   assignText?: string
 
-        // HTML-escape helper to avoid injecting raw labels
+        const DONT_ASK_SHORTCUT_KEY = 'dontAskDuplicateShortcutModal';
+        const proceedText = opts.proceedText || 'Proceed with changes?';
+        const assignText = opts.assignText || 'Assign here instead?';
+
+        // HTML-escape helper
         function esc(s) {
             return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
         }
 
-        chrome.storage.sync.get(DONT_ASK_SHORTCUT_KEY, data => {
-            if (data[DONT_ASK_SHORTCUT_KEY]) {
-                cb(true, true);
-                return;
-            }
-
+        function ensureOverlay() {
             let overlay = document.getElementById('dup-overlay');
             if (!overlay) {
                 overlay = document.createElement('div');
                 overlay.id = 'dup-overlay';
-                overlay.style.display = 'none'; // will show as flex below
+                overlay.style.display = 'none';
                 overlay.innerHTML = `
-        <div id="dup-box">
-          <!-- Two lines, same font/size/weight via inline style on both .dup-line -->
+        <div id="dup-box" style="max-width: 520px;">
           <p id="dup-line1" class="dup-line" style="margin:0 0 6px 0; font-size:14px; font-weight:400;"></p>
-          <p id="dup-line2" class="dup-line" style="margin:0 0 10px 0; font-size:14px; font-weight:400;">Assign here instead?</p>
+          <div id="dup-list-wrap" style="margin:0 0 6px; font-size:14px; font-weight:400; display:none;"></div>
+          <p id="dup-line2" class="dup-line" style="margin:0 0 10px 0; font-size:14px; font-weight:400;"></p>
 
           <label style="display:flex;gap:.5em;align-items:center;margin-top:2px;">
             <input id="dup-dont" type="checkbox"> Don’t ask me again
@@ -885,12 +1052,24 @@ document.addEventListener('DOMContentLoaded', function () {
             <button id="dup-no">Cancel</button>
             <button id="dup-yes">Yes</button>
           </div>
-        </div>
-      `;
+        </div>`;
                 document.body.appendChild(overlay);
             }
+            return overlay;
+        }
 
-            // Re-bind handlers each time with the current `cb`
+        function parseOwners(input) {
+            if (Array.isArray(input)) return input;
+            const s = typeof input === 'string' ? input : '';
+            return s.split(',').map(t => t.trim()).filter(Boolean);
+        }
+
+        chrome.storage.sync.get(DONT_ASK_SHORTCUT_KEY, data => {
+            if (data[DONT_ASK_SHORTCUT_KEY]) { cb(true, true); return; }
+
+            const overlay = ensureOverlay();
+
+            // wire buttons per-open
             const dontChk = overlay.querySelector('#dup-dont');
             const oldCancel = overlay.querySelector('#dup-no');
             const oldYes = overlay.querySelector('#dup-yes');
@@ -899,37 +1078,147 @@ document.addEventListener('DOMContentLoaded', function () {
             oldCancel.parentNode.replaceChild(newCancel, oldCancel);
             oldYes.parentNode.replaceChild(newYes, oldYes);
 
-            newCancel.addEventListener('click', () => {
-                overlay.style.display = 'none';
-                cb(false, false);
-            });
+            newCancel.addEventListener('click', () => { overlay.style.display = 'none'; cb(false, false); });
             newYes.addEventListener('click', () => {
                 const skip = dontChk.checked;
                 overlay.style.display = 'none';
-                if (skip) {
-                    chrome.storage.sync.set({ [DONT_ASK_SHORTCUT_KEY]: true }, () => cb(true, true));
-                } else {
-                    cb(true, false);
-                }
+                if (skip) chrome.storage.sync.set({ [DONT_ASK_SHORTCUT_KEY]: true }, () => cb(true, true));
+                else cb(true, false);
             });
 
-            // Build line 1 with inline-highlighted owners.
             const line1 = overlay.querySelector('#dup-line1');
+            const line2 = overlay.querySelector('#dup-line2');
+            const listWrap = overlay.querySelector('#dup-list-wrap');
+
             const yesBtn = overlay.querySelector('#dup-yes');
-            const yesColor = yesBtn ? getComputedStyle(yesBtn).color : '#1a73e8'; // fallback blue
+            const yesColor = yesBtn ? getComputedStyle(yesBtn).color : '#1a73e8';
 
-            // message is a comma-separated string of owner labels (e.g., "Model slot 1, Scroll to Bottom")
-            const owners = String(message || '')
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean);
+            // Build data
+            const owners = parseOwners(messageOrData);
+            const lines = Array.isArray(opts.lines) ? opts.lines.slice() : null;
+            const keyLabel = (opts.keyLabel || '').trim();       // keep caller’s casing (we recommend lower-case upstream)
+            const targetLabel = (opts.targetLabel || '').trim();
 
-            // Wrap each owner in a colored, bold span; join with ", "
-            const ownersHTML = owners
-                .map(name => `<span class="dup-key" style="font-weight:700; color:${esc(yesColor)};">${esc(name)}</span>`)
-                .join(', ');
+            // Reset UI zones
+            line1.textContent = '';
+            line2.textContent = '';
+            listWrap.innerHTML = '';
+            listWrap.style.display = 'none';
 
-            line1.innerHTML = `This key is assigned to ${ownersHTML}.`;
+            if (lines && lines.length > 0) {
+                // Multi with per-item mapping (UL bullets)
+                const header = document.createElement('div');
+                header.textContent = 'Multiple shortcuts will be reassigned:';
+                header.style.marginBottom = '6px';
+                listWrap.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.id = 'dup-list';
+                ul.style.margin = '0 0 6px 1.1em';
+                ul.style.padding = '0';
+                // better wrapping: only at spaces, no mid-word/mid-span breaks
+                ul.style.whiteSpace = 'normal';
+                ul.style.wordBreak = 'keep-all';
+
+                lines.forEach(({ key, from, to }) => {
+                    const li = document.createElement('li');
+                    li.style.margin = '0 0 4px 0';
+                    li.style.listStyle = 'disc';
+                    li.style.whiteSpace = 'normal';
+                    li.style.wordBreak = 'keep-all';
+
+                    const keySpan = document.createElement('span');
+                    keySpan.className = 'dup-key';
+                    keySpan.style.fontWeight = '700';
+                    keySpan.style.color = yesColor;
+                    keySpan.textContent = String(key || '').toLowerCase();
+
+                    const fromSpan = document.createElement('span');
+                    fromSpan.className = 'dup-key';
+                    fromSpan.style.fontWeight = '700';
+                    fromSpan.style.color = yesColor;
+                    fromSpan.textContent = from || '';
+
+                    const toSpan = document.createElement('span');
+                    toSpan.className = 'dup-key';
+                    toSpan.style.fontWeight = '700';
+                    toSpan.style.color = yesColor;
+                    toSpan.textContent = to || targetLabel || '';
+
+                    li.appendChild(keySpan);
+                    li.appendChild(document.createTextNode(' will be reassigned from '));
+                    li.appendChild(fromSpan);
+                    li.appendChild(document.createTextNode(' to '));
+                    li.appendChild(toSpan);
+                    ul.appendChild(li);
+                });
+
+                listWrap.appendChild(ul);
+                listWrap.style.display = 'block';
+                line2.textContent = proceedText;
+            } else if (owners.length > 1) {
+                // Multi (owners only): show header + UL with the SAME keyLabel/to for each
+                const header = document.createElement('div');
+                header.textContent = 'Multiple shortcuts will be reassigned:';
+                header.style.marginBottom = '6px';
+                listWrap.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.id = 'dup-list';
+                ul.style.margin = '0 0 6px 1.1em';
+                ul.style.padding = '0';
+                ul.style.whiteSpace = 'normal';
+                ul.style.wordBreak = 'keep-all';
+
+                owners.forEach(fromName => {
+                    const li = document.createElement('li');
+                    li.style.margin = '0 0 4px 0';
+                    li.style.listStyle = 'disc';
+                    li.style.whiteSpace = 'normal';
+                    li.style.wordBreak = 'keep-all';
+
+                    const keySpan = document.createElement('span');
+                    keySpan.className = 'dup-key';
+                    keySpan.style.fontWeight = '700';
+                    keySpan.style.color = yesColor;
+                    keySpan.textContent = keyLabel || 'key';
+
+                    const fromSpan = document.createElement('span');
+                    fromSpan.className = 'dup-key';
+                    fromSpan.style.fontWeight = '700';
+                    fromSpan.style.color = yesColor;
+                    fromSpan.textContent = fromName || '';
+
+                    const toSpan = document.createElement('span');
+                    toSpan.className = 'dup-key';
+                    toSpan.style.fontWeight = '700';
+                    toSpan.style.color = yesColor;
+                    toSpan.textContent = targetLabel || '';
+
+                    li.appendChild(keySpan);
+                    li.appendChild(document.createTextNode(' will be reassigned from '));
+                    li.appendChild(fromSpan);
+                    li.appendChild(document.createTextNode(' to '));
+                    li.appendChild(toSpan);
+                    ul.appendChild(li);
+                });
+
+                listWrap.appendChild(ul);
+                listWrap.style.display = 'block';
+                line2.textContent = proceedText;
+            } else {
+                // Single
+                const owner = owners[0] || '';
+                const prettyKey = keyLabel && /^[A-Za-z]$/.test(keyLabel) ? keyLabel.toLowerCase() : keyLabel;
+
+                if (prettyKey) {
+                    line1.innerHTML = `<span class="dup-key" style="font-weight:700; color:${esc(yesColor)};">${esc(prettyKey)}</span> is already assigned to <span class="dup-key" style="font-weight:700; color:${esc(yesColor)};">${esc(owner)}</span>.`;
+                } else {
+                    line1.innerHTML = `This key is assigned to <span class="dup-key" style="font-weight:700; color:${esc(yesColor)};">${esc(owner)}</span>.`;
+                }
+                // Bold the CTA
+                line2.innerHTML = `<strong>${esc(assignText)}</strong>`;
+            }
 
             overlay.style.display = 'flex';
         });
@@ -937,8 +1226,77 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-    window.showDuplicateModal = window.showDuplicateModal || showDuplicateModal;
 
+
+    /* Coalesce duplicate modal requests so the user only answers once */
+    (() => {
+        if (window.__dupModalGateInstalled) return;
+        window.__dupModalGateInstalled = true;
+
+        const rawShow = window.showDuplicateModal || showDuplicateModal;
+        const KEY = 'dontAskDuplicateShortcutModal';
+
+        const state = {
+            open: false,
+            waiters: [],
+            last: null,          // { yes, remember, at }
+            dontAskCache: null   // true | false | null (unknown)
+        };
+
+        window.showDuplicateModal = function coalescedDuplicateModal(messageOrData, cb, opts = {}) {
+            // If a dialog is in-flight, just join this request to the same decision.
+            if (state.open) {
+                state.waiters.push(cb);
+                return;
+            }
+
+            // If the user just answered very recently, reuse that decision (prevents back-to-back re-prompts).
+            if (state.last && (Date.now() - state.last.at) < 300) {
+                cb(state.last.yes, state.last.remember);
+                return;
+            }
+
+            // If we already know "Don't ask again" is set, auto-accept for all callers.
+            const autoAccept = () => {
+                const res = { yes: true, remember: true, at: Date.now() };
+                state.last = res;
+                try { cb(true, true); } catch (_) { }
+            };
+
+            const openModal = () => {
+                state.open = true;
+                state.waiters = [cb];
+
+                rawShow(messageOrData, (yes, remember) => {
+                    // Update caches
+                    if (remember) state.dontAskCache = true;
+                    state.last = { yes, remember, at: Date.now() };
+
+                    // Resolve all queued callers with the same answer
+                    const waiters = state.waiters.slice();
+                    state.waiters.length = 0;
+                    state.open = false;
+                    waiters.forEach(fn => { try { fn(yes, remember); } catch (_) { } });
+                }, opts);
+            };
+
+            if (state.dontAskCache === true) {
+                autoAccept();
+                return;
+            }
+
+            // Read "Don't ask again" from storage once, then cache
+            chrome.storage.sync.get(KEY, data => {
+                const skip = !!(data && data[KEY]);
+                if (skip) {
+                    state.dontAskCache = true;
+                    autoAccept();
+                } else {
+                    openModal();
+                }
+            });
+        };
+    })();
 
     // End of Utility Functions
 
@@ -1065,9 +1423,76 @@ document.addEventListener('DOMContentLoaded', function () {
     handleStateChange('disableCopyAfterSelectCheckbox', 'disableCopyAfterSelectCheckbox');
     handleStateChange('enableSendWithControlEnterCheckbox', 'enableSendWithControlEnterCheckbox');
     handleStateChange('enableStopWithControlBackspaceCheckbox', 'enableStopWithControlBackspaceCheckbox');
-    handleStateChange('useAltForModelSwitcherRadio', 'useAltForModelSwitcherRadio');
-    handleStateChange('useControlForModelSwitcherRadio', 'useControlForModelSwitcherRadio');
     handleStateChange('rememberSidebarScrollPositionCheckbox', 'rememberSidebarScrollPositionCheckbox');
+
+    // Specialized wiring for the Model Picker mode radios (Alt vs Control)
+    // Shows a dupe modal when switching to Alt would collide with popup shortcuts.
+    (function wireModelPickerModeRadios() {
+        const alt = document.getElementById('useAltForModelSwitcherRadio');
+        const ctrl = document.getElementById('useControlForModelSwitcherRadio');
+        if (!alt || !ctrl) return;
+
+        // Avoid double-binding if this script can run twice
+        if (alt.dataset.listenerAttached === 'true' || ctrl.dataset.listenerAttached === 'true') return;
+
+        function saveMode(mode) {
+            const obj = {
+                useAltForModelSwitcherRadio: mode === 'alt',
+                useControlForModelSwitcherRadio: mode === 'ctrl'
+            };
+            chrome.storage.sync.set(obj, function () {
+                if (chrome.runtime.lastError) {
+                    console.error('Error saving model picker mode:', chrome.runtime.lastError);
+                    showToast(`Error: ${chrome.runtime.lastError.message}`);
+                    return;
+                }
+                showToast('Options saved. Reload page to apply changes.');
+            });
+        }
+
+        alt.addEventListener('change', () => {
+            if (!alt.checked) return;
+
+            const conflicts = gatherPopupConflictsForModelSwitch('alt');
+            if (conflicts.length === 0) { saveMode('alt'); return; }
+
+            // Build bulleted lines like: “w will be reassigned from Web Search Tool to GPT-5 Auto”
+            const lines = conflicts.map(c => ({
+                key: (c.keyLabel || '').toLowerCase(),
+                from: c.label,
+                to: c.targetLabel || 'Model'
+            }));
+
+            const names = conflicts.map(c => c.label).join(', ');
+            window.showDuplicateModal(names, (yes, remember) => {
+                if (yes) {
+                    window.ShortcutUtils.clearOwners(conflicts, () => {
+                        saveMode('alt');
+                        if (remember) {
+                            window.prefs = window.prefs || {};
+                            window.prefs.autoOverwrite = true;
+                            chrome.storage.sync.set({ autoOverwrite: true });
+                        }
+                    });
+                } else {
+                    alt.checked = false;
+                    ctrl.checked = true;
+                }
+            }, { lines, proceedText: 'Proceed with changes?' });
+        });
+
+
+
+        // Switching to Control never collides with Alt-based popup shortcuts; just save.
+        ctrl.addEventListener('change', () => {
+            if (!ctrl.checked) return;
+            saveMode('ctrl');
+        });
+
+        alt.dataset.listenerAttached = 'true';
+        ctrl.dataset.listenerAttached = 'true';
+    })();
+
 
     const shortcutKeys = [
         'shortcutKeyScrollUpOneMessage',
@@ -1098,30 +1523,75 @@ document.addEventListener('DOMContentLoaded', function () {
         'shortcutKeyCancelDictation',
         'shortcutKeyShare',
         'shortcutKeyThinkLonger',
+        'shortcutKeyAddPhotosFiles'
     ];
     const shortcutKeyValues = {};
 
-    // Get the stored shortcut keys from chrome storage
+    // Helper: convert KeyboardEvent.code to display char for popup input
+    function codeToDisplayChar(code) {
+        if (!code || code === '\u00A0') return '';
+        // Letters → lowercase
+        if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
+        // Digits (row + numpad)
+        if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
+        if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
+
+        // Punctuation and special codes
+        const codeMap = {
+            Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
+            Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',',
+            Period: '.', Slash: '/', Backquote: '`',
+            Space: ' ', Enter: '↩', Escape: '⎋', Tab: '⇥',
+            Backspace: '', Delete: '',
+            ArrowLeft: '', ArrowRight: '', ArrowUp: '', ArrowDown: '',
+            IntlBackslash: '\\', IntlYen: '¥', IntlRo: 'ro',
+            Lang1: '', Lang2: '', Lang3: '', Lang4: '', Lang5: '',
+            VolumeMute: '', VolumeDown: '', VolumeUp: '',
+            MediaPlayPause: '', MediaTrackNext: '', MediaTrackPrevious: ''
+        };
+        if (code in codeMap) return codeMap[code];
+
+        // F1..F24 as-is
+        if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
+
+        return '';
+    }
+
+    // --- Robust shortcut input load/save/wireup (fixes clear bug & always syncs) ---
+
     chrome.storage.sync.get(shortcutKeys, function (data) {
+        // --- Clear all old keys to prevent stale cache on reload ---
+        Object.keys(shortcutKeyValues).forEach(k => { delete shortcutKeyValues[k]; });
+
         shortcutKeys.forEach(id => {
             const inputElement = document.getElementById(id);
-            if (inputElement) {
-                const storedValue = data[id]; // Value from storage
-                const defaultValue = inputElement.getAttribute('value') || ''; // Default from HTML
+            if (!inputElement) return;
+            const storedValue = data[id];
+            const defaultValue = inputElement.getAttribute('value') || '';
+            let displayValue = '';
 
-                // Case 1: Use stored value if it exists
-                // Case 2: Treat non-breaking space as blank
-                // Case 3: Fallback to default value
-                const value = storedValue === '\u00A0' ? '' : (storedValue !== undefined ? storedValue : defaultValue);
-
-                inputElement.value = value; // Set input field
-                shortcutKeyValues[id] = value; // Update in-memory map
-                console.log(`Loaded ${id}: "${value}"`); // Debug log
+            // --- Robust priority: ---
+            // 1. If storage value exists and is not NBSP, use it.
+            // 2. If storage value is NBSP, show blank.
+            // 3. If storage value is missing/undefined, fall back to HTML default value (if any).
+            if (typeof storedValue === 'string') {
+                if (storedValue === '\u00A0') {
+                    displayValue = '';
+                } else {
+                    displayValue = codeToDisplayChar(storedValue) || '';
+                }
+            } else if (defaultValue) {
+                displayValue = defaultValue;
+            } else {
+                displayValue = '';
             }
+
+            inputElement.value = displayValue;
+            shortcutKeyValues[id] = displayValue;
         });
     });
 
-    // Use unified conflict resolution against ALL shortcuts (popup inputs + model slots)
+    // Wire up input handlers (no stale NBSP, always clears memory on blank)
     shortcutKeys.forEach(id => {
         const inputElement = document.getElementById(id);
         if (!inputElement) return;
@@ -1129,18 +1599,24 @@ document.addEventListener('DOMContentLoaded', function () {
         inputElement.addEventListener('input', function () {
             let value = this.value.trim();
 
-            // Allow clearing
+            // --- CLEAR: If blank, save NBSP, update memory, and ensure ALL other slots release any stale value ---
             if (value === '') {
                 saveShortcutValue(id, '');
+                shortcutKeyValues[id] = '';
+                // Remove any stale NBSP from memory to ensure deleted slot stays blank
+                Object.keys(shortcutKeyValues).forEach(k => {
+                    if (shortcutKeyValues[k] === '\u00A0') shortcutKeyValues[k] = '';
+                });
                 showToast('Shortcut updated. Reload page to apply changes.');
                 return;
             }
 
-            // Convert to KeyboardEvent.code for cross-system comparison
+            // Always convert to KeyboardEvent.code for storage
             const code = window.ShortcutUtils.charToCode(value);
             if (!code) {
-                // invalid single-char for our supported map
+                // invalid input
                 saveShortcutValue(id, '');
+                shortcutKeyValues[id] = '';
                 this.value = '';
                 showToast('Unsupported key. Choose a letter, digit, or supported symbol.');
                 return;
@@ -1150,10 +1626,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const conflicts = window.ShortcutUtils.buildConflictsForCode(code, selfOwner);
 
             const proceed = () => {
-                // Clear any owners first
                 window.ShortcutUtils.clearOwners(conflicts, () => {
-                    // Now assign this input's value
-                    saveShortcutValue(id, value);
+                    // Save the normalized code string!
+                    saveShortcutValue(id, code);
+                    shortcutKeyValues[id] = codeToDisplayChar(code) || '';
+                    // After overwrite, ensure other slots with NBSP are blanked in memory
+                    Object.keys(shortcutKeyValues).forEach(k => {
+                        if (shortcutKeyValues[k] === '\u00A0') shortcutKeyValues[k] = '';
+                    });
+                    // Update the input to display the char, not the code, after save
+                    this.value = codeToDisplayChar(code) || '';
                     showToast('Options saved. Reload page to apply changes.');
                 });
             };
@@ -1163,30 +1645,83 @@ document.addEventListener('DOMContentLoaded', function () {
                     proceed();
                     return;
                 }
-                const names = conflicts.map(c => c.label).join(', ');
-                window.showDuplicateModal(names, (yes, remember) => {
-                    if (yes) {
-                        if (remember) {
-                            prefs.autoOverwrite = true;
-                            chrome.storage.sync.set({ autoOverwrite: true });
+
+                const keyLabel =
+                    (window.ShortcutUtils && typeof window.ShortcutUtils.displayFromCode === 'function')
+                        ? window.ShortcutUtils.displayFromCode(code)
+                        : (codeToDisplayChar ? codeToDisplayChar(code) : value);
+
+                if (conflicts.length === 1) {
+                    const owners = [conflicts[0].label];
+                    const targetLabel = getShortcutLabelById(id) || '';
+
+                    window.showDuplicateModal(owners, (yes, remember) => {
+                        if (yes) {
+                            if (remember) {
+                                prefs.autoOverwrite = true;
+                                chrome.storage.sync.set({ autoOverwrite: true });
+                            }
+                            proceed();
+                        } else {
+                            // Revert to previous value (show char, not code)
+                            chrome.storage.sync.get(id, data => {
+                                const prev = (data && data[id] && data[id] !== '\u00A0') ? data[id] : '';
+                                const displayPrev = prev ? (codeToDisplayChar(prev) || '') : '';
+                                inputElement.value = displayPrev;
+                            });
                         }
-                        proceed();
-                    } else {
-                        // Revert to the previously stored value
-                        chrome.storage.sync.get(id, data => {
-                            const prev = (data && data[id] && data[id] !== '\u00A0') ? data[id] : '';
-                            inputElement.value = prev;
-                        });
-                    }
-                });
+                    }, { keyLabel, targetLabel });
+                } else {
+                    const toLabel = getShortcutLabelById(id) || '';
+                    const lines = conflicts.map(c => {
+                        let k = '';
+                        if (c.type === 'shortcut') {
+                            const el = document.getElementById(c.id);
+                            const ch = (el && el.value) ? el.value.trim() : '';
+                            k = ch || '?';
+                        } else if (c.type === 'model') {
+                            const cur = (window.ShortcutUtils && typeof window.ShortcutUtils.getModelPickerCodesCache === 'function')
+                                ? window.ShortcutUtils.getModelPickerCodesCache()[c.idx]
+                                : '';
+                            k = (window.ShortcutUtils && typeof window.ShortcutUtils.displayFromCode === 'function')
+                                ? window.ShortcutUtils.displayFromCode(cur)
+                                : (cur || '?');
+                        }
+                        return { key: k, from: c.label, to: toLabel };
+                    });
+
+                    const names = conflicts.map(c => c.label).join(', ');
+                    window.showDuplicateModal(names, (yes, remember) => {
+                        if (yes) {
+                            if (remember) {
+                                prefs.autoOverwrite = true;
+                                chrome.storage.sync.set({ autoOverwrite: true });
+                            }
+                            proceed();
+                        } else {
+                            chrome.storage.sync.get(id, data => {
+                                const prev = (data && data[id] && data[id] !== '\u00A0') ? data[id] : '';
+                                const displayPrev = prev ? (codeToDisplayChar(prev) || '') : '';
+                                inputElement.value = displayPrev;
+                            });
+                        }
+                    }, { lines, proceedText: 'Proceed with changes?' });
+                }
+
             } else {
-                // No conflicts
-                saveShortcutValue(id, value);
+                saveShortcutValue(id, code);
+                shortcutKeyValues[id] = codeToDisplayChar(code) || '';
+                // After save, ensure all NBSP-stale are blank in memory
+                Object.keys(shortcutKeyValues).forEach(k => {
+                    if (shortcutKeyValues[k] === '\u00A0') shortcutKeyValues[k] = '';
+                });
+                // Update input to show char
+                this.value = codeToDisplayChar(code) || '';
                 showToast('Options saved. Reload page to apply changes.');
             }
+
         });
     });
-
 
 
     // Handling separator keys
@@ -1442,236 +1977,57 @@ enableEditableOpacity('slimSidebarOpacityValue', 'slimSidebarOpacitySlider', 'sl
 
 
 // ===================== Model Picker Keys (robust save + duplicates + clear + reset) =====================
-(function () {
-    // Local defaults
-    const DEFAULT_MODEL_PICKER_KEY_CODES = [
-        'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
-    ];
-
-
-    function getModelPickerModifier() {
-        // Prefer DOM state (instant), fallback to storage defaults if needed
-        const ctrlEl = document.getElementById('useControlForModelSwitcherRadio');
-        const altEl = document.getElementById('useAltForModelSwitcherRadio');
-        if (ctrlEl && ctrlEl.checked) return 'ctrl';
-        if (altEl && altEl.checked) return 'alt';
-        // Fallback: assume alt if radios not present yet
-        return 'alt';
-    }
-    // Model-picker chip labeler (platform-aware; lowercase output)
-    function displayFromCode(code) {
-        if (!code || code === '' || code === '\u00A0') return '\u00A0';
-
-        // Robust Mac detection
-        const isMac = (() => {
-            const ua = navigator.userAgent || '';
-            const plat = navigator.platform || '';
-            const uaDataPlat = (navigator.userAgentData && navigator.userAgentData.platform) || '';
-            return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
-        })();
-
-        // Letters → lowercase
-        if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
-
-        // Numbers
-        if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
-        if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
-
-        // Function keys → "f1"…"f24"
-        if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code.toLowerCase();
-
-        // Punctuation / common physical keys
-        const baseMap = {
-            Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
-            Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',',
-            Period: '.', Slash: '/', Backquote: '`',
-            Space: 'space', Enter: 'enter', Escape: 'esc', Tab: 'tab',
-            Backspace: 'bksp', Delete: 'del',
-            ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓',
-            IntlBackslash: '\\', IntlYen: '¥', IntlRo: 'ro',
-            Lang1: 'lang1', Lang2: 'lang2', Lang3: 'lang3', Lang4: 'lang4', Lang5: 'lang5',
-            VolumeMute: 'mute', VolumeDown: 'vol–', VolumeUp: 'vol+',
-            MediaPlayPause: 'play/pause', MediaTrackNext: 'next', MediaTrackPrevious: 'prev'
-        };
-
-        const mods = isMac
-            ? { MetaLeft: '⌘', MetaRight: '⌘', AltLeft: '⌥', AltRight: '⌥', ControlLeft: 'ctrl', ControlRight: 'ctrl', ShiftLeft: '⇧', ShiftRight: '⇧', Fn: 'fn' }
-            : { MetaLeft: 'win', MetaRight: 'win', AltLeft: 'alt', AltRight: 'alt', ControlLeft: 'ctrl', ControlRight: 'ctrl', ShiftLeft: 'shift', ShiftRight: 'shift', Fn: 'fn' };
-
-        if (code in baseMap) return baseMap[code];
-        if (code in mods) return mods[code];
-
-        // Fallback: humanize + lowercase
-        return code.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+function modelPickerInitSafe() {
+    // Wait for ShortcutUtils to load (for hot reload/async)
+    if (
+        typeof window.ShortcutUtils !== 'object' ||
+        typeof window.ShortcutUtils.getModelPickerCodesCache !== 'function'
+    ) {
+        if (!modelPickerInitSafe._tries) modelPickerInitSafe._tries = 0;
+        if (modelPickerInitSafe._tries++ > 30) return;
+        return setTimeout(modelPickerInitSafe, 16);
     }
 
+    const chips = Array.from(document.querySelectorAll('.mp-key'));
+    if (!chips.length) return;
 
-
-    function codeEquals(a, b) {
-        if (a === b) return true;
-        const A = a && a.match(/^(Digit|Numpad)([0-9])$/);
-        const B = b && b.match(/^(Digit|Numpad)([0-9])$/);
-        return !!(A && B && A[2] === B[2]);
+    // Always use current codes + current MODEL_NAMES
+    function render() {
+        const codes = window.ShortcutUtils.getModelPickerCodesCache();
+        const MODEL_NAMES = window.MODEL_NAMES || [];
+        chips.forEach((chip, i) => {
+            chip.classList.remove('listening');
+            chip.textContent = window.ShortcutUtils.displayFromCode(codes[i] || '');
+            chip.setAttribute('data-tooltip', `Set shortcut for\n${MODEL_NAMES[i] || `Slot ${i + 1}`}`);
+            chip.classList.add('custom-tooltip');
+        });
     }
-    function charToCode(ch) {
-        if (!ch) return '';
-        const raw = ch.trim();
-        if (!raw) return '';
-        const upper = raw.toUpperCase();
-        if (/^[A-Z]$/.test(upper)) return `Key${upper}`;
-        if (/^[0-9]$/.test(raw)) return `Digit${raw}`;
-        switch (raw) {
-            case '-': return 'Minus';
-            case '=': return 'Equal';
-            case '[': return 'BracketLeft';
-            case ']': return 'BracketRight';
-            case '\\': return 'Backslash';
-            case ';': return 'Semicolon';
-            case "'": return 'Quote';
-            case ',': return 'Comma';
-            case '.': return 'Period';
-            case '/': return 'Slash';
-            case '`': return 'Backquote';
-            case ' ': return 'Space';
-            default: return '';
+
+    // Reset button (always triggers full rerender after update)
+    (function wireResetButton() {
+        let resetEl = document.getElementById('mp-reset-keys');
+        if (!resetEl) {
+            resetEl = Array.from(document.querySelectorAll('.mp-icons .material-symbols-outlined'))
+                .find(el => (el.textContent || '').trim() === 'reset_wrench');
+            if (resetEl) {
+                resetEl.setAttribute('role', 'button');
+                resetEl.setAttribute('tabindex', '0');
+                resetEl.setAttribute('aria-label', 'Reset model keys to defaults');
+                resetEl.classList.add('tooltip');
+                if (!resetEl.getAttribute('data-tooltip')) {
+                    resetEl.setAttribute('data-tooltip', 'Reset model keys to defaults');
+                }
+            }
         }
-    }
-    function getShortcutLabelById(id) {
-        const el = document.getElementById(id);
-        if (!el) return id;
-        const label = el.closest('.shortcut-item')?.querySelector('.shortcut-label .i18n')?.textContent?.trim();
-        return label || id;
-    }
+        if (!resetEl || resetEl.dataset.mpResetWired) return;
 
-    // Build global-unique conflicts: model slots + popup inputs
-    function buildConflictsForCode(code, selfOwner, currentCodes) {
-        const conflicts = [];
-        const modelMod = getModelPickerModifier(); // 'alt' or 'ctrl'
-
-        // Model slots (same domain; always check)
-        currentCodes.forEach((c, i) => {
-            if (!c) return;
-            const isSelf = selfOwner && selfOwner.type === 'model' && selfOwner.idx === i;
-            if (!isSelf && codeEquals(c, code)) {
-                const pretty = (window.MODEL_NAMES && window.MODEL_NAMES[i]) ? window.MODEL_NAMES[i] : `Model slot ${i + 1}`;
-                conflicts.push({ type: 'model', idx: i, label: pretty });
-            }
-        });
-
-        // Popup inputs (Alt domain)
-        document.querySelectorAll('.key-input[id]').forEach(inp => {
-            const id = inp.id;
-            const val = inp.value.trim();
-            if (!val) return;
-            const c2 = charToCode(val);
-            if (!c2) return;
-            const isSelf = selfOwner && selfOwner.type === 'shortcut' && selfOwner.id === id;
-            if (!isSelf && codeEquals(c2, code)) {
-                // If we are assigning a model key and the model picker is CTRL, ignore popup "conflicts"
-                if (selfOwner && selfOwner.type === 'model' && modelMod === 'ctrl') {
-                    return;
-                }
-                // If we are assigning a popup key and the model picker is CTRL, ignore model vs popup "conflicts"
-                if (selfOwner && selfOwner.type === 'shortcut' && modelMod === 'ctrl') {
-                    return;
-                }
-                conflicts.push({ type: 'shortcut', id, label: getShortcutLabelById(id) });
-            }
-        });
-
-        return conflicts;
-    }
-
-
-
-    // Clear owners: for shortcuts, clear input and trigger its input handler;
-    // for model entries, blank that slot in currentCodes (caller will save).
-    function clearOwners(conflicts, currentCodes) {
-        let touchedModel = false;
-        conflicts.forEach(o => {
-            if (o.type === 'shortcut') {
-                const target = document.getElementById(o.id);
-                if (target) {
-                    target.value = '';
-                    target.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            } else if (o.type === 'model') {
-                currentCodes[o.idx] = '';
-                touchedModel = true;
-            }
-        });
-        return touchedModel;
-    }
-
-    // Robust storage ops with write token so late gets don’t clobber newer writes
-    let writeToken = 0;
-    function loadCodes(cb) {
-        chrome.storage.sync.get('modelPickerKeyCodes', ({ modelPickerKeyCodes }) => {
-            const arr = Array.isArray(modelPickerKeyCodes) ? modelPickerKeyCodes.slice(0, 10) : [];
-            const normalized = new Array(10).fill('').map((_, i) => (typeof arr[i] === 'string' ? arr[i] : ''));
-            cb(normalized);
-        });
-    }
-    function saveCodes(nextCodes, cb) {
-        const token = ++writeToken;
-        const payload = nextCodes.slice(0, 10);
-        chrome.storage.sync.set({ modelPickerKeyCodes: payload }, () => {
-            if (chrome.runtime && chrome.runtime.lastError) {
-                console.error('[modelPicker] save error:', chrome.runtime.lastError);
-                if (typeof window.showToast === 'function') {
-                    window.showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
-                }
-                if (cb) cb(false);
-                return;
-            }
-            // Verify; ignore late gets if another write happened since
-            chrome.storage.sync.get('modelPickerKeyCodes', ({ modelPickerKeyCodes }) => {
-                if (token !== writeToken) return; // a newer save happened; ignore
-                const ok = Array.isArray(modelPickerKeyCodes)
-                    && modelPickerKeyCodes.length === 10
-                    && modelPickerKeyCodes.every((v, i) => v === payload[i]);
-                if (!ok) {
-                    console.warn('[modelPicker] verify mismatch, retrying once');
-                    chrome.storage.sync.set({ modelPickerKeyCodes: payload }, () => cb && cb(true));
-                    return;
-                }
-                cb && cb(true);
-            });
-        });
-    }
-
-    function initModelPickerKeysEditor() {
-        const chips = Array.from(document.querySelectorAll('.mp-key'));
-        if (!chips.length) return;
-
-        // === RESET button (delegated; reuses dup modal if present; verifies save; re-renders) ===
-        (function wireResetButton() {
-            // Find a reset control (button preferred; fallback to icon text)
-            let resetEl = document.getElementById('mp-reset-keys');
-            if (!resetEl) {
-                resetEl = Array.from(document.querySelectorAll('.mp-icons .material-symbols-outlined'))
-                    .find(el => (el.textContent || '').trim() === 'reset_wrench');
-                if (resetEl) {
-                    resetEl.setAttribute('role', 'button');
-                    resetEl.setAttribute('tabindex', '0');
-                    resetEl.setAttribute('aria-label', 'Reset model keys to defaults');
-                    resetEl.classList.add('tooltip');
-                    if (!resetEl.getAttribute('data-tooltip')) {
-                        resetEl.setAttribute('data-tooltip', 'Reset model keys to defaults');
-                    }
-                }
-            }
-            if (!resetEl || resetEl.dataset.mpResetWired) return;
-
-            // Show a confirm using the existing dup overlay if available, else create a small one
-            function showConfirmReset(cb) {
-                let overlay = document.getElementById('dup-overlay');
-
-                if (!overlay) {
-                    overlay = document.createElement('div');
-                    overlay.id = 'dup-overlay';
-                    overlay.style.display = 'none';
-                    overlay.innerHTML = `
+        function showConfirmReset(cb) {
+            let overlay = document.getElementById('dup-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'dup-overlay';
+                overlay.style.display = 'none';
+                overlay.innerHTML = `
         <div id="dup-box">
           <h2 id="dup-h2" style="margin:0 0 6px 0; font-size:14px; font-weight:400;"></h2>
           <p id="dup-msg" style="margin:0 0 10px 0; font-size:14px; font-weight:400;"></p>
@@ -1681,288 +2037,124 @@ enableEditableOpacity('slimSidebarOpacityValue', 'slimSidebarOpacitySlider', 'sl
             <button id="dup-yes">Yes</button>
           </div>
         </div>`;
-                    document.body.appendChild(overlay);
-                }
-
-                const h2 = overlay.querySelector('#dup-h2') || overlay.querySelector('h2');
-                const msg = overlay.querySelector('#dup-msg') || overlay.querySelector('#dup-line2');
-                const dontWrap = overlay.querySelector('#dup-dont-wrap');
-                const oldCancel = overlay.querySelector('#dup-no');
-                const oldYes = overlay.querySelector('#dup-yes');
-
-                if (h2) h2.textContent = 'Reset all model keys to defaults?';
-                if (msg) msg.textContent = 'This will replace your custom keys.';
-                if (dontWrap) dontWrap.style.display = 'none';
-
-                const newCancel = oldCancel.cloneNode(true);
-                const newYes = oldYes.cloneNode(true);
-                oldCancel.parentNode.replaceChild(newCancel, oldCancel);
-                oldYes.parentNode.replaceChild(newYes, oldYes);
-
-                newCancel.addEventListener('click', () => {
-                    overlay.style.display = 'none';
-                    cb(false);
-                });
-                newYes.addEventListener('click', () => {
-                    overlay.style.display = 'none';
-                    cb(true);
-                });
-
-                overlay.style.display = 'flex';
+                document.body.appendChild(overlay);
             }
-
-            // Save defaults and update cache
-            function commitDefaults(done) {
-                const defaults = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
-                if (typeof window.saveModelPickerKeyCodes === 'function') {
-                    window.saveModelPickerKeyCodes(defaults, ok => {
-                        window.__modelPickerKeyCodes = defaults.slice();
-                        document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-                        done(ok, defaults);
-                    });
-                } else {
-                    chrome.storage.sync.set({ modelPickerKeyCodes: defaults }, () => {
-                        if (chrome.runtime && chrome.runtime.lastError) {
-                            console.error('[reset] save error:', chrome.runtime.lastError);
-                            if (typeof window.showToast === 'function') {
-                                window.showToast(`Save failed: ${chrome.runtime.lastError.message || 'storage error'}`);
-                            }
-                            return done(false, defaults);
-                        }
-                        window.__modelPickerKeyCodes = defaults.slice();
-                        document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-                        done(true, defaults);
-                    });
-                }
-            }
-
-            function triggerReset() {
-                showConfirmReset((yes) => {
-                    if (!yes) return;
-                    commitDefaults((ok, next) => {
-                        if (typeof loadCodes === 'function') {
-                            loadCodes((fresh) => {
-                                try { codes = fresh.slice(0, 10); } catch (_) { }
-                                if (typeof render === 'function') render();
-                                if (typeof window.showToast === 'function') {
-                                    window.showToast(ok ? 'Model keys reset to defaults.' : 'Reset attempted; please reopen the popup.');
-                                }
-                            });
-                        } else {
-                            codes = next.slice(0, 10);
-                            if (typeof render === 'function') render();
-                            if (typeof window.showToast === 'function') {
-                                window.showToast(ok ? 'Model keys reset to defaults.' : 'Reset attempted; please reopen the popup.');
-                            }
-                        }
-                    });
-                });
-            }
-
-            resetEl.style.cursor = 'pointer';
-            resetEl.addEventListener('click', triggerReset);
-            resetEl.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerReset(); }
+            const h2 = overlay.querySelector('#dup-h2');
+            const msg = overlay.querySelector('#dup-msg');
+            const dontWrap = overlay.querySelector('#dup-dont-wrap');
+            const oldCancel = overlay.querySelector('#dup-no');
+            const oldYes = overlay.querySelector('#dup-yes');
+            if (h2) h2.textContent = 'Reset all model keys to defaults?';
+            if (msg) msg.textContent = 'This will replace your custom keys.';
+            if (dontWrap) dontWrap.style.display = 'none';
+            const newCancel = oldCancel.cloneNode(true);
+            const newYes = oldYes.cloneNode(true);
+            oldCancel.parentNode.replaceChild(newCancel, oldCancel);
+            oldYes.parentNode.replaceChild(newYes, oldYes);
+            newCancel.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                cb(false);
             });
-            resetEl.dataset.mpResetWired = '1';
-        })();
-
-
-
-
-        // Current in-memory set; seed with whatever storage has (or blanks on first load)
-        let codes = new Array(10).fill('');
-
-        // Static model names for tooltips and picker UI
-        const MODEL_NAMES = [
-            'GPT-5 Auto',         // Slot 1
-            'GPT-5 Fast',         // Slot 2
-            'GPT-5 Thinking Mini',// Slot 3
-            'GPT-5 Thinking',     // Slot 4
-            'GPT-5 Pro',          // Slot 5
-            'Legacy Models  →',   // Slot 6
-            '4o',                 // Slot 7
-            '4.1',                // Slot 8
-            'o3',                 // Slot 9
-            'o4-mini'             // Slot 0
-        ];
-        // Expose globally so other scopes (conflict builders) can read it
-        window.MODEL_NAMES = MODEL_NAMES;
-
-
-        // Apply tooltips to chips: "Set shortcut for\n<ModelName>"
-        function applyTooltips() {
-            chips.forEach((chip, i) => {
-                const model = MODEL_NAMES && MODEL_NAMES[i] ? MODEL_NAMES[i] : `Slot ${i + 1}`;
-                const text = `Set shortcut for\n${model}`;
-                chip.setAttribute('data-tooltip', text);
-                chip.classList.add('custom-tooltip'); // ensures new styling
+            newYes.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                cb(true);
             });
+            overlay.style.display = 'flex';
         }
 
-
-
-        function render(src) {
-            const arr = Array.isArray(src) ? src : codes;
-            chips.forEach((chip, i) => {
-                chip.classList.remove('listening');
-                chip.textContent = displayFromCode(arr[i] || '');
-            });
-            applyTooltips();
-        }
-
-        // Bootstrap tooltips once at init (static list)
-        applyTooltips();
-
-
-
-        // Initial load, then render
-        // Initial load, with defaults if none exist, then render
-        chrome.storage.sync.get(['modelPickerKeyCodes'], data => {
-            let stored = Array.isArray(data.modelPickerKeyCodes) && data.modelPickerKeyCodes.length === 10
-                ? data.modelPickerKeyCodes.slice(0, 10)
-                : DEFAULT_MODEL_PICKER_KEY_CODES.slice();
-
-            codes = stored;
-            render();
-
-            // Ensure defaults are saved if no stored config
-            if (!Array.isArray(data.modelPickerKeyCodes) || data.modelPickerKeyCodes.length !== 10) {
-                chrome.storage.sync.set({ modelPickerKeyCodes: DEFAULT_MODEL_PICKER_KEY_CODES.slice() });
-            }
-        });
-
-
-        // Stay in sync if another context updates storage
-        // Bootstrap & stay in sync: model keys + autoOverwrite
-        // Bootstrap & stay in sync: model keys + autoOverwrite + modelPickerLabels
-        (function bootstrapPrefs() {
-            chrome.storage.sync.get(['autoOverwrite'], ({ autoOverwrite }) => {
-                if (!window.prefs) window.prefs = {};
-                window.prefs.autoOverwrite = !!autoOverwrite;
-            });
-        })();
-
-        const onStorageChange = (changes, area) => {
-            // Only care about sync: key codes and autoOverwrite
-            if (area === 'sync') {
-                if (changes.modelPickerKeyCodes) {
-                    const nv = changes.modelPickerKeyCodes.newValue;
-                    const arr = Array.isArray(nv) ? nv.slice(0, 10) : new Array(10).fill('');
-                    codes = new Array(10).fill('').map((_, i) => (typeof arr[i] === 'string' ? arr[i] : ''));
+        function triggerReset() {
+            showConfirmReset((yes) => {
+                if (!yes) return;
+                const defaults = [
+                    'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+                    'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
+                ];
+                window.saveModelPickerKeyCodes(defaults, ok => {
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(ok ? 'Model keys reset to defaults.' : 'Reset attempted; please reopen the popup.');
+                    }
                     render();
-                }
-                if (changes.autoOverwrite) {
-                    if (!window.prefs) window.prefs = {};
-                    window.prefs.autoOverwrite = !!changes.autoOverwrite.newValue;
-                }
-            }
-        };
-
-
-        chrome.storage.onChanged.addEventListener?.call
-            ? chrome.storage.onChanged.addEventListener(onStorageChange)
-            : chrome.storage.onChanged.addListener(onStorageChange);
-
-
-        // Chip capture
-        // Single-active capture state for chips
-        let activeChip = null;
-        let activeKeyHandler = null;
-
-        function cancelActiveCapture() {
-            if (!activeChip || !activeKeyHandler) return;
-            activeChip.removeEventListener('keydown', activeKeyHandler, true);
-            activeChip.classList.remove('listening');
-            activeChip = null;
-            activeKeyHandler = null;
-            render(); // restore label from saved codes
+                });
+            });
         }
+        resetEl.style.cursor = 'pointer';
+        resetEl.addEventListener('click', triggerReset);
+        resetEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerReset(); }
+        });
+        resetEl.dataset.mpResetWired = '1';
+    })();
 
-        chips.forEach((chip, idx) => {
-            const startCapture = () => {
-                // If another chip is in "Set" mode, cancel it first
-                if (activeChip && activeChip !== chip) cancelActiveCapture();
-                if (activeChip === chip) return; // already active on this chip
+    let activeChip = null;
+    let activeKeyHandler = null;
 
-                chip.classList.add('listening');
-                chip.textContent = 'Set';
+    function cancelActiveCapture() {
+        if (!activeChip || !activeKeyHandler) return;
+        activeChip.removeEventListener('keydown', activeKeyHandler, true);
+        activeChip.classList.remove('listening');
+        activeChip = null;
+        activeKeyHandler = null;
+        render();
+    }
 
-                const onKey = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const code = e.code;
-
-                    // Esc = cancel (no change)
-                    if (code === 'Escape') {
+    chips.forEach((chip, idx) => {
+        const startCapture = () => {
+            if (activeChip && activeChip !== chip) cancelActiveCapture();
+            if (activeChip === chip) return;
+            chip.classList.add('listening');
+            chip.textContent = 'Set';
+            const onKey = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const code = e.code;
+                if (code === 'Escape') {
+                    cancelActiveCapture();
+                    return;
+                }
+                if (code === 'Backspace' || code === 'Delete') {
+                    const codes = window.ShortcutUtils.getModelPickerCodesCache().slice();
+                    codes[idx] = '';
+                    window.saveModelPickerKeyCodes(codes, () => {
                         cancelActiveCapture();
-                        return;
-                    }
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(`Cleared key for slot ${idx + 1}.`);
+                        }
+                        render();
+                    });
+                    return;
+                }
+                if (/^(Shift|Alt|Control|Meta)(Left|Right)$/.test(code)) return;
+                const modelMod = typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
+                const selfOwner = { type: 'model', idx, modifier: modelMod };
+                const codes = window.ShortcutUtils.getModelPickerCodesCache().slice();
+                const conflicts = window.ShortcutUtils.buildConflictsForCode
+                    ? window.ShortcutUtils.buildConflictsForCode(code, selfOwner)
+                    : [];
 
-                    // Backspace/Delete = clear this slot
-                    if (code === 'Backspace' || code === 'Delete') {
-                        const next = codes.slice();
-                        next[idx] = '';
-                        saveCodes(next, () => {
-                            codes = next;
+                const proceedAssign = () => {
+                    window.ShortcutUtils.clearOwners && window.ShortcutUtils.clearOwners(conflicts, () => {
+                        codes[idx] = code;
+                        window.saveModelPickerKeyCodes(codes, () => {
                             cancelActiveCapture();
-                            if (typeof window.showToast === 'function') {
-                                window.showToast(`Cleared key for slot ${idx + 1}.`);
-                            }
+                            render();
                         });
-                        return;
-                    }
-
-                    // Ignore pure modifiers
-                    if (
-                        code === 'ShiftLeft' || code === 'ShiftRight' ||
-                        code === 'AltLeft' || code === 'AltRight' ||
-                        code === 'ControlLeft' || code === 'ControlRight' ||
-                        code === 'MetaLeft' || code === 'MetaRight'
-                    ) return;
-
-                    const selfOwner = { type: 'model', idx };
-                    const conflicts = buildConflictsForCode(code, selfOwner, codes.slice());
-
-                    const proceedAssign = () => {
-                        const next = codes.slice();
-                        clearOwners(conflicts, next); // clears other owners in inputs/next
-                        next[idx] = code;
-                        saveCodes(next, () => {
-                            codes = next;
-                            cancelActiveCapture();
-                        });
-                    };
-
-                    if (conflicts.length) {
-                        const autoOverwrite = !!(window.prefs && window.prefs.autoOverwrite);
-                        if (autoOverwrite) {
-                            proceedAssign();
-                        } else {
-                            const names = conflicts.map(c => c.label).join(', ');
-                            const ask = typeof window.showDuplicateModal === 'function'
-                                ? window.showDuplicateModal
-                                : (msg, cb) => {
-                                    // Map "Model slot N" → hard-coded MODEL_NAMES[N-1], with 10 → index 9 ("Slot 0")
-                                    const prettyMsg = msg
-                                        .split(',')
-                                        .map(part => {
-                                            const t = part.trim();
-                                            const m = t.match(/^Model slot\s+(\d+)$/i);
-                                            if (!m) return t;
-                                            const n = parseInt(m[1], 10);
-                                            const idx = (n === 10) ? 9 : (n - 1); // 1..9,10 → 0..8,9
-                                            return (Array.isArray(MODEL_NAMES) && MODEL_NAMES[idx]) ? MODEL_NAMES[idx] : t;
-                                        })
-                                        .join(', ');
-                                    cb(window.confirm(`This key is assigned to ${prettyMsg}. Assign here instead?`), false);
-                                };
-
-                            ask(names, (yes, remember) => {
+                    });
+                };
+                if (conflicts.length) {
+                    if (window.prefs && window.prefs.autoOverwrite) {
+                        proceedAssign();
+                    } else {
+                        const keyLabel = window.ShortcutUtils.displayFromCode
+                            ? window.ShortcutUtils.displayFromCode(code)
+                            : code;
+                        const MODEL_NAMES = window.MODEL_NAMES || [];
+                        const toLabel = MODEL_NAMES[idx] || `Model slot ${idx + 1}`;
+                        if (conflicts.length === 1) {
+                            const owners = [conflicts[0].label];
+                            window.showDuplicateModal(owners, (yes, remember) => {
                                 if (yes) {
                                     if (remember) {
-                                        if (!window.prefs) window.prefs = {};
+                                        window.prefs = window.prefs || {};
                                         window.prefs.autoOverwrite = true;
                                         chrome.storage.sync.set({ autoOverwrite: true });
                                     }
@@ -1970,36 +2162,72 @@ enableEditableOpacity('slimSidebarOpacityValue', 'slimSidebarOpacitySlider', 'sl
                                 } else {
                                     cancelActiveCapture();
                                 }
-
+                            }, { keyLabel, targetLabel: toLabel });
+                        } else {
+                            const lines = conflicts.map(c => {
+                                let k = '';
+                                if (c.type === 'shortcut') {
+                                    const el = document.getElementById(c.id);
+                                    const ch = (el && el.value) ? el.value.trim() : '';
+                                    k = ch || '?';
+                                } else if (c.type === 'model') {
+                                    const cur = codes[c.idx];
+                                    k = window.ShortcutUtils.displayFromCode
+                                        ? window.ShortcutUtils.displayFromCode(cur)
+                                        : (cur || '?');
+                                }
+                                return { key: k, from: c.label, to: toLabel };
                             });
+                            const names = conflicts.map(c => c.label).join(', ');
+                            window.showDuplicateModal(names, (yes, remember) => {
+                                if (yes) {
+                                    if (remember) {
+                                        window.prefs = window.prefs || {};
+                                        window.prefs.autoOverwrite = true;
+                                        chrome.storage.sync.set({ autoOverwrite: true });
+                                    }
+                                    proceedAssign();
+                                } else {
+                                    cancelActiveCapture();
+                                }
+                            }, { lines, proceedText: 'Proceed with changes?' });
                         }
-                    } else {
-                        proceedAssign();
                     }
-                };
-
-                chip.addEventListener('keydown', onKey, true);
-                activeChip = chip;
-                activeKeyHandler = onKey;
-                chip.focus();
+                } else {
+                    proceedAssign();
+                }
             };
+            chip.addEventListener('keydown', onKey, true);
+            activeChip = chip;
+            activeKeyHandler = onKey;
+            chip.focus();
+        };
+        chip.addEventListener('click', startCapture);
+        chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') startCapture(); });
+    });
 
-            chip.addEventListener('click', startCapture);
-            chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') startCapture(); });
-        });
+    document.addEventListener('mousedown', (evt) => {
+        if (!activeChip) return;
+        if (!evt.target.closest('.mp-icons')) {
+            cancelActiveCapture();
+        }
+    });
 
-        // Optional: clicking outside the chip row cancels active capture
-        document.addEventListener('mousedown', (evt) => {
-            if (!activeChip) return;
-            if (!evt.target.closest('.mp-icons')) {
-                cancelActiveCapture();
-            }
-        });
+    // Stay perfectly in sync with changes (after delete/reset/dup/modal etc)
+    document.addEventListener('modelPickerHydrated', render);
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.modelPickerKeyCodes) {
+            render();
+        }
+    });
+    render();
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', modelPickerInitSafe, { once: true });
+} else {
+    modelPickerInitSafe();
+}
 
-    }
-
-    document.addEventListener('DOMContentLoaded', initModelPickerKeysEditor);
-})();
 
 
 

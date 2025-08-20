@@ -869,6 +869,7 @@ h1 {
 span.dup-key {
     color: #007aff !important;
     font-weight: 600;
+    width: 95%;
 }
 
 /* ===== End Duplicate Key Overlay Styles ===== */
@@ -1152,4 +1153,24 @@ span.dup-key {
 .nowrap-label {
     white-space: nowrap;
     display: inline-block;
+}
+
+
+/* For shortcut-item--vertical, stack .ownLine vertically */
+.shortcut-item--vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+    align-items: stretch;
+}
+
+/* Each .ownLine is a row: label and switch are side by side */
+.shortcut-item--vertical .ownLine {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 0;
+    /* Remove any vertical spacing, handled by parent gap */
 }

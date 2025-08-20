@@ -87,18 +87,34 @@
 
             <!-- Row 3 -->
 
-            <div class="shortcut-item" style="padding-block: 0 !important;">
-                <div class="shortcut-label">
-                    <span class="i18n" data-i18n="label_pgup_pgdown">
-                        PgUp/PgDown Takeover
-                    </span>
-                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                        data-tooltip="__MSG_tt_pgup_pgdown__">info</span>
+            <div class="shortcut-item shortcut-item--vertical" style="padding-block: 0 !important;">
+                <div class="ownLine">
+                    <div class="shortcut-label">
+                        <span class="i18n" data-i18n="label_pgup_pgdown">
+                            PgUp/PgDown Takeover
+                        </span>
+                        <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                            data-tooltip="__MSG_tt_pgup_pgdown__">info</span>
+                    </div>
+                    <label class="p-form-switch">
+                        <input checked="" id="pageUpDownTakeover" name="pageUpDownTakeover" type="checkbox">
+                        <span></span>
+                    </label>
                 </div>
-                <label class="p-form-switch">
-                    <input checked="" id="pageUpDownTakeover" name="pageUpDownTakeover" type="checkbox">
-                    <span></span>
-                </label>
+                <div class="ownLine">
+                    <div class="shortcut-label">
+                        <span class="i18n" data-i18n="label_restore_shiftupdown">
+                            Shift+↑ + Shift+↓ Selects Text
+                        </span>
+                        <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                            data-tooltip="__MSG_tt_restore_shiftupdown__">info</span>
+                    </div>
+                    <label class="p-form-switch class-24">
+                        <input checked="" class="material-checkbox" id="restoreShiftUpDownEnabled"
+                            name="restoreShiftUpDownEnabled" type="checkbox">
+                        <span></span>
+                    </label>
+                </div>
             </div>
             <!-- Send Top Bar to Bottom-->
             <div class="shortcut-item class-1">
@@ -186,17 +202,23 @@
                     <!-- radio row -->
                     <div class="mp-options">
                         <label class="mp-option">
-                            <span class="mp-option-text i18n force-balance-break" data-i18n="label_use_alt">Use Alt</span>
+                            <span class="mp-option-text i18n force-balance-break" data-i18n="label_use_alt">Use
+                                Alt</span>
                             <input checked id="useAltForModelSwitcherRadio" name="useAltOrControlForModelSelection"
-                                type="radio" class="material-radio"><span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                                    data-tooltip="__MSG_tt_use_alt_for_picker__" style="line-height: 1; font-size:14px;">info</span>
+                                type="radio" class="material-radio"><span
+                                class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                                data-tooltip="__MSG_tt_use_alt_for_picker__"
+                                style="line-height: 1; font-size:14px;">info</span>
                         </label>
 
                         <label class="mp-option">
-                            <span class="mp-option-text i18n force-balance-break" data-i18n="label_use_control">Use Control</span>
+                            <span class="mp-option-text i18n force-balance-break" data-i18n="label_use_control">Use
+                                Control</span>
                             <input id="useControlForModelSwitcherRadio" name="useAltOrControlForModelSelection"
-                                type="radio" class="material-radio"><span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                                    data-tooltip="__MSG_tt_use_control_for_picker__" style="line-height: 1; font-size:14px;">info</span>
+                                type="radio" class="material-radio"><span
+                                class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                                data-tooltip="__MSG_tt_use_control_for_picker__"
+                                style="line-height: 1; font-size:14px;">info</span>
                         </label>
                     </div>
                 </div>
@@ -685,15 +707,15 @@
                     <span class="i18n" data-i18n="label_think_longer">
                         Think Longer Tool
                     </span>
-                                        <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                                            data-tooltip="__MSG_tt_think_longer__">info</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="__MSG_tt_think_longer__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
                         Alt +
                     </span>
-                    <input class="key-input" id="shortcutKeyThinkLonger" maxlength="1" name="shortcutKeyThinkLonger" type="text"
-                        value="">
+                    <input class="key-input" id="shortcutKeyThinkLonger" maxlength="1" name="shortcutKeyThinkLonger"
+                        type="text" value="">
                 </div>
             </div>
 
