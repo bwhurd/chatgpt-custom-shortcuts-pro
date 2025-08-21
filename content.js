@@ -4284,10 +4284,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active\:opacity
 
 
 // ====================================
-// @note rememberSidebarScrollPositionCheckbox
-//  Chat-sidebar scroll-restore (w/ proper scroll container targeting, 2024)
+// rememberSidebarScrollPositionCheckbox
+// Robust scroll-restore for rail + overlay (2025)
 // ====================================
-
 setTimeout(() => {
     (function () {
         'use strict';
@@ -4297,46 +4296,111 @@ setTimeout(() => {
             async ({ rememberSidebarScrollPositionCheckbox: enabled }) => {
                 if (!enabled) return;
 
-                // *** Tip: use per-path key to avoid wrong restores after page navs ***
-                const STORAGE_KEY = '__chat_sidebar_scrollTop__::' + location.pathname;
-                const SAVE_DEBOUNCE_MS = 150;    // ms after user stops scrolling → save
-                const IDLE_WAIT_MS = 1000;   // ms of no growth before restore starts
-                const POLL_INTERVAL_MS = 100;   // ms between lazy-load nudges
-                const MAX_WAIT_MS = 5000;   // total ms to keep nudging
-                const FINAL_DELAY_MS = 2000;   // ms after init for final jump
+                const SAVE_DEBOUNCE_MS = 150;
+                const IDLE_WAIT_MS = 1000;
+                const POLL_INTERVAL_MS = 100;
+                const MAX_WAIT_MS = 5000;
+                const FINAL_DELAY_MS = 2000;
 
-                const sleep = ms => new Promise(r => setTimeout(r, ms));
-                let container, saveTimer;
+                const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-                // ===== Manual-scroll override =====
-                let userScrolled = false; // global flag
+                // --- State we swap when the overlay/rail changes ---
+                let cur = {
+                    container: null,
+                    keySuffix: 'rail',
+                    saveTimer: null,
+                    userScrolled: false,
+                    cleanup: () => { },
+                };
 
-                function cancelAutoOnUserScroll(el) {
-                    // Mouse wheel / touch / keyboard / mouse
-                    ['wheel', 'touchstart', 'keydown', 'mousedown', 'mouseenter', 'focusin']
-                        .forEach(evt => el.addEventListener(evt, () => { userScrolled = true; }, { passive: true }));
-                }
+                // Helpers --------------------------------------------------------------
+                const isPage = (el) => el === document.scrollingElement;
 
-                // 1️⃣ Find the *real* sidebar scrollable container!
-                // Updated: direct, robust targeting of nav by aria-label/class
-                async function findContainer() {
-                    while (true) {
-                        // Wait for nav to appear, as ChatGPT is SPA and may need time
-                        const nav = document.querySelector('nav.group\\/scrollport[aria-label="Chat history"]');
-                        if (nav && nav.scrollHeight > nav.clientHeight) {
-                            return nav;
+                const on = (el, type, handler, opts) => {
+                    (isPage(el) ? window : el).addEventListener(type, handler, opts);
+                    return () => (isPage(el) ? window : el).removeEventListener(type, handler, opts);
+                };
+
+                const getMaxScroll = (el) =>
+                    isPage(el)
+                        ? Math.max(0, (document.scrollingElement?.scrollHeight || 0) - window.innerHeight)
+                        : Math.max(0, el.scrollHeight - el.clientHeight);
+
+                const getScrollTop = (el) =>
+                    isPage(el)
+                        ? (document.scrollingElement?.scrollTop || document.documentElement.scrollTop || 0)
+                        : el.scrollTop;
+
+                const setScrollTop = (el, v) => {
+                    if (isPage(el)) window.scrollTo(0, v);
+                    else el.scrollTop = v;
+                };
+
+                const getScrollHeight = (el) =>
+                    isPage(el) ? (document.scrollingElement?.scrollHeight || 0) : el.scrollHeight;
+
+                const isVisible = (el) => {
+                    if (!el) return false;
+                    const cs = getComputedStyle(el);
+                    if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return false;
+                    const rects = el.getClientRects();
+                    return rects && rects.length > 0 && rects[0].height > 0 && rects[0].width > 0;
+                };
+
+                // Walk up from a node to find the actual scrollport (incl. Radix viewport)
+                function pickScrollContainer(start) {
+                    // Prefer Radix ScrollArea viewport if present
+                    const radixViewport = start.querySelector('[data-radix-scroll-area-viewport]');
+                    if (radixViewport && isVisible(radixViewport)) return radixViewport;
+
+                    // Otherwise, walk ancestors until we find a scrollable clipped element
+                    let el = start;
+                    while (el) {
+                        if (isVisible(el)) {
+                            const cs = getComputedStyle(el);
+                            const canScroll = /(auto|scroll|overlay)/.test(cs.overflowY);
+                            const clipped = el.clientHeight > 0 && el.scrollHeight > el.clientHeight;
+                            if (canScroll && clipped) return el;
                         }
-                        await sleep(100);
+                        el = el.parentElement;
                     }
+                    // Fallback: page scroll (rail hidden; overlay not found)
+                    return document.scrollingElement || document.documentElement;
                 }
 
-                // 2️⃣ wait until the container stops growing for IDLE_WAIT_MS
-                async function waitForInitialIdle(container) {
-                    let lastH = container.scrollHeight;
+                // Find the *visible* sidebar root (overlay if open, else rail)
+                function findVisibleSidebarRoot() {
+                    // Overlay: often lives in a portal with these IDs
+                    const overlayIds = ['stage-popover-sidebar', 'stage-slideover-sidebar'];
+                    for (const id of overlayIds) {
+                        const root = document.getElementById(id);
+                        if (root && isVisible(root)) return { root, mode: 'overlay' };
+                    }
+
+                    // Otherwise, use a visible nav as anchor (rail or overlay)
+                    const navs = Array.from(document.querySelectorAll('nav[aria-label="Chat history"]'));
+                    const visible = navs.filter(isVisible);
+                    if (visible.length) {
+                        // Pick the one with the highest z-index (overlay beats rail)
+                        const best = visible
+                            .map((el) => ({ el, zi: parseInt(getComputedStyle(el).zIndex || '0', 10) || 0 }))
+                            .sort((a, b) => b.zi - a.zi)[0].el;
+                        // Root is the closest container that likely owns the panel
+                        const root = best.closest('#stage-popover-sidebar, #stage-slideover-sidebar, aside, nav') || best;
+                        const mode = root.id && /stage-(popover|slideover)-sidebar/.test(root.id) ? 'overlay' : 'rail';
+                        return { root, mode };
+                    }
+
+                    // Nothing visible yet
+                    return null;
+                }
+
+                async function waitForInitialIdle(el) {
+                    let lastH = getScrollHeight(el);
                     let lastChange = Date.now();
                     while (Date.now() - lastChange < IDLE_WAIT_MS) {
                         await sleep(200);
-                        const h = container.scrollHeight;
+                        const h = getScrollHeight(el);
                         if (h !== lastH) {
                             lastH = h;
                             lastChange = Date.now();
@@ -4344,63 +4408,111 @@ setTimeout(() => {
                     }
                 }
 
-                // 3️⃣ restore: nudge to bottom every POLL_INTERVAL until scrollTop is valid
-                async function restoreScroll(container) {
-                    const raw = sessionStorage.getItem(STORAGE_KEY);
+                async function restoreScroll(el, storageKey) {
+                    const raw = sessionStorage.getItem(storageKey);
                     if (raw === null) return;
                     const desired = parseInt(raw, 10);
                     if (isNaN(desired)) return;
 
                     const start = Date.now();
                     while (Date.now() - start < MAX_WAIT_MS) {
-                        if (userScrolled) return; // abort on manual scroll
+                        if (cur.userScrolled) return;
 
-                        const maxScroll = container.scrollHeight - container.clientHeight;
-                        container.scrollTop = maxScroll; // nudge loader
+                        // nudge to bottom to trigger lazy loading in history
+                        setScrollTop(el, getMaxScroll(el));
 
-                        if (userScrolled) return;
+                        if (cur.userScrolled) return;
 
-                        if (maxScroll >= desired) {
-                            container.scrollTop = desired;
+                        if (getMaxScroll(el) >= desired) {
+                            setScrollTop(el, desired);
                             return;
                         }
                         await sleep(POLL_INTERVAL_MS);
                     }
                 }
 
-                // 4️⃣ attach saver: only on user-driven scrolls
-                function attachSaver(container) {
-                    const commit = (pos) => {
-                        sessionStorage.setItem(STORAGE_KEY, String(pos));
-                    };
-                    container.addEventListener('scroll', e => {
-                        if (!e.isTrusted) return;
-                        clearTimeout(saveTimer);
-                        saveTimer = setTimeout(() => commit(container.scrollTop), SAVE_DEBOUNCE_MS);
-                    }, { passive: true });
-                    window.addEventListener('beforeunload', () => commit(container.scrollTop));
+                function attachSaver(el, storageKey) {
+                    const cleanups = [];
+
+                    const commit = (pos) => sessionStorage.setItem(storageKey, String(pos));
+
+                    // Save on scroll (trusted)
+                    cleanups.push(
+                        on(el, 'scroll', (e) => {
+                            if (e.isTrusted) {
+                                cur.userScrolled = true; // real user scrolled
+                                clearTimeout(cur.saveTimer);
+                                cur.saveTimer = setTimeout(() => commit(getScrollTop(el)), SAVE_DEBOUNCE_MS);
+                            }
+                        }, { passive: true })
+                    );
+
+                    // Also consider pre-scroll intent (wheel/touch/keydown/mousedown)
+                    const markIntent = () => { cur.userScrolled = true; };
+                    ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach((evt) => {
+                        cleanups.push(on(el, evt, markIntent, { passive: true }));
+                    });
+
+                    window.addEventListener('beforeunload', () => commit(getScrollTop(el)));
+
+                    return () => cleanups.forEach((fn) => fn && fn());
                 }
 
-                // 5️⃣ init sequence
-                container = await findContainer();
-                cancelAutoOnUserScroll(container); // <--- Insert after container found
-                await waitForInitialIdle(container);
-                await restoreScroll(container);
-                attachSaver(container);
+                async function initOnce() {
+                    const found = findVisibleSidebarRoot();
+                    if (!found) return; // nothing visible yet (e.g., before the overlay opens)
 
-                // 6️⃣ final safeguard jump after delay
-                setTimeout(() => {
-                    if (userScrolled) return; // respect manual intervention
-                    const raw = sessionStorage.getItem(STORAGE_KEY);
-                    const desired = raw !== null ? parseInt(raw, 10) : NaN;
-                    if (!isNaN(desired)) {
-                        container.scrollTop = desired;
-                    }
-                }, FINAL_DELAY_MS);
+                    const { root, mode } = found;
+                    const anchor =
+                        root.querySelector('nav[aria-label="Chat history"]') ||
+                        root.querySelector('[data-radix-scroll-area-viewport]') ||
+                        root;
+
+                    const container = pickScrollContainer(anchor);
+                    const keySuffix = mode; // 'overlay' or 'rail'
+                    const STORAGE_KEY = `__chat_sidebar_scrollTop__::${location.pathname}::${keySuffix}`;
+
+                    // If container hasn't changed, do nothing
+                    if (cur.container === container) return;
+
+                    // Cleanup previous listeners
+                    cur.cleanup();
+                    cur = { ...cur, container, keySuffix, userScrolled: false, cleanup: () => { } };
+
+                    // Wait for content to finish initial growth, then restore
+                    await waitForInitialIdle(container);
+                    await restoreScroll(container, STORAGE_KEY);
+
+                    // Attach saver and final safeguard
+                    cur.cleanup = attachSaver(container, STORAGE_KEY);
+
+                    setTimeout(() => {
+                        if (cur.userScrolled) return;
+                        const raw = sessionStorage.getItem(STORAGE_KEY);
+                        const desired = raw !== null ? parseInt(raw, 10) : NaN;
+                        if (!isNaN(desired)) setScrollTop(container, desired);
+                    }, FINAL_DELAY_MS);
+                }
+
+                // Observe DOM changes so we re-target when overlay opens/closes
+                const mo = new MutationObserver(() => { initOnce(); });
+                mo.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['class', 'style', 'data-state', 'aria-hidden'],
+                });
+
+                // Also re-evaluate on resize (rail vs overlay threshold)
+                window.addEventListener('resize', () => { initOnce(); }, { passive: true });
+
+                // Kick off now; observer will re-run as needed
+                initOnce();
             }
         );
     })();
 }, 500);
+
 
 // ==================================================
 // @note Slim-bar opacity / fade logic (robust, overlay-aware, single IIFE)
