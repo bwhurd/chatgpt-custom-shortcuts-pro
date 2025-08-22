@@ -400,14 +400,14 @@ document.addEventListener('DOMContentLoaded', function () {
         // We filter in the conflict builder instead.
     }
 
-  /**
-     * Build list of owners that conflict with `code`.
-     * Rules:
-     * - Model ↔ Model: always conflict.
-     * - Popup ↔ Popup: always conflict.
-     * - Model ↔ Popup: conflict only when model picker uses Alt (no conflict when using Control).
-     * Digits on row and numpad are treated as equal.
-     */
+    /**
+       * Build list of owners that conflict with `code`.
+       * Rules:
+       * - Model ↔ Model: always conflict.
+       * - Popup ↔ Popup: always conflict.
+       * - Model ↔ Popup: conflict only when model picker uses Alt (no conflict when using Control).
+       * Digits on row and numpad are treated as equal.
+       */
     function buildConflictsForCode(code, selfOwner) {
         const conflicts = [];
         const modelCodes = getModelPickerCodesCache();
@@ -1583,37 +1583,58 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Robust shortcut input load/save/wireup (fixes clear bug & always syncs) ---
 
-    chrome.storage.sync.get(shortcutKeys, function (data) {
-        Object.keys(shortcutKeyValues).forEach(k => { delete shortcutKeyValues[k]; });
+    // Known fallback defaults for shortcuts that may not have an HTML value attribute
+    // Add more entries here if you discover other defaults that must roundtrip.
+    const DEFAULT_SHORTCUT_CODE_FALLBACKS = {
+        // Show Model Picker default "/"
+        shortcutKeyToggleModelSelector: 'Slash'
+    };
 
-        shortcutKeys.forEach(id => {
-            const inputElement = document.getElementById(id);
-            if (!inputElement) return;
+    // Reusable: hydrate all shortcut inputs from storage (or HTML defaults) into value + dataset.keyCode
+    function refreshShortcutInputsFromStorage() {
+        chrome.storage.sync.get(shortcutKeys, function (data) {
+            // Clear old cache
+            Object.keys(shortcutKeyValues).forEach(k => { delete shortcutKeyValues[k]; });
 
-            const stored = data[id];
-            const defaultValue = inputElement.getAttribute('value') || '';
+            shortcutKeys.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
 
-            if (typeof stored === 'string' && stored !== '\u00A0' && stored.trim()) {
-                inputElement.dataset.keyCode = stored;
-                inputElement.value = codeToDisplayChar(stored);
-                shortcutKeyValues[id] = inputElement.value;
-            } else if (stored === '\u00A0') {
-                inputElement.dataset.keyCode = '';
-                inputElement.value = '';
-                shortcutKeyValues[id] = '';
-            } else if (defaultValue) {
-                // If author supplied a default single char in HTML, normalize it to a code into dataset
-                const code = (window.ShortcutUtils?.charToCode || charToCode)(defaultValue.trim()) || '';
-                inputElement.dataset.keyCode = code;
-                inputElement.value = code ? codeToDisplayChar(code) : defaultValue;
-                shortcutKeyValues[id] = inputElement.value;
-            } else {
-                inputElement.dataset.keyCode = '';
-                inputElement.value = '';
-                shortcutKeyValues[id] = '';
-            }
+                const stored = data[id];
+                const defaultValue = (el.getAttribute('value') || '').trim();
+                const fallbackCode = DEFAULT_SHORTCUT_CODE_FALLBACKS[id] || '';
+
+                if (typeof stored === 'string' && stored !== '\u00A0' && stored.trim()) {
+                    el.dataset.keyCode = stored;
+                    el.value = codeToDisplayChar(stored);
+                    shortcutKeyValues[id] = el.value;
+                } else if (stored === '\u00A0') {
+                    el.dataset.keyCode = '';
+                    el.value = '';
+                    shortcutKeyValues[id] = '';
+                } else if (defaultValue) {
+                    const code = (window.ShortcutUtils?.charToCode || charToCode)(defaultValue) || '';
+                    el.dataset.keyCode = code;
+                    el.value = code ? codeToDisplayChar(code) : defaultValue;
+                    shortcutKeyValues[id] = el.value;
+                } else if (fallbackCode) {
+                    el.dataset.keyCode = fallbackCode;
+                    el.value = codeToDisplayChar(fallbackCode);
+                    shortcutKeyValues[id] = el.value;
+                } else {
+                    el.dataset.keyCode = '';
+                    el.value = '';
+                    shortcutKeyValues[id] = '';
+                }
+            });
         });
-    });
+    }
+    
+    // Expose for import code to reuse
+    window.refreshShortcutInputsFromStorage = refreshShortcutInputsFromStorage;
+
+    // Initial hydrate on popup open
+    refreshShortcutInputsFromStorage();
 
     // Wire up robust key capture: supports arrows, function keys, media keys, labels, and guards input vs keydown
     shortcutKeys.forEach(id => {
@@ -1955,29 +1976,159 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        /**
+         * Normalize any stored/loaded shortcut value to a valid
+         * `KeyboardEvent.code` or NBSP placeholder.
+         *
+         * 1. Accepts already-valid code strings like "Slash" — **fixes import bug**.
+         * 2. Converts single printable characters (e.g. "/") to codes.
+         * 3. Returns NBSP for empty/invalid input.
+         */
         function normalizeShortcutVal(v) {
+            // ── empty / placeholder handling ───────────────────────────────────
             if (v == null) return '\u00A0';
             const s = String(v).trim();
             if (s === '' || s === '\u00A0') return '\u00A0';
-            // Already a code?
-            if (/^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash|Backquote|Delete|Insert|Home|End|Page(Up|Down)|CapsLock|NumLock|ScrollLock|PrintScreen|Pause|ContextMenu|Volume(Mute|Down|Up)|Media(PlayPause|TrackNext|TrackPrevious))/.test(s)) return s;
-            // Single character → code
+
+            // ── fast-path: value is already a valid `KeyboardEvent.code` ───────
+            //    Added `Slash` and other punctuation codes that were missing.
+            // Full-string match for every valid KeyboardEvent.code
+            const CODE_RE =
+                /^(?:Key[A-Z]|Digit[0-9]|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|F(?:[1-9]|1[0-9]|2[0-4])|Backspace|Enter|Escape|Tab|Space|Minus|Equal|Bracket(?:Left|Right)|Semicolon|Quote|Comma|Period|Slash|Backslash|Backquote|Delete|Insert|Home|End|Page(?:Up|Down)|CapsLock|NumLock|ScrollLock|PrintScreen|Pause|ContextMenu|Numpad(?:Divide|Multiply|Subtract|Add|Decimal|Enter|Equal)|Volume(?:Mute|Down|Up)|Media(?:PlayPause|TrackNext|TrackPrevious)|Meta(?:Left|Right)|Alt(?:Left|Right)|Control(?:Left|Right)|Shift(?:Left|Right)|Fn)$/;
+
+            if (CODE_RE.test(s)) return s;
+
+            // ── fallback: convert single printable char to code ────────────────
             const toCode = (window.ShortcutUtils?.charToCode || charToCode);
-            return toCode ? (toCode(s) || '\u00A0') : '\u00A0';
+            const converted = toCode ? toCode(s) : '';
+
+            return converted || '\u00A0';
         }
+
 
 
         function exportSettingsToFile() {
             const keySet = getExportKeySet();
+
+            // Build reverse label map on demand to translate visible labels (↑, Enter, Mute) back to codes
+            function getReverseMap() {
+                if (window.__revShortcutLabelMapForExport) return window.__revShortcutLabelMapForExport;
+                const display = (window.ShortcutUtils?.displayFromCode || window.displayFromCode);
+                const codes = [
+                    ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
+                    ...Array.from({ length: 10 }, (_, i) => `Digit${i}`),
+                    ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
+                    ...Array.from({ length: 24 }, (_, i) => `F${i + 1}`),
+                    'Minus', 'Equal', 'BracketLeft', 'BracketRight', 'Backslash', 'Semicolon', 'Quote', 'Comma', 'Period', 'Slash', 'Backquote',
+                    'Space', 'Enter', 'Escape', 'Tab', 'Backspace', 'Delete', 'Insert', 'Home', 'End', 'PageUp', 'PageDown',
+                    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                    'NumpadDivide', 'NumpadMultiply', 'NumpadSubtract', 'NumpadAdd', 'NumpadDecimal', 'NumpadEnter', 'NumpadEqual',
+                    'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen', 'Pause', 'ContextMenu',
+                    'IntlBackslash', 'IntlYen', 'IntlRo', 'Lang1', 'Lang2', 'Lang3', 'Lang4', 'Lang5',
+                    'VolumeMute', 'VolumeDown', 'VolumeUp', 'MediaPlayPause', 'MediaTrackNext', 'MediaTrackPrevious',
+                    'MetaLeft', 'MetaRight', 'AltLeft', 'AltRight', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Fn'
+                ];
+                const exact = Object.create(null);
+                const lower = Object.create(null);
+
+                // Known synonyms
+                const synonyms = {
+                    'Bksp': 'Backspace', 'Backspace': 'Backspace',
+                    'Del': 'Delete', 'Delete': 'Delete',
+                    'Esc': 'Escape', '⎋': 'Escape',
+                    'Enter': 'Enter', '↩': 'Enter',
+                    '⇥': 'Tab', 'Tab': 'Tab',
+                    'Space': 'Space',
+                    '↑': 'ArrowUp', '↓': 'ArrowDown', '←': 'ArrowLeft', '→': 'ArrowRight',
+                    'PgUp': 'PageUp', 'PgDn': 'PageDown', 'Page Up': 'PageUp', 'Page Down': 'PageDown',
+                    'Home': 'Home', 'End': 'End', 'Insert': 'Insert',
+                    'Mute': 'VolumeMute', 'Vol+': 'VolumeUp', 'Vol-': 'VolumeDown', 'Vol–': 'VolumeDown',
+                    'Play/Pause': 'MediaPlayPause', 'Next': 'MediaTrackNext', 'Prev': 'MediaTrackPrevious',
+                    'Win': 'MetaLeft', '⌘': 'MetaLeft', 'Command': 'MetaLeft',
+                    'Ctrl': 'ControlLeft', 'Control': 'ControlLeft',
+                    '⌥': 'AltLeft', 'Alt': 'AltLeft',
+                    '⇧': 'ShiftLeft', 'Shift': 'ShiftLeft', 'Fn': 'Fn'
+                };
+                Object.keys(synonyms).forEach(lbl => {
+                    exact[lbl] = synonyms[lbl];
+                    lower[lbl.toLowerCase()] = synonyms[lbl];
+                });
+
+                codes.forEach(c => {
+                    const lbl = display ? display(c) : '';
+                    if (lbl && lbl !== '\u00A0') {
+                        exact[lbl] ||= c;
+                        lower[lbl.toLowerCase()] ||= c;
+                    }
+                    exact[c] ||= c;
+                    lower[c.toLowerCase()] ||= c;
+                });
+
+                window.__revShortcutLabelMapForExport = { exact, lower };
+                return window.__revShortcutLabelMapForExport;
+            }
+
+            function effectiveShortcutCode(id, stored) {
+                // 1) Storage wins if present and not NBSP
+                if (typeof stored === 'string' && stored.trim() && stored !== '\u00A0') {
+                    return normalizeShortcutVal(stored);
+                }
+
+                // 2) UI dataset (already a code)
+                const el = document.getElementById(id);
+                if (el?.dataset?.keyCode) {
+                    const v = el.dataset.keyCode;
+                    if (v && v !== '\u00A0') return v;
+                }
+
+                // 3) Visible label in the field → try charToCode, then reverse label map
+                if (el && el.value && el.value.trim()) {
+                    const raw = el.value.trim();
+                    let code = (window.ShortcutUtils?.charToCode || charToCode)(raw) || '';
+                    if (!code) {
+                        const map = getReverseMap();
+                        code = map.exact[raw] || map.lower[raw.toLowerCase()] || '';
+                    }
+                    if (code) return code;
+                }
+
+                // 4) HTML default value attribute (single char) → code
+                if (el) {
+                    const defAttr = (el.getAttribute('value') || '').trim();
+                    if (defAttr) {
+                        const c = (window.ShortcutUtils?.charToCode || charToCode)(defAttr) || '';
+                        if (c) return c;
+                    }
+                }
+
+                // 5) Final fallback: hardcoded defaults for known edge cases (e.g., "/")
+                if (DEFAULT_SHORTCUT_CODE_FALLBACKS && DEFAULT_SHORTCUT_CODE_FALLBACKS[id]) {
+                    return DEFAULT_SHORTCUT_CODE_FALLBACKS[id];
+                }
+
+                // 6) Nothing found → NBSP
+                return '\u00A0';
+            }
+
             chrome.storage.sync.get(null, (all) => {
                 const out = {};
+
+                // Include all known keys present in storage (options, toggles, etc.)
                 keySet.forEach(k => {
                     if (Object.prototype.hasOwnProperty.call(all, k)) out[k] = all[k];
                 });
-                // Ensure shortcuts are normalized to codes for portability
+
+                // Ensure EVERY shortcut key is present using "effective" value (not NBSP if a default exists)
                 shortcutKeys.forEach(k => {
-                    if (k in out) out[k] = normalizeShortcutVal(out[k]);
+                    const stored = Object.prototype.hasOwnProperty.call(all, k) ? all[k] : undefined;
+                    out[k] = effectiveShortcutCode(k, stored);
                 });
+
+                // If modelPickerKeyCodes missing, include current cache/default so chips roundtrip too
+                if (!Object.prototype.hasOwnProperty.call(out, 'modelPickerKeyCodes')) {
+                    const codes = (window.ShortcutUtils?.getModelPickerCodesCache?.() || []).slice(0, 10);
+                    if (codes.length === 10) out.modelPickerKeyCodes = codes;
+                }
 
                 const payload = {
                     __meta: {
@@ -1989,9 +2140,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 };
 
                 const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-
-                // Generate filename with current date
-                const dateStr = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+                const dateStr = new Date().toISOString().split('T')[0];
                 const filename = `${dateStr}_chatgpt_custom_shortcuts_pro_settings.json`;
 
                 const a = document.createElement('a');
@@ -2000,7 +2149,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.body.appendChild(a); a.click(); a.remove();
                 URL.revokeObjectURL(a.href);
 
-                // Localized toast
                 showToast(t('toast_export_success'));
             });
         }
@@ -2022,6 +2170,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         const src = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
                         const keySet = getExportKeySet();
                         const next = {};
+
                         Object.keys(src || {}).forEach(k => {
                             if (!keySet.has(k)) return;
                             let v = src[k];
@@ -2031,43 +2180,57 @@ document.addEventListener('DOMContentLoaded', function () {
                             next[k] = v;
                         });
 
-                        // Localized "no compatible" toast
+                        // If nothing recognized
                         if (Object.keys(next).length === 0) { showToast(t('toast_import_no_compatible')); return; }
 
-                        // Localized confirmation
+                        // Confirm overwrite
                         const proceed = window.confirm(t('confirm_import_overwrite'));
                         if (!proceed) return;
 
-                        chrome.storage.sync.set(next, () => {
-                            if (chrome.runtime.lastError) {
-                                console.error('Import error:', chrome.runtime.lastError);
-                                // Localized failure toast with substitution for error
-                                showToast(t('toast_import_failed', chrome.runtime.lastError.message));
-                                return;
-                            }
-                            // Update visible inputs immediately for shortcuts (best-effort)
-                            shortcutKeys.forEach(id => {
-                                const el = document.getElementById(id);
-                                if (!el) return;
-                                const v = next[id];
-                                if (typeof v === 'string') {
-                                    if (v === '\u00A0') { el.dataset.keyCode = ''; el.value = ''; }
-                                    else { el.dataset.keyCode = v; el.value = codeToDisplayChar(v); }
+                        // Apply to storage
+                        chrome.storage.sync.get(null, curr => {
+                            const merged = { ...curr, ...next };
+
+                            chrome.storage.sync.set(merged, () => {
+                                if (chrome.runtime.lastError) {
+                                    console.error('Import error:', chrome.runtime.lastError);
+                                    showToast(t('toast_import_failed', chrome.runtime.lastError.message));
+                                    return;
                                 }
-                            });
-                            // Update radios if present
-                            ['useAltForModelSwitcherRadio', 'useControlForModelSwitcherRadio'].forEach(r => {
-                                if (r in next) {
-                                    const el = document.getElementById(r);
-                                    if (el) el.checked = !!next[r];
+
+                                // Rehydrate all shortcut inputs from storage so tricky defaults (e.g., Slash) render correctly
+                                if (typeof refreshShortcutInputsFromStorage === 'function') {
+                                    refreshShortcutInputsFromStorage();
                                 }
+
+                                // Reflect options/radios provided by the file
+                                const reflectOption = (key, val) => {
+                                    const el = document.getElementById(key);
+                                    if (!el) return;
+                                    if (el.type === 'checkbox' || el.type === 'radio') {
+                                        el.checked = !!val;
+                                    } else if (typeof val === 'string' || typeof val === 'number') {
+                                        el.value = val;
+                                    }
+                                };
+                                Object.keys(next).forEach(k => {
+                                    if (shortcutKeys.includes(k)) return; // shortcuts already handled by refresh
+                                    reflectOption(k, next[k]);
+                                });
+
+                                // If model picker codes provided, refresh local cache/UI
+                                if (Array.isArray(next.modelPickerKeyCodes) && next.modelPickerKeyCodes.length === 10) {
+                                    try {
+                                        window.__modelPickerKeyCodes = next.modelPickerKeyCodes.slice(0, 10);
+                                        document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+                                    } catch (_) { }
+                                }
+
+                                showToast(t('toast_import_complete'));
                             });
-                            // Checkboxes/opacity likely require page reload to fully apply behaviors
-                            showToast(t('toast_import_complete'));
                         });
                     } catch (e) {
                         console.error('Import parse error:', e);
-                        // Localized invalid file toast
                         showToast(t('toast_import_invalid'));
                     }
                 };

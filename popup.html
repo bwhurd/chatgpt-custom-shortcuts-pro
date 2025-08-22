@@ -218,6 +218,8 @@
                     <span class="i18n" data-i18n="label_copy">
                         Copy
                     </span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="__MSG_tt_copy_plain__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
@@ -314,8 +316,6 @@
                     <span class="i18n" data-i18n="label_new_chat">
                         New Conversation
                     </span>
-                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                        data-tooltip="__MSG_tt_new_chat__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
@@ -330,15 +330,13 @@
                     <span class="i18n" data-i18n="label_focus_input">
                         Focus Chat Input
                     </span>
-                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                        data-tooltip="__MSG_tt_focus_input__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
                         Alt +
                     </span>
-                    <input class="key-input" id="shortcutKeyActivateInput" maxlength="12" name="shortcutKeyActivateInput"
-                        type="text" value="w">
+                    <input class="key-input" id="shortcutKeyActivateInput" maxlength="12"
+                        name="shortcutKeyActivateInput" type="text" value="w">
                 </div>
             </div>
             <!-- Section 3 Row 7 -->
@@ -352,8 +350,8 @@
                     <span class="key-text platform-alt-label">
                         Alt +
                     </span>
-                    <input class="key-input" id="shortcutKeyToggleSidebar" maxlength="12" name="shortcutKeyToggleSidebar"
-                        type="text" value="s">
+                    <input class="key-input" id="shortcutKeyToggleSidebar" maxlength="12"
+                        name="shortcutKeyToggleSidebar" type="text" value="s">
                 </div>
             </div>
             <div class="shortcut-item class-1">
@@ -505,27 +503,30 @@
             <!-- Row 11 -->
             <div class="shortcut-item">
                 <div class="shortcut-label">
-                    <span class="i18n" data-i18n="label_send_stop">
-                        Send and Stop
-                    </span>
+                    <span class="i18n" data-i18n="label_send">Send</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="__MSG_tt_send__">info</span>
                 </div>
-                <div class="icon-input-container class-28">
-                    <label class="info-icon-tooltip class-29" data-tooltip="__MSG_tt_send__">
-                        <span class="material-symbols-outlined">
-                            send
-                        </span>
-                        <input checked="" id="enableSendWithControlEnterCheckbox"
-                            name="enableSendWithControlEnterCheckbox" type="checkbox">
-                    </label>
-                    <label class="info-icon-tooltip class-29" data-tooltip="__MSG_tt_stop__">
-                        <span class="material-symbols-outlined">
-                            stop_circle
-                        </span>
-                        <input checked="" id="enableStopWithControlBackspaceCheckbox"
-                            name="enableStopWithControlBackspaceCheckbox" type="checkbox">
-                    </label>
-                </div>
+                <label class="p-form-switch">
+                    <input checked id="enableSendWithControlEnterCheckbox" name="enableSendWithControlEnterCheckbox"
+                        type="checkbox">
+                    <span></span>
+                </label>
             </div>
+
+            <div class="shortcut-item">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_stop">Stop Message Generation with Control + Backspace</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="__MSG_tt_stop__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input checked id="enableStopWithControlBackspaceCheckbox"
+                        name="enableStopWithControlBackspaceCheckbox" type="checkbox">
+                    <span></span>
+                </label>
+            </div>
+
             <div class="shortcut-item class-13">
                 <div class="shortcut-label class-13">
                     <span class="i18n" data-i18n="label_regenerate">
@@ -554,22 +555,8 @@
                     <span class="key-text platform-alt-label">
                         Alt +
                     </span>
-                    <input class="key-input" id="shortcutKeyTemporaryChat" maxlength="12" name="shortcutKeyTemporaryChat"
-                        type="text" value="p">
-                </div>
-            </div>
-            <div class="shortcut-item">
-                <div class="shortcut-label">
-                    <span class="i18n" data-i18n="label_share">
-                        Share
-                    </span>
-                </div>
-                <div class="shortcut-keys">
-                    <span class="key-text platform-alt-label">
-                        Alt +
-                    </span>
-                    <input class="key-input" id="shortcutKeyShare" maxlength="12" name="shortcutKeyShare" type="text"
-                        value="">
+                    <input class="key-input" id="shortcutKeyTemporaryChat" maxlength="12"
+                        name="shortcutKeyTemporaryChat" type="text" value="p">
                 </div>
             </div>
             <!-- popup.html section -->
@@ -585,8 +572,8 @@
                     <span class="key-text platform-alt-label">
                         Alt +
                     </span>
-                    <input class="key-input" id="shortcutKeyToggleDictate" maxlength="12" name="shortcutKeyToggleDictate"
-                        type="text" value="">
+                    <input class="key-input" id="shortcutKeyToggleDictate" maxlength="12"
+                        name="shortcutKeyToggleDictate" type="text" value="y">
                 </div>
             </div>
             <div class="shortcut-item">
@@ -605,7 +592,20 @@
                         name="shortcutKeyCancelDictation" type="text" value="">
                 </div>
             </div>
-
+            <div class="shortcut-item">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_share">
+                        Share
+                    </span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">
+                        Alt +
+                    </span>
+                    <input class="key-input" id="shortcutKeyShare" maxlength="12" name="shortcutKeyShare" type="text"
+                        value="">
+                </div>
+            </div>
             <!-- ============= -->
             <!-- Tools section -->
             <div class="blank-row">
@@ -645,8 +645,6 @@
                     <span class="i18n" data-i18n="label_toggle_create_image">
                         Create Image Tool
                     </span>
-                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                        data-tooltip="__MSG_tt_toggle_create_image__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
@@ -661,8 +659,6 @@
                     <span class="i18n" data-i18n="label_toggle_canvas">
                         Canvas Tool
                     </span>
-                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-                        data-tooltip="__MSG_tt_toggle_canvas__">info</span>
                 </div>
                 <div class="shortcut-keys">
                     <span class="key-text platform-alt-label">
@@ -768,20 +764,17 @@
             </div>
             <!-- New Row: Hide Buttons -->
             <div class="shortcut-item">
-                <div class="shortcut-label info-icon-tooltip" data-tooltip="__MSG_tt_hide_arrows__">
-                    <span class="i18n" data-i18n="label_hide_arrows">
-                        Hide Arrow Buttons
-                    </span>
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_hide_arrows">Hide Arrow Buttons</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="__MSG_tt_hide_arrows__">info</span>
                 </div>
-                <div class="icon-input-container class-30">
-                    <label class="info-icon-tooltip class-29" data-tooltip="__MSG_tt_hide_arrows__">
-                        <span class="material-symbols-outlined">
-                            swap_vert
-                        </span>
-                        <input id="hideArrowButtonsCheckbox" name="hideArrowButtonsCheckbox" type="checkbox">
-                    </label>
-                </div>
+                <label class="p-form-switch">
+                    <input id="hideArrowButtonsCheckbox" name="hideArrowButtonsCheckbox" type="checkbox">
+                    <span></span>
+                </label>
             </div>
+
             <div class="shortcut-item class-31">
                 <div class="shortcut-label">
                     <span class="i18n" data-i18n="label_hide_corners">

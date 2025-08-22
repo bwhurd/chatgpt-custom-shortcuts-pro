@@ -69,16 +69,16 @@
         "message": "Go to Next Thread"
     },
     "label_send": {
-        "message": "Send"
+        "message": "Send with Control + Enter"
     },
     "label_stop": {
-        "message": "Stop"
+        "message": "Stop with Control + Backspace"
     },
     "tt_send": {
-        "message": "Check to make Control + Enter send the message."
+        "message": "Enable to make Control + Enter send the message."
     },
     "tt_stop": {
-        "message": "Check to make Control + Backspace stop response generation."
+        "message": "Enable to make Control + Backspace stop response generation."
     },
     "label_send_stop": {
         "message": "Send and Stop"
@@ -120,7 +120,7 @@
         "message": "Slide right to keep the bottom bar visible. Slide left to hide it until you hover."
     },
     "tt_copy_plain": {
-        "message": "Activate the lowest visible, native copy button."
+        "message": "Activate the lowest visible, native copy button. Press repeatedly to cycle through visible copy buttons."
     },
     "tt_strip_md": {
         "message": "Enable to remove Markdown * and ### from text copied with Alt+C, while leaving code boxes unchanged. Requires clipboard access."

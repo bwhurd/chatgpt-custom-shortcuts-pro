@@ -1014,7 +1014,7 @@ function matchesStoredKey(storedValue, e) {
             shortcutKeyStudy: '',
             shortcutKeyCreateImage: '',
             shortcutKeyToggleCanvas: '',
-            shortcutKeyToggleDictate: '',
+            shortcutKeyToggleDictate: 'y',
             shortcutKeyCancelDictation: '',
             shortcutKeyShare: '',
             shortcutKeyThinkLonger: '',
@@ -2420,17 +2420,14 @@ function matchesStoredKey(storedValue, e) {
                 document.querySelector(sel)?.click();
             },
             [shortcuts.shortcutKeyStudy]: async () => {
-                // Unique config for this action
                 const ICON_PATH_PREFIX = 'M16.3965 5.01128C16.3963'; // book icon prefix
                 await runActionByIcon(ICON_PATH_PREFIX);
             },
             [shortcuts.shortcutKeyCreateImage]: async () => {
-                // Unique config for this action
                 const ICON_PATH_PREFIX = 'M9.38759 8.53403C10.0712'; // image icon prefix
                 await runActionByIcon(ICON_PATH_PREFIX);
             },
             [shortcuts.shortcutKeyToggleCanvas]: async () => {
-                // Unique config for this action
                 const ICON_PATH_PREFIX = 'M12.0303 4.11328C13.4406'; // canvas icon prefix
                 await runActionByIcon(ICON_PATH_PREFIX);
             },
@@ -2486,7 +2483,6 @@ function matchesStoredKey(storedValue, e) {
                 const ICON_PATH_PREFIX = 'M14.2548 4.75488C14.5282'; // cancel dictation icon prefix
                 await clickExposedIconButton(ICON_PATH_PREFIX);
             },
-            // content.js function (uses exposed-button helper)
             [shortcuts.shortcutKeyShare]: async () => {
                 const ICON_PATH_PREFIX = 'M2.66821 12.6663V12.5003C2.66821'; // share icon prefix
                 await clickExposedIconButton(ICON_PATH_PREFIX);
