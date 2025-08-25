@@ -1,326 +1,326 @@
 {
-    "app_name": {
-        "message": "ChatGPT カスタムショートカット エキスパート"
-    },
-    "app_description": {
-        "message": "ChatGPT用のカスタムショートカット：上下スクロール、コピー、回答の結合、新規チャット、サイドバー表示切替のキー設定。"
-    },
-    "popup_title": {
-        "message": "ChatGPT カスタムショートカット エキスパート"
-    },
-    "label_scroll_up_one": {
-        "message": "1件上へスクロール"
-    },
-    "label_scroll_down_one": {
-        "message": "1件下へスクロール"
-    },
-    "label_scroll_top": {
-        "message": "先頭へスクロール"
-    },
-    "label_scroll_bottom": {
-        "message": "末尾へスクロール"
-    },
-    "label_pgup_pgdown": {
-        "message": "PgUp/PgDown を再割り当て"
-    },
-    "label_send_top_bar": {
-        "message": "上部バーを下へ"
-    },
-    "label_opacity": {
-        "message": "不透明度:"
-    },
-    "tag_new": {
-        "message": "新"
-    },
-    "label_copy": {
-        "message": "コピー"
-    },
-    "label_strip_md": {
-        "message": "コピー時にMarkdownを除去"
-    },
-    "label_select_copy": {
-        "message": "選択＋コピー"
-    },
-    "label_select_copy_behavior": {
-        "message": "「選択＋コピー」の動作"
-    },
-    "label_new_chat": {
-        "message": "新しいチャット"
-    },
-    "label_focus_input": {
-        "message": "入力欄にフォーカス"
-    },
-    "label_toggle_sidebar": {
-        "message": "サイドバーの表示切替"
-    },
-    "label_toggle_sidebar_folders": {
-        "message": "サイドバーのフォルダ切替 — メンテ中"
-    },
-    "label_search_chats": {
-        "message": "チャットを検索"
-    },
-    "label_search_web": {
-        "message": "ウェブ検索"
-    },
-    "label_prev_thread": {
-        "message": "前のスレッドへ"
-    },
-    "label_next_thread": {
-        "message": "次のスレッドへ"
-    },
-    "label_send": {
-        "message": "送信"
-    },
-    "label_stop": {
-        "message": "停止"
-    },
-    "tt_send": {
-        "message": "チェックすると、Ctrl + Enter で送信します。"
-    },
-    "tt_stop": {
-        "message": "チェックすると、Ctrl + Backspace で生成を停止します。"
-    },
-    "label_send_stop": {
-        "message": "送信/停止"
-    },
-    "label_join_all": {
-        "message": "全返信を結合してコピー"
-    },
-    "label_join_separator": {
-        "message": "結合/コピーの区切り"
-    },
-    "label_join_code": {
-        "message": "全コードブロックを結合してコピー"
-    },
-    "label_code_separator": {
-        "message": "コードブロックの区切り"
-    },
-    "label_hide_arrows": {
-        "message": "矢印ボタンを非表示"
-    },
-    "tt_scroll_up_one": {
-        "message": "1件ずつ上へスクロールします。"
-    },
-    "tt_scroll_down_one": {
-        "message": "1件ずつ下へスクロールします。"
-    },
-    "tt_scroll_top": {
-        "message": "最初のメッセージまでスクロールします。"
-    },
-    "tt_scroll_bottom": {
-        "message": "一番下までスクロールします。"
-    },
-    "tt_pgup_pgdown": {
-        "message": "有効にすると、PageUp/PageDown で常に会話をスクロールします。"
-    },
-    "tt_send_top_bar": {
-        "message": "有効にすると、モデル選択をメッセージ欄の下に表示します。小画面に便利です。"
-    },
-    "tt_opacity_slider": {
-        "message": "右へ動かすと下部バーを表示したままに。左で、ホバーするまで隠します。"
-    },
-    "tt_copy_plain": {
-        "message": "一番下に見えている標準のコピーボタンを押します。"
-    },
-    "tt_strip_md": {
-        "message": "有効にすると、Alt+C でコピーした文から Markdown の * と ### を除去し、コードブロックはそのまま。クリップボードアクセスが必要です。"
-    },
-    "tt_select_copy": {
-        "message": "マウス選択と Ctrl+C を再現します。繰り返し押すと、表示中のメッセージを順送りに選びます。"
-    },
-    "tt_select_copy_behavior": {
-        "message": "すべて/自分のみ/ChatGPT のみを選択。"
-    },
-    "tt_select_all": {
-        "message": "表示中のすべてを順送り。"
-    },
-    "tt_select_assistant": {
-        "message": "ChatGPT のメッセージのみ選択。"
-    },
-    "tt_select_user": {
-        "message": "あなたのメッセージのみ選択。"
-    },
-    "tt_disable_autocopy": {
-        "message": "自動コピーを無効化（＝テキスト選択だけ）。"
-    },
-    "tt_new_chat": {
-        "message": "新しい会話を開始。"
-    },
-    "tt_focus_input": {
-        "message": "入力欄にフォーカス。"
-    },
-    "tt_toggle_sidebar": {
-        "message": "サイドバーの表示を切り替え。"
-    },
-    "tt_search_chats": {
-        "message": "チャットを検索。"
-    },
-    "tt_search_web": {
-        "message": "Web検索ツールを切り替え。"
-    },
-    "tt_prev_thread": {
-        "message": "「<」をクリック。Control+Alt+ショートカットで、クリックせずに「<」間を移動。"
-    },
-    "tt_next_thread": {
-        "message": "「>」をクリック。Control+Alt+ショートカットで、クリックせずに「>」間を移動。"
-    },
-    "tt_edit_msg": {
-        "message": "一番下に見えているユーザーのメッセージで「編集」をクリック。もう一度で一つ上へ。"
-    },
-    "tt_send_edit": {
-        "message": "編集後に「送信」をクリック。"
-    },
-    "label_edit_msg": {
-        "message": "メッセージを編集"
-    },
-    "label_send_edit": {
-        "message": "編集したメッセージを送信"
-    },
-    "tt_join_all": {
-        "message": "会話内のChatGPTの回答をすべて結合してクリップボードにコピー。ユーザー入力は除外。"
-    },
-    "tt_join_separator": {
-        "message": "結合時の区切りを設定。改行はスペース +\\n を使用。"
-    },
-    "tt_join_code": {
-        "message": "コードブロックをすべて結合してクリップボードにコピー。ユーザー入力は除外。"
-    },
-    "tt_code_separator": {
-        "message": "コードブロック間の区切りを設定。改行はスペース + \\n を使用。"
-    },
-    "tt_hide_arrows": {
-        "message": "上下の矢印ボタンを隠す。"
-    },
-    "label_showModelPicker": {
-        "message": "モデルピッカーを表示"
-    },
-    "tt_showModelPicker_plain": {
-        "message": "ChatGPT Plus のモデルピッカーを表示"
-    },
-    "label_pickModel": {
-        "message": "モデルを選択"
-    },
-    "tt_pick_model_plain": {
-        "message": "Alt または Control のショートカットでモデルを切り替え。番号をクリックするとカスタムショートカットを設定/解除。"
-    },
-    "label_use_alt": {
-        "message": "Alt を使う"
-    },
-    "tt_use_Alt_for_picker": {
-        "message": "Alt+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
-    },
-    "label_use_control": {
-        "message": "Control を使う"
-    },
-    "tt_use_Control_for_picker": {
-        "message": "Control+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
-    },
-    "tt_regenerate": {
-        "message": "一番下に見えている再生成ボタンをクリック。"
-    },
-    "label_regenerate": {
-        "message": "回答を再生成"
-    },
-    "label_rememberSidebarScrollPositionCheckbox": {
-        "message": "サイドバーのスクロール位置を記憶"
-    },
-    "tt_rememberSidebarScrollPositionCheckbox": {
-        "message": "有効にすると、サイドバーのスクロール位置を記憶します。"
-    },
-    "label_fade_slim_sidebar": {
-        "message": "スリムサイドバーを薄く"
-    },
-    "tt_slim_opacity_slider": {
-        "message": "スリムサイドバーを薄くします。マウスを載せると表示。"
-    },
-    "label_temp_chat": {
-        "message": "一時チャット"
-    },
-    "tt_temp_chat": {
-        "message": "一時チャットを切り替え（最初のメッセージ送信前のみ利用可）。"
-    },
-    "label_think_longer": {
-        "message": "じっくり思考"
-    },
-    "tt_think_longer": {
-        "message": "無料版のみ。より深い推論で、より丁寧な回答に。"
-    },
-    "label_study": {
-        "message": "学習モード"
-    },
-    "tt_study": {
-        "message": "段階的に説明し、概念をつなげ、理解を強化するモードを切替。"
-    },
-    "label_toggle_create_image": {
-        "message": "画像作成"
-    },
-    "tt_toggle_create_image": {
-        "message": "画像作成ツールを切替。"
-    },
-    "label_toggle_canvas": {
-        "message": "キャンバス"
-    },
-    "tt_toggle_canvas": {
-        "message": "キャンバス作業スペースを切替。"
-    },
-    "label_add_photos_files": {
-        "message": "写真・ファイルを追加"
-    },
-    "tt_add_photos_files": {
-        "message": "メッセージに画像やファイルを添付。"
-    },
-    "label_toggle_dictate": {
-        "message": "音声入力"
-    },
-    "tt_toggle_dictate": {
-        "message": "1回押すと開始。もう一度で送信。"
-    },
-    "label_cancel_dictation": {
-        "message": "音声入力をキャンセル"
-    },
-    "tt_cancel_dictation": {
-        "message": "文字起こしせずに進行中の音声入力を中止。"
-    },
-    "label_share": {
-        "message": "共有"
-    },
-    "tt_share": {
-        "message": "会話を共有するリンクを作成。"
-    },
-    "label_backup_restore": {
-        "message": "設定のバックアップと復元"
-    },
-    "tt_backup_restore": {
-        "message": "拡張機能の設定をエクスポート/インポートします。"
-    },
-    "btn_export": {
-        "message": "エクスポート"
-    },
-    "btn_import": {
-        "message": "インポート"
-    },
-    "tt_export": {
-        "message": "設定をJSONファイルにエクスポートします。"
-    },
-    "tt_import": {
-        "message": "JSONファイルから設定をインポートします。"
-    },
-    "toast_export_success": {
-        "message": "設定をファイルにエクスポートしました。ダウンロードフォルダを確認してください。"
-    },
-    "toast_import_no_compatible": {
-        "message": "ファイルに互換性のある設定が見つかりません。"
-    },
-    "confirm_import_overwrite": {
-        "message": "ファイルから設定をインポートし、現在の値を上書きしますか？"
-    },
-    "toast_import_failed": {
-        "message": "インポートに失敗しました: $1"
-    },
-    "toast_import_complete": {
-        "message": "インポートが完了しました。すべての変更を反映するにはページを再読み込みしてください。"
-    },
-    "toast_import_invalid": {
-        "message": "無効なファイルです。インポートを中止しました。"
-    }
+	"app_name": {
+		"message": "ChatGPT カスタムショートカット エキスパート"
+	},
+	"app_description": {
+		"message": "ChatGPT用のカスタムショートカット：上下スクロール、コピー、回答の結合、新規チャット、サイドバー表示切替のキー設定。"
+	},
+	"popup_title": {
+		"message": "ChatGPT カスタムショートカット エキスパート"
+	},
+	"label_scroll_up_one": {
+		"message": "1件上へスクロール"
+	},
+	"label_scroll_down_one": {
+		"message": "1件下へスクロール"
+	},
+	"label_scroll_top": {
+		"message": "先頭へスクロール"
+	},
+	"label_scroll_bottom": {
+		"message": "末尾へスクロール"
+	},
+	"label_pgup_pgdown": {
+		"message": "PgUp/PgDown を再割り当て"
+	},
+	"label_send_top_bar": {
+		"message": "上部バーを下へ"
+	},
+	"label_opacity": {
+		"message": "不透明度:"
+	},
+	"tag_new": {
+		"message": "新"
+	},
+	"label_copy": {
+		"message": "コピー"
+	},
+	"label_strip_md": {
+		"message": "コピー時にMarkdownを除去"
+	},
+	"label_select_copy": {
+		"message": "選択＋コピー"
+	},
+	"label_select_copy_behavior": {
+		"message": "「選択＋コピー」の動作"
+	},
+	"label_new_chat": {
+		"message": "新しいチャット"
+	},
+	"label_focus_input": {
+		"message": "入力欄にフォーカス"
+	},
+	"label_toggle_sidebar": {
+		"message": "サイドバーの表示切替"
+	},
+	"label_toggle_sidebar_folders": {
+		"message": "サイドバーのフォルダ切替 — メンテ中"
+	},
+	"label_search_chats": {
+		"message": "チャットを検索"
+	},
+	"label_search_web": {
+		"message": "ウェブ検索"
+	},
+	"label_prev_thread": {
+		"message": "前のスレッドへ"
+	},
+	"label_next_thread": {
+		"message": "次のスレッドへ"
+	},
+	"label_send": {
+		"message": "送信"
+	},
+	"label_stop": {
+		"message": "停止"
+	},
+	"tt_send": {
+		"message": "チェックすると、Ctrl + Enter で送信します。"
+	},
+	"tt_stop": {
+		"message": "チェックすると、Ctrl + Backspace で生成を停止します。"
+	},
+	"label_send_stop": {
+		"message": "送信/停止"
+	},
+	"label_join_all": {
+		"message": "全返信を結合してコピー"
+	},
+	"label_join_separator": {
+		"message": "結合/コピーの区切り"
+	},
+	"label_join_code": {
+		"message": "全コードブロックを結合してコピー"
+	},
+	"label_code_separator": {
+		"message": "コードブロックの区切り"
+	},
+	"label_hide_arrows": {
+		"message": "矢印ボタンを非表示"
+	},
+	"tt_scroll_up_one": {
+		"message": "1件ずつ上へスクロールします。"
+	},
+	"tt_scroll_down_one": {
+		"message": "1件ずつ下へスクロールします。"
+	},
+	"tt_scroll_top": {
+		"message": "最初のメッセージまでスクロールします。"
+	},
+	"tt_scroll_bottom": {
+		"message": "一番下までスクロールします。"
+	},
+	"tt_pgup_pgdown": {
+		"message": "有効にすると、PageUp/PageDown で常に会話をスクロールします。"
+	},
+	"tt_send_top_bar": {
+		"message": "有効にすると、モデル選択をメッセージ欄の下に表示します。小画面に便利です。"
+	},
+	"tt_opacity_slider": {
+		"message": "右へ動かすと下部バーを表示したままに。左で、ホバーするまで隠します。"
+	},
+	"tt_copy_plain": {
+		"message": "一番下に見えている標準のコピーボタンを押します。"
+	},
+	"tt_strip_md": {
+		"message": "有効にすると、Alt+C でコピーした文から Markdown の * と ### を除去し、コードブロックはそのまま。クリップボードアクセスが必要です。"
+	},
+	"tt_select_copy": {
+		"message": "マウス選択と Ctrl+C を再現します。繰り返し押すと、表示中のメッセージを順送りに選びます。"
+	},
+	"tt_select_copy_behavior": {
+		"message": "すべて/自分のみ/ChatGPT のみを選択。"
+	},
+	"tt_select_all": {
+		"message": "表示中のすべてを順送り。"
+	},
+	"tt_select_assistant": {
+		"message": "ChatGPT のメッセージのみ選択。"
+	},
+	"tt_select_user": {
+		"message": "あなたのメッセージのみ選択。"
+	},
+	"tt_disable_autocopy": {
+		"message": "自動コピーを無効化（＝テキスト選択だけ）。"
+	},
+	"tt_new_chat": {
+		"message": "新しい会話を開始。"
+	},
+	"tt_focus_input": {
+		"message": "入力欄にフォーカス。"
+	},
+	"tt_toggle_sidebar": {
+		"message": "サイドバーの表示を切り替え。"
+	},
+	"tt_search_chats": {
+		"message": "チャットを検索。"
+	},
+	"tt_search_web": {
+		"message": "Web検索ツールを切り替え。"
+	},
+	"tt_prev_thread": {
+		"message": "「<」をクリック。Control+Alt+ショートカットで、クリックせずに「<」間を移動。"
+	},
+	"tt_next_thread": {
+		"message": "「>」をクリック。Control+Alt+ショートカットで、クリックせずに「>」間を移動。"
+	},
+	"tt_edit_msg": {
+		"message": "一番下に見えているユーザーのメッセージで「編集」をクリック。もう一度で一つ上へ。"
+	},
+	"tt_send_edit": {
+		"message": "編集後に「送信」をクリック。"
+	},
+	"label_edit_msg": {
+		"message": "メッセージを編集"
+	},
+	"label_send_edit": {
+		"message": "編集したメッセージを送信"
+	},
+	"tt_join_all": {
+		"message": "会話内のChatGPTの回答をすべて結合してクリップボードにコピー。ユーザー入力は除外。"
+	},
+	"tt_join_separator": {
+		"message": "結合時の区切りを設定。改行はスペース +\\n を使用。"
+	},
+	"tt_join_code": {
+		"message": "コードブロックをすべて結合してクリップボードにコピー。ユーザー入力は除外。"
+	},
+	"tt_code_separator": {
+		"message": "コードブロック間の区切りを設定。改行はスペース + \\n を使用。"
+	},
+	"tt_hide_arrows": {
+		"message": "上下の矢印ボタンを隠す。"
+	},
+	"label_showModelPicker": {
+		"message": "モデルピッカーを表示"
+	},
+	"tt_showModelPicker_plain": {
+		"message": "ChatGPT Plus のモデルピッカーを表示"
+	},
+	"label_pickModel": {
+		"message": "モデルを選択"
+	},
+	"tt_pick_model_plain": {
+		"message": "Alt または Control のショートカットでモデルを切り替え。番号をクリックするとカスタムショートカットを設定/解除。"
+	},
+	"label_use_alt": {
+		"message": "Alt を使う"
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Alt+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
+	},
+	"label_use_control": {
+		"message": "Control を使う"
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Control+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
+	},
+	"tt_regenerate": {
+		"message": "一番下に見えている再生成ボタンをクリック。"
+	},
+	"label_regenerate": {
+		"message": "回答を再生成"
+	},
+	"label_rememberSidebarScrollPositionCheckbox": {
+		"message": "サイドバーのスクロール位置を記憶"
+	},
+	"tt_rememberSidebarScrollPositionCheckbox": {
+		"message": "有効にすると、サイドバーのスクロール位置を記憶します。"
+	},
+	"label_fade_slim_sidebar": {
+		"message": "スリムサイドバーを薄く"
+	},
+	"tt_slim_opacity_slider": {
+		"message": "スリムサイドバーを薄くします。マウスを載せると表示。"
+	},
+	"label_temp_chat": {
+		"message": "一時チャット"
+	},
+	"tt_temp_chat": {
+		"message": "一時チャットを切り替え（最初のメッセージ送信前のみ利用可）。"
+	},
+	"label_think_longer": {
+		"message": "じっくり思考"
+	},
+	"tt_think_longer": {
+		"message": "無料版のみ。より深い推論で、より丁寧な回答に。"
+	},
+	"label_study": {
+		"message": "学習モード"
+	},
+	"tt_study": {
+		"message": "段階的に説明し、概念をつなげ、理解を強化するモードを切替。"
+	},
+	"label_toggle_create_image": {
+		"message": "画像作成"
+	},
+	"tt_toggle_create_image": {
+		"message": "画像作成ツールを切替。"
+	},
+	"label_toggle_canvas": {
+		"message": "キャンバス"
+	},
+	"tt_toggle_canvas": {
+		"message": "キャンバス作業スペースを切替。"
+	},
+	"label_add_photos_files": {
+		"message": "写真・ファイルを追加"
+	},
+	"tt_add_photos_files": {
+		"message": "メッセージに画像やファイルを添付。"
+	},
+	"label_toggle_dictate": {
+		"message": "音声入力"
+	},
+	"tt_toggle_dictate": {
+		"message": "1回押すと開始。もう一度で送信。"
+	},
+	"label_cancel_dictation": {
+		"message": "音声入力をキャンセル"
+	},
+	"tt_cancel_dictation": {
+		"message": "文字起こしせずに進行中の音声入力を中止。"
+	},
+	"label_share": {
+		"message": "共有"
+	},
+	"tt_share": {
+		"message": "会話を共有するリンクを作成。"
+	},
+	"label_backup_restore": {
+		"message": "設定のバックアップと復元"
+	},
+	"tt_backup_restore": {
+		"message": "拡張機能の設定をエクスポート/インポートします。"
+	},
+	"btn_export": {
+		"message": "エクスポート"
+	},
+	"btn_import": {
+		"message": "インポート"
+	},
+	"tt_export": {
+		"message": "設定をJSONファイルにエクスポートします。"
+	},
+	"tt_import": {
+		"message": "JSONファイルから設定をインポートします。"
+	},
+	"toast_export_success": {
+		"message": "設定をファイルにエクスポートしました。ダウンロードフォルダを確認してください。"
+	},
+	"toast_import_no_compatible": {
+		"message": "ファイルに互換性のある設定が見つかりません。"
+	},
+	"confirm_import_overwrite": {
+		"message": "ファイルから設定をインポートし、現在の値を上書きしますか？"
+	},
+	"toast_import_failed": {
+		"message": "インポートに失敗しました: $1"
+	},
+	"toast_import_complete": {
+		"message": "インポートが完了しました。すべての変更を反映するにはページを再読み込みしてください。"
+	},
+	"toast_import_invalid": {
+		"message": "無効なファイルです。インポートを中止しました。"
+	}
 }

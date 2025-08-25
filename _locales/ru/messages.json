@@ -1,326 +1,326 @@
 {
-    "app_name": {
-        "message": "ChatGPT: Свои горячие клавиши Плюс"
-    },
-    "app_description": {
-        "message": "Настройте свои горячие клавиши для ChatGPT: листайте вверх/вниз, копируйте текст, объединяйте ответы, открывайте новый чат и показывайте или скрывайте боковую панель."
-    },
-    "popup_title": {
-        "message": "ChatGPT: Свои горячие клавиши Плюс"
-    },
-    "label_scroll_up_one": {
-        "message": "На 1 сообщение вверх"
-    },
-    "label_scroll_down_one": {
-        "message": "На 1 сообщение вниз"
-    },
-    "label_scroll_top": {
-        "message": "В начало"
-    },
-    "label_scroll_bottom": {
-        "message": "В конец"
-    },
-    "label_pgup_pgdown": {
-        "message": "Переназначить PgUp/PgDown"
-    },
-    "label_send_top_bar": {
-        "message": "Верхнюю панель вниз"
-    },
-    "label_opacity": {
-        "message": "Непрозрачность:"
-    },
-    "tag_new": {
-        "message": "НОВОЕ"
-    },
-    "label_copy": {
-        "message": "Копировать"
-    },
-    "label_strip_md": {
-        "message": "Убирать Markdown при копировании"
-    },
-    "label_select_copy": {
-        "message": "Выделить + Копировать"
-    },
-    "label_select_copy_behavior": {
-        "message": "Режим «Выделить + Копировать»"
-    },
-    "label_new_chat": {
-        "message": "Новый чат"
-    },
-    "label_focus_input": {
-        "message": "Фокус на поле ввода"
-    },
-    "label_toggle_sidebar": {
-        "message": "Переключить боковую панель"
-    },
-    "label_toggle_sidebar_folders": {
-        "message": "Папки боковой панели — на ремонте"
-    },
-    "label_search_chats": {
-        "message": "Поиск по чатам"
-    },
-    "label_search_web": {
-        "message": "Веб-поиск"
-    },
-    "label_prev_thread": {
-        "message": "К предыдущему чату"
-    },
-    "label_next_thread": {
-        "message": "К следующему чату"
-    },
-    "label_send": {
-        "message": "Отправить"
-    },
-    "label_stop": {
-        "message": "Стоп"
-    },
-    "tt_send": {
-        "message": "Отметьте, чтобы Ctrl + Enter отправлял сообщение."
-    },
-    "tt_stop": {
-        "message": "Отметьте, чтобы Ctrl + Backspace останавливал генерацию ответа."
-    },
-    "label_send_stop": {
-        "message": "Отправить/Стоп"
-    },
-    "label_join_all": {
-        "message": "Склеить и скопировать все ответы"
-    },
-    "label_join_separator": {
-        "message": "Разделитель склейки/копии"
-    },
-    "label_join_code": {
-        "message": "Склеить и скопировать все блоки кода"
-    },
-    "label_code_separator": {
-        "message": "Разделитель блоков кода"
-    },
-    "label_hide_arrows": {
-        "message": "Скрыть стрелки"
-    },
-    "tt_scroll_up_one": {
-        "message": "Прокручивает вверх по одному сообщению."
-    },
-    "tt_scroll_down_one": {
-        "message": "Прокручивает вниз по одному сообщению."
-    },
-    "tt_scroll_top": {
-        "message": "Прокручивает к первому сообщению."
-    },
-    "tt_scroll_bottom": {
-        "message": "Прокручивает в самый низ."
-    },
-    "tt_pgup_pgdown": {
-        "message": "Включите, чтобы PageUp/PageDown всегда прокручивали беседу."
-    },
-    "tt_send_top_bar": {
-        "message": "Включите, чтобы поместить выбор модели под полем ввода. Удобно на маленьких экранах."
-    },
-    "tt_opacity_slider": {
-        "message": "Сдвиньте вправо — нижняя панель видима. Влево — скрыта, пока не наведёте курсор."
-    },
-    "tt_copy_plain": {
-        "message": "Нажимает самую нижнюю видимую встроенную кнопку копирования."
-    },
-    "tt_strip_md": {
-        "message": "Включите, чтобы при Alt+C из текста удалялись Markdown‑символы * и ###, не меняя блоки кода. Нужен доступ к буферу обмена."
-    },
-    "tt_select_copy": {
-        "message": "Имитирует выделение мышью и Ctrl+C. Нажимайте повторно, чтобы по очереди проходить видимые сообщения."
-    },
-    "tt_select_copy_behavior": {
-        "message": "Выбирать любые, только ваши или только ChatGPT."
-    },
-    "tt_select_all": {
-        "message": "Перебирает все видимые сообщения."
-    },
-    "tt_select_assistant": {
-        "message": "Выбирать только сообщения ChatGPT."
-    },
-    "tt_select_user": {
-        "message": "Выбирать только ваши сообщения."
-    },
-    "tt_disable_autocopy": {
-        "message": "Отметьте, чтобы отключить авто‑копирование (теперь только выделяет текст)."
-    },
-    "tt_new_chat": {
-        "message": "Начать новый разговор."
-    },
-    "tt_focus_input": {
-        "message": "Фокус на поле ввода."
-    },
-    "tt_toggle_sidebar": {
-        "message": "Показать/скрыть боковую панель."
-    },
-    "tt_search_chats": {
-        "message": "Поиск по чатам."
-    },
-    "tt_search_web": {
-        "message": "Вкл./выкл. инструмент «Поиск в интернете»."
-    },
-    "tt_prev_thread": {
-        "message": "Нажмите «<». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «<» без кликов."
-    },
-    "tt_next_thread": {
-        "message": "Нажмите «>». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «>» без кликов."
-    },
-    "tt_edit_msg": {
-        "message": "Нажмите «Редактировать» на самом нижнем видимом сообщении пользователя. Нажмите ещё раз — перейдёте к следующему выше."
-    },
-    "tt_send_edit": {
-        "message": "После правки сообщения нажмите «Отправить»."
-    },
-    "label_edit_msg": {
-        "message": "Редактировать сообщение"
-    },
-    "label_send_edit": {
-        "message": "Отправить отредактированное"
-    },
-    "tt_join_all": {
-        "message": "Склеить все ответы ChatGPT в беседе и скопировать в буфер. Ввод пользователя пропускается."
-    },
-    "tt_join_separator": {
-        "message": "Настройте разделитель между объединёнными частями. Для переноса строки используйте пробел +\\n."
-    },
-    "tt_join_code": {
-        "message": "Склеить все блоки кода и скопировать в буфер. Ввод пользователя пропускается."
-    },
-    "tt_code_separator": {
-        "message": "Настройте разделитель между блоками кода. Для переноса строки используйте пробел + \\n."
-    },
-    "tt_hide_arrows": {
-        "message": "Скрыть кнопки со стрелками вверх/вниз."
-    },
-    "label_showModelPicker": {
-        "message": "Показать выбор модели"
-    },
-    "tt_showModelPicker_plain": {
-        "message": "Показать выбор модели ChatGPT Plus"
-    },
-    "label_pickModel": {
-        "message": "Выбрать модель"
-    },
-    "tt_pick_model_plain": {
-        "message": "Переключайте модели горячей клавишей с Alt или Control. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
-    },
-    "label_use_alt": {
-        "message": "Использовать Alt"
-    },
-    "tt_use_Alt_for_picker": {
-        "message": "Alt+шорткат — переключение моделей. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
-    },
-    "label_use_control": {
-        "message": "Использовать Control"
-    },
-    "tt_use_Control_for_picker": {
-        "message": "Control+шорткат — переключение моделей. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
-    },
-    "tt_regenerate": {
-        "message": "Нажимает самую нижнюю видимую кнопку «Сгенерировать заново»."
-    },
-    "label_regenerate": {
-        "message": "Сгенерировать заново"
-    },
-    "label_rememberSidebarScrollPositionCheckbox": {
-        "message": "Запоминать позицию прокрутки боковой панели"
-    },
-    "tt_rememberSidebarScrollPositionCheckbox": {
-        "message": "Включите, чтобы запоминать позицию прокрутки боковой панели."
-    },
-    "label_fade_slim_sidebar": {
-        "message": "Затемнить узкую панель"
-    },
-    "tt_slim_opacity_slider": {
-        "message": "Делает узкую панель полупрозрачной. Наведите курсор, чтобы показать."
-    },
-    "label_temp_chat": {
-        "message": "Временный чат"
-    },
-    "tt_temp_chat": {
-        "message": "Переключить временный чат (доступно до отправки первого сообщения)."
-    },
-    "label_think_longer": {
-        "message": "Думать дольше"
-    },
-    "tt_think_longer": {
-        "message": "Доступно только в бесплатной версии. Более глубокие рассуждения для более подробного ответа."
-    },
-    "label_study": {
-        "message": "Режим обучения"
-    },
-    "tt_study": {
-        "message": "Переключить режим с пошаговыми объяснениями, связью понятий и закреплением."
-    },
-    "label_toggle_create_image": {
-        "message": "Создать изображение"
-    },
-    "tt_toggle_create_image": {
-        "message": "Переключить инструмент создания изображений."
-    },
-    "label_toggle_canvas": {
-        "message": "Холст"
-    },
-    "tt_toggle_canvas": {
-        "message": "Переключить рабочее пространство «Холст»."
-    },
-    "label_add_photos_files": {
-        "message": "Добавить фото и файлы"
-    },
-    "tt_add_photos_files": {
-        "message": "Прикрепить к сообщению изображения или файлы."
-    },
-    "label_toggle_dictate": {
-        "message": "Диктовать"
-    },
-    "tt_toggle_dictate": {
-        "message": "Нажмите один раз — начать диктовку. Нажмите ещё раз — отправить."
-    },
-    "label_cancel_dictation": {
-        "message": "Отменить диктовку"
-    },
-    "tt_cancel_dictation": {
-        "message": "Отменить текущую диктовку без распознавания."
-    },
-    "label_share": {
-        "message": "Поделиться"
-    },
-    "tt_share": {
-        "message": "Создать ссылку для обмена перепиской."
-    },
-    "label_backup_restore": {
-        "message": "Резервное копирование и восстановление"
-    },
-    "tt_backup_restore": {
-        "message": "Экспортируйте или импортируйте все настройки расширения."
-    },
-    "btn_export": {
-        "message": "Экспорт"
-    },
-    "btn_import": {
-        "message": "Импорт"
-    },
-    "tt_export": {
-        "message": "Сохраните настройки в файл JSON."
-    },
-    "tt_import": {
-        "message": "Загрузите настройки из файла JSON."
-    },
-    "toast_export_success": {
-        "message": "Настройки экспортированы. Проверьте папку загрузок."
-    },
-    "toast_import_no_compatible": {
-        "message": "В файле нет подходящих настроек."
-    },
-    "confirm_import_overwrite": {
-        "message": "Импортировать настройки из файла и заменить текущие?"
-    },
-    "toast_import_failed": {
-        "message": "Ошибка импорта: $1"
-    },
-    "toast_import_complete": {
-        "message": "Импорт завершён. Перезагрузите страницу для применения изменений."
-    },
-    "toast_import_invalid": {
-        "message": "Неверный файл. Импорт отменён."
-    }
+	"app_name": {
+		"message": "ChatGPT: Свои горячие клавиши Плюс"
+	},
+	"app_description": {
+		"message": "Настройте свои горячие клавиши для ChatGPT: листайте вверх/вниз, копируйте текст, объединяйте ответы, открывайте новый чат и показывайте или скрывайте боковую панель."
+	},
+	"popup_title": {
+		"message": "ChatGPT: Свои горячие клавиши Плюс"
+	},
+	"label_scroll_up_one": {
+		"message": "На 1 сообщение вверх"
+	},
+	"label_scroll_down_one": {
+		"message": "На 1 сообщение вниз"
+	},
+	"label_scroll_top": {
+		"message": "В начало"
+	},
+	"label_scroll_bottom": {
+		"message": "В конец"
+	},
+	"label_pgup_pgdown": {
+		"message": "Переназначить PgUp/PgDown"
+	},
+	"label_send_top_bar": {
+		"message": "Верхнюю панель вниз"
+	},
+	"label_opacity": {
+		"message": "Непрозрачность:"
+	},
+	"tag_new": {
+		"message": "НОВОЕ"
+	},
+	"label_copy": {
+		"message": "Копировать"
+	},
+	"label_strip_md": {
+		"message": "Убирать Markdown при копировании"
+	},
+	"label_select_copy": {
+		"message": "Выделить + Копировать"
+	},
+	"label_select_copy_behavior": {
+		"message": "Режим «Выделить + Копировать»"
+	},
+	"label_new_chat": {
+		"message": "Новый чат"
+	},
+	"label_focus_input": {
+		"message": "Фокус на поле ввода"
+	},
+	"label_toggle_sidebar": {
+		"message": "Переключить боковую панель"
+	},
+	"label_toggle_sidebar_folders": {
+		"message": "Папки боковой панели — на ремонте"
+	},
+	"label_search_chats": {
+		"message": "Поиск по чатам"
+	},
+	"label_search_web": {
+		"message": "Веб-поиск"
+	},
+	"label_prev_thread": {
+		"message": "К предыдущему чату"
+	},
+	"label_next_thread": {
+		"message": "К следующему чату"
+	},
+	"label_send": {
+		"message": "Отправить"
+	},
+	"label_stop": {
+		"message": "Стоп"
+	},
+	"tt_send": {
+		"message": "Отметьте, чтобы Ctrl + Enter отправлял сообщение."
+	},
+	"tt_stop": {
+		"message": "Отметьте, чтобы Ctrl + Backspace останавливал генерацию ответа."
+	},
+	"label_send_stop": {
+		"message": "Отправить/Стоп"
+	},
+	"label_join_all": {
+		"message": "Склеить и скопировать все ответы"
+	},
+	"label_join_separator": {
+		"message": "Разделитель склейки/копии"
+	},
+	"label_join_code": {
+		"message": "Склеить и скопировать все блоки кода"
+	},
+	"label_code_separator": {
+		"message": "Разделитель блоков кода"
+	},
+	"label_hide_arrows": {
+		"message": "Скрыть стрелки"
+	},
+	"tt_scroll_up_one": {
+		"message": "Прокручивает вверх по одному сообщению."
+	},
+	"tt_scroll_down_one": {
+		"message": "Прокручивает вниз по одному сообщению."
+	},
+	"tt_scroll_top": {
+		"message": "Прокручивает к первому сообщению."
+	},
+	"tt_scroll_bottom": {
+		"message": "Прокручивает в самый низ."
+	},
+	"tt_pgup_pgdown": {
+		"message": "Включите, чтобы PageUp/PageDown всегда прокручивали беседу."
+	},
+	"tt_send_top_bar": {
+		"message": "Включите, чтобы поместить выбор модели под полем ввода. Удобно на маленьких экранах."
+	},
+	"tt_opacity_slider": {
+		"message": "Сдвиньте вправо — нижняя панель видима. Влево — скрыта, пока не наведёте курсор."
+	},
+	"tt_copy_plain": {
+		"message": "Нажимает самую нижнюю видимую встроенную кнопку копирования."
+	},
+	"tt_strip_md": {
+		"message": "Включите, чтобы при Alt+C из текста удалялись Markdown‑символы * и ###, не меняя блоки кода. Нужен доступ к буферу обмена."
+	},
+	"tt_select_copy": {
+		"message": "Имитирует выделение мышью и Ctrl+C. Нажимайте повторно, чтобы по очереди проходить видимые сообщения."
+	},
+	"tt_select_copy_behavior": {
+		"message": "Выбирать любые, только ваши или только ChatGPT."
+	},
+	"tt_select_all": {
+		"message": "Перебирает все видимые сообщения."
+	},
+	"tt_select_assistant": {
+		"message": "Выбирать только сообщения ChatGPT."
+	},
+	"tt_select_user": {
+		"message": "Выбирать только ваши сообщения."
+	},
+	"tt_disable_autocopy": {
+		"message": "Отметьте, чтобы отключить авто‑копирование (теперь только выделяет текст)."
+	},
+	"tt_new_chat": {
+		"message": "Начать новый разговор."
+	},
+	"tt_focus_input": {
+		"message": "Фокус на поле ввода."
+	},
+	"tt_toggle_sidebar": {
+		"message": "Показать/скрыть боковую панель."
+	},
+	"tt_search_chats": {
+		"message": "Поиск по чатам."
+	},
+	"tt_search_web": {
+		"message": "Вкл./выкл. инструмент «Поиск в интернете»."
+	},
+	"tt_prev_thread": {
+		"message": "Нажмите «<». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «<» без кликов."
+	},
+	"tt_next_thread": {
+		"message": "Нажмите «>». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «>» без кликов."
+	},
+	"tt_edit_msg": {
+		"message": "Нажмите «Редактировать» на самом нижнем видимом сообщении пользователя. Нажмите ещё раз — перейдёте к следующему выше."
+	},
+	"tt_send_edit": {
+		"message": "После правки сообщения нажмите «Отправить»."
+	},
+	"label_edit_msg": {
+		"message": "Редактировать сообщение"
+	},
+	"label_send_edit": {
+		"message": "Отправить отредактированное"
+	},
+	"tt_join_all": {
+		"message": "Склеить все ответы ChatGPT в беседе и скопировать в буфер. Ввод пользователя пропускается."
+	},
+	"tt_join_separator": {
+		"message": "Настройте разделитель между объединёнными частями. Для переноса строки используйте пробел +\\n."
+	},
+	"tt_join_code": {
+		"message": "Склеить все блоки кода и скопировать в буфер. Ввод пользователя пропускается."
+	},
+	"tt_code_separator": {
+		"message": "Настройте разделитель между блоками кода. Для переноса строки используйте пробел + \\n."
+	},
+	"tt_hide_arrows": {
+		"message": "Скрыть кнопки со стрелками вверх/вниз."
+	},
+	"label_showModelPicker": {
+		"message": "Показать выбор модели"
+	},
+	"tt_showModelPicker_plain": {
+		"message": "Показать выбор модели ChatGPT Plus"
+	},
+	"label_pickModel": {
+		"message": "Выбрать модель"
+	},
+	"tt_pick_model_plain": {
+		"message": "Переключайте модели горячей клавишей с Alt или Control. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
+	},
+	"label_use_alt": {
+		"message": "Использовать Alt"
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Alt+шорткат — переключение моделей. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
+	},
+	"label_use_control": {
+		"message": "Использовать Control"
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Control+шорткат — переключение моделей. Нажмите любую цифру, чтобы задать или сбросить свой шорткат."
+	},
+	"tt_regenerate": {
+		"message": "Нажимает самую нижнюю видимую кнопку «Сгенерировать заново»."
+	},
+	"label_regenerate": {
+		"message": "Сгенерировать заново"
+	},
+	"label_rememberSidebarScrollPositionCheckbox": {
+		"message": "Запоминать позицию прокрутки боковой панели"
+	},
+	"tt_rememberSidebarScrollPositionCheckbox": {
+		"message": "Включите, чтобы запоминать позицию прокрутки боковой панели."
+	},
+	"label_fade_slim_sidebar": {
+		"message": "Затемнить узкую панель"
+	},
+	"tt_slim_opacity_slider": {
+		"message": "Делает узкую панель полупрозрачной. Наведите курсор, чтобы показать."
+	},
+	"label_temp_chat": {
+		"message": "Временный чат"
+	},
+	"tt_temp_chat": {
+		"message": "Переключить временный чат (доступно до отправки первого сообщения)."
+	},
+	"label_think_longer": {
+		"message": "Думать дольше"
+	},
+	"tt_think_longer": {
+		"message": "Доступно только в бесплатной версии. Более глубокие рассуждения для более подробного ответа."
+	},
+	"label_study": {
+		"message": "Режим обучения"
+	},
+	"tt_study": {
+		"message": "Переключить режим с пошаговыми объяснениями, связью понятий и закреплением."
+	},
+	"label_toggle_create_image": {
+		"message": "Создать изображение"
+	},
+	"tt_toggle_create_image": {
+		"message": "Переключить инструмент создания изображений."
+	},
+	"label_toggle_canvas": {
+		"message": "Холст"
+	},
+	"tt_toggle_canvas": {
+		"message": "Переключить рабочее пространство «Холст»."
+	},
+	"label_add_photos_files": {
+		"message": "Добавить фото и файлы"
+	},
+	"tt_add_photos_files": {
+		"message": "Прикрепить к сообщению изображения или файлы."
+	},
+	"label_toggle_dictate": {
+		"message": "Диктовать"
+	},
+	"tt_toggle_dictate": {
+		"message": "Нажмите один раз — начать диктовку. Нажмите ещё раз — отправить."
+	},
+	"label_cancel_dictation": {
+		"message": "Отменить диктовку"
+	},
+	"tt_cancel_dictation": {
+		"message": "Отменить текущую диктовку без распознавания."
+	},
+	"label_share": {
+		"message": "Поделиться"
+	},
+	"tt_share": {
+		"message": "Создать ссылку для обмена перепиской."
+	},
+	"label_backup_restore": {
+		"message": "Резервное копирование и восстановление"
+	},
+	"tt_backup_restore": {
+		"message": "Экспортируйте или импортируйте все настройки расширения."
+	},
+	"btn_export": {
+		"message": "Экспорт"
+	},
+	"btn_import": {
+		"message": "Импорт"
+	},
+	"tt_export": {
+		"message": "Сохраните настройки в файл JSON."
+	},
+	"tt_import": {
+		"message": "Загрузите настройки из файла JSON."
+	},
+	"toast_export_success": {
+		"message": "Настройки экспортированы. Проверьте папку загрузок."
+	},
+	"toast_import_no_compatible": {
+		"message": "В файле нет подходящих настроек."
+	},
+	"confirm_import_overwrite": {
+		"message": "Импортировать настройки из файла и заменить текущие?"
+	},
+	"toast_import_failed": {
+		"message": "Ошибка импорта: $1"
+	},
+	"toast_import_complete": {
+		"message": "Импорт завершён. Перезагрузите страницу для применения изменений."
+	},
+	"toast_import_invalid": {
+		"message": "Неверный файл. Импорт отменён."
+	}
 }
