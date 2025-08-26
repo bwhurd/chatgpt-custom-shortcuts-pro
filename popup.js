@@ -2572,49 +2572,44 @@ document.addEventListener("DOMContentLoaded", () => {
 			}
 
 			function effectiveShortcutCode(id, stored) {
-				// 1) Storage wins if present and not NBSP
-				if (
-					typeof stored === "string" &&
-					stored.trim() &&
-					stored !== "\u00A0"
-				) {
+				// 0) If the user explicitly cleared this shortcut, preserve the clear in the export.
+				//    NBSP is our canonical "cleared" sentinel for shortcut fields.
+				if (stored === "\u00A0") return "\u00A0";
+
+				// 1) If storage holds a real value, export it (normalize in case it's a label/char).
+				if (typeof stored === "string" && stored.trim()) {
 					return normalizeShortcutVal(stored);
 				}
 
-				// 2) UI dataset (already a code)
+				// 2) Only for truly "unset" keys (no storage record), derive an effective value
+				//    so first-time exports include defaults currently visible in the UI.
 				const el = document.getElementById(id);
-				if (el?.dataset?.keyCode) {
-					const v = el.dataset.keyCode;
-					if (v && v !== "\u00A0") return v;
-				}
 
-				// 3) Visible label in the field → try charToCode, then reverse label map
-				const visible = el?.value?.trim();
+				// Prefer dataset (already a KeyboardEvent.code)
+				const ds = el?.dataset?.keyCode || "";
+				if (ds && ds !== "\u00A0") return ds;
+
+				// Try the visible label/character in the input
+				const visible = el?.value?.trim() || "";
 				if (visible) {
-					const raw = visible;
-					let code =
-						(window.ShortcutUtils?.charToCode ?? charToCode)(raw) || "";
+					let code = (window.ShortcutUtils?.charToCode ?? charToCode)(visible) || "";
 					if (!code) {
 						const map = getReverseMap();
-						code = map.exact[raw] || map.lower[raw.toLowerCase()] || "";
+						code = map.exact[visible] || map.lower[visible.toLowerCase()] || "";
 					}
 					if (code) return code;
 				}
 
-				// 4) HTML default value attribute (single char) → code
-				const defAttr = el?.getAttribute("value")?.trim();
+				// HTML default attribute (single character) → code
+				const defAttr = el?.getAttribute("value")?.trim() || "";
 				if (defAttr) {
-					const c =
-						(window.ShortcutUtils?.charToCode ?? charToCode)(defAttr) || "";
+					const c = (window.ShortcutUtils?.charToCode ?? charToCode)(defAttr) || "";
 					if (c) return c;
 				}
 
-				// 5) Final fallback: hardcoded defaults for known edge cases (e.g., "/")
-				const fallback = DEFAULT_SHORTCUT_CODE_FALLBACKS?.[id];
-				if (fallback) return fallback;
-
-				// 6) Nothing found → NBSP
-				return "\u00A0";
+				// Final fallback for known edge cases (e.g., "/")
+				const fallback = DEFAULT_SHORTCUT_CODE_FALLBACKS?.[id] || "";
+				return fallback || "\u00A0";
 			}
 
 			chrome.storage.sync.get(null, (all) => {

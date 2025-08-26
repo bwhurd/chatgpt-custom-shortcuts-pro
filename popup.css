@@ -330,19 +330,19 @@ h1 {
 	transform-origin: right center;
 }
 
-.p-form-switch > input {
+.p-form-switch>input {
 	display: none;
 }
 
-.p-form-switch > input:checked + span {
+.p-form-switch>input:checked+span {
 	background: #60c35b;
 }
 
-.p-form-switch > input:checked + span::after {
+.p-form-switch>input:checked+span::after {
 	left: calc(100% - calc(var(--width) / 1.8));
 }
 
-.p-form-switch > span {
+.p-form-switch>span {
 	background: #e0e0e0;
 	border: 1px solid #d3d3d3;
 	border-radius: 500px;
@@ -353,7 +353,7 @@ h1 {
 	width: var(--width);
 }
 
-.p-form-switch > span::after {
+.p-form-switch>span::after {
 	background: #f9f9f9;
 	border-radius: 50%;
 	border: 0.5px solid rgba(0, 0, 0, 0.101987);
@@ -419,7 +419,7 @@ h1 {
 
 .shortcut-item .p-form-switch,
 .shortcut-item label.p-form-switch,
-.shortcut-item > .p-form-switch {
+.shortcut-item>.p-form-switch {
 	margin-left: auto;
 }
 
@@ -1043,7 +1043,7 @@ span.dup-key {
 }
 
 /* Make sure item margins don't leave phantom gaps */
-.shortcut-container.filtering-active .shortcut-grid > .shortcut-item {
+.shortcut-container.filtering-active .shortcut-grid>.shortcut-item {
 	margin: 0 !important;
 }
 
@@ -1144,10 +1144,8 @@ span.dup-key {
 
 	padding-block: 12px;
 
-	max-inline-size: var(
-		--tooltip-max-fit,
-		clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw)
-	);
+	max-inline-size: var(--tooltip-max-fit,
+			clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw));
 }
 
 .info-icon-tooltip:hover::after,
@@ -1180,6 +1178,7 @@ span.dup-key {
 	overflow-x: hidden;
 	/* hide any overflow instead of scroll */
 }
+
 /* "dup-no" lookalike button style */
 .dup-like-btn {
 	padding: 7px 22px;

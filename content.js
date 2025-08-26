@@ -164,14 +164,17 @@ window.hideSlimSidebarBarInstant = () => {
 	if (!bar) return;
 	bar.style.setProperty("transition", "none", "important");
 	bar.style.setProperty("opacity", "0", "important");
-	void bar.offsetWidth;
+	// force reflow without using void
+	// eslint-disable-next-line no-unused-expressions
+	bar.offsetWidth;
 	setTimeout(() => {
-		if (bar)
+		if (bar) {
 			bar.style.setProperty(
 				"transition",
 				"opacity 0.5s ease-in-out",
 				"important",
 			);
+		}
 	}, 0);
 };
 
@@ -186,10 +189,13 @@ window.flashSlimSidebarBar = (dur = 2500) => {
 	if (!bar) return;
 	bar.style.setProperty("transition", "none", "important");
 	bar.style.setProperty("opacity", "1", "important");
-	void bar.offsetWidth;
+	// force reflow without using void
+	// eslint-disable-next-line no-unused-expressions
+	bar.offsetWidth;
 	bar.style.setProperty("transition", "opacity 0.5s ease-in-out", "important");
 	setTimeout(() => window.fadeSlimSidebarBarToIdle(), dur);
 };
+
 
 window.fadeSlimSidebarBarToIdle = () => {
 	const bar = document.getElementById("stage-sidebar-tiny-bar");
@@ -203,22 +209,28 @@ window.fadeSlimSidebarBarToIdle = () => {
 };
 
 // Mac Cross-Compatibility Helper
+// Mac Cross-Compatibility Helper
+const MAC_REGEX = /Mac/i;
+
 function isMacPlatform() {
 	const ua = navigator.userAgent || "";
 	const plat = navigator.platform || "";
 	const uaDataPlat = navigator.userAgentData?.platform || "";
-	return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
+	return MAC_REGEX.test(plat) || MAC_REGEX.test(ua) || MAC_REGEX.test(uaDataPlat);
 }
 
-// --- compat helpers to support both legacy chars and new codes ---
 
 // --- compat helpers to support both legacy chars and new codes ---
+const LETTER_REGEX = /^[A-Z]$/;
+const DIGIT_REGEX = /^[0-9]$/;
+
 function charToCode(ch) {
 	if (!ch) return "";
 	const raw = ch.trim();
 	const upper = raw.toUpperCase();
-	if (/^[A-Z]$/.test(upper)) return `Key${upper}`;
-	if (/^[0-9]$/.test(raw)) return `Digit${raw}`;
+	if (LETTER_REGEX.test(upper)) return `Key${upper}`;
+	if (DIGIT_REGEX.test(raw)) return `Digit${raw}`;
+
 	switch (raw) {
 		case "-":
 			return "Minus";
@@ -257,11 +269,22 @@ function charToCode(ch) {
  * @param {string} b
  * @returns {boolean}
  */
+// Precompiled regexes (top-level for performance)
+const DIGIT_NUMPAD_REGEX = /^(Digit|Numpad)([0-9])$/;
+const VALID_CODE_REGEX =
+	/^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash|Backquote|Space)$/;
+
+/**
+ * Treat 'DigitX' and 'NumpadX' as equivalent.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
 const codeEquals = (a, b) => {
 	if (a === b) return true;
-	const A = a?.match(/^(Digit|Numpad)([0-9])$/);
-	const B = b?.match(/^(Digit|Numpad)([0-9])$/);
-	return !!(A && B && A[2] === B[2]);
+	const A = a?.match(DIGIT_NUMPAD_REGEX);
+	const B = b?.match(DIGIT_NUMPAD_REGEX);
+	return Boolean(A && B && A[2] === B[2]);
 };
 
 /** Accepts either a legacy single char ('w') or a code ('KeyW', 'Digit1', 'Numpad1', etc.) in storage. */
@@ -270,9 +293,7 @@ const normalizeStoredToCode = (stored) => {
 	const s = String(stored).trim();
 
 	// Recognized code patterns (keep in sync with charToCode)
-	const validCode =
-		/^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash|Backquote|Space)$/;
-	if (validCode.test(s)) return s;
+	if (VALID_CODE_REGEX.test(s)) return s;
 
 	// Legacy single-character value
 	if (s.length === 1)
@@ -309,7 +330,9 @@ const getOpenMenus = () => {
 // ======================================================
 // ==== Shared flashBorder helper (deduplicated) =========
 const flashBorder = (el) => {
-	if (!el || !window.gsap) return;
+	if (!el) return;
+	if (!window.gsap) return;
+
 	const tertiary =
 		getComputedStyle(document.documentElement)
 			.getPropertyValue("--main-surface-tertiary")
@@ -407,17 +430,14 @@ const DELAYS = {
 // =============================
 // @note Main IIFE
 // =============================
-
 (() => {
 	// appendWithFragment: Appends multiple elements to a parent element using a document fragment to improve performance.
 
 	function appendWithFragment(parent, ...elements) {
 		const fragment = document.createDocumentFragment();
-		elements
-			.filter((el) => el !== null && el !== undefined)
-			.forEach((el) => {
-				fragment.appendChild(el); // avoid returning a value from the callback
-			});
+		for (const el of elements.filter((el) => el !== null && el !== undefined)) {
+			fragment.appendChild(el);
+		}
 		parent.appendChild(fragment);
 	}
 
@@ -542,30 +562,32 @@ const DELAYS = {
 		return lines.join("\n"); // Return raw code content without backticks
 	}
 
+	function getAllCodeBlocks() {
+		const codeBoxes = document.querySelectorAll("pre");
+		const blocks = [];
+		for (const codeBox of codeBoxes) {
+			const codeElements = codeBox.querySelectorAll("code");
+			for (const codeElement of codeElements) {
+				const block = codeElement.textContent.trim();
+				if (block) {
+					blocks.push(block);
+				}
+			}
+		}
+		return blocks;
+	}
+
 	function copyCode() {
-		const codeBoxes = document.querySelectorAll("pre"); // Get all code boxes
+		const codeBoxes = document.querySelectorAll("pre");
 		if (codeBoxes.length === 0) {
 			showToast("No code boxes found");
 			return;
 		}
-
 		chrome.storage.sync.get("copyCode-userSeparator", (data) => {
 			const copyCodeSeparator = data["copyCode-userSeparator"]
 				? parseSeparator(data["copyCode-userSeparator"])
-				: " \n  \n --- --- --- \n \n"; // Default to single line break
-
-			const formattedBlocks = [];
-			for (const codeBox of codeBoxes) {
-				const codeElements = codeBox.querySelectorAll("code");
-				for (const codeElement of codeElements) {
-					const block = codeElement.textContent.trim(); // Ensure we capture the code content only
-					if (block) {
-						formattedBlocks.push(block); // Add block directly
-					}
-				}
-			}
-
-			// Join the code blocks with the specified separator
+				: " \n  \n --- --- --- \n \n";
+			const formattedBlocks = getAllCodeBlocks();
 			const output = formattedBlocks.join(copyCodeSeparator);
 
 			if (output.trim()) {
@@ -638,7 +660,7 @@ const DELAYS = {
 			return document.createComment("scroll-up-btn-disabled");
 		}
 
-		if (!window.gsap || !window.ScrollToPlugin) {
+		if (!(window.gsap && window.ScrollToPlugin)) {
 			console.error("GSAP or ScrollToPlugin is missing.");
 			return document.createComment("scroll-up-btn-no-gsap");
 		}
@@ -690,6 +712,15 @@ const DELAYS = {
 		return upButton;
 	}
 
+	function getNextMessage(messages, currentScrollTop, messageThreshold) {
+		for (let i = 0; i < messages.length; i++) {
+			if (messages[i].offsetTop > currentScrollTop + messageThreshold) {
+				return messages[i];
+			}
+		}
+		return null;
+	}
+
 	function goDownOneMessage(feedbackTarget = null) {
 		resetScrollState();
 
@@ -697,7 +728,7 @@ const DELAYS = {
 			document.querySelectorAll('[data-testid^="conversation-turn-"]'),
 		);
 		const scrollContainer = getScrollableContainer();
-		if (!scrollContainer || !messages.length) return;
+		if (!scrollContainer || messages.length === 0) return;
 
 		gsap.set(scrollContainer, { scrollTo: "+=0" });
 		gsap.killTweensOf(scrollContainer);
@@ -709,13 +740,7 @@ const DELAYS = {
 		const messageThreshold = isBottom ? 48 : 30;
 		const scrollOffset = isBottom ? 43 : 25;
 
-		let targetMessage = null;
-		for (let i = 0; i < messages.length; i++) {
-			if (messages[i].offsetTop > currentScrollTop + messageThreshold) {
-				targetMessage = messages[i];
-				break;
-			}
-		}
+		const targetMessage = getNextMessage(messages, currentScrollTop, messageThreshold);
 
 		if (targetMessage) {
 			gsap.to(scrollContainer, {
@@ -742,7 +767,7 @@ const DELAYS = {
 			return document.createComment("scroll-down-btn-disabled");
 		}
 
-		if (!window.gsap || !window.ScrollToPlugin) {
+		if (!(window.gsap && window.ScrollToPlugin)) {
 			console.error("GSAP or ScrollToPlugin is missing.");
 			return document.createComment("scroll-down-btn-no-gsap");
 		}
@@ -895,12 +920,70 @@ const DELAYS = {
 
 	const waitFor = async (getter, { timeout = 3000, interval = 50 } = {}) => {
 		const start = Date.now();
-		while (Date.now() - start < timeout) {
+
+		const poll = async () => {
+			if (Date.now() - start >= timeout) return null;
 			const res = getter();
 			if (res) return res;
 			await sleep(interval);
+			return poll();
+		};
+
+		return poll();
+	};
+
+
+	// Helper: synthesize a small cluster of hover-like events to hint UI state.
+	const dispatchHoverEvents = (el) => {
+		const fire = (type, Ctor) => {
+			try {
+				const rect = el.getBoundingClientRect();
+				el.dispatchEvent(
+					new Ctor(type, {
+						bubbles: true,
+						cancelable: true,
+						composed: true,
+						clientX: rect.left + rect.width / 2,
+						clientY: rect.top + rect.height / 2,
+					}),
+				);
+			} catch { /* ignore */ }
+		};
+		if ("PointerEvent" in window) {
+			fire("pointerover", PointerEvent);
+			fire("pointerenter", PointerEvent);
+			fire("pointermove", PointerEvent);
 		}
-		return null;
+		fire("mouseover", MouseEvent);
+		fire("mouseenter", MouseEvent);
+		fire("mousemove", MouseEvent);
+	};
+
+	// Helper: progressively try to expand a submenu using keys/clicks.
+	const attemptExpand = async (el, delays) => {
+		sendKey(el, "ArrowRight", "ArrowRight", 39);
+		await sleep(delays.betweenKeyAttempts);
+		if (el.getAttribute("aria-expanded") !== "true") {
+			sendKey(el, "Enter", "Enter", 13);
+			await sleep(delays.betweenKeyAttempts);
+		}
+		if (el.getAttribute("aria-expanded") !== "true") {
+			sendKey(el, " ", "Space", 32);
+			await sleep(delays.betweenKeyAttempts);
+		}
+		if (el.getAttribute("aria-expanded") !== "true") {
+			smartClick(el);
+		}
+	};
+
+	// Helper: resolve the currently-open submenu element.
+	const resolveOpenSubmenu = (submenuId) => {
+		if (submenuId) {
+			const el = document.getElementById(submenuId);
+			if (el && el.getAttribute("data-state") === "open") return el;
+		}
+		const open = getOpenMenus();
+		return open.length ? open[open.length - 1] : null;
 	};
 
 	const openSubmenu = async (triggerEl, delays = DELAYS) => {
@@ -914,58 +997,13 @@ const DELAYS = {
 
 		try {
 			triggerEl.focus({ preventScroll: true });
-		} catch { }
+		} catch { /* ignore */ }
 
-		const hover = (type, Ctor) => {
-			try {
-				const rect = triggerEl.getBoundingClientRect();
-				triggerEl.dispatchEvent(
-					new Ctor(type, {
-						bubbles: true,
-						cancelable: true,
-						composed: true,
-						clientX: rect.left + rect.width / 2,
-						clientY: rect.top + rect.height / 2,
-					}),
-				);
-			} catch {
-				/* ignore */
-			}
-		};
-		if ("PointerEvent" in window) {
-			hover("pointerover", PointerEvent);
-			hover("pointerenter", PointerEvent);
-			hover("pointermove", PointerEvent);
-		}
-		hover("mouseover", MouseEvent);
-		hover("mouseenter", MouseEvent);
-		hover("mousemove", MouseEvent);
-
-		sendKey(triggerEl, "ArrowRight", "ArrowRight", 39);
-
-		await sleep(delays.betweenKeyAttempts);
-		if (triggerEl.getAttribute("aria-expanded") !== "true") {
-			sendKey(triggerEl, "Enter", "Enter", 13);
-			await sleep(delays.betweenKeyAttempts);
-		}
-		if (triggerEl.getAttribute("aria-expanded") !== "true") {
-			sendKey(triggerEl, " ", "Space", 32);
-			await sleep(delays.betweenKeyAttempts);
-		}
-
-		if (triggerEl.getAttribute("aria-expanded") !== "true") {
-			smartClick(triggerEl);
-		}
+		dispatchHoverEvents(triggerEl);
+		await attemptExpand(triggerEl, delays);
 
 		const submenuEl = await waitFor(
-			() => {
-				if (submenuId) {
-					const el = document.getElementById(submenuId);
-					if (el && el.getAttribute("data-state") === "open") return el;
-				}
-				const open = getOpenMenus();
-				return open.length ? open[open.length - 1] : null;
-			},
+			() => resolveOpenSubmenu(submenuId),
 			{ timeout: delays.waitSubmenuEl },
 		);
 
@@ -1105,8 +1143,82 @@ const DELAYS = {
 		smartClick(target);
 	};
 
+	// Clicks a button by its data-testid attribute, ensuring it's visible and interactable.
+	const clickButtonByTestId = async (
+		testId,
+		{
+			timeout = 2000,
+			interval = 50,
+			delays = DELAYS,
+			root = document,
+			pick = (btns) => btns[0], // if multiple, pick the first
+		} = {}
+	) => {
+		const buttonSelector = `[data-testid="${testId}"]`;
+
+		const getClickableAncestor = (node) => {
+			const isClickable = (el) =>
+				el &&
+				typeof el.click === "function" &&
+				(el.tagName === "BUTTON" ||
+					el.tagName === "A" ||
+					el.getAttribute("role") === "button" ||
+					el.tabIndex >= 0);
+			let el = node;
+			for (let i = 0; i < 8 && el; i++) {
+				if (isClickable(el)) return el;
+				el = el.parentElement;
+			}
+			return null;
+		};
+
+		const ensureVisible = (el) => {
+			try {
+				el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+			} catch { }
+		};
+
+		const target = await waitFor(
+			() => {
+				const btns = Array.from(root.querySelectorAll(buttonSelector));
+				if (!btns.length) return null;
+				const chosenBtn = pick(btns) || btns[0];
+				return getClickableAncestor(chosenBtn);
+			},
+			{ timeout, interval }
+		);
+
+		if (!target) return;
+
+		ensureVisible(target);
+		flashBorder(target);
+		await sleep(delays.beforeFinalClick);
+		smartClick(target);
+	};
+
+
 	// ==== End Exposed Button Click Shared helpers =========
 	// ======================================================
+
+
+
+	// ======================================================
+	// ==== Shortcut Helpers============
+
+	const FENCE_RE = /^(?: {0,3})([`~]{3,})([^\n]*)$/;
+	const NEWLINE_RE = /\r?\n/;
+
+	function safeClick(el) {
+		if (!el) return false;
+		if (el.offsetParent === null) return false;
+		try {
+			el.click();
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 
 	// @note Keyboard shortcut defaults
 	chrome.storage.sync.get(
@@ -1197,62 +1309,102 @@ const DELAYS = {
 
 			const isMac = isMacPlatform();
 
+			// Memoized fence regex builder (avoids in-scope regex literal and repeated construction)
+			// Top-level regex (declared once per module to satisfy Biome useTopLevelRegex)
+
+
+			// Keep a tiny helper for parity with existing calls
+			const getFenceRe = () => FENCE_RE;
+
+			/**
+			 * Parse a single line into a fence descriptor (or null if not a fence).
+			 */
+
+			function parseFenceLine(line, index) {
+				const match = getFenceRe().exec(line);
+				if (!match) return null;
+				const raw = match[1];
+				return {
+					line: index,
+					char: raw[0],
+					len: raw.length,
+					raw,
+					info: match[2],
+				};
+			}
+
+
+			/**
+			 * Collect all fence descriptors from the document.
+			 */
+			function collectFences(lines) {
+				const result = [];
+				for (let i = 0; i < lines.length; i += 1) {
+					const f = parseFenceLine(lines[i], i);
+					if (f) result.push(f);
+				}
+				return result;
+			}
+
+			/**
+			 * Find the index of the fence that closes the fence at startIdx.
+			 * A valid closer matches both the fence char and length.
+			 */
+			function findMatchingFenceIndex(fences, startIdx) {
+				const open = fences[startIdx];
+				for (let j = startIdx + 1; j < fences.length; j += 1) {
+					const f = fences[j];
+					if (f.char === open.char && f.len === open.len) return j;
+				}
+				return -1;
+			}
+
+			/**
+			 * Build a region object from a slice of lines.
+			 * If addTrailingNewline is true, append a newline (to mirror original behavior).
+			 */
+			function makeRegion(lines, start, endExclusive, isCode, addTrailingNewline) {
+				let text = lines.slice(start, endExclusive).join("\n");
+				if (addTrailingNewline) text += "\n";
+				return { text, isCode };
+			}
+
+			/**
+			 * Split markdown text into regions demarcated by fenced code blocks.
+			 * Returns array of { text, isCode } regions.
+			 */
 			function splitByCodeFences(text) {
-				const lines = text.split(/\r?\n/);
-				const fences = [];
-				for (let i = 0; i < lines.length; ++i) {
-					// Accept up to 3 spaces before the fence
-					const m = lines[i].match(/^ {0,3}([`~]{3,})([^\n]*)$/);
-					if (m) {
-						fences.push({
-							line: i,
-							char: m[1][0],
-							len: m[1].length,
-							raw: m[1],
-							info: m[2],
-						});
+				const lines = text.split(NEWLINE_RE);
+				const fences = collectFences(lines);
+				const regions = [];
+
+				let lastLine = 0;
+				for (let i = 0; i < fences.length; i += 1) {
+					const closeIdx = findMatchingFenceIndex(fences, i);
+					if (closeIdx === -1) break;
+
+					const open = fences[i];
+					if (open.line > lastLine) {
+						regions.push(makeRegion(lines, lastLine, open.line, false, true));
 					}
+
+					// Include closing fence line; add trailing newline to mirror previous logic
+					regions.push(
+						makeRegion(lines, open.line, fences[closeIdx].line + 1, true, true),
+					);
+
+					lastLine = fences[closeIdx].line + 1;
+					i = closeIdx; // skip to the closer we just consumed
 				}
 
-				const regions = [];
-				let lastLine = 0;
-				let i = 0;
-				while (i < fences.length) {
-					const open = fences[i];
-					let closeIdx = -1;
-					for (let j = i + 1; j < fences.length; ++j) {
-						if (fences[j].char === open.char && fences[j].len === open.len) {
-							closeIdx = j;
-							break;
-						}
-					}
-					if (closeIdx > -1) {
-						if (open.line > lastLine) {
-							regions.push({
-								text: `${lines.slice(lastLine, open.line).join("\n")}\n`,
-								isCode: false,
-							});
-						}
-						regions.push({
-							text: `${lines
-								.slice(open.line, fences[closeIdx].line + 1)
-								.join("\n")}\n`,
-							isCode: true,
-						});
-						lastLine = fences[closeIdx].line + 1;
-						i = closeIdx + 1;
-					} else {
-						break;
-					}
-				}
 				if (lastLine < lines.length) {
-					regions.push({
-						text: lines.slice(lastLine).join("\n"),
-						isCode: false,
-					});
+					// Final trailing text (no forced trailing newline to match previous behavior)
+					regions.push(makeRegion(lines, lastLine, lines.length, false, false));
 				}
+
 				return regions;
 			}
+
 
 			function stripMarkdownOutsideCodeblocks(text) {
 				return splitByCodeFences(text)
@@ -1400,61 +1552,104 @@ const DELAYS = {
 				[shortcuts.shortcutKeyEdit]: () => {
 					// always scroll to center if possible, clamp if not
 					const gsapScrollToCenterAndClick = (button) => {
-						if (!button) return;
-						const container =
-							typeof getScrollableContainer === "function"
-								? getScrollableContainer()
-								: window;
+						// Strong guards against stale or non-elements
+						if (!button || !button.isConnected || typeof button.click !== "function") return;
 
-						// Compute target center scroll position
+						// Resolve a valid scroll container; fall back to window if not an Element.
+						let container = window;
+						try {
+							if (typeof getScrollableContainer === "function") {
+								const candidate = getScrollableContainer();
+								if (candidate && candidate instanceof Element && candidate.isConnected) {
+									container = candidate;
+								}
+							}
+						} catch { /* ignore */ }
+
+						// Compute geometry relative to the chosen container
+						let contTop = 0;
+						let contHeight = window.innerHeight;
+						if (container !== window) {
+							try {
+								const cr = container.getBoundingClientRect();
+								contTop = cr.top;
+								contHeight = container.clientHeight;
+							} catch { /* fall back to defaults */ }
+						}
+
 						const rect = button.getBoundingClientRect();
-						const contRect =
-							container === window
-								? { top: 0, height: window.innerHeight }
-								: {
-									top: container.getBoundingClientRect().top,
-									height: container.clientHeight,
-								};
+						const offsetCenter = (contHeight - rect.height) / 2;
 
-						const offsetCenter = contRect.height / 2 - rect.height / 2;
-						let targetY =
-							container === window
-								? window.scrollY + rect.top - offsetCenter
-								: container.scrollTop +
-								(rect.top - contRect.top) -
-								offsetCenter;
+						let targetY = container === window
+							? window.scrollY + rect.top - offsetCenter
+							: container.scrollTop + (rect.top - contTop) - offsetCenter;
 
-						// Clamp scroll position to valid scroll range
-						const maxScroll =
-							container === window
-								? document.documentElement.scrollHeight - window.innerHeight
-								: container.scrollHeight - container.clientHeight;
+						const maxScroll = container === window
+							? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+							: Math.max(0, container.scrollHeight - container.clientHeight);
+
 						targetY = Math.max(0, Math.min(targetY, maxScroll));
 
-						const scrollAndAnimate = () => {
-							if (!window.gsap) {
-								// fallback: instant scroll + click
+						// Click only if the element still exists at click time
+						const safeClick = () => {
+							// Optional chaining keeps this null-safe & satisfies the linter.
+							const canClick = button?.isConnected && typeof button?.click === "function";
+							if (!canClick) return;
+							try {
+								button.click();
+							} catch {
+								/* noop */
+							}
+						};
+
+
+						const finish = () => {
+							// Don’t let a missing helper kill the click
+							try { if (typeof flashBorder === "function") flashBorder(button); } catch { }
+							setTimeout(safeClick, 200);
+						};
+
+						const animateWithGsap = () => {
+							try {
+								if (!window.gsap) return false;
+								// If ScrollToPlugin isn't registered, bail to native fallback
+								const hasScrollTo =
+									(gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
+									(typeof ScrollToPlugin !== "undefined");
+								if (!hasScrollTo) return false;
+
+								gsap.to(container, {
+									duration: 0.6,
+									scrollTo: { y: targetY, autoKill: true },
+									ease: "power4.out",
+									onComplete: finish,
+								});
+								return true;
+							} catch {
+								return false;
+							}
+						};
+
+						// Run the animation or fall back to native smooth/instant scroll
+						if (!animateWithGsap()) {
+							try {
 								if (container === window) {
-									window.scrollTo(0, targetY);
+									window.scrollTo({ top: targetY, behavior: "smooth" });
+								} else if (typeof container.scrollTo === "function") {
+									container.scrollTo({ top: targetY, behavior: "smooth" });
 								} else {
 									container.scrollTop = targetY;
 								}
-								setTimeout(() => button.click(), 150);
-								return;
+							} catch {
+								// very old browsers: instant
+								if (container === window) window.scrollTo(0, targetY);
+								else container.scrollTop = targetY;
 							}
-							gsap.to(container, {
-								duration: 0.6,
-								scrollTo: { y: targetY, autoKill: true },
-								ease: "power4.out",
-								onComplete: () => {
-									flashBorder(button);
-									setTimeout(() => button.click(), 250);
-								},
-							});
-						};
-
-						scrollAndAnimate();
+							setTimeout(finish, 250);
+						}
 					};
+
+
 
 					setTimeout(() => {
 						try {
@@ -1541,7 +1736,6 @@ const DELAYS = {
 						}
 					}, 50);
 				},
-
 				[shortcuts.shortcutKeySendEdit]: () => {
 					try {
 						// Find all possible send buttons (second button in each container)
@@ -1600,17 +1794,10 @@ const DELAYS = {
 					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
 
 					// 2) Fallbacks only if nothing clickable is visible
-					const clickIfVisible = (selector) => {
-						const el = document.querySelector(selector);
-						if (el?.offsetParent !== null) {
-							el.click();
-							return true;
-						}
-						return false;
-					};
 
 					// 2a) Try the test-id button
-					if (clickIfVisible('button[data-testid="new-chat-button"]')) return;
+					const newChatBtn = document.querySelector('button[data-testid="new-chat-button"]');
+					if (safeClick(newChatBtn)) return;
 
 					// 2b) Try known SVG-path variants (very old UIs)
 					const selectors = [
@@ -1618,7 +1805,8 @@ const DELAYS = {
 						'button:has(svg > path[d^="M15.673 3.913a3.121 3.121 0 1 1 4.414 4.414"])',
 					];
 					for (const sel of selectors) {
-						if (clickIfVisible(sel)) return;
+						const btn = document.querySelector(sel);
+						if (safeClick(btn)) return;
 					}
 				},
 				[shortcuts.shortcutKeySearchConversationHistory]: () => {
@@ -1640,35 +1828,16 @@ const DELAYS = {
 					document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
 					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
 
-					// 2) Fallbacks only if nothing clickable is visible
-					const clickIfVisible = (selector) => {
-						const el = document.querySelector(selector);
-						if (el?.offsetParent !== null) {
-							el.click();
-							return true;
-						}
-						return false;
-					};
-
 					// 2a) Try the test-id button
-					if (
-						clickIfVisible('button[data-testid="search-conversation-button"]')
-					)
-						return;
+					const searchBtn = document.querySelector('button[data-testid="search-conversation-button"]');
+					if (safeClick(searchBtn)) return;
 
 					// 2b) Very old SVG-path fallback
 					const path = document.querySelector(
 						'button svg path[d^="M10.75 4.25C7.16015"]',
 					);
 					const btn = path?.closest("button");
-					if (btn?.offsetParent !== null) {
-						const orig = btn.style.cssText;
-						btn.style.cssText +=
-							"visibility: visible; display: block; position: absolute; top: 0; left: 0;";
-						btn.click();
-						btn.style.cssText = orig;
-						return;
-					}
+					if (safeClick(btn)) return;
 				},
 				[shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
 					// native scroll to bottom
@@ -1739,8 +1908,7 @@ const DELAYS = {
 					const direct = document.querySelector(
 						'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
 					);
-					if (direct?.offsetParent !== null) {
-						direct.click();
+					if (safeClick(direct)) {
 						setTimeout(() => { }, 30);
 						return;
 					}
@@ -1768,8 +1936,7 @@ const DELAYS = {
 					for (const sel of selectors) {
 						const el = document.querySelector(sel);
 						const btn = el?.closest("button");
-						if (btn?.offsetParent !== null) {
-							btn.click();
+						if (safeClick(btn)) {
 							setTimeout(() => { }, 30);
 							return;
 						}
@@ -2385,23 +2552,23 @@ const DELAYS = {
 								) ||
 								roleContainer.querySelector('[data-message-author-role="user"]')
 							);
-						} else {
-							return (
-								roleContainer.querySelector(
-									'[data-message-author-role="assistant"] .whitespace-pre-wrap',
-								) ||
-								roleContainer.querySelector(
-									'[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
-								) ||
-								roleContainer.querySelector(
-									".prose, .markdown, .markdown-new-styling",
-								) ||
-								roleContainer.querySelector(
-									'[data-message-author-role="assistant"]',
-								)
-							);
 						}
+						return (
+							roleContainer.querySelector(
+								'[data-message-author-role="assistant"] .whitespace-pre-wrap',
+							) ||
+							roleContainer.querySelector(
+								'[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
+							) ||
+							roleContainer.querySelector(
+								".prose, .markdown, .markdown-new-styling",
+							) ||
+							roleContainer.querySelector(
+								'[data-message-author-role="assistant"]',
+							)
+						);
 					}
+
 
 					// Attach the click handler once
 					if (!window.__selectThenCopyCopyHandlerAttached) {
@@ -2656,7 +2823,8 @@ const DELAYS = {
 					const sel =
 						'#conversation-header-actions button:has(svg path[d*="4.521"][d*="15.166"]),\
      #conversation-header-actions button:has(svg path[d*="15.799"][d*="14.536"])';
-					document.querySelector(sel)?.click();
+					const el = document.querySelector(sel);
+					safeClick(el);
 				},
 				[shortcuts.shortcutKeyStudy]: async () => {
 					const ICON_PATH_PREFIX = "M16.3965 5.01128C16.3963"; // book icon prefix
@@ -2695,8 +2863,7 @@ const DELAYS = {
 								el.getAttribute("role") === "button" ||
 								el.tabIndex >= 0
 							) {
-								el.click();
-								return;
+								if (safeClick(el)) return;
 							}
 							el = el.parentElement;
 						}
@@ -2717,8 +2884,7 @@ const DELAYS = {
 								el.getAttribute("role") === "button" ||
 								el.tabIndex >= 0
 							) {
-								el.click();
-								return;
+								if (safeClick(el)) return;
 							}
 							el = el.parentElement;
 						}
@@ -2772,10 +2938,8 @@ const DELAYS = {
 					const ICON_PATH_PREFIX = "M14.2548 4.75488C14.5282";
 					await clickExposedIconButton(ICON_PATH_PREFIX);
 				},
-
 				[shortcuts.shortcutKeyShare]: async () => {
-					const ICON_PATH_PREFIX = "M2.66821 12.6663V12.5003C2.66821"; // share icon prefix
-					await clickExposedIconButton(ICON_PATH_PREFIX);
+					await clickButtonByTestId("share-chat-button");
 				},
 				[shortcuts.shortcutKeyThinkLonger]: async () => {
 					const ICON_PATH_PREFIX = "M14.3352 10.0257C14.3352"; // think longer icon prefix
@@ -2986,7 +3150,6 @@ const DELAYS = {
 // ====================================
 // @note UI Styling & Header Scaling
 // ====================================
-
 (() => {
 	function applyInitialTransitions() {
 		// Profile button
@@ -3134,7 +3297,6 @@ const DELAYS = {
 // =========================================
 // @note PageUp/PageDown Key Takeover Logic
 // =========================================
-
 (() => {
 	// Handle PageUp & PageDown scrolling with GSAP
 	function handleKeyDown(event) {
@@ -3378,7 +3540,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // ==================================================
 // @note TopBarToBottom Feature
 // ==================================================
-
 (() => {
 	chrome.storage.sync.get(
 		{ moveTopBarToBottomCheckbox: false },
@@ -4228,7 +4389,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // @note Auto-click "Open link" in warning dialogs
 // Efficient, minimal observer, only targets added nodes.
 // ==============================================================
-
 (() => {
 	// --- Parameters ---
 	const BUTTON_TEXT = "Open link";
