@@ -77,5 +77,19 @@
 	},
 	"vcs": {
 		"enabled": false
-	}
+	},
+	"overrides": [
+		{
+			"includes": [
+				"**/*.css"
+			],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noImportantStyles": "off"
+					}
+				}
+			}
+		}
+	]
 }

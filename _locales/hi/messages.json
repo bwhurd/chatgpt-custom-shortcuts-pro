@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "चैट साझा करने के लिए लिंक बनाएँ."
 	},
-	"label_backup_restore": {
-		"message": "बैकअप और रिस्टोर सेटिंग्स"
-	},
 	"tt_backup_restore": {
 		"message": "एक्सटेंशन की सभी सेटिंग्स एक्सपोर्ट या इम्पोर्ट करें."
-	},
-	"btn_export": {
-		"message": "एक्सपोर्ट"
-	},
-	"btn_import": {
-		"message": "इम्पोर्ट"
 	},
 	"tt_export": {
 		"message": "अपनी सेटिंग्स को JSON फ़ाइल में एक्सपोर्ट करें."
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "अमान्य फ़ाइल. इम्पोर्ट रद्द किया गया."
+	},
+	"label_scroll_down_two": {
+		"message": "दो संदेश नीचे स्क्रॉल करें"
+	},
+	"label_scroll_up_two": {
+		"message": "दो संदेश ऊपर स्क्रॉल करें"
+	},
+	"label_clear_reset": {
+		"message": "साफ़ करें और रीसेट"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "सभी शॉर्टकट साफ़ करें"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "सभी शॉर्टकट कुंजियाँ साफ़ करें (स्विच बनाए रखें)"
+	},
+	"btn_reset_defaults": {
+		"message": "डिफ़ॉल्ट पर रीसेट"
+	},
+	"tt_reset_defaults": {
+		"message": "सभी विकल्प और शॉर्टकट डिफ़ॉल्ट पर रीसेट करें"
+	},
+	"label_backup_restore": {
+		"message": "बैकअप और रिस्टोर"
+	},
+	"btn_export": {
+		"message": "सेटिंग्स एक्सपोर्ट करें"
+	},
+	"btn_import": {
+		"message": "सेटिंग्स इम्पोर्ट करें"
 	}
 }

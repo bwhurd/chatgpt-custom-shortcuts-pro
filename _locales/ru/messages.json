@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "Создать ссылку для обмена перепиской."
 	},
-	"label_backup_restore": {
-		"message": "Резервное копирование и восстановление"
-	},
 	"tt_backup_restore": {
 		"message": "Экспортируйте или импортируйте все настройки расширения."
-	},
-	"btn_export": {
-		"message": "Экспорт"
-	},
-	"btn_import": {
-		"message": "Импорт"
 	},
 	"tt_export": {
 		"message": "Сохраните настройки в файл JSON."
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "Неверный файл. Импорт отменён."
+	},
+	"label_scroll_down_two": {
+		"message": "Прокрутить вниз на два сообщения"
+	},
+	"label_scroll_up_two": {
+		"message": "Прокрутить вверх на два сообщения"
+	},
+	"label_clear_reset": {
+		"message": "Очистить и сбросить"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "Очистить все горячие клавиши"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "Очистить все горячие клавиши (переключатели оставить)"
+	},
+	"btn_reset_defaults": {
+		"message": "Сбросить настройки"
+	},
+	"tt_reset_defaults": {
+		"message": "Восстановить все параметры и горячие клавиши к значениям по умолчанию"
+	},
+	"label_backup_restore": {
+		"message": "Резервное копирование"
+	},
+	"btn_export": {
+		"message": "Экспорт настроек"
+	},
+	"btn_import": {
+		"message": "Импорт настроек"
 	}
 }

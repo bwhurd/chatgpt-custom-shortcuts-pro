@@ -37,7 +37,6 @@ body {
 
 .key-input,
 .key-text,
-body,
 h1 {
 	text-wrap: balance;
 }
@@ -49,8 +48,8 @@ h1 {
 body,
 h1 {
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif !important;
+		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+		sans-serif !important;
 	font-size: 14px;
 	font-feature-settings: normal;
 	font-variation-settings: normal;
@@ -330,19 +329,11 @@ h1 {
 	transform-origin: right center;
 }
 
-.p-form-switch>input {
+.p-form-switch > input {
 	display: none;
 }
 
-.p-form-switch>input:checked+span {
-	background: #60c35b;
-}
-
-.p-form-switch>input:checked+span::after {
-	left: calc(100% - calc(var(--width) / 1.8));
-}
-
-.p-form-switch>span {
+.p-form-switch > span {
 	background: #e0e0e0;
 	border: 1px solid #d3d3d3;
 	border-radius: 500px;
@@ -353,7 +344,7 @@ h1 {
 	width: var(--width);
 }
 
-.p-form-switch>span::after {
+.p-form-switch > span::after {
 	background: #f9f9f9;
 	border-radius: 50%;
 	border: 0.5px solid rgba(0, 0, 0, 0.101987);
@@ -369,6 +360,14 @@ h1 {
 	top: 6.5%;
 	transition: all 0.2s;
 	width: 52.5%;
+}
+
+.p-form-switch > input:checked + span {
+	background: #60c35b;
+}
+
+.p-form-switch > input:checked + span::after {
+	left: calc(100% - calc(var(--width) / 1.8));
 }
 
 .shortcut-column {
@@ -419,7 +418,7 @@ h1 {
 
 .shortcut-item .p-form-switch,
 .shortcut-item label.p-form-switch,
-.shortcut-item>.p-form-switch {
+.shortcut-item > .p-form-switch {
 	margin-left: auto;
 }
 
@@ -488,8 +487,8 @@ h1 {
 	border-top: 1px solid #ccc;
 	font-size: 0.9rem;
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif;
+		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+		sans-serif;
 	font-weight: 400;
 	z-index: 100;
 	box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
@@ -725,8 +724,8 @@ h1 {
 
 h1 {
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif !important;
+		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+		sans-serif !important;
 }
 
 .opacity-editable {
@@ -922,7 +921,10 @@ span.dup-key {
 	position: relative;
 }
 
-.custom-tooltip:hover::after {
+.custom-tooltip:hover::after,
+.custom-tooltip:focus::after,
+.custom-tooltip:focus-visible::after,
+.custom-tooltip:focus-within::after {
 	content: attr(data-tooltip);
 	white-space: pre;
 	/* preserves \n line breaks */
@@ -944,7 +946,10 @@ span.dup-key {
 	box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.2);
 }
 
-.custom-tooltip:hover::before {
+.custom-tooltip:hover::before,
+.custom-tooltip:focus::before,
+.custom-tooltip:focus-visible::before,
+.custom-tooltip:focus-within::before {
 	content: "";
 	position: absolute;
 	top: -15px;
@@ -954,6 +959,21 @@ span.dup-key {
 	border-width: 6px;
 	border-style: solid;
 	border-color: transparent transparent rgba(0, 0, 0, 0.9) transparent;
+}
+
+/* Shift tooltip for the last chip (slot 0) to the left by 1em */
+.mp-key--shift-left.custom-tooltip:hover::after,
+.mp-key--shift-left.custom-tooltip:focus::after,
+.mp-key--shift-left.custom-tooltip:focus-visible::after,
+.mp-key--shift-left.custom-tooltip:focus-within::after {
+	left: calc(50% - 1em);
+}
+
+.mp-key--shift-left.custom-tooltip:hover::before,
+.mp-key--shift-left.custom-tooltip:focus::before,
+.mp-key--shift-left.custom-tooltip:focus-visible::before,
+.mp-key--shift-left.custom-tooltip:focus-within::before {
+	left: calc(50% - 1em);
 }
 
 /* ===== End Custom Model Selector Styles ===== */
@@ -1043,7 +1063,7 @@ span.dup-key {
 }
 
 /* Make sure item margins don't leave phantom gaps */
-.shortcut-container.filtering-active .shortcut-grid>.shortcut-item {
+.shortcut-container.filtering-active .shortcut-grid > .shortcut-item {
 	margin: 0 !important;
 }
 
@@ -1110,8 +1130,8 @@ span.dup-key {
 	padding: 12px 20px;
 	border-radius: 10px;
 	font-family:
-		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif;
+		-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+		sans-serif;
 	font-size: 14px;
 	font-weight: 500;
 	text-align: center;
@@ -1125,7 +1145,7 @@ span.dup-key {
 	/* don't force early breaks */
 	word-break: keep-all;
 	/* never split words mid-token */
-	hyphens: auto;
+
 	/* allow hyphenation if necessary */
 
 	line-height: 1.45;
@@ -1144,8 +1164,7 @@ span.dup-key {
 
 	padding-block: 12px;
 
-	max-inline-size: var(--tooltip-max-fit,
-			clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw));
+	max-inline-size: var(--tooltip-max-fit, clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw));
 }
 
 .info-icon-tooltip:hover::after,
@@ -1211,4 +1230,17 @@ span.dup-key {
 
 .class-9 {
 	accent-color: #60c35b;
+}
+
+#dup-line1 {
+	text-wrap: normal !important;
+	white-space: normal !important;
+}
+
+#dup-box,
+#dup-box * {
+	text-wrap: normal !important;
+	white-space: normal !important;
+	word-break: normal !important;
+	overflow-wrap: normal !important;
 }

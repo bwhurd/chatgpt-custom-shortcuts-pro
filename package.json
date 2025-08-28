@@ -10,13 +10,15 @@
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"lint": "biome lint .",
 		"format": "biome format . --write",
-		"check": "biome check ."
+		"check": "biome check .",
+		"zip": "node build-zip.js"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
-		"@biomejs/biome": "^2.2.2"
+		"@biomejs/biome": "^2.2.2",
+		"archiver": "^7.0.1"
 	},
 	"dependencies": {
 		"acorn": "^8.15.0",

@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "Створити посилання для спільного доступу до розмови."
 	},
-	"label_backup_restore": {
-		"message": "Резервне копіювання й відновлення"
-	},
 	"tt_backup_restore": {
 		"message": "Експортуйте або імпортуйте всі налаштування розширення."
-	},
-	"btn_export": {
-		"message": "Експорт"
-	},
-	"btn_import": {
-		"message": "Імпорт"
 	},
 	"tt_export": {
 		"message": "Збережіть налаштування у файл JSON."
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "Недійсний файл. Імпорт скасовано."
+	},
+	"label_scroll_down_two": {
+		"message": "Прокрутити вниз на два повідомлення"
+	},
+	"label_scroll_up_two": {
+		"message": "Прокрутити вгору на два повідомлення"
+	},
+	"label_clear_reset": {
+		"message": "Очистити й скинути"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "Очистити всі гарячі клавіші"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "Очистити всі гарячі клавіші (перемикачі залишити)"
+	},
+	"btn_reset_defaults": {
+		"message": "Скинути до стандартних"
+	},
+	"tt_reset_defaults": {
+		"message": "Відновити всі налаштування за замовчуванням"
+	},
+	"label_backup_restore": {
+		"message": "Резервне копіювання"
+	},
+	"btn_export": {
+		"message": "Експорт налаштувань"
+	},
+	"btn_import": {
+		"message": "Імпорт налаштувань"
 	}
 }

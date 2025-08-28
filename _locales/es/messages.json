@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "Crea un enlace para compartir la conversación."
 	},
-	"label_backup_restore": {
-		"message": "Guardar y restaurar ajustes"
-	},
 	"tt_backup_restore": {
 		"message": "Exporta o importa todos los ajustes de la extensión."
-	},
-	"btn_export": {
-		"message": "Exportar"
-	},
-	"btn_import": {
-		"message": "Importar"
 	},
 	"tt_export": {
 		"message": "Exporta tus ajustes a un archivo JSON."
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "Archivo no válido. Importación cancelada."
+	},
+	"label_scroll_down_two": {
+		"message": "Bajar dos mensajes"
+	},
+	"label_scroll_up_two": {
+		"message": "Subir dos mensajes"
+	},
+	"label_clear_reset": {
+		"message": "Borrar y restablecer"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "Borrar todos los atajos"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "Borrar atajos (mantener interruptores)"
+	},
+	"btn_reset_defaults": {
+		"message": "Restablecer valores"
+	},
+	"tt_reset_defaults": {
+		"message": "Restablece todas las opciones y atajos a los valores por defecto"
+	},
+	"label_backup_restore": {
+		"message": "Respaldo y restaurar"
+	},
+	"btn_export": {
+		"message": "Exportar ajustes"
+	},
+	"btn_import": {
+		"message": "Importar ajustes"
 	}
 }

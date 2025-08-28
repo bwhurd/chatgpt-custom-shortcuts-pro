@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "会話を共有するリンクを作成。"
 	},
-	"label_backup_restore": {
-		"message": "設定のバックアップと復元"
-	},
 	"tt_backup_restore": {
 		"message": "拡張機能の設定をエクスポート/インポートします。"
-	},
-	"btn_export": {
-		"message": "エクスポート"
-	},
-	"btn_import": {
-		"message": "インポート"
 	},
 	"tt_export": {
 		"message": "設定をJSONファイルにエクスポートします。"
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "無効なファイルです。インポートを中止しました。"
+	},
+	"label_scroll_down_two": {
+		"message": "メッセージを2件下にスクロール"
+	},
+	"label_scroll_up_two": {
+		"message": "メッセージを2件上にスクロール"
+	},
+	"label_clear_reset": {
+		"message": "クリア＆リセット"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "ショートカットをすべてクリア"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "ショートカットキーをすべてクリア（トグルはそのまま）"
+	},
+	"btn_reset_defaults": {
+		"message": "初期設定に戻す"
+	},
+	"tt_reset_defaults": {
+		"message": "すべての設定とショートカットをデフォルトに戻す"
+	},
+	"label_backup_restore": {
+		"message": "バックアップ＆復元"
+	},
+	"btn_export": {
+		"message": "設定をエクスポート"
+	},
+	"btn_import": {
+		"message": "設定をインポート"
 	}
 }

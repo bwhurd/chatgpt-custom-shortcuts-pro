@@ -287,17 +287,8 @@
 	"tt_share": {
 		"message": "Create a link to share the conversation."
 	},
-	"label_backup_restore": {
-		"message": "Backup & Restore Settings"
-	},
 	"tt_backup_restore": {
 		"message": "Export or import all extension settings."
-	},
-	"btn_export": {
-		"message": "Export"
-	},
-	"btn_import": {
-		"message": "Import"
 	},
 	"tt_export": {
 		"message": "Export your settings to a JSON file."
@@ -322,5 +313,35 @@
 	},
 	"toast_import_invalid": {
 		"message": "Invalid file. Import aborted."
+	},
+	"label_scroll_down_two": {
+		"message": "Scroll Down Two Messages"
+	},
+	"label_scroll_up_two": {
+		"message": "Scroll Up Two Messages"
+	},
+	"label_clear_reset": {
+		"message": "Clear & Reset"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "Clear all shortcuts"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "Clear all shortcut keys (keep toggles)"
+	},
+	"btn_reset_defaults": {
+		"message": "Reset defaults"
+	},
+	"tt_reset_defaults": {
+		"message": "Reset all options and shortcuts to defaults"
+	},
+	"label_backup_restore": {
+		"message": "Backup & Restore"
+	},
+	"btn_export": {
+		"message": "Export Settings"
+	},
+	"btn_import": {
+		"message": "Import Settings"
 	}
 }

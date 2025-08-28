@@ -15,7 +15,7 @@ ChatGPT Custom Shortcuts Pro
 // GSAP plugins are loaded via manifest *before* this script — register directly.
 gsap.registerPlugin(ScrollToPlugin, Observer, Flip);
 ScrollToPlugin.config({ autoKill: true });
-console.log("GSAP plugins registered.");
+console.log('GSAP plugins registered.');
 
 // Shared scroll state object
 const ScrollState = {
@@ -38,9 +38,7 @@ function resetScrollState() {
 }
 
 function getScrollableContainer() {
-	const firstMessage = document.querySelector(
-		'[data-testid^="conversation-turn-"]',
-	);
+	const firstMessage = document.querySelector('[data-testid^="conversation-turn-"]');
 	if (!firstMessage) return null;
 
 	let container = firstMessage.parentElement;
@@ -48,8 +46,8 @@ function getScrollableContainer() {
 		const style = getComputedStyle(container);
 		if (
 			container.scrollHeight > container.clientHeight &&
-			style.overflowY !== "visible" &&
-			style.overflowY !== "hidden"
+			style.overflowY !== 'visible' &&
+			style.overflowY !== 'hidden'
 		) {
 			return container;
 		}
@@ -66,12 +64,10 @@ let chatContainerObserver = null;
 
 function observeConversationContainer(callback) {
 	// If DOM isn't ready yet, defer a single attach
-	if (document.readyState === "loading") {
-		document.addEventListener(
-			"DOMContentLoaded",
-			() => observeConversationContainer(callback),
-			{ once: true },
-		);
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', () => observeConversationContainer(callback), {
+			once: true,
+		});
 		return;
 	}
 
@@ -79,8 +75,7 @@ function observeConversationContainer(callback) {
 	const target = getScrollableContainer();
 	if (!target) {
 		// Retry briefly while the chat UI mounts, then give up cleanly
-		observeConversationContainer._retries =
-			(observeConversationContainer._retries || 0) + 1;
+		observeConversationContainer._retries = (observeConversationContainer._retries || 0) + 1;
 		if (observeConversationContainer._retries <= 20) {
 			setTimeout(() => observeConversationContainer(callback), 150);
 		}
@@ -95,7 +90,7 @@ function observeConversationContainer(callback) {
 	chatContainerObserver = new MutationObserver((mutations) => {
 		// Batch/delay heavy work (avoid global name collisions)
 		if (mutations.length) {
-			const key = "__csp_chatObserverFlushScheduled";
+			const key = '__csp_chatObserverFlushScheduled';
 			if (!window[key]) {
 				window[key] = true;
 				requestIdleCallback(
@@ -119,7 +114,7 @@ function observeConversationContainer(callback) {
 observeConversationContainer((mutations) => {
 	// Only act if relevant children were added/removed
 	for (const mutation of mutations) {
-		if (mutation.type === "childList") {
+		if (mutation.type === 'childList') {
 			// Example: run updateChatUI or refresh shortcut mapping
 			// updateChatUI();
 		}
@@ -148,9 +143,7 @@ function applyVisibilitySettings(data) {
 
 	for (const key in settingsMap) {
 		// If present in data, use its boolean value, otherwise fallback to default.
-		window[key] = Object.hasOwn(data, key)
-			? Boolean(data[key])
-			: settingsMap[key];
+		window[key] = Object.hasOwn(data, key) ? Boolean(data[key]) : settingsMap[key];
 	}
 }
 
@@ -160,52 +153,43 @@ window.applyVisibilitySettings = applyVisibilitySettings;
 // helper for slim sidebar bugs with sidebar toggle shortcut
 // These helpers only set styles directly, no timers, no recursion
 window.hideSlimSidebarBarInstant = () => {
-	const bar = document.getElementById("stage-sidebar-tiny-bar");
+	const bar = document.getElementById('stage-sidebar-tiny-bar');
 	if (!bar) return;
-	bar.style.setProperty("transition", "none", "important");
-	bar.style.setProperty("opacity", "0", "important");
+	bar.style.setProperty('transition', 'none', 'important');
+	bar.style.setProperty('opacity', '0', 'important');
 	// force reflow without using void
 	// eslint-disable-next-line no-unused-expressions
 	bar.offsetWidth;
 	setTimeout(() => {
 		if (bar) {
-			bar.style.setProperty(
-				"transition",
-				"opacity 0.5s ease-in-out",
-				"important",
-			);
+			bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 		}
 	}, 0);
 };
 
 window.flashSlimSidebarBar = (dur = 2500) => {
 	// Use the canonical timer in the main IIFE if present
-	if (typeof window._flashSlimSidebarBar === "function") {
+	if (typeof window._flashSlimSidebarBar === 'function') {
 		window._flashSlimSidebarBar(dur);
 		return;
 	}
 	// Fallback for standalone: just snap to 1, fade to idle after dur
-	const bar = document.getElementById("stage-sidebar-tiny-bar");
+	const bar = document.getElementById('stage-sidebar-tiny-bar');
 	if (!bar) return;
-	bar.style.setProperty("transition", "none", "important");
-	bar.style.setProperty("opacity", "1", "important");
+	bar.style.setProperty('transition', 'none', 'important');
+	bar.style.setProperty('opacity', '1', 'important');
 	// force reflow without using void
 	// eslint-disable-next-line no-unused-expressions
 	bar.offsetWidth;
-	bar.style.setProperty("transition", "opacity 0.5s ease-in-out", "important");
+	bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 	setTimeout(() => window.fadeSlimSidebarBarToIdle(), dur);
 };
 
-
 window.fadeSlimSidebarBarToIdle = () => {
-	const bar = document.getElementById("stage-sidebar-tiny-bar");
+	const bar = document.getElementById('stage-sidebar-tiny-bar');
 	if (!bar) return;
-	bar.style.setProperty("transition", "opacity 0.5s ease-in-out", "important");
-	bar.style.setProperty(
-		"opacity",
-		(window._slimBarIdleOpacity ?? 0.6).toString(),
-		"important",
-	);
+	bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+	bar.style.setProperty('opacity', (window._slimBarIdleOpacity ?? 0.6).toString(), 'important');
 };
 
 // Mac Cross-Compatibility Helper
@@ -213,51 +197,50 @@ window.fadeSlimSidebarBarToIdle = () => {
 const MAC_REGEX = /Mac/i;
 
 function isMacPlatform() {
-	const ua = navigator.userAgent || "";
-	const plat = navigator.platform || "";
-	const uaDataPlat = navigator.userAgentData?.platform || "";
+	const ua = navigator.userAgent || '';
+	const plat = navigator.platform || '';
+	const uaDataPlat = navigator.userAgentData?.platform || '';
 	return MAC_REGEX.test(plat) || MAC_REGEX.test(ua) || MAC_REGEX.test(uaDataPlat);
 }
-
 
 // --- compat helpers to support both legacy chars and new codes ---
 const LETTER_REGEX = /^[A-Z]$/;
 const DIGIT_REGEX = /^[0-9]$/;
 
 function charToCode(ch) {
-	if (!ch) return "";
+	if (!ch) return '';
 	const raw = ch.trim();
 	const upper = raw.toUpperCase();
 	if (LETTER_REGEX.test(upper)) return `Key${upper}`;
 	if (DIGIT_REGEX.test(raw)) return `Digit${raw}`;
 
 	switch (raw) {
-		case "-":
-			return "Minus";
-		case "=":
-			return "Equal";
-		case "[":
-			return "BracketLeft";
-		case "]":
-			return "BracketRight";
-		case "\\":
-			return "Backslash";
-		case ";":
-			return "Semicolon";
+		case '-':
+			return 'Minus';
+		case '=':
+			return 'Equal';
+		case '[':
+			return 'BracketLeft';
+		case ']':
+			return 'BracketRight';
+		case '\\':
+			return 'Backslash';
+		case ';':
+			return 'Semicolon';
 		case "'":
-			return "Quote";
-		case ",":
-			return "Comma";
-		case ".":
-			return "Period";
-		case "/":
-			return "Slash";
-		case "`":
-			return "Backquote";
-		case " ":
-			return "Space";
+			return 'Quote';
+		case ',':
+			return 'Comma';
+		case '.':
+			return 'Period';
+		case '/':
+			return 'Slash';
+		case '`':
+			return 'Backquote';
+		case ' ':
+			return 'Space';
 		default:
-			return "";
+			return '';
 	}
 }
 
@@ -289,17 +272,16 @@ const codeEquals = (a, b) => {
 
 /** Accepts either a legacy single char ('w') or a code ('KeyW', 'Digit1', 'Numpad1', etc.) in storage. */
 const normalizeStoredToCode = (stored) => {
-	if (!stored) return "";
+	if (!stored) return '';
 	const s = String(stored).trim();
 
 	// Recognized code patterns (keep in sync with charToCode)
 	if (VALID_CODE_REGEX.test(s)) return s;
 
 	// Legacy single-character value
-	if (s.length === 1)
-		return typeof charToCode === "function" ? charToCode(s) : "";
+	if (s.length === 1) return typeof charToCode === 'function' ? charToCode(s) : '';
 
-	return "";
+	return '';
 };
 
 // Expose a single, canonical place for these helpers (used elsewhere in the file)
@@ -313,16 +295,13 @@ window.ShortcutUtils = {
 // ==== Shared getOpenMenus helper  =========
 const getOpenMenus = () => {
 	const menus = Array.from(
-		document.querySelectorAll(
-			'[role="menu"][data-radix-menu-content][data-state="open"]',
-		),
+		document.querySelectorAll('[role="menu"][data-radix-menu-content][data-state="open"]'),
 	);
 	const X_OFFSET_TOLERANCE = 4; // px; prefer horizontal ordering when difference exceeds this
 	return menus.sort((a, b) => {
 		const ra = a.getBoundingClientRect();
 		const rb = b.getBoundingClientRect();
-		if (Math.abs(ra.left - rb.left) > X_OFFSET_TOLERANCE)
-			return ra.left - rb.left;
+		if (Math.abs(ra.left - rb.left) > X_OFFSET_TOLERANCE) return ra.left - rb.left;
 		return ra.top - rb.top;
 	});
 };
@@ -334,17 +313,15 @@ const flashBorder = (el) => {
 	if (!window.gsap) return;
 
 	const tertiary =
-		getComputedStyle(document.documentElement)
-			.getPropertyValue("--main-surface-tertiary")
-			.trim() || "#888";
-	const row =
-		el.closest('div[class*="group-hover/turn-messages"]') || el.parentElement;
-	row?.classList.add("force-full-opacity");
+		getComputedStyle(document.documentElement).getPropertyValue('--main-surface-tertiary').trim() ||
+		'#888';
+	const row = el.closest('div[class*="group-hover/turn-messages"]') || el.parentElement;
+	row?.classList.add('force-full-opacity');
 	gsap
 		.timeline({
 			onComplete: () => {
-				gsap.set(el, { clearProps: "boxShadow,scale" });
-				row?.classList.remove("force-full-opacity");
+				gsap.set(el, { clearProps: 'boxShadow,scale' });
+				row?.classList.remove('force-full-opacity');
 			},
 		})
 		.fromTo(
@@ -354,14 +331,14 @@ const flashBorder = (el) => {
 				boxShadow: `0 0 0 3px ${tertiary}`,
 				scale: 0.95,
 				duration: 0.25,
-				ease: "power2.out",
+				ease: 'power2.out',
 			},
 		)
 		.to(el, {
 			boxShadow: `0 0 0 0 ${tertiary}`,
 			scale: 1,
 			duration: 0.3,
-			ease: "power2.in",
+			ease: 'power2.in',
 		});
 };
 
@@ -385,6 +362,10 @@ const DELAYS = {
 	feedbackDelay: 100, // ms, feedback animation delay
 };
 
+window.DELAYS = DELAYS;
+window.delays = DELAYS;
+const delays = DELAYS;
+
 // =====================================
 // @note Sync Chrome Storage + UI State + Expose Global Variables
 // =====================================
@@ -393,22 +374,22 @@ const DELAYS = {
 	// Fetch initial values from Chrome storage
 	chrome.storage.sync.get(
 		[
-			"hideArrowButtonsCheckbox",
-			"moveTopBarToBottomCheckbox",
-			"pageUpDownTakeover",
-			"removeMarkdownOnCopyCheckbox",
-			"selectMessagesSentByUserOrChatGptCheckbox",
-			"onlySelectUserCheckbox",
-			"onlySelectAssistantCheckbox",
-			"disableCopyAfterSelectCheckbox",
-			"enableSendWithControlEnterCheckbox",
-			"enableStopWithControlBackspaceCheckbox",
-			"popupBottomBarOpacityValue",
-			"useAltForModelSwitcherRadio",
-			"useControlForModelSwitcherRadio",
-			"rememberSidebarScrollPositionCheckbox",
-			"FadeSlimSidebarCheckbox", // (checkbox state: true/false)
-			"popupSlimSidebarOpacityValue", // (slider value: number)
+			'hideArrowButtonsCheckbox',
+			'moveTopBarToBottomCheckbox',
+			'pageUpDownTakeover',
+			'removeMarkdownOnCopyCheckbox',
+			'selectMessagesSentByUserOrChatGptCheckbox',
+			'onlySelectUserCheckbox',
+			'onlySelectAssistantCheckbox',
+			'disableCopyAfterSelectCheckbox',
+			'enableSendWithControlEnterCheckbox',
+			'enableStopWithControlBackspaceCheckbox',
+			'popupBottomBarOpacityValue',
+			'useAltForModelSwitcherRadio',
+			'useControlForModelSwitcherRadio',
+			'rememberSidebarScrollPositionCheckbox',
+			'FadeSlimSidebarCheckbox', // (checkbox state: true/false)
+			'popupSlimSidebarOpacityValue', // (slider value: number)
 		],
 		(data) => {
 			applyVisibilitySettings(data);
@@ -417,7 +398,7 @@ const DELAYS = {
 
 	// Listen for changes in Chrome storage and dynamically apply settings
 	chrome.storage.onChanged.addListener((changes, area) => {
-		if (area === "sync") {
+		if (area === 'sync') {
 			const updatedData = {};
 			for (const key in changes) {
 				updatedData[key] = changes[key].newValue;
@@ -443,15 +424,15 @@ const DELAYS = {
 
 	function showToast(message, delays = DELAYS) {
 		// Reuse a single toast; avoid stacking & leaking timers
-		const id = "csp-toast";
+		const id = 'csp-toast';
 		let toast = document.getElementById(id);
 		if (!toast) {
-			toast = document.createElement("div");
+			toast = document.createElement('div');
 			toast.id = id;
-			toast.setAttribute("role", "status");
-			toast.setAttribute("aria-live", "polite");
+			toast.setAttribute('role', 'status');
+			toast.setAttribute('aria-live', 'polite');
 			toast.style.cssText =
-				"position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:16px;background-color:#333;color:#FFF;border-radius:4px;max-width:90%;text-align:center;z-index:1000;font-size:14px;opacity:0;transition:opacity 0.5s ease;box-shadow:0 2px 4px -1px rgba(0,0,0,0.2),0 4px 5px 0 rgba(0,0,0,0.14),0 1px 10px 0 rgba(0,0,0,0.12)";
+				'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:16px;background-color:#333;color:#FFF;border-radius:4px;max-width:90%;text-align:center;z-index:1000;font-size:14px;opacity:0;transition:opacity 0.5s ease;box-shadow:0 2px 4px -1px rgba(0,0,0,0.2),0 4px 5px 0 rgba(0,0,0,0.14),0 1px 10px 0 rgba(0,0,0,0.12)';
 			document.body.appendChild(toast);
 		}
 		// Clear previous timers if any
@@ -461,12 +442,12 @@ const DELAYS = {
 		toast.textContent = message;
 		// Show
 		requestAnimationFrame(() => {
-			toast.style.opacity = "1";
+			toast.style.opacity = '1';
 		});
 
 		// Hide then remove
 		toast._hideTimer = setTimeout(() => {
-			toast.style.opacity = "0";
+			toast.style.opacity = '0';
 		}, 3000);
 		toast._removeTimer = setTimeout(() => {
 			if (toast?.parentNode) toast.parentNode.removeChild(toast);
@@ -474,42 +455,37 @@ const DELAYS = {
 	}
 
 	function copyAll() {
-		const proseNodeList = document.querySelectorAll(".prose");
+		const proseNodeList = document.querySelectorAll('.prose');
 		if (!proseNodeList || proseNodeList.length === 0) {
-			showToast("No prose elements found");
+			showToast('No prose elements found');
 			return;
 		}
 
-		chrome.storage.sync.get(
-			["copyAll-userSeparator", "copyCode-userSeparator"],
-			(data) => {
-				const userSepRaw = data["copyAll-userSeparator"];
-				const sep = userSepRaw
-					? parseSeparator(userSepRaw)
-					: " \n  \n --- --- --- \n \n";
+		chrome.storage.sync.get(['copyAll-userSeparator', 'copyCode-userSeparator'], (data) => {
+			const userSepRaw = data['copyAll-userSeparator'];
+			const sep = userSepRaw ? parseSeparator(userSepRaw) : ' \n  \n --- --- --- \n \n';
 
-				const parts = [];
-				for (const proseEl of proseNodeList) {
-					const text = getFormattedText(proseEl);
-					if (text?.trim().length) parts.push(text);
-				}
+			const parts = [];
+			for (const proseEl of proseNodeList) {
+				const text = getFormattedText(proseEl);
+				if (text?.trim().length) parts.push(text);
+			}
 
-				const output = parts.join(sep);
+			const output = parts.join(sep);
 
-				if (output) {
-					navigator.clipboard
-						.writeText(output)
-						.then(() => showToast("All responses copied to clipboard!"))
-						.catch(() => showToast("Error copying content to clipboard!"));
-				} else {
-					showToast("No content found in the prose elements");
-				}
-			},
-		);
+			if (output) {
+				navigator.clipboard
+					.writeText(output)
+					.then(() => showToast('All responses copied to clipboard!'))
+					.catch(() => showToast('Error copying content to clipboard!'));
+			} else {
+				showToast('No content found in the prose elements');
+			}
+		});
 	}
 
 	function getFormattedText(proseElement) {
-		let result = "";
+		let result = '';
 		for (const child of proseElement.childNodes) {
 			switch (child.nodeType) {
 				case Node.TEXT_NODE: {
@@ -518,29 +494,27 @@ const DELAYS = {
 				}
 				case Node.ELEMENT_NODE: {
 					switch (child.tagName) {
-						case "BR": {
-							result += "\n";
+						case 'BR': {
+							result += '\n';
 							break;
 						}
-						case "P": {
+						case 'P': {
 							result += `${getFormattedText(child)}\n\n`;
 							break;
 						}
-						case "PRE": {
+						case 'PRE': {
 							result += `${processCodeBlock(child.textContent)}\n\n`;
 							break;
 						}
-						case "OL":
-						case "UL": {
-							let items = Array.from(child.querySelectorAll("li"));
-							if (child.tagName === "OL") {
-								items = items.map(
-									(item, index) => `${index + 1}. ${getFormattedText(item)}\n`,
-								);
+						case 'OL':
+						case 'UL': {
+							let items = Array.from(child.querySelectorAll('li'));
+							if (child.tagName === 'OL') {
+								items = items.map((item, index) => `${index + 1}. ${getFormattedText(item)}\n`);
 							} else {
 								items = items.map((item) => `- ${getFormattedText(item)}\n`);
 							}
-							result += `${items.join("")}\n`;
+							result += `${items.join('')}\n`;
 							break;
 						}
 						default: {
@@ -555,18 +529,16 @@ const DELAYS = {
 	}
 
 	function processCodeBlock(codeBlockText) {
-		const lines = codeBlockText
-			.split("\n")
-			.filter((line) => line.trim() !== ""); // Remove empty lines
-		if (lines.length === 0) return ""; // Skip empty blocks
-		return lines.join("\n"); // Return raw code content without backticks
+		const lines = codeBlockText.split('\n').filter((line) => line.trim() !== ''); // Remove empty lines
+		if (lines.length === 0) return ''; // Skip empty blocks
+		return lines.join('\n'); // Return raw code content without backticks
 	}
 
 	function getAllCodeBlocks() {
-		const codeBoxes = document.querySelectorAll("pre");
+		const codeBoxes = document.querySelectorAll('pre');
 		const blocks = [];
 		for (const codeBox of codeBoxes) {
-			const codeElements = codeBox.querySelectorAll("code");
+			const codeElements = codeBox.querySelectorAll('code');
 			for (const codeElement of codeElements) {
 				const block = codeElement.textContent.trim();
 				if (block) {
@@ -578,43 +550,83 @@ const DELAYS = {
 	}
 
 	function copyCode() {
-		const codeBoxes = document.querySelectorAll("pre");
+		const codeBoxes = document.querySelectorAll('pre');
 		if (codeBoxes.length === 0) {
-			showToast("No code boxes found");
+			showToast('No code boxes found');
 			return;
 		}
-		chrome.storage.sync.get("copyCode-userSeparator", (data) => {
-			const copyCodeSeparator = data["copyCode-userSeparator"]
-				? parseSeparator(data["copyCode-userSeparator"])
-				: " \n  \n --- --- --- \n \n";
+		chrome.storage.sync.get('copyCode-userSeparator', (data) => {
+			const copyCodeSeparator = data['copyCode-userSeparator']
+				? parseSeparator(data['copyCode-userSeparator'])
+				: ' \n  \n --- --- --- \n \n';
 			const formattedBlocks = getAllCodeBlocks();
 			const output = formattedBlocks.join(copyCodeSeparator);
 
 			if (output.trim()) {
 				navigator.clipboard
 					.writeText(output)
-					.then(() => showToast("All code boxes copied to clipboard!"))
-					.catch(() => showToast("Error copying code content to clipboard!"));
+					.then(() => showToast('All code boxes copied to clipboard!'))
+					.catch(() => showToast('Error copying code content to clipboard!'));
 			} else {
-				showToast("No content found in the code boxes");
+				showToast('No content found in the code boxes');
 			}
 		});
 	}
 
 	function parseSeparator(separator) {
 		// Parse literal `\n` and similar into real line breaks
-		return separator
-			.replace(/\\n/g, "\n")
-			.replace(/\\t/g, "\t")
-			.replace(/\\r/g, "\r");
+		return separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+	}
+
+	// Shared helper so "one up" and "two up" use the exact same anchor logic.
+	function scrollUpByMessages(steps = 1, feedbackTarget = null) {
+		resetScrollState();
+
+		const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
+		const scrollContainer = getScrollableContainer();
+		if (!scrollContainer || messages.length === 0) return;
+
+		// Offset values based on checkbox state
+		const isBottom = window.moveTopBarToBottomCheckbox;
+		const messageThreshold = isBottom ? -48 : -30; // same as original goUpOne
+		const scrollOffset = isBottom ? 43 : 25;
+
+		let foundCount = 0;
+		let targetMessage = null;
+
+		// Scan upward from the bottom, counting matches like original goUpOne
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const messageTop = messages[i].getBoundingClientRect().top;
+			if (messageTop < messageThreshold) {
+				foundCount++;
+				if (foundCount === steps) {
+					targetMessage = messages[i];
+					break;
+				}
+			}
+		}
+
+		if (targetMessage) {
+			gsap.to(scrollContainer, {
+				duration: 0.6,
+				scrollTo: { y: targetMessage.offsetTop - scrollOffset },
+				ease: 'power4.out',
+			});
+		} else {
+			gsap.to(scrollContainer, {
+				duration: 0.6,
+				scrollTo: { y: 0 },
+				ease: 'power4.out',
+			});
+		}
+
+		if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
 	}
 
 	function goUpOneMessage(feedbackTarget = null) {
 		resetScrollState(); // Reset the shared scroll state
 
-		const messages = document.querySelectorAll(
-			'[data-testid^="conversation-turn-"]',
-		);
+		const messages = document.querySelectorAll('[data-testid^="conversation-turn-"]');
 		let targetMessage = null;
 
 		// Offset values based on checkbox state
@@ -639,7 +651,7 @@ const DELAYS = {
 				scrollTo: {
 					y: targetMessage.offsetTop - scrollOffset,
 				},
-				ease: "power4.out",
+				ease: 'power4.out',
 			});
 		} else {
 			gsap.to(scrollContainer, {
@@ -647,43 +659,47 @@ const DELAYS = {
 				scrollTo: {
 					y: 0,
 				},
-				ease: "power4.out",
+				ease: 'power4.out',
 			});
 		}
 
 		if (feedbackTarget) feedbackAnimation(feedbackTarget);
 	}
 
+	function goUpTwoMessages(feedbackTarget = null) {
+		scrollUpByMessages(2, feedbackTarget);
+	}
+
 	function createScrollUpButton() {
 		// Return a harmless node when button is gated off – avoids undefined append
 		if (window.hideArrowButtonsCheckbox) {
-			return document.createComment("scroll-up-btn-disabled");
+			return null;
 		}
 
 		if (!(window.gsap && window.ScrollToPlugin)) {
-			console.error("GSAP or ScrollToPlugin is missing.");
-			return document.createComment("scroll-up-btn-no-gsap");
+			console.error('GSAP or ScrollToPlugin is missing.');
+			return document.createComment('scroll-up-btn-no-gsap');
 		}
 
-		const upButton = document.createElement("button");
+		const upButton = document.createElement('button');
 		upButton.classList.add(
-			"chatGPT-scroll-btn",
-			"cursor-pointer",
-			"absolute",
-			"right-6",
-			"z-10",
-			"rounded-full",
-			"border",
-			"border-gray-200",
-			"bg-gray-50",
-			"text-gray-600",
-			"dark:border-white/10",
-			"dark:bg-white/10",
-			"dark:text-gray-200",
+			'chatGPT-scroll-btn',
+			'cursor-pointer',
+			'absolute',
+			'right-6',
+			'z-10',
+			'rounded-full',
+			'border',
+			'border-gray-200',
+			'bg-gray-50',
+			'text-gray-600',
+			'dark:border-white/10',
+			'dark:bg-white/10',
+			'dark:text-gray-200',
 		);
 		upButton.style.cssText =
-			"display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 196px; right: 26px; z-index: 10000; transition: opacity 1s;";
-		upButton.id = "upButton";
+			'display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 196px; right: 26px; z-index: 10000; transition: opacity 1s;';
+		upButton.id = 'upButton';
 
 		upButton.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xl" style="transform: scale(0.75);">
@@ -695,18 +711,18 @@ const DELAYS = {
 			goUpOneMessage(upButton);
 		};
 
-		upButton.addEventListener("mouseover", () => {
-			upButton.style.opacity = "1";
+		upButton.addEventListener('mouseover', () => {
+			upButton.style.opacity = '1';
 		});
 
-		upButton.addEventListener("mouseleave", () => {
-			upButton.style.transition = "opacity 1s";
-			upButton.style.opacity = "0.2";
+		upButton.addEventListener('mouseleave', () => {
+			upButton.style.transition = 'opacity 1s';
+			upButton.style.opacity = '0.2';
 		});
 
 		setTimeout(() => {
-			upButton.style.transition = "opacity 1s";
-			upButton.style.opacity = "0.2";
+			upButton.style.transition = 'opacity 1s';
+			upButton.style.opacity = '0.2';
 		}, delays.buttonFade);
 
 		return upButton;
@@ -724,13 +740,11 @@ const DELAYS = {
 	function goDownOneMessage(feedbackTarget = null) {
 		resetScrollState();
 
-		const messages = Array.from(
-			document.querySelectorAll('[data-testid^="conversation-turn-"]'),
-		);
+		const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
 		const scrollContainer = getScrollableContainer();
 		if (!scrollContainer || messages.length === 0) return;
 
-		gsap.set(scrollContainer, { scrollTo: "+=0" });
+		gsap.set(scrollContainer, { scrollTo: '+=0' });
 		gsap.killTweensOf(scrollContainer);
 
 		const currentScrollTop = scrollContainer.scrollTop;
@@ -746,7 +760,7 @@ const DELAYS = {
 			gsap.to(scrollContainer, {
 				duration: 0.6,
 				scrollTo: { y: targetMessage.offsetTop - scrollOffset },
-				ease: "power4.out",
+				ease: 'power4.out',
 			});
 		} else {
 			gsap.to(scrollContainer, {
@@ -754,43 +768,98 @@ const DELAYS = {
 				scrollTo: {
 					y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
 				},
-				ease: "power4.out",
+				ease: 'power4.out',
 			});
 		}
 
 		if (feedbackTarget) feedbackAnimation(feedbackTarget);
 	}
 
+	function scrolldownbymessages(steps = 1, feedbackTarget = null) {
+		resetScrollState();
+
+		const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
+		const scrollContainer = getScrollableContainer();
+		if (!scrollContainer || messages.length === 0) return;
+
+		gsap.set(scrollContainer, { scrollTo: '+=0' });
+		gsap.killTweensOf(scrollContainer);
+
+		const isBottom = window.moveTopBarToBottomCheckbox;
+		const messageThreshold = isBottom ? 48 : 30;
+		const scrollOffset = isBottom ? 43 : 25;
+
+		// Use a local variable instead of reassigning the parameter
+		const stepCount = Math.max(1, Math.floor(steps));
+
+		let virtualTop = scrollContainer.scrollTop;
+		let targetMessage = null;
+
+		for (let i = 0; i < stepCount; i++) {
+			const next = getNextMessage(messages, virtualTop, messageThreshold);
+			if (!next) {
+				targetMessage = null;
+				break;
+			}
+			targetMessage = next;
+			virtualTop = Math.max(0, targetMessage.offsetTop - scrollOffset);
+		}
+
+		if (targetMessage) {
+			gsap.to(scrollContainer, {
+				duration: 0.6,
+				overwrite: 'auto',
+				scrollTo: { y: virtualTop },
+				ease: 'power4.out',
+			});
+		} else {
+			gsap.to(scrollContainer, {
+				duration: 0.6,
+				overwrite: 'auto',
+				scrollTo: {
+					y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
+				},
+				ease: 'power4.out',
+			});
+		}
+
+		if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
+	}
+
+	function goDownTwoMessages(feedbackTarget = null) {
+		scrolldownbymessages(2, feedbackTarget);
+	}
+
 	function createScrollDownButton() {
 		// Same defensive return strategy as the up-button
 		if (window.hideArrowButtonsCheckbox) {
-			return document.createComment("scroll-down-btn-disabled");
+			return null;
 		}
 
 		if (!(window.gsap && window.ScrollToPlugin)) {
-			console.error("GSAP or ScrollToPlugin is missing.");
-			return document.createComment("scroll-down-btn-no-gsap");
+			console.error('GSAP or ScrollToPlugin is missing.');
+			return document.createComment('scroll-down-btn-no-gsap');
 		}
 
-		const downButton = document.createElement("button");
+		const downButton = document.createElement('button');
 		downButton.classList.add(
-			"chatGPT-scroll-btn",
-			"cursor-pointer",
-			"absolute",
-			"right-6",
-			"z-10",
-			"rounded-full",
-			"border",
-			"border-gray-200",
-			"bg-gray-50",
-			"text-gray-600",
-			"dark:border-white/10",
-			"dark:bg-white/10",
-			"dark:text-gray-200",
+			'chatGPT-scroll-btn',
+			'cursor-pointer',
+			'absolute',
+			'right-6',
+			'z-10',
+			'rounded-full',
+			'border',
+			'border-gray-200',
+			'bg-gray-50',
+			'text-gray-600',
+			'dark:border-white/10',
+			'dark:bg-white/10',
+			'dark:text-gray-200',
 		);
 		downButton.style.cssText =
-			"display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 228px; right: 26px; z-index: 10000; transition: opacity 1s;";
-		downButton.id = "downButton";
+			'display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 228px; right: 26px; z-index: 10000; transition: opacity 1s;';
+		downButton.id = 'downButton';
 
 		downButton.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xl" style="transform: scale(0.75);">
@@ -802,18 +871,18 @@ const DELAYS = {
 			goDownOneMessage(downButton);
 		};
 
-		downButton.addEventListener("mouseover", () => {
-			downButton.style.opacity = "1";
+		downButton.addEventListener('mouseover', () => {
+			downButton.style.opacity = '1';
 		});
 
-		downButton.addEventListener("mouseleave", () => {
-			downButton.style.transition = "opacity 1s";
-			downButton.style.opacity = "0.2";
+		downButton.addEventListener('mouseleave', () => {
+			downButton.style.transition = 'opacity 1s';
+			downButton.style.opacity = '0.2';
 		});
 
 		setTimeout(() => {
-			downButton.style.transition = "opacity 1s";
-			downButton.style.opacity = "0.2";
+			downButton.style.transition = 'opacity 1s';
+			downButton.style.opacity = '0.2';
 		}, delays.buttonFade);
 
 		return downButton;
@@ -821,34 +890,49 @@ const DELAYS = {
 
 	function feedbackAnimation(button) {
 		// Reset any ongoing transitions to ensure a clean start
-		button.style.transition = "none";
-		button.style.opacity = "1"; // Full opacity immediately
-		button.style.transform = "scale(0.8)"; // Shrink for feedback effect
+		button.style.transition = 'none';
+		button.style.opacity = '1'; // Full opacity immediately
+		button.style.transform = 'scale(0.8)'; // Shrink for feedback effect
 
 		// Delay to allow the scale and opacity changes to settle
 		setTimeout(() => {
-			button.style.transition = "transform 0.2s, opacity 2s"; // Add transitions
-			button.style.transform = "scale(1)"; // Restore size
-			button.style.opacity = "0.2"; // Gradually fade to low opacity
+			button.style.transition = 'transform 0.2s, opacity 2s'; // Add transitions
+			button.style.transform = 'scale(1)'; // Restore size
+			button.style.opacity = '0.2'; // Gradually fade to low opacity
 		}, delays.feedbackDelay); // Start fading and scaling after a brief delay
 	}
 
-	chrome.storage.sync.get(null, (data) => {
-		applyVisibilitySettings(data);
+	// Helper to (re)inject arrow buttons in the DOM based on current settings
+	function injectOrToggleArrowButtons() {
+		// Remove any previous buttons (or comments)
+		document.getElementById('upButton')?.remove();
+		document.getElementById('downButton')?.remove();
 
-		// Prevent duplicate injection if script re-initializes
-		if (document.body?.dataset?.cgptScrollButtons === "1") return;
-		document.body.dataset.cgptScrollButtons = "1";
+		// If setting is true, don't add (early return).
+		if (window.hideArrowButtonsCheckbox) return;
 
+		// Add fresh buttons (will only show if setting is false)
 		const upButton = createScrollUpButton();
 		const downButton = createScrollDownButton();
 		appendWithFragment(document.body, upButton, downButton);
+	}
+
+	// Wrap applyVisibilitySettings so every time it's called, it also (re)injects
+	const _applyVisibilitySettings = window.applyVisibilitySettings;
+	window.applyVisibilitySettings = (data) => {
+		_applyVisibilitySettings(data);
+		injectOrToggleArrowButtons();
+	};
+
+	// Initial settings load
+	chrome.storage.sync.get(null, (data) => {
+		window.applyVisibilitySettings(data); // Will now auto (re)inject buttons
 	});
 
 	const PLUS_BTN_SEL = '[data-testid="composer-plus-btn"]';
 
 	// "More" submenu trigger (match by icon path, not text)
-	const MORE_ICON_PATH_PREFIX = "M15.498 8.50159";
+	const MORE_ICON_PATH_PREFIX = 'M15.498 8.50159';
 	const MORE_TRIGGER_SEL = `div[role="menuitem"][aria-haspopup="menu"] svg path[d^="${MORE_ICON_PATH_PREFIX}"]`;
 
 	const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -874,22 +958,22 @@ const DELAYS = {
 					/* ignore */
 				}
 			};
-			if ("PointerEvent" in window) {
-				dispatch("pointerover", PointerEvent);
-				dispatch("pointerenter", PointerEvent);
-				dispatch("pointerdown", PointerEvent);
+			if ('PointerEvent' in window) {
+				dispatch('pointerover', PointerEvent);
+				dispatch('pointerenter', PointerEvent);
+				dispatch('pointerdown', PointerEvent);
 			}
-			dispatch("mouseover", MouseEvent);
-			dispatch("mouseenter", MouseEvent);
-			dispatch("mousedown", MouseEvent);
+			dispatch('mouseover', MouseEvent);
+			dispatch('mouseenter', MouseEvent);
+			dispatch('mousedown', MouseEvent);
 			// Natural order: release before activation
-			if ("PointerEvent" in window) dispatch("pointerup", PointerEvent);
-			dispatch("mouseup", MouseEvent);
+			if ('PointerEvent' in window) dispatch('pointerup', PointerEvent);
+			dispatch('mouseup', MouseEvent);
 			// Now activate the element
 			el.click();
-			if ("PointerEvent" in window) {
-				dispatch("pointerout", PointerEvent);
-				dispatch("pointerleave", PointerEvent);
+			if ('PointerEvent' in window) {
+				dispatch('pointerout', PointerEvent);
+				dispatch('pointerleave', PointerEvent);
 			}
 		} catch {
 			try {
@@ -911,11 +995,11 @@ const DELAYS = {
 			composed: true,
 		};
 		try {
-			el.dispatchEvent(new KeyboardEvent("keydown", opts));
-		} catch { }
+			el.dispatchEvent(new KeyboardEvent('keydown', opts));
+		} catch {}
 		try {
-			el.dispatchEvent(new KeyboardEvent("keyup", opts));
-		} catch { }
+			el.dispatchEvent(new KeyboardEvent('keyup', opts));
+		} catch {}
 	};
 
 	const waitFor = async (getter, { timeout = 3000, interval = 50 } = {}) => {
@@ -932,7 +1016,6 @@ const DELAYS = {
 		return poll();
 	};
 
-
 	// Helper: synthesize a small cluster of hover-like events to hint UI state.
 	const dispatchHoverEvents = (el) => {
 		const fire = (type, Ctor) => {
@@ -947,31 +1030,33 @@ const DELAYS = {
 						clientY: rect.top + rect.height / 2,
 					}),
 				);
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		};
-		if ("PointerEvent" in window) {
-			fire("pointerover", PointerEvent);
-			fire("pointerenter", PointerEvent);
-			fire("pointermove", PointerEvent);
+		if ('PointerEvent' in window) {
+			fire('pointerover', PointerEvent);
+			fire('pointerenter', PointerEvent);
+			fire('pointermove', PointerEvent);
 		}
-		fire("mouseover", MouseEvent);
-		fire("mouseenter", MouseEvent);
-		fire("mousemove", MouseEvent);
+		fire('mouseover', MouseEvent);
+		fire('mouseenter', MouseEvent);
+		fire('mousemove', MouseEvent);
 	};
 
 	// Helper: progressively try to expand a submenu using keys/clicks.
 	const attemptExpand = async (el, delays) => {
-		sendKey(el, "ArrowRight", "ArrowRight", 39);
+		sendKey(el, 'ArrowRight', 'ArrowRight', 39);
 		await sleep(delays.betweenKeyAttempts);
-		if (el.getAttribute("aria-expanded") !== "true") {
-			sendKey(el, "Enter", "Enter", 13);
+		if (el.getAttribute('aria-expanded') !== 'true') {
+			sendKey(el, 'Enter', 'Enter', 13);
 			await sleep(delays.betweenKeyAttempts);
 		}
-		if (el.getAttribute("aria-expanded") !== "true") {
-			sendKey(el, " ", "Space", 32);
+		if (el.getAttribute('aria-expanded') !== 'true') {
+			sendKey(el, ' ', 'Space', 32);
 			await sleep(delays.betweenKeyAttempts);
 		}
-		if (el.getAttribute("aria-expanded") !== "true") {
+		if (el.getAttribute('aria-expanded') !== 'true') {
 			smartClick(el);
 		}
 	};
@@ -980,7 +1065,7 @@ const DELAYS = {
 	const resolveOpenSubmenu = (submenuId) => {
 		if (submenuId) {
 			const el = document.getElementById(submenuId);
-			if (el && el.getAttribute("data-state") === "open") return el;
+			if (el && el.getAttribute('data-state') === 'open') return el;
 		}
 		const open = getOpenMenus();
 		return open.length ? open[open.length - 1] : null;
@@ -989,7 +1074,7 @@ const DELAYS = {
 	const openSubmenu = async (triggerEl, delays = DELAYS) => {
 		if (!triggerEl) return null;
 
-		const ariaControls = triggerEl.getAttribute("aria-controls") || "";
+		const ariaControls = triggerEl.getAttribute('aria-controls') || '';
 		const submenuId = ariaControls ? ariaControls : null;
 
 		flashBorder(triggerEl);
@@ -997,26 +1082,23 @@ const DELAYS = {
 
 		try {
 			triggerEl.focus({ preventScroll: true });
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 
 		dispatchHoverEvents(triggerEl);
 		await attemptExpand(triggerEl, delays);
 
-		const submenuEl = await waitFor(
-			() => resolveOpenSubmenu(submenuId),
-			{ timeout: delays.waitSubmenuEl },
-		);
+		const submenuEl = await waitFor(() => resolveOpenSubmenu(submenuId), {
+			timeout: delays.waitSubmenuEl,
+		});
 
 		return submenuEl;
 	};
 
 	const openComposerMenuAndMore = async (delays = DELAYS) => {
-		const composer = document.querySelector(
-			'form[data-type="unified-composer"]',
-		);
-		const plusBtn =
-			composer?.querySelector(PLUS_BTN_SEL) ||
-			document.querySelector(PLUS_BTN_SEL);
+		const composer = document.querySelector('form[data-type="unified-composer"]');
+		const plusBtn = composer?.querySelector(PLUS_BTN_SEL) || document.querySelector(PLUS_BTN_SEL);
 
 		if (!plusBtn) return false;
 
@@ -1037,11 +1119,8 @@ const DELAYS = {
 				topMenu = menus[menus.length - 1];
 				if (!topMenu) return null;
 				const path = topMenu.querySelector(MORE_TRIGGER_SEL);
-				if (path)
-					return path.closest('div[role="menuitem"][aria-haspopup="menu"]');
-				return topMenu.querySelector(
-					'div[role="menuitem"][aria-haspopup="menu"]',
-				);
+				if (path) return path.closest('div[role="menuitem"][aria-haspopup="menu"]');
+				return topMenu.querySelector('div[role="menuitem"][aria-haspopup="menu"]');
 			},
 			{ timeout: delays.waitSubmenuOpen },
 		);
@@ -1102,10 +1181,10 @@ const DELAYS = {
 		const getClickableAncestor = (node) => {
 			const isClickable = (el) =>
 				el &&
-				typeof el.click === "function" &&
-				(el.tagName === "BUTTON" ||
-					el.tagName === "A" ||
-					el.getAttribute("role") === "button" ||
+				typeof el.click === 'function' &&
+				(el.tagName === 'BUTTON' ||
+					el.tagName === 'A' ||
+					el.getAttribute('role') === 'button' ||
 					el.tabIndex >= 0);
 			let el = node;
 			for (let i = 0; i < 8 && el; i++) {
@@ -1118,11 +1197,11 @@ const DELAYS = {
 		const ensureVisible = (el) => {
 			try {
 				el.scrollIntoView({
-					block: "center",
-					inline: "center",
-					behavior: "auto",
+					block: 'center',
+					inline: 'center',
+					behavior: 'auto',
 				});
-			} catch { }
+			} catch {}
 		};
 
 		const target = await waitFor(
@@ -1152,17 +1231,17 @@ const DELAYS = {
 			delays = DELAYS,
 			root = document,
 			pick = (btns) => btns[0], // if multiple, pick the first
-		} = {}
+		} = {},
 	) => {
 		const buttonSelector = `[data-testid="${testId}"]`;
 
 		const getClickableAncestor = (node) => {
 			const isClickable = (el) =>
 				el &&
-				typeof el.click === "function" &&
-				(el.tagName === "BUTTON" ||
-					el.tagName === "A" ||
-					el.getAttribute("role") === "button" ||
+				typeof el.click === 'function' &&
+				(el.tagName === 'BUTTON' ||
+					el.tagName === 'A' ||
+					el.getAttribute('role') === 'button' ||
 					el.tabIndex >= 0);
 			let el = node;
 			for (let i = 0; i < 8 && el; i++) {
@@ -1174,8 +1253,8 @@ const DELAYS = {
 
 		const ensureVisible = (el) => {
 			try {
-				el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
-			} catch { }
+				el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+			} catch {}
 		};
 
 		const target = await waitFor(
@@ -1185,7 +1264,7 @@ const DELAYS = {
 				const chosenBtn = pick(btns) || btns[0];
 				return getClickableAncestor(chosenBtn);
 			},
-			{ timeout, interval }
+			{ timeout, interval },
 		);
 
 		if (!target) return;
@@ -1196,11 +1275,8 @@ const DELAYS = {
 		smartClick(target);
 	};
 
-
 	// ==== End Exposed Button Click Shared helpers =========
 	// ======================================================
-
-
 
 	// ======================================================
 	// ==== Shortcut Helpers============
@@ -1219,79 +1295,82 @@ const DELAYS = {
 		}
 	}
 
-
 	// @note Keyboard shortcut defaults
 	chrome.storage.sync.get(
 		[
-			"shortcutKeyScrollUpOneMessage",
-			"shortcutKeyScrollDownOneMessage",
-			"shortcutKeyCopyLowest",
-			"shortcutKeyEdit",
-			"shortcutKeySendEdit",
-			"shortcutKeyCopyAllResponses",
-			"shortcutKeyCopyAllCodeBlocks",
-			"shortcutKeyClickNativeScrollToBottom",
-			"shortcutKeyScrollToTop",
-			"shortcutKeyNewConversation",
-			"shortcutKeySearchConversationHistory",
-			"shortcutKeyToggleSidebar",
-			"shortcutKeyActivateInput",
-			"shortcutKeySearchWeb",
-			"shortcutKeyPreviousThread",
-			"shortcutKeyNextThread",
-			"selectThenCopy",
-			"shortcutKeyToggleSidebarFoldersButton",
-			"shortcutKeyClickSendButton",
-			"shortcutKeyClickStopButton",
-			"shortcutKeyToggleModelSelector",
-			"shortcutKeyRegenerate",
-			"altPageUp",
-			"altPageDown",
-			"shortcutKeyTemporaryChat",
-			"shortcutKeyStudy",
-			"shortcutKeyCreateImage",
-			"shortcutKeyToggleCanvas",
-			"shortcutKeyToggleDictate",
-			"shortcutKeyCancelDictation",
-			"shortcutKeyShare",
-			"shortcutKeyThinkLonger",
-			"shortcutKeyAddPhotosFiles",
+			'shortcutKeyScrollUpOneMessage',
+			'shortcutKeyScrollDownOneMessage',
+			'shortcutKeyScrollUpTwoMessages',
+			'shortcutKeyScrollDownTwoMessages',
+			'shortcutKeyCopyLowest',
+			'shortcutKeyEdit',
+			'shortcutKeySendEdit',
+			'shortcutKeyCopyAllResponses',
+			'shortcutKeyCopyAllCodeBlocks',
+			'shortcutKeyClickNativeScrollToBottom',
+			'shortcutKeyScrollToTop',
+			'shortcutKeyNewConversation',
+			'shortcutKeySearchConversationHistory',
+			'shortcutKeyToggleSidebar',
+			'shortcutKeyActivateInput',
+			'shortcutKeySearchWeb',
+			'shortcutKeyPreviousThread',
+			'shortcutKeyNextThread',
+			'selectThenCopy',
+			'shortcutKeyToggleSidebarFoldersButton',
+			'shortcutKeyClickSendButton',
+			'shortcutKeyClickStopButton',
+			'shortcutKeyToggleModelSelector',
+			'shortcutKeyRegenerate',
+			'altPageUp',
+			'altPageDown',
+			'shortcutKeyTemporaryChat',
+			'shortcutKeyStudy',
+			'shortcutKeyCreateImage',
+			'shortcutKeyToggleCanvas',
+			'shortcutKeyToggleDictate',
+			'shortcutKeyCancelDictation',
+			'shortcutKeyShare',
+			'shortcutKeyThinkLonger',
+			'shortcutKeyAddPhotosFiles',
 		],
 		(data) => {
 			const shortcutDefaults = {
-				shortcutKeyScrollUpOneMessage: "a",
-				shortcutKeyScrollDownOneMessage: "f",
-				shortcutKeyCopyLowest: "c",
-				shortcutKeyEdit: "e",
-				shortcutKeySendEdit: "d",
-				shortcutKeyCopyAllResponses: "[",
-				shortcutKeyCopyAllCodeBlocks: "]",
-				shortcutKeyClickNativeScrollToBottom: "z",
-				shortcutKeyScrollToTop: "t",
-				shortcutKeyNewConversation: "n",
-				shortcutKeySearchConversationHistory: "k",
-				shortcutKeyToggleSidebar: "s",
-				shortcutKeyActivateInput: "w",
-				shortcutKeySearchWeb: "q",
-				shortcutKeyPreviousThread: "j",
-				shortcutKeyNextThread: ";",
-				selectThenCopy: "x",
-				shortcutKeyToggleSidebarFoldersButton: "",
-				shortcutKeyClickSendButton: "Enter",
-				shortcutKeyClickStopButton: "Backspace",
-				shortcutKeyToggleModelSelector: "/",
-				shortcutKeyRegenerate: "r",
-				altPageUp: "PageUp",
-				altPageDown: "PageDown",
-				shortcutKeyTemporaryChat: "p",
-				shortcutKeyStudy: "",
-				shortcutKeyCreateImage: "",
-				shortcutKeyToggleCanvas: "",
-				shortcutKeyToggleDictate: "y",
-				shortcutKeyCancelDictation: "",
-				shortcutKeyShare: "",
-				shortcutKeyThinkLonger: "",
-				shortcutKeyAddPhotosFiles: "",
+				shortcutKeyScrollUpOneMessage: 'a',
+				shortcutKeyScrollDownOneMessage: 'f',
+				shortcutKeyScrollUpTwoMessages: '↑',
+				shortcutKeyScrollDownTwoMessages: '↓',
+				shortcutKeyCopyLowest: 'c',
+				shortcutKeyEdit: 'e',
+				shortcutKeySendEdit: 'd',
+				shortcutKeyCopyAllResponses: '[',
+				shortcutKeyCopyAllCodeBlocks: ']',
+				shortcutKeyClickNativeScrollToBottom: 'z',
+				shortcutKeyScrollToTop: 't',
+				shortcutKeyNewConversation: 'n',
+				shortcutKeySearchConversationHistory: 'k',
+				shortcutKeyToggleSidebar: 's',
+				shortcutKeyActivateInput: 'w',
+				shortcutKeySearchWeb: 'q',
+				shortcutKeyPreviousThread: 'j',
+				shortcutKeyNextThread: ';',
+				selectThenCopy: 'x',
+				shortcutKeyToggleSidebarFoldersButton: '',
+				shortcutKeyClickSendButton: 'Enter',
+				shortcutKeyClickStopButton: 'Backspace',
+				shortcutKeyToggleModelSelector: '/',
+				shortcutKeyRegenerate: 'r',
+				altPageUp: 'PageUp',
+				altPageDown: 'PageDown',
+				shortcutKeyTemporaryChat: 'p',
+				shortcutKeyStudy: '',
+				shortcutKeyCreateImage: '',
+				shortcutKeyToggleCanvas: '',
+				shortcutKeyToggleDictate: 'y',
+				shortcutKeyCancelDictation: '',
+				shortcutKeyShare: '',
+				shortcutKeyThinkLonger: '',
+				shortcutKeyAddPhotosFiles: '',
 			};
 
 			const shortcuts = {};
@@ -1304,14 +1383,12 @@ const DELAYS = {
 				}
 			}
 
-			const modelToggleKey =
-				shortcuts.shortcutKeyToggleModelSelector.toLowerCase();
+			const modelToggleKey = shortcuts.shortcutKeyToggleModelSelector.toLowerCase();
 
 			const isMac = isMacPlatform();
 
 			// Memoized fence regex builder (avoids in-scope regex literal and repeated construction)
 			// Top-level regex (declared once per module to satisfy Biome useTopLevelRegex)
-
 
 			// Keep a tiny helper for parity with existing calls
 			const getFenceRe = () => FENCE_RE;
@@ -1332,7 +1409,6 @@ const DELAYS = {
 					info: match[2],
 				};
 			}
-
 
 			/**
 			 * Collect all fence descriptors from the document.
@@ -1364,8 +1440,8 @@ const DELAYS = {
 			 * If addTrailingNewline is true, append a newline (to mirror original behavior).
 			 */
 			function makeRegion(lines, start, endExclusive, isCode, addTrailingNewline) {
-				let text = lines.slice(start, endExclusive).join("\n");
-				if (addTrailingNewline) text += "\n";
+				let text = lines.slice(start, endExclusive).join('\n');
+				if (addTrailingNewline) text += '\n';
 				return { text, isCode };
 			}
 
@@ -1389,9 +1465,7 @@ const DELAYS = {
 					}
 
 					// Include closing fence line; add trailing newline to mirror previous logic
-					regions.push(
-						makeRegion(lines, open.line, fences[closeIdx].line + 1, true, true),
-					);
+					regions.push(makeRegion(lines, open.line, fences[closeIdx].line + 1, true, true));
 
 					lastLine = fences[closeIdx].line + 1;
 					i = closeIdx; // skip to the closer we just consumed
@@ -1405,11 +1479,10 @@ const DELAYS = {
 				return regions;
 			}
 
-
 			function stripMarkdownOutsideCodeblocks(text) {
 				return splitByCodeFences(text)
 					.map((seg) => (seg.isCode ? seg.text : removeMarkdown(seg.text)))
-					.join("");
+					.join('');
 			}
 			function removeMarkdown(text) {
 				return (
@@ -1417,32 +1490,32 @@ const DELAYS = {
 						// ── BACKTICKS FIXES ─────────────────────────────────────────────────────────────
 
 						// 0) Backticks at end of non-empty line → move to new line
-						.replace(/([^\n`]+?)\s*`{3,}(\s*\S*)?$/gm, "$1\n```$2")
+						.replace(/([^\n`]+?)\s*`{3,}(\s*\S*)?$/gm, '$1\n```$2')
 
 						// 1) 3+ backticks anywhere after text → break before them
-						.replace(/([^\n])\s*`{3,}/g, "$1\n```")
+						.replace(/([^\n])\s*`{3,}/g, '$1\n```')
 
 						// 2) Line with 3+ backticks only (plus optional space) → normalize to ```
-						.replace(/^[ \t]*`{3,}\s*$/gm, "```")
+						.replace(/^[ \t]*`{3,}\s*$/gm, '```')
 
 						// 3) 3+ backticks at start with trailing content → isolate backticks
-						.replace(/^[ \t]*`{3,}\s*(\S.*)$/gm, "```\n$1")
+						.replace(/^[ \t]*`{3,}\s*(\S.*)$/gm, '```\n$1')
 
 						// ── REMAINDER (unchanged) ────────────────────────────────────────────────────────
 
-						.replace(/([^\n~]+?)\s*(~{4,})(\s*)$/gm, "$1\n$2")
-						.replace(/^(\s*)[*\-+]\s+/gm, "$1- ")
-						.replace(/(\*\*|__)(.*?)\1/g, "$2")
-						.replace(/(\*|_)(.*?)\1/g, "$2")
-						.replace(/^#{1,6}\s+(.*)/gm, "$1")
-						.replace(/^(\s*)(\d+)\.\s+(.*)/gm, "$1$2. $3")
-						.replace(/\n{3,}/g, "\n\n")
-						.replace(/\\(?=~)/g, "")
-						.replace(/\(\[.*?\]\[(.*?)\]\)/g, "[$1]")
-						.replace(/^(\[1\]: http.*)$/m, "\n---\nSources:\n$1")
-						.replace(/\\(?=&)/g, "")
-						.replace(/\[[^\]]+?\]\[(\d{1,2})\]/g, "[$1]")
-						.replace(/\]\s*,\s*\[/g, "] [")
+						.replace(/([^\n~]+?)\s*(~{4,})(\s*)$/gm, '$1\n$2')
+						.replace(/^(\s*)[*\-+]\s+/gm, '$1- ')
+						.replace(/(\*\*|__)(.*?)\1/g, '$2')
+						.replace(/(\*|_)(.*?)\1/g, '$2')
+						.replace(/^#{1,6}\s+(.*)/gm, '$1')
+						.replace(/^(\s*)(\d+)\.\s+(.*)/gm, '$1$2. $3')
+						.replace(/\n{3,}/g, '\n\n')
+						.replace(/\\(?=~)/g, '')
+						.replace(/\(\[.*?\]\[(.*?)\]\)/g, '[$1]')
+						.replace(/^(\[1\]: http.*)$/m, '\n---\nSources:\n$1')
+						.replace(/\\(?=&)/g, '')
+						.replace(/\[[^\]]+?\]\[(\d{1,2})\]/g, '[$1]')
+						.replace(/\]\s*,\s*\[/g, '] [')
 						.trim()
 				);
 			}
@@ -1451,20 +1524,16 @@ const DELAYS = {
 			const keyFunctionMappingCtrl = {
 				Enter: () => {
 					try {
-						document
-							.querySelector('button[data-testid="send-button"]')
-							?.click();
+						document.querySelector('button[data-testid="send-button"]')?.click();
 					} catch (e) {
-						console.error("Enter handler failed:", e);
+						console.error('Enter handler failed:', e);
 					}
 				},
 				Backspace: () => {
 					try {
-						document
-							.querySelector('button[data-testid="stop-button"]')
-							?.click();
+						document.querySelector('button[data-testid="stop-button"]')?.click();
 					} catch (e) {
-						console.error("Backspace handler failed:", e);
+						console.error('Backspace handler failed:', e);
 					}
 				},
 			};
@@ -1474,7 +1543,7 @@ const DELAYS = {
 			// @note Alt Key Function Maps
 			const keyFunctionMappingAlt = {
 				[shortcuts.shortcutKeyScrollUpOneMessage]: () => {
-					const upButton = document.getElementById("upButton");
+					const upButton = document.getElementById('upButton');
 					if (upButton) {
 						upButton.click();
 						// feedbackAnimation is already called inside the click handler, so this is redundant.
@@ -1483,38 +1552,41 @@ const DELAYS = {
 					}
 				},
 				[shortcuts.shortcutKeyScrollDownOneMessage]: () => {
-					const downButton = document.getElementById("downButton");
+					const downButton = document.getElementById('downButton');
 					if (downButton) {
 						downButton.click(); // feedback is triggered in the click handler
 					} else {
 						goDownOneMessage(); // function is available even when button is hidden
 					}
 				},
+				[shortcuts.shortcutKeyScrollUpTwoMessages]: () => {
+					const upButton = document.getElementById('upButton');
+					goUpTwoMessages(upButton || null);
+				},
+				[shortcuts.shortcutKeyScrollDownTwoMessages]: () => {
+					const downButton = document.getElementById('downButton');
+					goDownTwoMessages(downButton || null);
+				},
 				[shortcuts.shortcutKeyCopyAllResponses]: copyAll,
 				[shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
 				[shortcuts.shortcutKeyCopyLowest]: () => {
-					const copyPath = "M12.668 10.667C12.668";
+					const copyPath = 'M12.668 10.667C12.668';
 
 					// Find the correct button
-					const visibleButtons = Array.from(
-						document.querySelectorAll("button"),
-					).filter((btn) => {
+					const visibleButtons = Array.from(document.querySelectorAll('button')).filter((btn) => {
 						if (!btn.querySelector(`svg path[d^="${copyPath}"]`)) return false;
 						const r = btn.getBoundingClientRect();
 						return (
 							r.top >= 0 &&
 							r.left >= 0 &&
-							r.bottom <=
-							(window.innerHeight || document.documentElement.clientHeight) &&
-							r.right <=
-							(window.innerWidth || document.documentElement.clientWidth)
+							r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+							r.right <= (window.innerWidth || document.documentElement.clientWidth)
 						);
 					});
 					if (!visibleButtons.length) return;
 
 					const btn = visibleButtons.at(-1); // actually assign btn!
-					const isMsgCopy =
-						btn.getAttribute("data-testid") === "copy-turn-action-button";
+					const isMsgCopy = btn.getAttribute('data-testid') === 'copy-turn-action-button';
 
 					if (window.gsap) flashBorder(btn);
 
@@ -1526,14 +1598,12 @@ const DELAYS = {
 								.readText()
 								.then((text) => {
 									const trimmed = text.trim();
-									if (/^```[\s\S]*```$/.test(trimmed))
-										return navigator.clipboard.writeText(text);
+									if (/^```[\s\S]*```$/.test(trimmed)) return navigator.clipboard.writeText(text);
 									if (
 										isMsgCopy &&
-										typeof window.removeMarkdownOnCopyCheckbox !==
-										"undefined" &&
+										typeof window.removeMarkdownOnCopyCheckbox !== 'undefined' &&
 										window.removeMarkdownOnCopyCheckbox &&
-										typeof stripMarkdownOutsideCodeblocks === "function"
+										typeof stripMarkdownOutsideCodeblocks === 'function'
 									) {
 										const cleaned = stripMarkdownOutsideCodeblocks(text);
 										return navigator.clipboard.writeText(cleaned);
@@ -1553,18 +1623,20 @@ const DELAYS = {
 					// always scroll to center if possible, clamp if not
 					const gsapScrollToCenterAndClick = (button) => {
 						// Strong guards against stale or non-elements
-						if (!button || !button.isConnected || typeof button.click !== "function") return;
+						if (!button || !button.isConnected || typeof button.click !== 'function') return;
 
 						// Resolve a valid scroll container; fall back to window if not an Element.
 						let container = window;
 						try {
-							if (typeof getScrollableContainer === "function") {
+							if (typeof getScrollableContainer === 'function') {
 								const candidate = getScrollableContainer();
 								if (candidate && candidate instanceof Element && candidate.isConnected) {
 									container = candidate;
 								}
 							}
-						} catch { /* ignore */ }
+						} catch {
+							/* ignore */
+						}
 
 						// Compute geometry relative to the chosen container
 						let contTop = 0;
@@ -1574,26 +1646,30 @@ const DELAYS = {
 								const cr = container.getBoundingClientRect();
 								contTop = cr.top;
 								contHeight = container.clientHeight;
-							} catch { /* fall back to defaults */ }
+							} catch {
+								/* fall back to defaults */
+							}
 						}
 
 						const rect = button.getBoundingClientRect();
 						const offsetCenter = (contHeight - rect.height) / 2;
 
-						let targetY = container === window
-							? window.scrollY + rect.top - offsetCenter
-							: container.scrollTop + (rect.top - contTop) - offsetCenter;
+						let targetY =
+							container === window
+								? window.scrollY + rect.top - offsetCenter
+								: container.scrollTop + (rect.top - contTop) - offsetCenter;
 
-						const maxScroll = container === window
-							? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
-							: Math.max(0, container.scrollHeight - container.clientHeight);
+						const maxScroll =
+							container === window
+								? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+								: Math.max(0, container.scrollHeight - container.clientHeight);
 
 						targetY = Math.max(0, Math.min(targetY, maxScroll));
 
 						// Click only if the element still exists at click time
 						const safeClick = () => {
 							// Optional chaining keeps this null-safe & satisfies the linter.
-							const canClick = button?.isConnected && typeof button?.click === "function";
+							const canClick = button?.isConnected && typeof button?.click === 'function';
 							if (!canClick) return;
 							try {
 								button.click();
@@ -1602,10 +1678,11 @@ const DELAYS = {
 							}
 						};
 
-
 						const finish = () => {
 							// Don’t let a missing helper kill the click
-							try { if (typeof flashBorder === "function") flashBorder(button); } catch { }
+							try {
+								if (typeof flashBorder === 'function') flashBorder(button);
+							} catch {}
 							setTimeout(safeClick, 200);
 						};
 
@@ -1615,13 +1692,13 @@ const DELAYS = {
 								// If ScrollToPlugin isn't registered, bail to native fallback
 								const hasScrollTo =
 									(gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
-									(typeof ScrollToPlugin !== "undefined");
+									typeof ScrollToPlugin !== 'undefined';
 								if (!hasScrollTo) return false;
 
 								gsap.to(container, {
 									duration: 0.6,
 									scrollTo: { y: targetY, autoKill: true },
-									ease: "power4.out",
+									ease: 'power4.out',
 									onComplete: finish,
 								});
 								return true;
@@ -1634,9 +1711,9 @@ const DELAYS = {
 						if (!animateWithGsap()) {
 							try {
 								if (container === window) {
-									window.scrollTo({ top: targetY, behavior: "smooth" });
-								} else if (typeof container.scrollTo === "function") {
-									container.scrollTo({ top: targetY, behavior: "smooth" });
+									window.scrollTo({ top: targetY, behavior: 'smooth' });
+								} else if (typeof container.scrollTo === 'function') {
+									container.scrollTo({ top: targetY, behavior: 'smooth' });
 								} else {
 									container.scrollTop = targetY;
 								}
@@ -1649,20 +1726,14 @@ const DELAYS = {
 						}
 					};
 
-
-
 					setTimeout(() => {
 						try {
 							// --- Find all edit buttons as in 111 ---
 							const allButtons = Array.from(
-								document.querySelectorAll(
-									'button svg path[d^="M11.3312 3.56837C12.7488"]',
-								),
-							).map((svgPath) => svgPath.closest("button"));
+								document.querySelectorAll('button svg path[d^="M11.3312 3.56837C12.7488"]'),
+							).map((svgPath) => svgPath.closest('button'));
 
-							const composerBackground = document.getElementById(
-								"composer-background",
-							);
+							const composerBackground = document.getElementById('composer-background');
 							const composerRect = composerBackground
 								? composerBackground.getBoundingClientRect()
 								: null;
@@ -1694,11 +1765,8 @@ const DELAYS = {
 								({ rect }) =>
 									rect.bottom > 0 &&
 									rect.right > 0 &&
-									rect.top <
-									(window.innerHeight ||
-										document.documentElement.clientHeight) &&
-									rect.left <
-									(window.innerWidth || document.documentElement.clientWidth),
+									rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
+									rect.left < (window.innerWidth || document.documentElement.clientWidth),
 							);
 
 							let targetButton = null;
@@ -1711,17 +1779,13 @@ const DELAYS = {
 							} else {
 								// No button in viewport: scroll up to and center the next higher button
 								// (highest button that is still above the viewport)
-								const aboveViewport = filteredButtonsData.filter(
-									({ rect }) => rect.bottom < 0,
-								);
+								const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
 
 								if (aboveViewport.length > 0) {
 									// Among those above the viewport, pick the one closest to the viewport
 									// i.e. the one with the largest rect.bottom
 									const target = aboveViewport.reduce((closest, current) =>
-										current.rect.bottom > closest.rect.bottom
-											? current
-											: closest,
+										current.rect.bottom > closest.rect.bottom ? current : closest,
 									);
 									targetButton = target.btn;
 								}
@@ -1739,11 +1803,9 @@ const DELAYS = {
 				[shortcuts.shortcutKeySendEdit]: () => {
 					try {
 						// Find all possible send buttons (second button in each container)
-						const sendButtons = Array.from(
-							document.querySelectorAll("div.flex.justify-end.gap-2"),
-						)
+						const sendButtons = Array.from(document.querySelectorAll('div.flex.justify-end.gap-2'))
 							.map((container) => {
-								const buttons = container.querySelectorAll("button");
+								const buttons = container.querySelectorAll('button');
 								return buttons.length >= 2 ? buttons[1] : null;
 							})
 							.filter(Boolean);
@@ -1754,11 +1816,8 @@ const DELAYS = {
 							return (
 								rect.top >= 0 &&
 								rect.left >= 0 &&
-								rect.bottom <=
-								(window.innerHeight ||
-									document.documentElement.clientHeight) &&
-								rect.right <=
-								(window.innerWidth || document.documentElement.clientWidth)
+								rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+								rect.right <= (window.innerWidth || document.documentElement.clientWidth)
 							);
 						});
 
@@ -1779,8 +1838,8 @@ const DELAYS = {
 					// 1) Fire the native “New Chat” shortcut first (Ctrl/Cmd + Shift + O)
 					const isMac = isMacPlatform();
 					const eventInit = {
-						key: "o",
-						code: "KeyO",
+						key: 'o',
+						code: 'KeyO',
 						keyCode: 79,
 						which: 79,
 						bubbles: true,
@@ -1790,8 +1849,8 @@ const DELAYS = {
 						ctrlKey: !isMac,
 						metaKey: isMac,
 					};
-					document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+					document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+					document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
 
 					// 2) Fallbacks only if nothing clickable is visible
 
@@ -1813,8 +1872,8 @@ const DELAYS = {
 					// 1) Fire the native “Search Conversation History” shortcut first (Ctrl/Cmd + K)
 					const isMac = isMacPlatform();
 					const eventInit = {
-						key: "k",
-						code: "KeyK",
+						key: 'k',
+						code: 'KeyK',
 						keyCode: 75,
 						which: 75,
 						bubbles: true,
@@ -1825,18 +1884,18 @@ const DELAYS = {
 						metaKey: isMac,
 						altKey: false,
 					};
-					document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+					document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+					document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
 
 					// 2a) Try the test-id button
-					const searchBtn = document.querySelector('button[data-testid="search-conversation-button"]');
+					const searchBtn = document.querySelector(
+						'button[data-testid="search-conversation-button"]',
+					);
 					if (safeClick(searchBtn)) return;
 
 					// 2b) Very old SVG-path fallback
-					const path = document.querySelector(
-						'button svg path[d^="M10.75 4.25C7.16015"]',
-					);
-					const btn = path?.closest("button");
+					const path = document.querySelector('button svg path[d^="M10.75 4.25C7.16015"]');
+					const btn = path?.closest('button');
 					if (safeClick(btn)) return;
 				},
 				[shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
@@ -1846,8 +1905,8 @@ const DELAYS = {
 
 					gsap.to(el, {
 						duration: 0.6,
-						scrollTo: { y: "max" },
-						ease: "power4.out",
+						scrollTo: { y: 'max' },
+						ease: 'power4.out',
 					});
 				},
 				[shortcuts.shortcutKeyScrollToTop]: () => {
@@ -1858,31 +1917,27 @@ const DELAYS = {
 					gsap.to(el, {
 						duration: 0.6,
 						scrollTo: { y: 0 },
-						ease: "power4.out",
+						ease: 'power4.out',
 					});
 				},
 				// @note Toggle Sidebar Function
 				[shortcuts.shortcutKeyToggleSidebar]: function toggleSidebar() {
 					// —— Directional snap logic ——
-					const slimBarEl = document.getElementById("stage-sidebar-tiny-bar");
+					const slimBarEl = document.getElementById('stage-sidebar-tiny-bar');
 					const largeSidebarEl = document.querySelector(
-						"aside#stage-sidebar:not([inert]):not(.pointer-events-none)",
+						'aside#stage-sidebar:not([inert]):not(.pointer-events-none)',
 					);
 					if (window._fadeSlimSidebarEnabled && slimBarEl && !largeSidebarEl) {
 						window.hideSlimSidebarBarInstant();
-					} else if (
-						window._fadeSlimSidebarEnabled &&
-						slimBarEl &&
-						largeSidebarEl
-					) {
+					} else if (window._fadeSlimSidebarEnabled && slimBarEl && largeSidebarEl) {
 						window.flashSlimSidebarBar();
 					}
 
 					// —— Existing toggle logic ——
 					const isMac = isMacPlatform();
 					const eventInit = {
-						key: "s",
-						code: "KeyS",
+						key: 's',
+						code: 'KeyS',
 						keyCode: 83,
 						which: 83,
 						bubbles: true,
@@ -1894,13 +1949,13 @@ const DELAYS = {
 					};
 
 					// 1) Try native keyboard toggle
-					document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+					document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+					document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
 					if (
-						document.querySelector('button[data-testid="close-sidebar-button"]')
-							?.offsetParent !== null
+						document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !==
+						null
 					) {
-						setTimeout(() => { }, 30);
+						setTimeout(() => {}, 30);
 						return;
 					}
 
@@ -1909,7 +1964,7 @@ const DELAYS = {
 						'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
 					);
 					if (safeClick(direct)) {
-						setTimeout(() => { }, 30);
+						setTimeout(() => {}, 30);
 						return;
 					}
 
@@ -1935,15 +1990,15 @@ const DELAYS = {
 					];
 					for (const sel of selectors) {
 						const el = document.querySelector(sel);
-						const btn = el?.closest("button");
+						const btn = el?.closest('button');
 						if (safeClick(btn)) {
-							setTimeout(() => { }, 30);
+							setTimeout(() => {}, 30);
 							return;
 						}
 					}
 
 					// 4) If still nothing, just exit
-					setTimeout(() => { }, 30);
+					setTimeout(() => {}, 30);
 				},
 				[shortcuts.shortcutKeyActivateInput]: function activateInput() {
 					const selectors = [
@@ -1962,8 +2017,8 @@ const DELAYS = {
 
 					// Fallback: trigger the page’s native shortcut (Shift + Escape)
 					const eventInit = {
-						key: "Escape",
-						code: "Escape",
+						key: 'Escape',
+						code: 'Escape',
 						keyCode: 27,
 						which: 27,
 						bubbles: true,
@@ -1973,28 +2028,26 @@ const DELAYS = {
 						ctrlKey: false,
 						metaKey: false,
 					};
-					document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-					document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
+					document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+					document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
 				},
 				[shortcuts.shortcutKeySearchWeb]: async () => {
 					// Unique config for this action
-					const ICON_PATH_PREFIX = "M10 2.125C14.3492"; // globe icon prefix
+					const ICON_PATH_PREFIX = 'M10 2.125C14.3492'; // globe icon prefix
 					await runActionByIcon(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
 					const SCROLL_ANCHOR_PCT =
-						typeof window.SCROLL_ANCHOR_PCT === "number"
-							? window.SCROLL_ANCHOR_PCT
-							: 80;
+						typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
 					const POST_CLICK_DELAY = 350;
 
 					const getScrollableContainer =
-						typeof window.getScrollableContainer === "function"
+						typeof window.getScrollableContainer === 'function'
 							? window.getScrollableContainer
 							: () => window;
 
 					const composerRect = () => {
-						const el = document.getElementById("composer-background");
+						const el = document.getElementById('composer-background');
 						return el ? el.getBoundingClientRect() : null;
 					};
 
@@ -2006,14 +2059,12 @@ const DELAYS = {
 							container === window
 								? { top: 0, height: window.innerHeight }
 								: {
-									top: container.getBoundingClientRect().top,
-									height: container.clientHeight,
-								};
+										top: container.getBoundingClientRect().top,
+										height: container.clientHeight,
+									};
 
-						const anchorPx =
-							(contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-						const current =
-							container === window ? window.scrollY : container.scrollTop;
+						const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+						const current = container === window ? window.scrollY : container.scrollTop;
 						let targetY =
 							container === window
 								? current + rect.top - anchorPx
@@ -2021,15 +2072,15 @@ const DELAYS = {
 
 						const maxScroll =
 							container === window
-								? (document.scrollingElement || document.documentElement)
-									.scrollHeight - window.innerHeight
+								? (document.scrollingElement || document.documentElement).scrollHeight -
+									window.innerHeight
 								: container.scrollHeight - container.clientHeight;
 						targetY = Math.max(0, Math.min(targetY, maxScroll));
 
 						gsap.to(container, {
 							duration: 0.6,
 							scrollTo: { y: targetY, autoKill: false },
-							ease: "power4.out",
+							ease: 'power4.out',
 							onComplete,
 						});
 					};
@@ -2042,14 +2093,12 @@ const DELAYS = {
 							container === window
 								? { top: 0, height: window.innerHeight }
 								: {
-									top: container.getBoundingClientRect().top,
-									height: container.clientHeight,
-								};
+										top: container.getBoundingClientRect().top,
+										height: container.clientHeight,
+									};
 
-						const anchorPx =
-							(contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-						const currentScroll =
-							container === window ? window.scrollY : container.scrollTop;
+						const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+						const currentScroll = container === window ? window.scrollY : container.scrollTop;
 						const btnTop =
 							container === window
 								? rect.top + window.scrollY
@@ -2061,28 +2110,24 @@ const DELAYS = {
 					}
 
 					const getMsgId = (btn) =>
-						btn.closest("[data-message-id]")?.getAttribute("data-message-id");
+						btn.closest('[data-message-id]')?.getAttribute('data-message-id');
 
 					const relaunchHover = (wrapper) => {
 						if (!wrapper) return;
-						wrapper.classList.add("force-hover");
-						["pointerover", "pointerenter", "mouseover"].forEach((evt) => {
+						wrapper.classList.add('force-hover');
+						['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
 							wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
 						});
 					};
 
 					/* -------- Candidate collection & priority logic -------- */
 					const collectCandidates = () => {
-						const divBtns = Array.from(
-							document.querySelectorAll("div.tabular-nums"),
-						)
+						const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
 							.map((el) => el.previousElementSibling)
-							.filter((el) => el?.tagName === "BUTTON");
+							.filter((el) => el?.tagName === 'BUTTON');
 						const pathBtns = Array.from(
-							document.querySelectorAll(
-								'button svg path[d^="M11.5292 3.7793"]',
-							),
-						).map((p) => p.closest("button"));
+							document.querySelectorAll('button svg path[d^="M11.5292 3.7793"]'),
+						).map((p) => p.closest('button'));
 						return [...divBtns, ...pathBtns].filter(Boolean);
 					};
 
@@ -2090,11 +2135,11 @@ const DELAYS = {
 						const comp = composerRect();
 						return comp
 							? !(
-								rect.bottom < comp.top ||
-								rect.top > comp.bottom ||
-								rect.right < comp.left ||
-								rect.left > comp.right
-							)
+									rect.bottom < comp.top ||
+									rect.top > comp.bottom ||
+									rect.right < comp.left ||
+									rect.left > comp.right
+								)
 							: false;
 					};
 
@@ -2112,40 +2157,30 @@ const DELAYS = {
 								rect,
 								absBottom: rect.bottom + scrollY,
 								fullyVisible:
-									rect.top >= 0 &&
-									rect.bottom <= viewH - BOTTOM_BUFFER &&
-									!isOverlapComposer(rect),
+									rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
 							};
 						});
 
 						// a) lowest fully visible
 						const fully = withMeta.filter((m) => m.fullyVisible);
 						if (fully.length) {
-							return fully.reduce((a, b) =>
-								a.rect.bottom > b.rect.bottom ? a : b,
-							).btn;
+							return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
 						}
 
 						// b) just above viewport
 						const above = withMeta.filter((m) => m.rect.bottom <= 0);
 						if (above.length) {
-							return above.reduce((a, b) =>
-								a.rect.bottom > b.rect.bottom ? a : b,
-							).btn;
+							return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
 						}
 
 						// c) lowest overall
-						return withMeta.reduce((a, b) =>
-							a.absBottom > b.absBottom ? a : b,
-						).btn;
+						return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
 					};
 
 					const recenter = (msgId) => {
 						if (!msgId) return;
 						const container = getScrollableContainer();
-						const target = document.querySelector(
-							`[data-message-id="${msgId}"] button`,
-						);
+						const target = document.querySelector(`[data-message-id="${msgId}"] button`);
 						if (!target) return;
 						scrollToAnchor(container, target);
 					};
@@ -2159,11 +2194,7 @@ const DELAYS = {
 							const container = getScrollableContainer();
 
 							// Only in preview mode: skip already-centered candidate
-							if (
-								opts.previewOnly &&
-								target &&
-								isButtonCentered(container, target)
-							) {
+							if (opts.previewOnly && target && isButtonCentered(container, target)) {
 								const idx = all.indexOf(target);
 								let found = false;
 								for (let i = idx - 1; i >= 0; --i) {
@@ -2208,18 +2239,16 @@ const DELAYS = {
 				// Export / attach to your shortcuts map
 				[shortcuts.shortcutKeyNextThread]: (opts = {}) => {
 					const SCROLL_ANCHOR_PCT =
-						typeof window.SCROLL_ANCHOR_PCT === "number"
-							? window.SCROLL_ANCHOR_PCT
-							: 80;
+						typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
 					const POST_CLICK_DELAY = 350;
 
 					const getScrollableContainer =
-						typeof window.getScrollableContainer === "function"
+						typeof window.getScrollableContainer === 'function'
 							? window.getScrollableContainer
 							: () => window;
 
 					const composerRect = () => {
-						const el = document.getElementById("composer-background");
+						const el = document.getElementById('composer-background');
 						return el ? el.getBoundingClientRect() : null;
 					};
 
@@ -2231,14 +2260,12 @@ const DELAYS = {
 							container === window
 								? { top: 0, height: window.innerHeight }
 								: {
-									top: container.getBoundingClientRect().top,
-									height: container.clientHeight,
-								};
+										top: container.getBoundingClientRect().top,
+										height: container.clientHeight,
+									};
 
-						const anchorPx =
-							(contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-						const current =
-							container === window ? window.scrollY : container.scrollTop;
+						const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+						const current = container === window ? window.scrollY : container.scrollTop;
 						let targetY =
 							container === window
 								? current + rect.top - anchorPx
@@ -2246,15 +2273,15 @@ const DELAYS = {
 
 						const maxScroll =
 							container === window
-								? (document.scrollingElement || document.documentElement)
-									.scrollHeight - window.innerHeight
+								? (document.scrollingElement || document.documentElement).scrollHeight -
+									window.innerHeight
 								: container.scrollHeight - container.clientHeight;
 						targetY = Math.max(0, Math.min(targetY, maxScroll));
 
 						gsap.to(container, {
 							duration: 0.6,
 							scrollTo: { y: targetY, autoKill: false },
-							ease: "power4.out",
+							ease: 'power4.out',
 							onComplete,
 						});
 					};
@@ -2267,14 +2294,12 @@ const DELAYS = {
 							container === window
 								? { top: 0, height: window.innerHeight }
 								: {
-									top: container.getBoundingClientRect().top,
-									height: container.clientHeight,
-								};
+										top: container.getBoundingClientRect().top,
+										height: container.clientHeight,
+									};
 
-						const anchorPx =
-							(contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-						const currentScroll =
-							container === window ? window.scrollY : container.scrollTop;
+						const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+						const currentScroll = container === window ? window.scrollY : container.scrollTop;
 						const btnTop =
 							container === window
 								? rect.top + window.scrollY
@@ -2286,50 +2311,44 @@ const DELAYS = {
 					}
 
 					const getMsgId = (btn) =>
-						btn.closest("[data-message-id]")?.getAttribute("data-message-id");
+						btn.closest('[data-message-id]')?.getAttribute('data-message-id');
 
 					const relaunchHover = (wrapper) => {
 						if (!wrapper) return;
-						wrapper.classList.add("force-hover");
-						["pointerover", "pointerenter", "mouseover"].forEach((evt) => {
+						wrapper.classList.add('force-hover');
+						['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
 							wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
 						});
 					};
 
 					/* -------- Candidate collection & priority logic -------- */
 					const collectCandidates = () => {
-						const divBtns = Array.from(
-							document.querySelectorAll("div.tabular-nums"),
-						)
+						const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
 							.map((el) => el.previousElementSibling)
-							.filter((el) => el?.tagName === "BUTTON");
+							.filter((el) => el?.tagName === 'BUTTON');
 						const pathBtns = Array.from(
-							document.querySelectorAll(
-								'button svg path[d^="M7.52925 3.7793"]',
-							),
-						).map((p) => p.closest("button"));
+							document.querySelectorAll('button svg path[d^="M7.52925 3.7793"]'),
+						).map((p) => p.closest('button'));
 
 						// Exclude "Thought for" buttons
 						const isExcluded = (btn) => {
-							const span = btn.querySelector("span");
+							const span = btn.querySelector('span');
 							if (!span) return false;
 							return /^Thought for\b/.test(span.textContent.trim());
 						};
 
-						return [...divBtns, ...pathBtns]
-							.filter(Boolean)
-							.filter((btn) => !isExcluded(btn));
+						return [...divBtns, ...pathBtns].filter(Boolean).filter((btn) => !isExcluded(btn));
 					};
 
 					const isOverlapComposer = (rect) => {
 						const comp = composerRect();
 						return comp
 							? !(
-								rect.bottom < comp.top ||
-								rect.top > comp.bottom ||
-								rect.right < comp.left ||
-								rect.left > comp.right
-							)
+									rect.bottom < comp.top ||
+									rect.top > comp.bottom ||
+									rect.right < comp.left ||
+									rect.left > comp.right
+								)
 							: false;
 					};
 
@@ -2347,40 +2366,30 @@ const DELAYS = {
 								rect,
 								absBottom: rect.bottom + scrollY,
 								fullyVisible:
-									rect.top >= 0 &&
-									rect.bottom <= viewH - BOTTOM_BUFFER &&
-									!isOverlapComposer(rect),
+									rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
 							};
 						});
 
 						// a) lowest fully visible
 						const fully = withMeta.filter((m) => m.fullyVisible);
 						if (fully.length) {
-							return fully.reduce((a, b) =>
-								a.rect.bottom > b.rect.bottom ? a : b,
-							).btn;
+							return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
 						}
 
 						// b) just above viewport
 						const above = withMeta.filter((m) => m.rect.bottom <= 0);
 						if (above.length) {
-							return above.reduce((a, b) =>
-								a.rect.bottom > b.rect.bottom ? a : b,
-							).btn;
+							return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
 						}
 
 						// c) lowest overall
-						return withMeta.reduce((a, b) =>
-							a.absBottom > b.absBottom ? a : b,
-						).btn;
+						return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
 					};
 
 					const recenter = (msgId) => {
 						if (!msgId) return;
 						const container = getScrollableContainer();
-						const target = document.querySelector(
-							`[data-message-id="${msgId}"] button`,
-						);
+						const target = document.querySelector(`[data-message-id="${msgId}"] button`);
 						if (!target) return;
 						scrollToAnchor(container, target);
 					};
@@ -2394,11 +2403,7 @@ const DELAYS = {
 							const container = getScrollableContainer();
 
 							// Only in preview mode: skip already-centered candidate
-							if (
-								opts.previewOnly &&
-								target &&
-								isButtonCentered(container, target)
-							) {
+							if (opts.previewOnly && target && isButtonCentered(container, target)) {
 								// Find previous candidate that is not centered (just before target)
 								const idx = all.indexOf(target);
 								for (let i = idx - 1; i >= 0; --i) {
@@ -2438,21 +2443,19 @@ const DELAYS = {
 					// === Smart copy helpers (insert once after `const DEBUG = false;`) ===
 					function rangeToHTMLAndText(range) {
 						const frag = range.cloneContents();
-						const div = document.createElement("div");
+						const div = document.createElement('div');
 						div.appendChild(frag);
 						return {
 							html: div.innerHTML,
-							text: div.innerText || div.textContent || "",
+							text: div.innerText || div.textContent || '',
 						};
 					}
 
 					function fragmentHasSemanticList(html) {
-						const div = document.createElement("div");
+						const div = document.createElement('div');
 						div.innerHTML = html;
 						// True semantic lists (native or ARIA)
-						return !!div.querySelector(
-							'ol, ul, [role="list"], [role="listitem"]',
-						);
+						return !!div.querySelector('ol, ul, [role="list"], [role="listitem"]');
 					}
 
 					async function smartCopyFromRange(range) {
@@ -2462,12 +2465,12 @@ const DELAYS = {
 						if (navigator.clipboard && window.ClipboardItem) {
 							const items = keepHtml
 								? {
-									"text/html": new Blob([html], { type: "text/html" }),
-									"text/plain": new Blob([text], { type: "text/plain" }),
-								}
+										'text/html': new Blob([html], { type: 'text/html' }),
+										'text/plain': new Blob([text], { type: 'text/plain' }),
+									}
 								: {
-									"text/plain": new Blob([text], { type: "text/plain" }),
-								};
+										'text/plain': new Blob([text], { type: 'text/plain' }),
+									};
 							try {
 								await navigator.clipboard.write([new ClipboardItem(items)]);
 								return;
@@ -2477,16 +2480,16 @@ const DELAYS = {
 						}
 
 						document.addEventListener(
-							"copy",
+							'copy',
 							(e) => {
-								if (keepHtml) e.clipboardData.setData("text/html", html);
-								e.clipboardData.setData("text/plain", text);
+								if (keepHtml) e.clipboardData.setData('text/html', html);
+								e.clipboardData.setData('text/plain', text);
 								e.preventDefault();
 							},
 							{ once: true },
 						);
 
-						document.execCommand("copy");
+						document.execCommand('copy');
 					}
 					// === End smart copy helpers ===
 
@@ -2533,15 +2536,14 @@ const DELAYS = {
 								void smartCopyFromRange(range);
 							}
 						} catch (err) {
-							if (typeof DEBUG !== "undefined" && DEBUG)
-								console.debug("doSelectAndCopy failed:", err);
+							if (typeof DEBUG !== 'undefined' && DEBUG)
+								console.debug('doSelectAndCopy failed:', err);
 						}
 					}
 
 					// Helper: find the innermost visible text container for a given role container
 					function findContentElForTurn(roleContainer) {
-						const isUser =
-							roleContainer.getAttribute("data-message-author-role") === "user";
+						const isUser = roleContainer.getAttribute('data-message-author-role') === 'user';
 						if (isUser) {
 							return (
 								roleContainer.querySelector(
@@ -2560,30 +2562,21 @@ const DELAYS = {
 							roleContainer.querySelector(
 								'[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
 							) ||
-							roleContainer.querySelector(
-								".prose, .markdown, .markdown-new-styling",
-							) ||
-							roleContainer.querySelector(
-								'[data-message-author-role="assistant"]',
-							)
+							roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
+							roleContainer.querySelector('[data-message-author-role="assistant"]')
 						);
 					}
 
-
 					// Attach the click handler once
 					if (!window.__selectThenCopyCopyHandlerAttached) {
-						document.addEventListener("click", (e) => {
-							const btn = e.target.closest(
-								'[data-testid="copy-turn-action-button"]',
-							);
+						document.addEventListener('click', (e) => {
+							const btn = e.target.closest('[data-testid="copy-turn-action-button"]');
 							if (!btn) return;
 
 							const roleContainer =
-								btn.closest("[data-message-author-role]") ||
+								btn.closest('[data-message-author-role]') ||
 								btn
-									.closest(
-										'article[data-turn], article[data-testid^="conversation-turn-"]',
-									)
+									.closest('article[data-turn], article[data-testid^="conversation-turn-"]')
 									?.querySelector(
 										'[data-message-author-role="assistant"], [data-message-author-role="user"]',
 									);
@@ -2591,10 +2584,7 @@ const DELAYS = {
 							if (!roleContainer) return;
 
 							const contentEl = findContentElForTurn(roleContainer);
-							if (
-								contentEl &&
-								(contentEl.innerText || contentEl.textContent || "").trim()
-							) {
+							if (contentEl && (contentEl.innerText || contentEl.textContent || '').trim()) {
 								// Clicking the copy button should always copy
 								doSelectAndCopy(contentEl, true);
 							}
@@ -2605,11 +2595,9 @@ const DELAYS = {
 					return () => {
 						setTimeout(() => {
 							try {
-								const onlySelectAssistant =
-									window.onlySelectAssistantCheckbox || false;
+								const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
 								const onlySelectUser = window.onlySelectUserCheckbox || false;
-								const disableCopyAfterSelect =
-									window.disableCopyAfterSelectCheckbox || false;
+								const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
 								const shouldCopy = !disableCopyAfterSelect;
 
 								const allConversationTurns = Array.from(
@@ -2618,28 +2606,21 @@ const DELAYS = {
 									),
 								);
 
-								const viewportHeight =
-									window.innerHeight || document.documentElement.clientHeight;
-								const viewportWidth =
-									window.innerWidth || document.documentElement.clientWidth;
+								const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+								const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
 
 								const composerRect = (() => {
-									const composer = document.getElementById(
-										"composer-background",
-									);
+									const composer = document.getElementById('composer-background');
 									return composer ? composer.getBoundingClientRect() : null;
 								})();
 
 								const visibleTurns = allConversationTurns.filter((el) => {
 									const rect = el.getBoundingClientRect();
-									const horizontallyVisible =
-										rect.right > 0 && rect.left < viewportWidth;
-									const verticallyVisible =
-										rect.bottom > 0 && rect.top < viewportHeight;
+									const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
+									const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
 									if (!(horizontallyVisible && verticallyVisible)) return false;
 
-									if (composerRect && rect.top >= composerRect.top)
-										return false;
+									if (composerRect && rect.top >= composerRect.top) return false;
 
 									return true;
 								});
@@ -2650,10 +2631,7 @@ const DELAYS = {
 										!el.querySelector('[data-message-author-role="assistant"]')
 									)
 										return false;
-									if (
-										onlySelectUser &&
-										!el.querySelector('[data-message-author-role="user"]')
-									)
+									if (onlySelectUser && !el.querySelector('[data-message-author-role="user"]'))
 										return false;
 									return true;
 								});
@@ -2661,14 +2639,11 @@ const DELAYS = {
 								if (!filteredVisibleTurns.length) return;
 
 								filteredVisibleTurns.sort(
-									(a, b) =>
-										b.getBoundingClientRect().top -
-										a.getBoundingClientRect().top,
+									(a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
 								);
 
 								const { lastSelectedIndex } = window.selectThenCopyState;
-								const nextIndex =
-									(lastSelectedIndex + 1) % filteredVisibleTurns.length;
+								const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
 								const selectedTurn = filteredVisibleTurns[nextIndex];
 								if (!selectedTurn) return;
 
@@ -2677,9 +2652,7 @@ const DELAYS = {
 
 								function selectAndCopyMessage(turn, shouldCopyParam) {
 									try {
-										const isUser = !!turn.querySelector(
-											'[data-message-author-role="user"]',
-										);
+										const isUser = !!turn.querySelector('[data-message-author-role="user"]');
 										const isAssistant = !!turn.querySelector(
 											'[data-message-author-role="assistant"]',
 										);
@@ -2707,24 +2680,19 @@ const DELAYS = {
 												turn.querySelector(
 													'[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
 												) ||
-												turn.querySelector(
-													".prose, .markdown, .markdown-new-styling",
-												) ||
-												turn.querySelector(
-													'[data-message-author-role="assistant"]',
-												);
+												turn.querySelector('.prose, .markdown, .markdown-new-styling') ||
+												turn.querySelector('[data-message-author-role="assistant"]');
 										}
 
 										if (!contentEl || !contentEl.innerText.trim()) return;
 
 										doSelectAndCopy(contentEl, !!shouldCopyParam);
 									} catch (err) {
-										if (DEBUG)
-											console.debug("selectAndCopyMessage failed:", err);
+										if (DEBUG) console.debug('selectAndCopyMessage failed:', err);
 									}
 								}
 							} catch (err) {
-								if (DEBUG) console.debug("outer selectThenCopy failure:", err);
+								if (DEBUG) console.debug('outer selectThenCopy failure:', err);
 							}
 						}, 50);
 					};
@@ -2747,7 +2715,7 @@ const DELAYS = {
 					window.toggleModelSelector();
 				},
 				[shortcuts.shortcutKeyRegenerate]: () => {
-					const REGEN_BTN_PATH = "M3.502 16.6663V13.3333C3.502";
+					const REGEN_BTN_PATH = 'M3.502 16.6663V13.3333C3.502';
 					const MENU_BTN_SELECTOR = `button[id^="radix-"] svg path[d^="${REGEN_BTN_PATH}"]`;
 					const MENUITEM_SELECTOR = `div[role="menuitem"] svg path[d^="${REGEN_BTN_PATH}"]`;
 
@@ -2756,19 +2724,15 @@ const DELAYS = {
 						return (
 							r.top >= 0 &&
 							r.left >= 0 &&
-							r.bottom <=
-							(window.innerHeight || document.documentElement.clientHeight) &&
-							r.right <=
-							(window.innerWidth || document.documentElement.clientWidth)
+							r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+							r.right <= (window.innerWidth || document.documentElement.clientWidth)
 						);
 					}
 
 					// Step 1: Find all visible matching menu buttons, pick the lowest one
-					const regenBtnPaths = Array.from(
-						document.querySelectorAll(MENU_BTN_SELECTOR),
-					);
+					const regenBtnPaths = Array.from(document.querySelectorAll(MENU_BTN_SELECTOR));
 					const visibleBtns = regenBtnPaths
-						.map((path) => path.closest("button"))
+						.map((path) => path.closest('button'))
 						.filter((btn) => btn && isVisible(btn));
 					if (!visibleBtns.length) return;
 					const lowestMenuBtn = visibleBtns[visibleBtns.length - 1];
@@ -2776,13 +2740,13 @@ const DELAYS = {
 					if (window.gsap) flashBorder(lowestMenuBtn);
 
 					// Step 1b: Open menu if not open
-					if (lowestMenuBtn.getAttribute("aria-expanded") !== "true") {
+					if (lowestMenuBtn.getAttribute('aria-expanded') !== 'true') {
 						lowestMenuBtn.focus();
-						for (const type of ["keydown", "keyup"]) {
+						for (const type of ['keydown', 'keyup']) {
 							lowestMenuBtn.dispatchEvent(
 								new KeyboardEvent(type, {
-									key: " ",
-									code: "Space",
+									key: ' ',
+									code: 'Space',
 									keyCode: 32,
 									charCode: 32,
 									bubbles: true,
@@ -2794,15 +2758,12 @@ const DELAYS = {
 					}
 
 					function clickLowestMenuItem(attempt = 0) {
-						const menuItemPaths = Array.from(
-							document.querySelectorAll(MENUITEM_SELECTOR),
-						);
+						const menuItemPaths = Array.from(document.querySelectorAll(MENUITEM_SELECTOR));
 						const visibleMenuItems = menuItemPaths
 							.map((path) => path.closest('div[role="menuitem"]'))
 							.filter((item) => item && isVisible(item));
 						if (visibleMenuItems.length) {
-							const lowestMenuItem =
-								visibleMenuItems[visibleMenuItems.length - 1];
+							const lowestMenuItem = visibleMenuItems[visibleMenuItems.length - 1];
 							if (window.gsap) flashBorder(lowestMenuItem);
 							setTimeout(() => {
 								lowestMenuItem.click();
@@ -2810,13 +2771,12 @@ const DELAYS = {
 							return;
 						}
 						// Retry for up to ~500ms if not found
-						if (attempt < 10)
-							setTimeout(() => clickLowestMenuItem(attempt + 1), 50);
+						if (attempt < 10) setTimeout(() => clickLowestMenuItem(attempt + 1), 50);
 					}
 
 					setTimeout(
 						() => clickLowestMenuItem(),
-						lowestMenuBtn.getAttribute("aria-expanded") === "true" ? 500 : 700,
+						lowestMenuBtn.getAttribute('aria-expanded') === 'true' ? 500 : 700,
 					);
 				},
 				[shortcuts.shortcutKeyTemporaryChat]: () => {
@@ -2827,19 +2787,19 @@ const DELAYS = {
 					safeClick(el);
 				},
 				[shortcuts.shortcutKeyStudy]: async () => {
-					const ICON_PATH_PREFIX = "M16.3965 5.01128C16.3963"; // book icon prefix
+					const ICON_PATH_PREFIX = 'M16.3965 5.01128C16.3963'; // book icon prefix
 					await runActionByIcon(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyCreateImage]: async () => {
-					const ICON_PATH_PREFIX = "M9.38759 8.53403C10.0712"; // image icon prefix
+					const ICON_PATH_PREFIX = 'M9.38759 8.53403C10.0712'; // image icon prefix
 					await runActionByIcon(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyToggleCanvas]: async () => {
-					const ICON_PATH_PREFIX = "M12.0303 4.11328C13.4406"; // canvas icon prefix
+					const ICON_PATH_PREFIX = 'M12.0303 4.11328C13.4406'; // canvas icon prefix
 					await runActionByIcon(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyAddPhotosFiles]: async () => {
-					const ICON_PATH_PREFIX = "M4.33496 12.5V7.5C4.33496"; // Add Photos & Files icon path prefix
+					const ICON_PATH_PREFIX = 'M4.33496 12.5V7.5C4.33496'; // Add Photos & Files icon path prefix
 					await runActionByIcon(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyToggleDictate]: () => {
@@ -2850,7 +2810,7 @@ const DELAYS = {
 					}, 300);
 
 					// Try fallback first (submit dictation)
-					const FALLBACK_ICON_PATH_PREFIX = "M15.4835 4.14551C15.6794";
+					const FALLBACK_ICON_PATH_PREFIX = 'M15.4835 4.14551C15.6794';
 					const fallbackPath = document.querySelector(
 						`svg path[d^="${FALLBACK_ICON_PATH_PREFIX}"]`,
 					);
@@ -2858,9 +2818,9 @@ const DELAYS = {
 						let el = fallbackPath;
 						for (let i = 0; i < 8 && el; i++) {
 							if (
-								el.tagName === "BUTTON" ||
-								el.tagName === "A" ||
-								el.getAttribute("role") === "button" ||
+								el.tagName === 'BUTTON' ||
+								el.tagName === 'A' ||
+								el.getAttribute('role') === 'button' ||
 								el.tabIndex >= 0
 							) {
 								if (safeClick(el)) return;
@@ -2871,17 +2831,15 @@ const DELAYS = {
 					}
 
 					// Try primary (start dictation)
-					const PRIMARY_ICON_PATH_PREFIX = "M15.7806 10.1963C16.1326";
-					const primaryPath = document.querySelector(
-						`svg path[d^="${PRIMARY_ICON_PATH_PREFIX}"]`,
-					);
+					const PRIMARY_ICON_PATH_PREFIX = 'M15.7806 10.1963C16.1326';
+					const primaryPath = document.querySelector(`svg path[d^="${PRIMARY_ICON_PATH_PREFIX}"]`);
 					if (primaryPath) {
 						let el = primaryPath;
 						for (let i = 0; i < 8 && el; i++) {
 							if (
-								el.tagName === "BUTTON" ||
-								el.tagName === "A" ||
-								el.getAttribute("role") === "button" ||
+								el.tagName === 'BUTTON' ||
+								el.tagName === 'A' ||
+								el.getAttribute('role') === 'button' ||
 								el.tabIndex >= 0
 							) {
 								if (safeClick(el)) return;
@@ -2900,10 +2858,10 @@ const DELAYS = {
 
 					const isClickable = (el) =>
 						el &&
-						typeof el.click === "function" &&
-						(el.tagName === "BUTTON" ||
-							el.tagName === "A" ||
-							el.getAttribute("role") === "button" ||
+						typeof el.click === 'function' &&
+						(el.tagName === 'BUTTON' ||
+							el.tagName === 'A' ||
+							el.getAttribute('role') === 'button' ||
 							el.tabIndex >= 0);
 
 					const getClickableAncestor = (node) => {
@@ -2921,8 +2879,8 @@ const DELAYS = {
 							if (!node) continue;
 							const target = getClickableAncestor(node) || node;
 							try {
-								target.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
-							} catch { }
+								target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+							} catch {}
 							flashBorder(target);
 							await sleep(DELAYS.beforeFinalClick);
 							smartClick(target);
@@ -2935,29 +2893,27 @@ const DELAYS = {
 					if (await trySelectorClick()) return;
 
 					// 2) Fallback: icon path prefix (still localization-proof, but less stable if the icon changes)
-					const ICON_PATH_PREFIX = "M14.2548 4.75488C14.5282";
+					const ICON_PATH_PREFIX = 'M14.2548 4.75488C14.5282';
 					await clickExposedIconButton(ICON_PATH_PREFIX);
 				},
 				[shortcuts.shortcutKeyShare]: async () => {
-					await clickButtonByTestId("share-chat-button");
+					await clickButtonByTestId('share-chat-button');
 				},
 				[shortcuts.shortcutKeyThinkLonger]: async () => {
-					const ICON_PATH_PREFIX = "M14.3352 10.0257C14.3352"; // think longer icon prefix
+					const ICON_PATH_PREFIX = 'M14.3352 10.0257C14.3352'; // think longer icon prefix
 					await clickExposedIconButton(ICON_PATH_PREFIX);
 				},
 			}; // Close keyFunctionMapping object @note Bottom of keyFunctionMapping
 
 			// Assign the functions to the window object for global access
-			window.toggleSidebar =
-				keyFunctionMappingAlt[shortcuts.shortcutKeyToggleSidebar];
-			window.newConversation =
-				keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
+			window.toggleSidebar = keyFunctionMappingAlt[shortcuts.shortcutKeyToggleSidebar];
+			window.newConversation = keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
 			window.globalScrollToBottom =
 				keyFunctionMappingAlt[shortcuts.shortcutKeyClickNativeScrollToBottom];
 
 			// Robust helper for all shortcut styles, including number keys!
 			function matchesShortcutKey(setting, event) {
-				if (!setting || setting === "\u00A0") return false;
+				if (!setting || setting === '\u00A0') return false;
 
 				// If it's a single digit, match against key and code for both top-row and numpad
 				if (/^\d$/.test(setting)) {
@@ -2987,13 +2943,13 @@ const DELAYS = {
 				return event.key && event.key.toLowerCase() === setting.toLowerCase();
 			}
 
-			document.addEventListener("keydown", (event) => {
+			document.addEventListener('keydown', (event) => {
 				if (
 					event.isComposing || // IME active (Hindi, Japanese)
 					event.keyCode === 229 || // Generic composition keyCode
-					["Control", "Meta", "Alt", "AltGraph"].includes(event.key) || // Modifier keys
-					event.getModifierState?.("AltGraph") || // AltGr pressed (ES, EU)
-					["Henkan", "Muhenkan", "KanaMode"].includes(event.key) // JIS IME-specific keys
+					['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
+					event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
+					['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
 				) {
 					return;
 				}
@@ -3002,8 +2958,7 @@ const DELAYS = {
 				const isAltPressed = event.altKey;
 
 				// Canonical key: use layout-aware key for text, keep exact for special keys
-				const keyIdentifier =
-					event.key.length === 1 ? event.key.toLowerCase() : event.key;
+				const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
 				// Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
 				if (isAltPressed) {
@@ -3024,18 +2979,14 @@ const DELAYS = {
 						// Get model codes cache safely (may be provided by ShortcutUtils)
 						const modelCodes =
 							window.ShortcutUtils &&
-								typeof window.ShortcutUtils.getModelPickerCodesCache ===
-								"function"
+							typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
 								? window.ShortcutUtils.getModelPickerCodesCache()
 								: [];
 
 						// Find a model slot assigned to that digit (normalizes Digit/Numpad via codeEquals)
 						const modelAssignedIndex =
-							window.ShortcutUtils &&
-								typeof window.ShortcutUtils.codeEquals === "function"
-								? modelCodes.findIndex((c) =>
-									window.ShortcutUtils.codeEquals(c, `Digit${digit}`),
-								)
+							window.ShortcutUtils && typeof window.ShortcutUtils.codeEquals === 'function'
+								? modelCodes.findIndex((c) => window.ShortcutUtils.codeEquals(c, `Digit${digit}`))
 								: -1;
 
 						if (modelAssignedIndex !== -1) {
@@ -3045,11 +2996,11 @@ const DELAYS = {
 								// Intercept only when Alt is the chosen modifier for model switching.
 								event.preventDefault();
 								// Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
-								if (typeof window.switchModelByIndex === "function") {
+								if (typeof window.switchModelByIndex === 'function') {
 									window.switchModelByIndex(modelAssignedIndex);
 								} else {
 									document.dispatchEvent(
-										new CustomEvent("modelPickerNumber", {
+										new CustomEvent('modelPickerNumber', {
 											detail: { index: modelAssignedIndex, event },
 										}),
 									);
@@ -3119,13 +3070,9 @@ const DELAYS = {
 					// … everything else (Ctrl + Enter, Ctrl + Backspace, etc.) stays the same ↓
 					// Try both keyIdentifier and event.code for lookup
 					const ctrlShortcut =
-						keyFunctionMappingCtrl[keyIdentifier] ||
-						keyFunctionMappingCtrl[event.code];
+						keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
 					if (ctrlShortcut) {
-						if (
-							isCtrlShortcutEnabled(keyIdentifier) ||
-							isCtrlShortcutEnabled(event.code)
-						) {
+						if (isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code)) {
 							event.preventDefault();
 							ctrlShortcut();
 						}
@@ -3153,81 +3100,71 @@ const DELAYS = {
 (() => {
 	function applyInitialTransitions() {
 		// Profile button
-		const profileBtn = document.querySelector(
-			'button[data-testid="profile-button"]',
-		);
+		const profileBtn = document.querySelector('button[data-testid="profile-button"]');
 		if (profileBtn) {
-			profileBtn.style.padding = "0";
-			profileBtn.style.overflow = "visible";
-			const img = profileBtn.querySelector("img");
+			profileBtn.style.padding = '0';
+			profileBtn.style.overflow = 'visible';
+			const img = profileBtn.querySelector('img');
 			if (img) {
 				gsap.to(img, {
 					scale: 0.85,
-					transformOrigin: "center",
-					borderRadius: "50%",
+					transformOrigin: 'center',
+					borderRadius: '50%',
 					duration: 0.2,
-					ease: "power1.out",
+					ease: 'power1.out',
 				});
 			}
-			const rounded = profileBtn.querySelector(".rounded-full");
+			const rounded = profileBtn.querySelector('.rounded-full');
 			if (rounded) {
-				rounded.style.borderRadius = "50%";
-				rounded.style.overflow = "visible";
+				rounded.style.borderRadius = '50%';
+				rounded.style.overflow = 'visible';
 			}
 		}
 
 		// Conversation edit buttons hover behavior
-		document.querySelectorAll(".group\\/conversation-turn").forEach((el) => {
-			el.style.display = "flex";
-			el.style.opacity = "0.1";
-			el.style.transition = "opacity 0.2s ease-in-out";
-			const parent = el.closest(".group\\/conversation-turn");
+		document.querySelectorAll('.group\\/conversation-turn').forEach((el) => {
+			el.style.display = 'flex';
+			el.style.opacity = '0.1';
+			el.style.transition = 'opacity 0.2s ease-in-out';
+			const parent = el.closest('.group\\/conversation-turn');
 			if (parent) {
-				parent.addEventListener("mouseenter", () =>
-					gsap.to(el, { opacity: 1, duration: 0.2 }),
-				);
-				parent.addEventListener("mouseleave", () =>
-					gsap.to(el, { opacity: 0.1, duration: 0.2 }),
-				);
+				parent.addEventListener('mouseenter', () => gsap.to(el, { opacity: 1, duration: 0.2 }));
+				parent.addEventListener('mouseleave', () => gsap.to(el, { opacity: 0.1, duration: 0.2 }));
 			}
 		});
 
 		// Disclaimer text color match
 		document
-			.querySelectorAll(".items-center.justify-center.p-2.text-center.text-xs")
+			.querySelectorAll('.items-center.justify-center.p-2.text-center.text-xs')
 			.forEach((el) => {
 				gsap.to(el, {
-					color: getComputedStyle(document.body).getPropertyValue(
-						"--main-surface-primary",
-					),
+					color: getComputedStyle(document.body).getPropertyValue('--main-surface-primary'),
 					duration: 0.1,
-					ease: "power1.out",
+					ease: 'power1.out',
 				});
 			});
 
 		// Sidebar labels truncation
 		document
-			.querySelectorAll("nav .relative.grow.overflow-hidden.whitespace-nowrap")
+			.querySelectorAll('nav .relative.grow.overflow-hidden.whitespace-nowrap')
 			.forEach((el) => {
-				el.style.whiteSpace = "nowrap";
-				el.style.overflow = "hidden";
-				el.style.textOverflow = "ellipsis";
-				el.style.fontSize = "0.9em";
+				el.style.whiteSpace = 'nowrap';
+				el.style.overflow = 'hidden';
+				el.style.textOverflow = 'ellipsis';
+				el.style.fontSize = '0.9em';
 			});
 
 		// Sidebar headers
-		document
-			.querySelectorAll("nav h3.px-2.text-xs.font-semibold")
-			.forEach((el) => {
-				el.style.display = "block";
-				el.style.backgroundColor = "var(--sidebar-surface-primary)";
-				el.style.width = "100%";
-			});
+		document.querySelectorAll('nav h3.px-2.text-xs.font-semibold').forEach((el) => {
+			el.style.display = 'block';
+			el.style.backgroundColor = 'var(--sidebar-surface-primary)';
+			el.style.width = '100%';
+		});
 
 		// Kill sidebar scrollbar
-		const main = document.querySelector("#main.transition-width");
+		const main = document.querySelector('#main.transition-width');
 		if (main) {
-			main.style.overflowY = "";
+			main.style.overflowY = '';
 		}
 	}
 
@@ -3242,41 +3179,41 @@ const DELAYS = {
 					if (n.nodeType !== 1) continue;
 
 					// Late-loaded conversation edit buttons
-					if (n.matches(".group\\/conversation-turn")) {
+					if (n.matches('.group\\/conversation-turn')) {
 						gsap.set(n, { opacity: 0.1 });
-						const parent = n.closest(".group\\/conversation-turn");
+						const parent = n.closest('.group\\/conversation-turn');
 						if (parent) {
-							parent.addEventListener("mouseenter", () =>
+							parent.addEventListener('mouseenter', () =>
 								gsap.to(n, { opacity: 1, duration: 0.2 }),
 							);
-							parent.addEventListener("mouseleave", () =>
+							parent.addEventListener('mouseleave', () =>
 								gsap.to(n, { opacity: 0.1, duration: 0.2 }),
 							);
 						}
 					}
 
 					// Delayed header fade (originally timeout-based)
-					if (n.matches(".flex.h-\\[44px\\].items-center.justify-between")) {
+					if (n.matches('.flex.h-\\[44px\\].items-center.justify-between')) {
 						gsap.to(n, {
 							opacity: 0.3,
 							duration: 0.2,
-							ease: "sine.out",
+							ease: 'sine.out',
 						});
 					}
 
 					// Shrink header height if `.md\:h-header-height` appears
-					if (n.matches(".md\\:h-header-height")) {
-						n.style.height = "fit-content";
+					if (n.matches('.md\\:h-header-height')) {
+						n.style.height = 'fit-content';
 					}
 
 					// Hide late anchor buttons
-					if (n.matches("a.group.flex.gap-2")) {
+					if (n.matches('a.group.flex.gap-2')) {
 						gsap.set(n, {
 							opacity: 0,
-							pointerEvents: "none",
+							pointerEvents: 'none',
 							width: 0,
 							height: 0,
-							overflow: "hidden",
+							overflow: 'hidden',
 						});
 					}
 				}
@@ -3287,8 +3224,8 @@ const DELAYS = {
 	};
 
 	// Run when DOM is ready
-	if (document.readyState === "loading") {
-		document.addEventListener("DOMContentLoaded", ready);
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', ready);
 	} else {
 		ready();
 	}
@@ -3300,7 +3237,7 @@ const DELAYS = {
 (() => {
 	// Handle PageUp & PageDown scrolling with GSAP
 	function handleKeyDown(event) {
-		if (event.key === "PageUp" || event.key === "PageDown") {
+		if (event.key === 'PageUp' || event.key === 'PageDown') {
 			resetScrollState(); // Reset shared state
 
 			event.stopPropagation();
@@ -3310,17 +3247,12 @@ const DELAYS = {
 			if (!scrollContainer) return;
 
 			const viewportHeight = window.innerHeight * 0.8; // Keep the native PageUp/PageDown feel
-			const direction = event.key === "PageUp" ? -1 : 1;
-			let targetScrollPosition =
-				scrollContainer.scrollTop + direction * viewportHeight;
+			const direction = event.key === 'PageUp' ? -1 : 1;
+			let targetScrollPosition = scrollContainer.scrollTop + direction * viewportHeight;
 
 			// Ensure we don't scroll past the natural top/bottom limits
-			const maxScroll =
-				scrollContainer.scrollHeight - scrollContainer.clientHeight;
-			targetScrollPosition = Math.max(
-				0,
-				Math.min(targetScrollPosition, maxScroll),
-			);
+			const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+			targetScrollPosition = Math.max(0, Math.min(targetScrollPosition, maxScroll));
 
 			// Use GSAP for smooth scrolling with slow end effect
 			gsap.to(scrollContainer, {
@@ -3328,7 +3260,7 @@ const DELAYS = {
 				scrollTo: {
 					y: targetScrollPosition,
 				},
-				ease: "power4.out", // Ensures gradual deceleration at the end
+				ease: 'power4.out', // Ensures gradual deceleration at the end
 			});
 		}
 	}
@@ -3341,29 +3273,29 @@ const DELAYS = {
 	// Attach or detach the event listener
 	function toggleEventListener(enabled) {
 		if (enabled) {
-			document.addEventListener("keydown", handleKeyDown);
-			document.addEventListener("wheel", handleUserInteraction, {
+			document.addEventListener('keydown', handleKeyDown);
+			document.addEventListener('wheel', handleUserInteraction, {
 				passive: true,
 			});
-			document.addEventListener("touchstart", handleUserInteraction, {
+			document.addEventListener('touchstart', handleUserInteraction, {
 				passive: true,
 			});
 		} else {
-			document.removeEventListener("keydown", handleKeyDown);
-			document.removeEventListener("wheel", handleUserInteraction);
-			document.removeEventListener("touchstart", handleUserInteraction);
+			document.removeEventListener('keydown', handleKeyDown);
+			document.removeEventListener('wheel', handleUserInteraction);
+			document.removeEventListener('touchstart', handleUserInteraction);
 		}
 	}
 
 	// Initialize PageUp/PageDown takeover
 	function initializePageUpDownTakeover() {
-		chrome.storage.sync.get(["pageUpDownTakeover"], (data) => {
+		chrome.storage.sync.get(['pageUpDownTakeover'], (data) => {
 			const enabled = data.pageUpDownTakeover !== false;
 			toggleEventListener(enabled);
 		});
 
 		chrome.storage.onChanged.addListener((changes, area) => {
-			if (area === "sync" && changes.pageUpDownTakeover) {
+			if (area === 'sync' && changes.pageUpDownTakeover) {
 				const enabled = changes.pageUpDownTakeover.newValue !== false;
 				toggleEventListener(enabled);
 			}
@@ -3377,7 +3309,7 @@ const DELAYS = {
 // @note expose edit buttons with simulated mouse hover
 // ==================================================
 (function injectAlwaysVisibleStyle() {
-	const style = document.createElement("style");
+	const style = document.createElement('style');
 	style.textContent = `
 
 /* Ensure parents can receive hover events */
@@ -3495,9 +3427,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 	// Decide how faded the buttons are in light/dark mode
 	function getFadeOpacity() {
 		if (
-			document.documentElement.classList.contains("dark") ||
-			document.body.classList.contains("dark") ||
-			window.matchMedia("(prefers-color-scheme: dark)").matches
+			document.documentElement.classList.contains('dark') ||
+			document.body.classList.contains('dark') ||
+			window.matchMedia('(prefers-color-scheme: dark)').matches
 		) {
 			return 0.08;
 		}
@@ -3505,36 +3437,32 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 	}
 
 	// Attach to all .flex.justify-start OR .flex.justify-end
-	document
-		.querySelectorAll("div.flex.justify-start, div.flex.justify-end")
-		.forEach((parent) => {
-			// Find the child that contains "group-hover/turn-messages"
-			// (Does not need to be a direct child if you prefer querySelector)
-			const child = parent.querySelector(
-				'div[class*="group-hover/turn-messages"]',
-			);
-			if (!child) return;
+	document.querySelectorAll('div.flex.justify-start, div.flex.justify-end').forEach((parent) => {
+		// Find the child that contains "group-hover/turn-messages"
+		// (Does not need to be a direct child if you prefer querySelector)
+		const child = parent.querySelector('div[class*="group-hover/turn-messages"]');
+		if (!child) return;
 
-			let fadeTimeout = null;
+		let fadeTimeout = null;
 
-			// Show the child immediately on hover
-			parent.addEventListener("mouseenter", () => {
-				clearTimeout(fadeTimeout);
-				child.classList.add("force-full-opacity");
-				child.style.opacity = "1";
-			});
-
-			// Fade the child out 2s after mouse leaves
-			parent.addEventListener("mouseleave", () => {
-				fadeTimeout = setTimeout(() => {
-					child.classList.remove("force-full-opacity");
-					child.style.opacity = getFadeOpacity();
-				}, 2000);
-			});
-
-			// Set initial opacity according to current mode
-			child.style.opacity = getFadeOpacity();
+		// Show the child immediately on hover
+		parent.addEventListener('mouseenter', () => {
+			clearTimeout(fadeTimeout);
+			child.classList.add('force-full-opacity');
+			child.style.opacity = '1';
 		});
+
+		// Fade the child out 2s after mouse leaves
+		parent.addEventListener('mouseleave', () => {
+			fadeTimeout = setTimeout(() => {
+				child.classList.remove('force-full-opacity');
+				child.style.opacity = getFadeOpacity();
+			}, 2000);
+		});
+
+		// Set initial opacity according to current mode
+		child.style.opacity = getFadeOpacity();
+	});
 })();
 
 // ==================================================
@@ -3547,21 +3475,19 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			if (!enabled) return;
 
 			// Blacklist logic for specific paths/hostnames
-			const hostname = location.hostname.replace(/^www\./, "");
+			const hostname = location.hostname.replace(/^www\./, '');
 			const pathname = location.pathname;
 
 			// Matches "*://chatgpt.com/gpts*"
-			const isGpts = hostname === "chatgpt.com" && pathname.startsWith("/gpts");
+			const isGpts = hostname === 'chatgpt.com' && pathname.startsWith('/gpts');
 			// Matches "*://chatgpt.com/codex*"
-			const isCodex =
-				hostname === "chatgpt.com" && pathname.startsWith("/codex");
+			const isCodex = hostname === 'chatgpt.com' && pathname.startsWith('/codex');
 			// Matches "*://chatgpt.com/g/*"
-			const isG = hostname === "chatgpt.com" && pathname.startsWith("/g/");
+			const isG = hostname === 'chatgpt.com' && pathname.startsWith('/g/');
 			// Matches "*://sora.chatgpt.com/*"
-			const isSora = hostname === "sora.chatgpt.com";
+			const isSora = hostname === 'sora.chatgpt.com';
 			// Matches "*://chatgpt.com/library/*"
-			const isLibrary =
-				hostname === "chatgpt.com" && pathname.startsWith("/library/");
+			const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
 
 			if (isGpts || isCodex || isG || isSora || isLibrary) return;
 
@@ -3575,24 +3501,16 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 						flexChildren,
 						tries = 0;
 					while (tries++ < 25) {
-						header = document.querySelector("#page-header");
+						header = document.querySelector('#page-header');
 						if (header) {
-							flexChildren = header.querySelectorAll(
-								":scope > .flex.items-center",
-							);
+							flexChildren = header.querySelectorAll(':scope > .flex.items-center');
 							if (flexChildren.length > 0) break;
 						}
 						await sleep(200);
 					}
-					if (!header || !flexChildren || flexChildren.length === 0)
-						return false;
-					for (const seg of [
-						flexChildren[0],
-						flexChildren[flexChildren.length - 1],
-					]) {
-						const loginBtn = seg?.querySelector(
-							'button[data-testid="login-button"]',
-						);
+					if (!header || !flexChildren || flexChildren.length === 0) return false;
+					for (const seg of [flexChildren[0], flexChildren[flexChildren.length - 1]]) {
+						const loginBtn = seg?.querySelector('button[data-testid="login-button"]');
 						if (loginBtn) return true;
 					}
 					return false;
@@ -3633,21 +3551,18 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							}
 
 							try {
-								chrome.storage.sync.get(
-									{ popupBottomBarOpacityValue: 0.6 },
-									(res) => {
-										if (chrome.runtime.lastError) {
-											// console.error("Error:", chrome.runtime.lastError); // comment out if you want silence
-											window.popupBottomBarOpacityValue = 0.6;
-										} else {
-											window.popupBottomBarOpacityValue =
-												typeof res.popupBottomBarOpacityValue === "number"
-													? res.popupBottomBarOpacityValue
-													: 0.6;
-										}
-										resolve(window.popupBottomBarOpacityValue);
-									},
-								);
+								chrome.storage.sync.get({ popupBottomBarOpacityValue: 0.6 }, (res) => {
+									if (chrome.runtime.lastError) {
+										// console.error("Error:", chrome.runtime.lastError); // comment out if you want silence
+										window.popupBottomBarOpacityValue = 0.6;
+									} else {
+										window.popupBottomBarOpacityValue =
+											typeof res.popupBottomBarOpacityValue === 'number'
+												? res.popupBottomBarOpacityValue
+												: 0.6;
+									}
+									resolve(window.popupBottomBarOpacityValue);
+								});
 							} catch {
 								// console.error("Failed chrome.storage.sync.get"); // left silent
 								window.popupBottomBarOpacityValue = 0.6;
@@ -3673,22 +3588,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 								await ensureOpacityValueReady(); // Wait for storage fetch
 								// Wait for target UI pieces
 								async function getTopBarSegments() {
-									const header = await waitForElement(
-										"#page-header",
-										12000,
-										200,
-									);
+									const header = await waitForElement('#page-header', 12000, 200);
 									if (!header) return [null, null];
 									const flexChildren = Array.from(
-										header.querySelectorAll(":scope > .flex.items-center"),
+										header.querySelectorAll(':scope > .flex.items-center'),
 									);
 									if (!flexChildren.length) return [null, null];
-									if (flexChildren.length === 1)
-										return [flexChildren[0], flexChildren[0]];
-									return [
-										flexChildren[0],
-										flexChildren[flexChildren.length - 1],
-									];
+									if (flexChildren.length === 1) return [flexChildren[0], flexChildren[0]];
+									return [flexChildren[0], flexChildren[flexChildren.length - 1]];
 								}
 
 								const [topBarLeft, topBarRight] = await getTopBarSegments();
@@ -3700,20 +3607,17 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 								if (!topBarLeft || !topBarRight || !composerForm) return;
 								const composerContainer =
-									composerForm.querySelector(".border-token-border-default") ||
-									composerForm;
+									composerForm.querySelector('.border-token-border-default') || composerForm;
 
 								injectBottomBar(topBarLeft, topBarRight, composerContainer);
 
 								// Grayscale Profile Button
-								waitForElement('button[data-testid="profile-button"]').then(
-									(profileButton) => {
-										if (profileButton) {
-											applyInitialGrayscale(profileButton);
-											observeProfileButton(profileButton);
-										}
-									},
-								);
+								waitForElement('button[data-testid="profile-button"]').then((profileButton) => {
+									if (profileButton) {
+										applyInitialGrayscale(profileButton);
+										observeProfileButton(profileButton);
+									}
+								});
 							}
 
 							// ---------- Section 3 • Bottom Bar Creation ----------
@@ -3730,45 +3634,40 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							const debounce = window.__bbDebounce;
 
 							/* ----------------------------------------------------------------------- */
-							function injectBottomBar(
-								topBarLeft,
-								topBarRight,
-								composerContainer,
-							) {
+							function injectBottomBar(topBarLeft, topBarRight, composerContainer) {
 								/* prevent double‑injection ------------------------------------------ */
-								let bottomBar = document.getElementById("bottomBarContainer");
+								let bottomBar = document.getElementById('bottomBarContainer');
 								if (!bottomBar) {
 									/* create bar ----------------------------------------------------- */
-									bottomBar = document.createElement("div");
-									bottomBar.id = "bottomBarContainer";
+									bottomBar = document.createElement('div');
+									bottomBar.id = 'bottomBarContainer';
 									Object.assign(bottomBar.style, {
-										display: "flex",
-										justifyContent: "space-between",
-										alignItems: "center",
-										padding: "0 12px",
-										margin: "0",
-										minHeight: "unset",
-										lineHeight: "1",
-										gap: "8px",
-										fontSize: "12px",
-										boxSizing: "border-box",
-										opacity: "1",
-										transition: "opacity 0.5s",
+										display: 'flex',
+										justifyContent: 'space-between',
+										alignItems: 'center',
+										padding: '0 12px',
+										margin: '0',
+										minHeight: 'unset',
+										lineHeight: '1',
+										gap: '8px',
+										fontSize: '12px',
+										boxSizing: 'border-box',
+										opacity: '1',
+										transition: 'opacity 0.5s',
 									});
 
 									/* ----------------------------------------------------------------
 									   width + scale logic
 									------------------------------------------------------------------ */
 									function setWidth() {
-										bottomBar.style.width =
-											window.getComputedStyle(composerContainer).width;
+										bottomBar.style.width = window.getComputedStyle(composerContainer).width;
 									}
 									function scaleOnce() {
 										const avail = composerContainer.clientWidth;
 										const content = bottomBar.scrollWidth;
 										const s = Math.min(1, avail / content);
 										bottomBar.style.transform = `scale(${s})`;
-										bottomBar.style.transformOrigin = "left center";
+										bottomBar.style.transformOrigin = 'left center';
 										return s;
 									}
 									function scaleUntilStable() {
@@ -3786,15 +3685,13 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 									const debouncedStable = debounce(scaleUntilStable, 60);
 
 									/* observe container resize + window resize ---------------------- */
-									new ResizeObserver(debouncedStable).observe(
-										composerContainer,
-									);
-									window.addEventListener("resize", debouncedStable);
+									new ResizeObserver(debouncedStable).observe(composerContainer);
+									window.addEventListener('resize', debouncedStable);
 
 									/* fade / opacity handlers --------------------------------------- */
 									const idleOpacity = () => {
 										const value =
-											typeof window.popupBottomBarOpacityValue === "number"
+											typeof window.popupBottomBarOpacityValue === 'number'
 												? window.popupBottomBarOpacityValue
 												: 0.6;
 										bottomBar.style.opacity = String(value);
@@ -3802,27 +3699,26 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 									let fadeT;
 									setTimeout(idleOpacity, 2500);
-									bottomBar.addEventListener("mouseover", () => {
+									bottomBar.addEventListener('mouseover', () => {
 										clearTimeout(fadeT);
-										bottomBar.style.opacity = "1";
-										if (typeof setGrayscale === "function") setGrayscale(false);
+										bottomBar.style.opacity = '1';
+										if (typeof setGrayscale === 'function') setGrayscale(false);
 									});
-									bottomBar.addEventListener("mouseout", () => {
+									bottomBar.addEventListener('mouseout', () => {
 										fadeT = setTimeout(() => {
 											idleOpacity();
-											if (typeof setGrayscale === "function")
-												setGrayscale(true);
+											if (typeof setGrayscale === 'function') setGrayscale(true);
 										}, 2500);
 									});
 
 									/* capture scroll, insert, restore ------------------------------- */
 									const sc =
-										typeof getScrollableContainer === "function" &&
-										getScrollableContainer();
+										typeof getScrollableContainer === 'function' && getScrollableContainer();
 									const prevScrollBot = sc ? sc.scrollHeight - sc.scrollTop : 0;
-									(
-										composerContainer.closest("form") || composerContainer
-									).insertAdjacentElement("afterend", bottomBar);
+									(composerContainer.closest('form') || composerContainer).insertAdjacentElement(
+										'afterend',
+										bottomBar,
+									);
 									if (sc) sc.scrollTop += sc.scrollHeight - prevScrollBot;
 
 									/* run first stable scale pass after insertion ------------------- */
@@ -3830,45 +3726,43 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 									setTimeout(() => scaleUntilStable(), 1500);
 
 									/* gsap intro ---------------------------------------------------- */
-									gsap.set(bottomBar, { opacity: 0, y: 10, display: "flex" });
+									gsap.set(bottomBar, { opacity: 0, y: 10, display: 'flex' });
 									gsap.to(bottomBar, {
 										opacity: 1,
 										y: 0,
 										duration: 0.2,
-										ease: "power2.out",
+										ease: 'power2.out',
 									});
 								}
 
 								/* ----- left / right containers ------------------------------------ */
-								let left = document.getElementById("bottomBarLeft");
-								let right = document.getElementById("bottomBarRight");
+								let left = document.getElementById('bottomBarLeft');
+								let right = document.getElementById('bottomBarRight');
 								if (!left) {
-									left = document.createElement("div");
-									left.id = "bottomBarLeft";
-									left.style.display = "flex";
-									left.style.alignItems = "center";
-									left.style.gap = "2px";
+									left = document.createElement('div');
+									left.id = 'bottomBarLeft';
+									left.style.display = 'flex';
+									left.style.alignItems = 'center';
+									left.style.gap = '2px';
 									bottomBar.appendChild(left);
 								}
 								if (!right) {
-									right = document.createElement("div");
-									right.id = "bottomBarRight";
-									right.style.display = "flex";
-									right.style.alignItems = "center";
-									right.style.gap = "2px";
-									right.style.marginLeft = "auto";
+									right = document.createElement('div');
+									right.id = 'bottomBarRight';
+									right.style.display = 'flex';
+									right.style.alignItems = 'center';
+									right.style.gap = '2px';
+									right.style.marginLeft = 'auto';
 									bottomBar.appendChild(right);
 								}
 
 								[...left.children].forEach((c) => {
-									const keep = ["static-sidebar-btn", "static-newchat-btn"];
-									if (!keep.includes(c.dataset.id) && c !== topBarLeft)
-										c.remove();
+									const keep = ['static-sidebar-btn', 'static-newchat-btn'];
+									if (!keep.includes(c.dataset.id) && c !== topBarLeft) c.remove();
 								});
 
 								if (!left.contains(topBarLeft)) left.appendChild(topBarLeft);
-								if (!right.contains(topBarRight))
-									right.appendChild(topBarRight);
+								if (!right.contains(topBarRight)) right.appendChild(topBarRight);
 
 								injectStaticButtons(left);
 								adjustBottomBarTextScaling(bottomBar);
@@ -3879,15 +3773,15 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 								/* hide stale disclaimer ------------------------------------------- */
 								const old = document.querySelector(
-									"div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs",
+									'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs',
 								);
 								if (old)
 									gsap.to(old, {
 										opacity: 0,
 										duration: 0.4,
-										ease: "sine.out",
+										ease: 'sine.out',
 										onComplete: () => {
-											old.style.display = "none";
+											old.style.display = 'none';
 										},
 									});
 							}
@@ -3900,21 +3794,18 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 								);
 								if (!btnSidebar) {
 									btnSidebar = createStaticButton({
-										label: "Static Toggle Sidebar",
+										label: 'Static Toggle Sidebar',
 										svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
 										proxySelector:
 											'button[data-testid="open-sidebar-button"],button[data-testid="close-sidebar-button"]',
 										fallbackShortcut: {
 											ctrl: true,
 											shift: true,
-											key: "s",
-											code: "KeyS",
+											key: 's',
+											code: 'KeyS',
 										},
 									});
-									leftContainer.insertBefore(
-										btnSidebar,
-										leftContainer.firstChild,
-									);
+									leftContainer.insertBefore(btnSidebar, leftContainer.firstChild);
 								}
 
 								// ---- 4.2  Static New‑Chat Button ----
@@ -3923,51 +3814,43 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 								);
 								if (!btnNewChat) {
 									btnNewChat = createStaticButton({
-										label: "Static New Chat",
+										label: 'Static New Chat',
 										svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
 										proxySelector: 'button[data-testid="new-chat-button"]',
 										fallbackShortcut: {
 											ctrl: true,
 											shift: true,
-											key: "o",
-											code: "KeyO",
+											key: 'o',
+											code: 'KeyO',
 										},
 									});
-									leftContainer.insertBefore(
-										btnNewChat,
-										btnSidebar.nextSibling,
-									);
+									leftContainer.insertBefore(btnNewChat, btnSidebar.nextSibling);
 								}
 							}
 
 							/* ---------- shared helper ---------- */
-							function createStaticButton({
-								label,
-								svg,
-								proxySelector,
-								fallbackShortcut,
-							}) {
-								const btn = document.createElement("button");
-								btn.setAttribute("aria-label", label);
+							function createStaticButton({ label, svg, proxySelector, fallbackShortcut }) {
+								const btn = document.createElement('button');
+								btn.setAttribute('aria-label', label);
 								btn.setAttribute(
-									"data-id",
-									label.toLowerCase().includes("sidebar")
-										? "static-sidebar-btn"
-										: "static-newchat-btn",
+									'data-id',
+									label.toLowerCase().includes('sidebar')
+										? 'static-sidebar-btn'
+										: 'static-newchat-btn',
 								);
 
 								// ---- visual styling (unchanged) ----
 								btn.innerHTML = svg;
 								btn.className =
-									"text-token-text-secondary focus-visible:bg-token-surface-hover " +
-									"enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary " +
-									"h-10 rounded-lg px-2 focus-visible:outline-0";
+									'text-token-text-secondary focus-visible:bg-token-surface-hover ' +
+									'enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary ' +
+									'h-10 rounded-lg px-2 focus-visible:outline-0';
 								Object.assign(btn.style, {
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									height: "36px",
-									padding: "8px",
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									height: '36px',
+									padding: '8px',
 								});
 
 								/* ---- behaviour ---- */
@@ -3977,14 +3860,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 									// Attempt shortcut first (if defined)…
 									if (fallbackShortcut) {
-										const {
-											key,
-											code,
-											ctrl,
-											shift,
-											alt = false,
-											meta = false,
-										} = fallbackShortcut;
+										const { key, code, ctrl, shift, alt = false, meta = false } = fallbackShortcut;
 										const isMac = isMacPlatform();
 
 										const evtInit = {
@@ -4003,9 +3879,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 										// `dispatchEvent` returns FALSE if preventDefault was called → means the page handled our shortcut
 										const shortcutUnhandled = document.dispatchEvent(
-											new KeyboardEvent("keydown", evtInit),
+											new KeyboardEvent('keydown', evtInit),
 										);
-										document.dispatchEvent(new KeyboardEvent("keyup", evtInit));
+										document.dispatchEvent(new KeyboardEvent('keyup', evtInit));
 
 										// …fallback to click only when the shortcut was NOT handled
 										if (shortcutUnhandled) {
@@ -4027,27 +3903,21 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							function applyInitialGrayscale(btn) {
 								if (!btn) return;
 								profileBtnRef = btn;
-								btn.style.setProperty("filter", "grayscale(100%)", "important");
-								btn.style.setProperty(
-									"transition",
-									"filter 0.4s ease",
-									"important",
-								);
+								btn.style.setProperty('filter', 'grayscale(100%)', 'important');
+								btn.style.setProperty('transition', 'filter 0.4s ease', 'important');
 							}
 							function setGrayscale(state) {
 								if (!profileBtnRef) return;
 								profileBtnRef.style.setProperty(
-									"filter",
-									state ? "grayscale(100%)" : "grayscale(0%)",
-									"important",
+									'filter',
+									state ? 'grayscale(100%)' : 'grayscale(0%)',
+									'important',
 								);
 							}
 							function observeProfileButton(btn) {
 								const parent = btn.parentElement || document.body;
 								const observer = new MutationObserver(() => {
-									const newBtn = document.querySelector(
-										'button[data-testid="profile-button"]',
-									);
+									const newBtn = document.querySelector('button[data-testid="profile-button"]');
 									if (newBtn && newBtn !== profileBtnRef) {
 										applyInitialGrayscale(newBtn);
 									}
@@ -4058,14 +3928,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							// ---------- Section 6 • Text Truncation ----------
 
 							function applyOneLineEllipsis(el) {
-								el.style.setProperty("white-space", "nowrap", "important");
-								el.style.setProperty("overflow", "hidden", "important");
-								el.style.setProperty("text-overflow", "ellipsis", "important");
+								el.style.setProperty('white-space', 'nowrap', 'important');
+								el.style.setProperty('overflow', 'hidden', 'important');
+								el.style.setProperty('text-overflow', 'ellipsis', 'important');
 								// keep the current font‑size; no shrinking logic
 							}
 
 							function adjustBottomBarTextScaling(bar) {
-								bar.querySelectorAll(".truncate").forEach((el) => {
+								bar.querySelectorAll('.truncate').forEach((el) => {
 									if (
 										el.closest(
 											'button[data-id="static-sidebar-btn"],button[data-id="static-newchat-btn"]',
@@ -4077,30 +3947,25 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							}
 
 							function initAdjustBottomBarTextScaling() {
-								const bar = document.querySelector(
-									"#bottomBarContainer, .bottom-bar",
-								);
+								const bar = document.querySelector('#bottomBarContainer, .bottom-bar');
 								if (!bar) return;
 
 								const run = () => adjustBottomBarTextScaling(bar);
 								const deb = debounce(run, 100);
 
 								run(); // initial pass
-								window.addEventListener("resize", deb);
+								window.addEventListener('resize', deb);
 								new ResizeObserver(deb).observe(bar); // re‑apply on layout changes
 							}
 
-							document.addEventListener(
-								"DOMContentLoaded",
-								initAdjustBottomBarTextScaling,
-							);
+							document.addEventListener('DOMContentLoaded', initAdjustBottomBarTextScaling);
 						})();
 					}, 500);
 
 					// -------------------- Section 7. Style Injection ("global") --------------------
 
 					(function injectBottomBarStyles() {
-						const style = document.createElement("style");
+						const style = document.createElement('style');
 						style.textContent = `
                     .draggable.sticky.top-0 {
                         opacity: 0 !important; pointer-events: none !important;
@@ -4156,36 +4021,34 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 					// -------------------- Section 7.1. Bottom Bar Mutation Observer for Duplicate Buttons --------------------
 					(() => {
-						const PATH_PREFIXES = ["M15.6729", "M8.85719"];
-						const SELECTOR = ["button", "a"]
+						const PATH_PREFIXES = ['M15.6729', 'M8.85719'];
+						const SELECTOR = ['button', 'a']
 							.map((tag) =>
-								PATH_PREFIXES.map(
-									(prefix) => `${tag} svg > path[d^="${prefix}"]`,
-								).join(","),
+								PATH_PREFIXES.map((prefix) => `${tag} svg > path[d^="${prefix}"]`).join(','),
 							)
-							.join(",");
+							.join(',');
 
 						function hideMatchedElements(container) {
 							if (!container) return;
 							// Find all matching paths in the container
 							const paths = container.querySelectorAll(SELECTOR);
 							paths.forEach((path) => {
-								const el = path.closest("button,a");
+								const el = path.closest('button,a');
 								if (el) {
-									el.style.setProperty("visibility", "hidden", "important");
-									el.style.setProperty("position", "absolute", "important");
-									el.style.setProperty("width", "1px", "important");
-									el.style.setProperty("height", "1px", "important");
-									el.style.setProperty("overflow", "hidden", "important");
+									el.style.setProperty('visibility', 'hidden', 'important');
+									el.style.setProperty('position', 'absolute', 'important');
+									el.style.setProperty('width', '1px', 'important');
+									el.style.setProperty('height', '1px', 'important');
+									el.style.setProperty('overflow', 'hidden', 'important');
 									// Optional: add a data attribute so you can track which elements were hidden
-									el.setAttribute("data-ext-hidden", "true");
+									el.setAttribute('data-ext-hidden', 'true');
 								}
 							});
 						}
 
 						// Setup mutation observer
 						function observeBottomBar() {
-							const container = document.querySelector("#bottomBarContainer");
+							const container = document.querySelector('#bottomBarContainer');
 							if (!container) {
 								// Try again soon if the container isn't present yet
 								setTimeout(observeBottomBar, 500);
@@ -4197,10 +4060,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							const observer = new MutationObserver((mutationsList) => {
 								mutationsList.forEach((mutation) => {
 									// If children added/removed or subtree changed, re-hide
-									if (
-										mutation.addedNodes.length > 0 ||
-										mutation.type === "childList"
-									) {
+									if (mutation.addedNodes.length > 0 || mutation.type === 'childList') {
 										hideMatchedElements(container);
 									}
 								});
@@ -4219,14 +4079,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 					setTimeout(() => {
 						(() => {
 							const observer = new MutationObserver(() => {
-								document
-									.querySelectorAll("div.text-token-text-secondary")
-									.forEach((el) => {
-										const txt = el.textContent.trim().replace(/\s+/g, " ");
-										if (txt.includes("Check important info")) {
-											el.setAttribute("data-id", "hide-this-warning");
-										}
-									});
+								document.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
+									const txt = el.textContent.trim().replace(/\s+/g, ' ');
+									if (txt.includes('Check important info')) {
+										el.setAttribute('data-id', 'hide-this-warning');
+									}
+								});
 							});
 							observer.observe(document.body, {
 								childList: true,
@@ -4239,17 +4097,16 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 					(function stripComposerLabels() {
 						const ACTION_WRAPPER =
 							'[style*="--vt-composer-search-action"],[style*="--vt-composer-research-action"]';
-						const IMAGE_BUTTON =
-							'button[data-testid="composer-button-create-image"]';
+						const IMAGE_BUTTON = 'button[data-testid="composer-button-create-image"]';
 
 						const stripLabel = (btn) => {
-							btn.querySelectorAll("span, div").forEach((node) => {
-								if (!node.querySelector("svg") && !node.dataset.labelStripped) {
-									node.dataset.labelStripped = "true";
+							btn.querySelectorAll('span, div').forEach((node) => {
+								if (!node.querySelector('svg') && !node.dataset.labelStripped) {
+									node.dataset.labelStripped = 'true';
 									gsap.to(node, {
 										opacity: 0,
 										duration: 0.15,
-										ease: "sine.out",
+										ease: 'sine.out',
 										onComplete: () => node.remove(),
 									});
 								}
@@ -4257,7 +4114,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 						};
 						const scan = (root) => {
 							root.querySelectorAll(ACTION_WRAPPER).forEach((wrp) => {
-								const btn = wrp.querySelector("button");
+								const btn = wrp.querySelector('button');
 								if (btn) stripLabel(btn);
 							});
 							root.querySelectorAll(IMAGE_BUTTON).forEach((btn) => {
@@ -4296,7 +4153,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 			(() => {
 				setTimeout(function injectNoBottomBarStyles() {
-					const style = document.createElement("style");
+					const style = document.createElement('style');
 					style.textContent = `
                         form.w-full[data-type="unified-composer"] {
                             margin-bottom: -1em;
@@ -4319,14 +4176,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 					(() => {
 						const observer = new MutationObserver(() => {
-							document
-								.querySelectorAll("div.text-token-text-secondary")
-								.forEach((el) => {
-									const txt = el.textContent.trim().replace(/\s+/g, " ");
-									if (txt.includes("Check important info")) {
-										el.setAttribute("data-id", "hide-this-warning");
-									}
-								});
+							document.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
+								const txt = el.textContent.trim().replace(/\s+/g, ' ');
+								if (txt.includes('Check important info')) {
+									el.setAttribute('data-id', 'hide-this-warning');
+								}
+							});
 						});
 						observer.observe(document.body, { childList: true, subtree: true });
 					})();
@@ -4343,12 +4198,11 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // Auto-click "try again" when "Something went wrong" appears after switching from a foldered to non-foldered chat.
 // Batch checks during browser idle time to avoid main-thread contention. Wrap click logic in an idle callback and schedule it once per mutation burst.
 (() => {
-	const containerSel =
-		"div.flex.h-full.w-full.flex-col.items-center.justify-center.gap-4";
+	const containerSel = 'div.flex.h-full.w-full.flex-col.items-center.justify-center.gap-4';
 	const btnSel = `${containerSel} button.btn-secondary`;
 
 	// 1) Inject fade CSS
-	const style = document.createElement("style");
+	const style = document.createElement('style');
 	style.textContent = `
       ${containerSel} {
         opacity: 0;
@@ -4364,12 +4218,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 	let scheduled = false;
 	const handleNode = (node) => {
 		if (!(node instanceof HTMLElement) || !node.matches(containerSel)) return;
-		node.classList.add("visible"); // fade in
+		node.classList.add('visible'); // fade in
 		if (scheduled) return;
 		scheduled = true;
 		requestIdleCallback(() => {
 			node.querySelector(btnSel)?.click();
-			node.classList.remove("visible"); // fade out
+			node.classList.remove('visible'); // fade out
 			scheduled = false;
 		});
 	};
@@ -4391,7 +4245,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // ==============================================================
 (() => {
 	// --- Parameters ---
-	const BUTTON_TEXT = "Open link";
+	const BUTTON_TEXT = 'Open link';
 
 	/**
 	 * Checks if a node or its descendants have an <a> with the target text
@@ -4406,7 +4260,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			// Check for <a> with child div containing our BUTTON_TEXT
 			// We assume (as in your HTML) structure:
 			//    <a ...><div>Open link</div></a>
-			const anchors = root.querySelectorAll("a.btn-primary");
+			const anchors = root.querySelectorAll('a.btn-primary');
 			for (const a of anchors) {
 				if (
 					a.textContent.trim() === BUTTON_TEXT ||
@@ -4427,7 +4281,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		let btn = null;
 		if (
 			node.matches &&
-			(node.matches("a.btn-primary") || node.matches("a[rel][target]")) &&
+			(node.matches('a.btn-primary') || node.matches('a[rel][target]')) &&
 			node.textContent.trim() === BUTTON_TEXT
 		) {
 			btn = node;
@@ -4457,8 +4311,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		tryClickOpenLink(document.body);
 	}
 
-	if (document.readyState === "loading")
-		document.addEventListener("DOMContentLoaded", start, { once: true });
+	if (document.readyState === 'loading')
+		document.addEventListener('DOMContentLoaded', start, { once: true });
 	else start();
 })();
 
@@ -4467,19 +4321,19 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // ===============================
 (() => {
 	chrome.storage.sync.get(
-		["useControlForModelSwitcherRadio", "modelPickerKeyCodes"],
+		['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
 		({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
 			const DEFAULT_MODEL_PICKER_KEY_CODES = [
-				"Digit1",
-				"Digit2",
-				"Digit3",
-				"Digit4",
-				"Digit5",
-				"Digit6",
-				"Digit7",
-				"Digit8",
-				"Digit9",
-				"Digit0",
+				'Digit1',
+				'Digit2',
+				'Digit3',
+				'Digit4',
+				'Digit5',
+				'Digit6',
+				'Digit7',
+				'Digit8',
+				'Digit9',
+				'Digit0',
 			];
 			const KEY_CODES =
 				Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length === 10
@@ -4487,34 +4341,24 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 					: DEFAULT_MODEL_PICKER_KEY_CODES.slice();
 			const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
 			const USE_CTRL = !!useControlForModelSwitcherRadio;
-			const MOD_KEY_TEXT = USE_CTRL
-				? IS_MAC
-					? "Command"
-					: "Ctrl"
-				: IS_MAC
-					? "Option"
-					: "Alt";
+			const MOD_KEY_TEXT = USE_CTRL ? (IS_MAC ? 'Command' : 'Ctrl') : IS_MAC ? 'Option' : 'Alt';
 			const MENU_BTN = 'button[data-testid="model-switcher-dropdown-button"]';
 
 			// Helper: Alt/Option or Ctrl/Command
-			const modPressed = (e) =>
-				USE_CTRL ? (IS_MAC ? e.metaKey : e.ctrlKey) : e.altKey;
+			const modPressed = (e) => (USE_CTRL ? (IS_MAC ? e.metaKey : e.ctrlKey) : e.altKey);
 			const synthClick = (el) => {
-				el?.dispatchEvent(
-					new MouseEvent("click", { bubbles: true, cancelable: true }),
-				);
+				el?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 			};
 
 			const flashMenuItem = (el) => {
 				if (!el || !window.gsap) return;
 				const tertiary =
 					getComputedStyle(document.documentElement)
-						.getPropertyValue("--main-surface-tertiary")
-						.trim() || "#888";
+						.getPropertyValue('--main-surface-tertiary')
+						.trim() || '#888';
 				window.gsap
 					.timeline({
-						onComplete: () =>
-							window.gsap.set(el, { clearProps: "boxShadow,scale" }),
+						onComplete: () => window.gsap.set(el, { clearProps: 'boxShadow,scale' }),
 					})
 					.fromTo(
 						el,
@@ -4523,28 +4367,28 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 							boxShadow: `0 0 0 3px ${tertiary}`,
 							scale: 0.95,
 							duration: 0.22,
-							ease: "power2.out",
+							ease: 'power2.out',
 						},
 					)
 					.to(el, {
 						boxShadow: `0 0 0 0 ${tertiary}`,
 						scale: 1,
 						duration: 0.15,
-						ease: "power2.in",
+						ease: 'power2.in',
 					});
 			};
 
 			const flashBottomBar = () => {
-				const bb = document.getElementById("bottomBarContainer");
+				const bb = document.getElementById('bottomBarContainer');
 				if (!bb) return;
 				clearTimeout(bb._flashTimer);
 				clearTimeout(bb._fadeT);
-				bb.style.opacity = "1";
+				bb.style.opacity = '1';
 
 				// No assignment inside an expression: compute first, then assign.
 				const idle = () => {
 					const targetOpacity =
-						typeof window.popupBottomBarOpacityValue === "number"
+						typeof window.popupBottomBarOpacityValue === 'number'
 							? window.popupBottomBarOpacityValue
 							: 0.6;
 					bb.style.opacity = String(targetOpacity);
@@ -4556,14 +4400,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			const ensureMainMenuOpen = () => {
 				const btn = document.querySelector(MENU_BTN);
 				if (!btn) return false;
-				if (btn.getAttribute("aria-expanded") === "true") return true;
+				if (btn.getAttribute('aria-expanded') === 'true') return true;
 				btn.focus();
 
-				["keydown", "keyup"].forEach((type) => {
+				['keydown', 'keyup'].forEach((type) => {
 					btn.dispatchEvent(
 						new KeyboardEvent(type, {
-							key: " ",
-							code: "Space",
+							key: ' ',
+							code: 'Space',
 							keyCode: 32,
 							charCode: 32,
 							bubbles: true,
@@ -4581,9 +4425,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 			// Style for shortcut labels
 			(() => {
-				if (document.getElementById("__altHintStyle")) return;
-				const style = document.createElement("style");
-				style.id = "__altHintStyle";
+				if (document.getElementById('__altHintStyle')) return;
+				const style = document.createElement('style');
+				style.id = '__altHintStyle';
 				style.textContent = `
                 .alt-hint {
                     font-size: 10px;
@@ -4596,20 +4440,17 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			})();
 
 			const removeAllLabels = () => {
-				document.querySelectorAll(".alt-hint").forEach((el) => {
+				document.querySelectorAll('.alt-hint').forEach((el) => {
 					el.remove(); // no implicit return from the callback
 				});
 			};
 			const addLabel = (el, labelText) => {
-				if (!el || el.querySelector(".alt-hint")) return;
+				if (!el || el.querySelector('.alt-hint')) return;
 				// If label is empty, do not display a hint at all
-				if (!labelText || labelText === "—") return;
-				const target =
-					el.querySelector(".flex.items-center") ||
-					el.querySelector(".flex") ||
-					el;
-				const span = document.createElement("span");
-				span.className = "alt-hint";
+				if (!labelText || labelText === '—') return;
+				const target = el.querySelector('.flex.items-center') || el.querySelector('.flex') || el;
+				const span = document.createElement('span');
+				span.className = 'alt-hint';
 				span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
 				(target || el).appendChild(span);
 			};
@@ -4626,24 +4467,20 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 				// Use direct-children to avoid grabbing nested/hidden templates
 				const firstItems = Array.from(
-					first.querySelectorAll(
-						':scope > [role="menuitem"][data-radix-collection-item]',
-					),
+					first.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
 				);
 				const result = firstItems.map((el, i) => ({
 					el,
-					menu: "main",
+					menu: 'main',
 					idx: i,
 				}));
 
 				if (second) {
 					const secondItems = Array.from(
-						second.querySelectorAll(
-							':scope > [role="menuitem"][data-radix-collection-item]',
-						),
+						second.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
 					);
 					secondItems.forEach((el, j) => {
-						result.push({ el, menu: "submenu", idx: j });
+						result.push({ el, menu: 'submenu', idx: j });
 					});
 				}
 				return result.slice(0, 10);
@@ -4651,54 +4488,54 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 			function displayFromCode(code) {
 				// Handle "cleared" shortcuts: anything falsy, empty string, or nbsp
-				if (!code || code === "" || code === "\u00A0") return "—";
+				if (!code || code === '' || code === '\u00A0') return '—';
 				if (/^Key([A-Z])$/.test(code)) return code.slice(-1);
 				if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
 				if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
 				if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
 				switch (code) {
-					case "Minus":
-						return "-";
-					case "Equal":
-						return "=";
-					case "BracketLeft":
-						return "[";
-					case "BracketRight":
-						return "]";
-					case "Backslash":
-						return "\\";
-					case "Semicolon":
-						return ";";
-					case "Quote":
+					case 'Minus':
+						return '-';
+					case 'Equal':
+						return '=';
+					case 'BracketLeft':
+						return '[';
+					case 'BracketRight':
+						return ']';
+					case 'Backslash':
+						return '\\';
+					case 'Semicolon':
+						return ';';
+					case 'Quote':
 						return "'";
-					case "Comma":
-						return ",";
-					case "Period":
-						return ".";
-					case "Slash":
-						return "/";
-					case "Backquote":
-						return "`";
-					case "Space":
-						return "Space";
-					case "Enter":
-						return "Enter";
-					case "Escape":
-						return "Esc";
-					case "Tab":
-						return "Tab";
-					case "Backspace":
-						return "Bksp";
-					case "Delete":
-						return "Del";
-					case "ArrowLeft":
-						return "←";
-					case "ArrowRight":
-						return "→";
-					case "ArrowUp":
-						return "↑";
-					case "ArrowDown":
-						return "↓";
+					case 'Comma':
+						return ',';
+					case 'Period':
+						return '.';
+					case 'Slash':
+						return '/';
+					case 'Backquote':
+						return '`';
+					case 'Space':
+						return 'Space';
+					case 'Enter':
+						return 'Enter';
+					case 'Escape':
+						return 'Esc';
+					case 'Tab':
+						return 'Tab';
+					case 'Backspace':
+						return 'Bksp';
+					case 'Delete':
+						return 'Del';
+					case 'ArrowLeft':
+						return '←';
+					case 'ArrowRight':
+						return '→';
+					case 'ArrowUp':
+						return '↑';
+					case 'ArrowDown':
+						return '↓';
 					default:
 						return code;
 				}
@@ -4707,10 +4544,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			// Use the global helper to avoid drift/duplication
 			function indexFromEvent(e) {
 				const utils = window.ShortcutUtils || {};
-				const cmp =
-					typeof utils.codeEquals === "function"
-						? utils.codeEquals
-						: () => false;
+				const cmp = typeof utils.codeEquals === 'function' ? utils.codeEquals : () => false;
 				for (let i = 0; i < KEY_CODES.length; i++) {
 					if (cmp(e.code, KEY_CODES[i])) return i;
 				}
@@ -4728,7 +4562,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 			// --- KEY HANDLING ---
 			window.addEventListener(
-				"keydown",
+				'keydown',
 				(e) => {
 					if (!modPressed(e)) return;
 
@@ -4743,12 +4577,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 					// Helper: simulate pointerenter/hover on a node
 					const hover = (el) => {
 						if (!el) return;
-						el.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-						el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-						el.dispatchEvent(
-							new MouseEvent("pointerenter", { bubbles: false }),
-						);
-						el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+						el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+						el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+						el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+						el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
 					};
 
 					// Try to force-open submenu by "hovering" each likely trigger until a second menu appears
@@ -4761,8 +4593,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 						const candidates = Array.from(
 							scope.querySelectorAll(
 								':scope > [role="menuitem"][data-has-submenu], ' +
-								':scope > [role="menuitem"][aria-haspopup="menu"], ' +
-								':scope > [role="menuitem"][aria-controls]',
+									':scope > [role="menuitem"][aria-haspopup="menu"], ' +
+									':scope > [role="menuitem"][aria-controls]',
 							),
 						);
 
@@ -4813,19 +4645,15 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			);
 
 			// Keep click-to-open labels, but also observe DOM so labels appear *when* submenu mounts
-			document.addEventListener("click", (e) => {
-				if (
-					e
-						.composedPath()
-						.some((n) => n instanceof Element && n.matches(MENU_BTN))
-				) {
+			document.addEventListener('click', (e) => {
+				if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN))) {
 					setTimeout(applyHints, 60);
 				}
 				const t = e.target instanceof Element ? e.target : null;
 				const submenuTriggerClicked = t?.closest(
 					'[role="menuitem"][data-has-submenu], ' +
-					'[role="menuitem"][aria-haspopup="menu"], ' +
-					'[role="menuitem"][aria-controls]',
+						'[role="menuitem"][aria-haspopup="menu"], ' +
+						'[role="menuitem"][aria-controls]',
 				);
 				if (submenuTriggerClicked) {
 					setTimeout(applyHints, 90);
@@ -4849,10 +4677,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 				});
 			})();
 
-			if (
-				document.querySelector(MENU_BTN)?.getAttribute("aria-expanded") ===
-				"true"
-			) {
+			if (document.querySelector(MENU_BTN)?.getAttribute('aria-expanded') === 'true') {
 				scheduleHints();
 			}
 		},
@@ -4865,11 +4690,11 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		if (!btn) return;
 		// Local helpers so we don't depend on closure-scoped functions
 		const pressSpace = (el) => {
-			["keydown", "keyup"].forEach((type) => {
+			['keydown', 'keyup'].forEach((type) => {
 				el.dispatchEvent(
 					new KeyboardEvent(type, {
-						key: " ",
-						code: "Space",
+						key: ' ',
+						code: 'Space',
 						keyCode: 32,
 						charCode: 32,
 						bubbles: true,
@@ -4882,16 +4707,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 		const hover = (el) => {
 			if (!el) return;
-			el.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-			el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-			el.dispatchEvent(new MouseEvent("pointerenter", { bubbles: false }));
-			el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+			el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+			el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+			el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+			el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
 		};
 		const safeClick = (el) => {
 			if (!el) return;
-			el.dispatchEvent(
-				new MouseEvent("click", { bubbles: true, cancelable: true }),
-			);
+			el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 		};
 
 		// Try to find submenu triggers by ARIA *or* visible text (e.g. "Legacy models")
@@ -4899,14 +4722,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			const ariaMatches = Array.from(
 				menu.querySelectorAll(
 					':scope > [role="menuitem"][data-has-submenu], ' +
-					':scope > [role="menuitem"][aria-haspopup="menu"], ' +
-					':scope > [role="menuitem"][aria-controls]',
+						':scope > [role="menuitem"][aria-haspopup="menu"], ' +
+						':scope > [role="menuitem"][aria-controls]',
 				),
 			);
-			const textMatches = Array.from(
-				menu.querySelectorAll(':scope > [role="menuitem"]'),
-			).filter((el) =>
-				/legacy|more|advanced|older|models/i.test(el.textContent || ""),
+			const textMatches = Array.from(menu.querySelectorAll(':scope > [role="menuitem"]')).filter(
+				(el) => /legacy|more|advanced|older|models/i.test(el.textContent || ''),
 			);
 			// De-dupe while preserving order
 			const set = new Set([...ariaMatches, ...textMatches]);
@@ -4937,7 +4758,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		};
 
 		const openMain = (cb) => {
-			if (btn.getAttribute("aria-expanded") === "true") return cb();
+			if (btn.getAttribute('aria-expanded') === 'true') return cb();
 			btn.focus();
 			pressSpace(btn);
 			setTimeout(cb, 120);
@@ -4955,7 +4776,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 	// Listen for modelPickerKeyCodes changes and update in real-time
 	chrome.storage.onChanged.addListener((changes, area) => {
-		if (area !== "sync") return;
+		if (area !== 'sync') return;
 		if (changes.modelPickerKeyCodes) {
 			const val = changes.modelPickerKeyCodes.newValue;
 			if (Array.isArray(val) && val.length === 10) {
@@ -4963,10 +4784,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 				// If menu is open, refresh labels to reflect new keys
 				if (
 					document
-						.querySelector(
-							'button[data-testid="model-switcher-dropdown-button"]',
-						)
-						?.getAttribute("aria-expanded") === "true"
+						.querySelector('button[data-testid="model-switcher-dropdown-button"]')
+						?.getAttribute('aria-expanded') === 'true'
 				) {
 					setTimeout(() => {
 						const menu = getOpenMenu();
@@ -5000,10 +4819,10 @@ setTimeout(() => {
 				// --- State we swap when the overlay/rail changes ---
 				let cur = {
 					container: null,
-					keySuffix: "rail",
+					keySuffix: 'rail',
 					saveTimer: null,
 					userScrolled: false,
-					cleanup: () => { },
+					cleanup: () => {},
 				};
 
 				// Helpers --------------------------------------------------------------
@@ -5011,24 +4830,17 @@ setTimeout(() => {
 
 				const on = (el, type, handler, opts) => {
 					(isPage(el) ? window : el).addEventListener(type, handler, opts);
-					return () =>
-						(isPage(el) ? window : el).removeEventListener(type, handler, opts);
+					return () => (isPage(el) ? window : el).removeEventListener(type, handler, opts);
 				};
 
 				const getMaxScroll = (el) =>
 					isPage(el)
-						? Math.max(
-							0,
-							(document.scrollingElement?.scrollHeight || 0) -
-							window.innerHeight,
-						)
+						? Math.max(0, (document.scrollingElement?.scrollHeight || 0) - window.innerHeight)
 						: Math.max(0, el.scrollHeight - el.clientHeight);
 
 				const getScrollTop = (el) =>
 					isPage(el)
-						? document.scrollingElement?.scrollTop ||
-						document.documentElement.scrollTop ||
-						0
+						? document.scrollingElement?.scrollTop || document.documentElement.scrollTop || 0
 						: el.scrollTop;
 
 				const setScrollTop = (el, v) => {
@@ -5037,34 +4849,21 @@ setTimeout(() => {
 				};
 
 				const getScrollHeight = (el) =>
-					isPage(el)
-						? document.scrollingElement?.scrollHeight || 0
-						: el.scrollHeight;
+					isPage(el) ? document.scrollingElement?.scrollHeight || 0 : el.scrollHeight;
 
 				const isVisible = (el) => {
 					if (!el) return false;
 					const cs = getComputedStyle(el);
-					if (
-						cs.display === "none" ||
-						cs.visibility === "hidden" ||
-						+cs.opacity === 0
-					)
+					if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0)
 						return false;
 					const rects = el.getClientRects();
-					return (
-						rects &&
-						rects.length > 0 &&
-						rects[0].height > 0 &&
-						rects[0].width > 0
-					);
+					return rects && rects.length > 0 && rects[0].height > 0 && rects[0].width > 0;
 				};
 
 				// Walk up from a node to find the actual scrollport (incl. Radix viewport)
 				function pickScrollContainer(start) {
 					// Prefer Radix ScrollArea viewport if present
-					const radixViewport = start.querySelector(
-						"[data-radix-scroll-area-viewport]",
-					);
+					const radixViewport = start.querySelector('[data-radix-scroll-area-viewport]');
 					if (radixViewport && isVisible(radixViewport)) return radixViewport;
 
 					// Otherwise, walk ancestors until we find a scrollable clipped element
@@ -5073,8 +4872,7 @@ setTimeout(() => {
 						if (isVisible(el)) {
 							const cs = getComputedStyle(el);
 							const canScroll = /(auto|scroll|overlay)/.test(cs.overflowY);
-							const clipped =
-								el.clientHeight > 0 && el.scrollHeight > el.clientHeight;
+							const clipped = el.clientHeight > 0 && el.scrollHeight > el.clientHeight;
 							if (canScroll && clipped) return el;
 						}
 						el = el.parentElement;
@@ -5086,37 +4884,28 @@ setTimeout(() => {
 				// Find the *visible* sidebar root (overlay if open, else rail)
 				function findVisibleSidebarRoot() {
 					// Overlay: often lives in a portal with these IDs
-					const overlayIds = [
-						"stage-popover-sidebar",
-						"stage-slideover-sidebar",
-					];
+					const overlayIds = ['stage-popover-sidebar', 'stage-slideover-sidebar'];
 					for (const id of overlayIds) {
 						const root = document.getElementById(id);
-						if (root && isVisible(root)) return { root, mode: "overlay" };
+						if (root && isVisible(root)) return { root, mode: 'overlay' };
 					}
 
 					// Otherwise, use a visible nav as anchor (rail or overlay)
-					const navs = Array.from(
-						document.querySelectorAll('nav[aria-label="Chat history"]'),
-					);
+					const navs = Array.from(document.querySelectorAll('nav[aria-label="Chat history"]'));
 					const visible = navs.filter(isVisible);
 					if (visible.length) {
 						// Pick the one with the highest z-index (overlay beats rail)
 						const best = visible
 							.map((el) => ({
 								el,
-								zi: parseInt(getComputedStyle(el).zIndex || "0", 10) || 0,
+								zi: parseInt(getComputedStyle(el).zIndex || '0', 10) || 0,
 							}))
 							.sort((a, b) => b.zi - a.zi)[0].el;
 						// Root is the closest container that likely owns the panel
 						const root =
-							best.closest(
-								"#stage-popover-sidebar, #stage-slideover-sidebar, aside, nav",
-							) || best;
+							best.closest('#stage-popover-sidebar, #stage-slideover-sidebar, aside, nav') || best;
 						const mode =
-							root.id && /stage-(popover|slideover)-sidebar/.test(root.id)
-								? "overlay"
-								: "rail";
+							root.id && /stage-(popover|slideover)-sidebar/.test(root.id) ? 'overlay' : 'rail';
 						return { root, mode };
 					}
 
@@ -5164,22 +4953,18 @@ setTimeout(() => {
 				function attachSaver(el, storageKey) {
 					const cleanups = [];
 
-					const commit = (pos) =>
-						sessionStorage.setItem(storageKey, String(pos));
+					const commit = (pos) => sessionStorage.setItem(storageKey, String(pos));
 
 					// Save on scroll (trusted)
 					cleanups.push(
 						on(
 							el,
-							"scroll",
+							'scroll',
 							(e) => {
 								if (e.isTrusted) {
 									cur.userScrolled = true; // real user scrolled
 									clearTimeout(cur.saveTimer);
-									cur.saveTimer = setTimeout(
-										() => commit(getScrollTop(el)),
-										SAVE_DEBOUNCE_MS,
-									);
+									cur.saveTimer = setTimeout(() => commit(getScrollTop(el)), SAVE_DEBOUNCE_MS);
 								}
 							},
 							{ passive: true },
@@ -5190,18 +4975,18 @@ setTimeout(() => {
 					const markIntent = () => {
 						cur.userScrolled = true;
 					};
-					["wheel", "touchstart", "mousedown", "keydown"].forEach((evt) => {
+					['wheel', 'touchstart', 'mousedown', 'keydown'].forEach((evt) => {
 						cleanups.push(on(el, evt, markIntent, { passive: true }));
 					});
 
-					window.addEventListener("beforeunload", () => {
+					window.addEventListener('beforeunload', () => {
 						commit(getScrollTop(el));
 					});
 
 					return () => {
 						for (const fn of cleanups) {
 							// call if it's a function; do not return any value from an array callback
-							if (typeof fn === "function") {
+							if (typeof fn === 'function') {
 								fn();
 							}
 						}
@@ -5215,7 +5000,7 @@ setTimeout(() => {
 					const { root, mode } = found;
 					const anchor =
 						root.querySelector('nav[aria-label="Chat history"]') ||
-						root.querySelector("[data-radix-scroll-area-viewport]") ||
+						root.querySelector('[data-radix-scroll-area-viewport]') ||
 						root;
 
 					const container = pickScrollContainer(anchor);
@@ -5232,7 +5017,7 @@ setTimeout(() => {
 						container,
 						keySuffix,
 						userScrolled: false,
-						cleanup: () => { },
+						cleanup: () => {},
 					};
 
 					// Wait for content to finish initial growth, then restore
@@ -5258,12 +5043,12 @@ setTimeout(() => {
 					childList: true,
 					subtree: true,
 					attributes: true,
-					attributeFilter: ["class", "style", "data-state", "aria-hidden"],
+					attributeFilter: ['class', 'style', 'data-state', 'aria-hidden'],
 				});
 
 				// Also re-evaluate on resize (rail vs overlay threshold)
 				window.addEventListener(
-					"resize",
+					'resize',
 					() => {
 						initOnce();
 					},
@@ -5286,11 +5071,11 @@ setTimeout(() => {
 		({ fadeSlimSidebarEnabled: enabled }) => {
 			window._fadeSlimSidebarEnabled = enabled;
 			if (!enabled) {
-				const barEl = document.getElementById("stage-sidebar-tiny-bar");
+				const barEl = document.getElementById('stage-sidebar-tiny-bar');
 				if (barEl) {
-					barEl.style.removeProperty("transition");
-					barEl.style.removeProperty("opacity");
-					barEl.style.removeProperty("pointer-events");
+					barEl.style.removeProperty('transition');
+					barEl.style.removeProperty('opacity');
+					barEl.style.removeProperty('pointer-events');
 				}
 				return;
 			}
@@ -5304,15 +5089,11 @@ setTimeout(() => {
 			// -- NEW: Helper to check if large sidebar is open --
 			function isLargeSidebarOpen() {
 				// Replace '#stage-sidebar' with your actual sidebar element ID/class if needed!
-				const largeSidebar = document.getElementById("stage-sidebar");
+				const largeSidebar = document.getElementById('stage-sidebar');
 				if (!largeSidebar) return false;
 				const style = window.getComputedStyle(largeSidebar);
 				// Consider it open if it's visible and not display:none/hidden
-				return (
-					style.display !== "none" &&
-					style.visibility !== "hidden" &&
-					style.opacity !== "0"
-				);
+				return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
 			}
 
 			function getIdleOpacity() {
@@ -5321,24 +5102,21 @@ setTimeout(() => {
 			function ensureOpacityLoaded() {
 				if (window._slimBarOpacityPromise) return window._slimBarOpacityPromise;
 				window._slimBarOpacityPromise = new Promise((res) => {
-					chrome.storage.sync.get(
-						{ popupSlimSidebarOpacityValue: 0.6 },
-						(data) => {
-							window._slimBarIdleOpacity =
-								typeof data.popupSlimSidebarOpacityValue === "number"
-									? data.popupSlimSidebarOpacityValue
-									: 0.6;
-							res();
-						},
-					);
+					chrome.storage.sync.get({ popupSlimSidebarOpacityValue: 0.6 }, (data) => {
+						window._slimBarIdleOpacity =
+							typeof data.popupSlimSidebarOpacityValue === 'number'
+								? data.popupSlimSidebarOpacityValue
+								: 0.6;
+						res();
+					});
 				});
 				return window._slimBarOpacityPromise;
 			}
 
 			function detachCurrentBar() {
 				if (!bar) return;
-				bar.removeEventListener("mouseenter", onEnter, true);
-				bar.removeEventListener("mouseleave", onLeave, true);
+				bar.removeEventListener('mouseenter', onEnter, true);
+				bar.removeEventListener('mouseleave', onLeave, true);
 				if (classObserver) classObserver.disconnect();
 				clearTimeout(idleTimer);
 				idleTimerVersion++;
@@ -5349,7 +5127,7 @@ setTimeout(() => {
 			function overlayIsOpen() {
 				const selectors = [
 					'[id^="radix-"][data-state="open"]',
-					".modal, .slideover, .overlay, .DialogOverlay, .MenuOverlay",
+					'.modal, .slideover, .overlay, .DialogOverlay, .MenuOverlay',
 					'[data-state="open"]',
 					'[data-overlay="true"]',
 				];
@@ -5358,12 +5136,12 @@ setTimeout(() => {
 					if (el && isVisible(el)) return true;
 				}
 				// Heuristic fallback: look for large, fixed overlays with high z-index
-				const candidates = Array.from(document.body.querySelectorAll("*"));
+				const candidates = Array.from(document.body.querySelectorAll('*'));
 				return candidates.some((elem) => {
 					if (!(elem instanceof HTMLElement)) return false;
 					const style = window.getComputedStyle(elem);
 					if (
-						(style.position === "fixed" || style.position === "absolute") &&
+						(style.position === 'fixed' || style.position === 'absolute') &&
 						(parseInt(style.zIndex, 10) || 0) > 1000 &&
 						elem.offsetWidth >= window.innerWidth * 0.75 &&
 						elem.offsetHeight >= window.innerHeight * 0.5
@@ -5377,44 +5155,35 @@ setTimeout(() => {
 			function isVisible(el) {
 				if (!el) return false;
 				const style = window.getComputedStyle(el);
-				return (
-					style.display !== "none" &&
-					style.visibility !== "hidden" &&
-					style.opacity !== "0"
-				);
+				return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
 			}
 
 			function setOpacity(value) {
 				if (!bar) return;
 				if (overlayIsOpen()) {
-					bar.style.setProperty("opacity", "0", "important");
-					bar.style.pointerEvents = "none";
+					bar.style.setProperty('opacity', '0', 'important');
+					bar.style.pointerEvents = 'none';
 					return;
 				}
 				// Don't block pointer-events unless you actually want to!
-				bar.style.setProperty("opacity", value, "important");
-				bar.style.pointerEvents = "";
+				bar.style.setProperty('opacity', value, 'important');
+				bar.style.pointerEvents = '';
 			}
 
 			function fadeToIdle() {
 				if (!bar) return;
 				if (overlayIsOpen()) {
-					setOpacity("0");
+					setOpacity('0');
 					return;
 				}
 				if (hover) return;
 				// If large sidebar is open, instantly set opacity 0
 				if (isLargeSidebarOpen()) {
-					bar.style.setProperty("transition", "none", "important");
-					setOpacity("0");
+					bar.style.setProperty('transition', 'none', 'important');
+					setOpacity('0');
 					void bar.offsetWidth;
 					setTimeout(() => {
-						if (bar)
-							bar.style.setProperty(
-								"transition",
-								"opacity 0.5s ease-in-out",
-								"important",
-							);
+						if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 					}, 0);
 					return;
 				}
@@ -5424,7 +5193,7 @@ setTimeout(() => {
 			function onEnter() {
 				hover = true;
 				clearTimeout(idleTimer);
-				setOpacity("1");
+				setOpacity('1');
 			}
 			function onLeave() {
 				hover = false;
@@ -5442,36 +5211,27 @@ setTimeout(() => {
 
 				bar = el;
 				// Show instantly, then restore the fade
-				bar.style.setProperty("transition", "none", "important");
-				setOpacity("1");
+				bar.style.setProperty('transition', 'none', 'important');
+				setOpacity('1');
 				void bar.offsetWidth;
-				bar.style.setProperty(
-					"transition",
-					"opacity 0.5s ease-in-out",
-					"important",
-				);
+				bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 
-				bar.addEventListener("mouseenter", onEnter, true);
-				bar.addEventListener("mouseleave", onLeave, true);
+				bar.addEventListener('mouseenter', onEnter, true);
+				bar.addEventListener('mouseleave', onLeave, true);
 
 				bar.addEventListener(
-					"click",
+					'click',
 					function onClick() {
 						if (!bar) return;
 						// Disable fade transition instantly for this click
-						bar.style.setProperty("transition", "none", "important");
-						setOpacity("0");
+						bar.style.setProperty('transition', 'none', 'important');
+						setOpacity('0');
 						hover = false;
 						clearTimeout(idleTimer);
 						idleTimerVersion++;
 						void bar.offsetWidth;
 						setTimeout(() => {
-							if (bar)
-								bar.style.setProperty(
-									"transition",
-									"opacity 0.5s ease-in-out",
-									"important",
-								);
+							if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 						}, 0);
 					},
 					true,
@@ -5480,31 +5240,21 @@ setTimeout(() => {
 				classObserver = new MutationObserver(() => {
 					// Sidebar just closed or opened; handle transition instantly
 					if (isLargeSidebarOpen()) {
-						bar.style.setProperty("transition", "none", "important");
-						setOpacity("0");
+						bar.style.setProperty('transition', 'none', 'important');
+						setOpacity('0');
 						hover = false;
 						clearTimeout(idleTimer);
 						idleTimerVersion++;
 						void bar.offsetWidth;
 						setTimeout(() => {
-							if (bar)
-								bar.style.setProperty(
-									"transition",
-									"opacity 0.5s ease-in-out",
-									"important",
-								);
+							if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 						}, 0);
 					} else {
-						bar.style.setProperty("transition", "none", "important");
-						setOpacity("1");
+						bar.style.setProperty('transition', 'none', 'important');
+						setOpacity('1');
 						void bar.offsetWidth;
 						setTimeout(() => {
-							if (bar)
-								bar.style.setProperty(
-									"transition",
-									"opacity 0.5s ease-in-out",
-									"important",
-								);
+							if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 							clearTimeout(idleTimer);
 							idleTimerVersion++;
 							const thisVersion = idleTimerVersion;
@@ -5516,15 +5266,15 @@ setTimeout(() => {
 				});
 
 				// We want to observe changes on the large sidebar, not the slimbar
-				const largeSidebar = document.getElementById("stage-sidebar");
+				const largeSidebar = document.getElementById('stage-sidebar');
 				if (largeSidebar) {
 					classObserver.observe(largeSidebar, {
 						attributes: true,
-						attributeFilter: ["class", "style"],
+						attributeFilter: ['class', 'style'],
 					});
 				}
 
-				setOpacity("1");
+				setOpacity('1');
 				clearTimeout(idleTimer);
 				idleTimerVersion++;
 				const thisVersion = idleTimerVersion;
@@ -5535,7 +5285,7 @@ setTimeout(() => {
 
 			// DOM observer to attach/detach
 			const domObserver = new MutationObserver(() => {
-				const el = document.getElementById("stage-sidebar-tiny-bar");
+				const el = document.getElementById('stage-sidebar-tiny-bar');
 				if (el !== bar) {
 					if (el) {
 						attachToBar(el);
@@ -5555,46 +5305,46 @@ setTimeout(() => {
 				childList: true,
 				subtree: true,
 				attributes: true,
-				attributeFilter: ["class", "style"],
+				attributeFilter: ['class', 'style'],
 			});
 
 			// (Removed setInterval: fadeToIdle() is now handled only by user idle, DOM mutation, or overlayObserver events.)
 
 			// startup
 			function startup() {
-				const first = document.getElementById("stage-sidebar-tiny-bar");
+				const first = document.getElementById('stage-sidebar-tiny-bar');
 				if (first) attachToBar(first);
 			}
-			if (document.readyState === "loading") {
-				document.addEventListener("DOMContentLoaded", startup);
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', startup);
 			} else {
 				startup();
 			}
 
 			chrome.storage.onChanged.addListener((chg, area) => {
-				if (area !== "sync") return;
+				if (area !== 'sync') return;
 
-				if ("popupSlimSidebarOpacityValue" in chg) {
+				if ('popupSlimSidebarOpacityValue' in chg) {
 					window._slimBarIdleOpacity =
-						typeof chg.popupSlimSidebarOpacityValue.newValue === "number"
+						typeof chg.popupSlimSidebarOpacityValue.newValue === 'number'
 							? chg.popupSlimSidebarOpacityValue.newValue
 							: 0.6;
 					fadeToIdle();
 				}
 
-				if ("fadeSlimSidebarEnabled" in chg) {
+				if ('fadeSlimSidebarEnabled' in chg) {
 					window._fadeSlimSidebarEnabled = chg.fadeSlimSidebarEnabled.newValue;
 					const nowOn = chg.fadeSlimSidebarEnabled.newValue;
 					if (!nowOn) {
 						detachCurrentBar();
-						const barEl = document.getElementById("stage-sidebar-tiny-bar");
+						const barEl = document.getElementById('stage-sidebar-tiny-bar');
 						if (barEl) {
-							barEl.style.removeProperty("transition");
-							barEl.style.removeProperty("opacity");
-							barEl.style.removeProperty("pointer-events");
+							barEl.style.removeProperty('transition');
+							barEl.style.removeProperty('opacity');
+							barEl.style.removeProperty('pointer-events');
 						}
 					} else {
-						const barEl = document.getElementById("stage-sidebar-tiny-bar");
+						const barEl = document.getElementById('stage-sidebar-tiny-bar');
 						if (barEl) attachToBar(barEl);
 					}
 				}
@@ -5603,13 +5353,13 @@ setTimeout(() => {
 			window.flashSlimSidebarBar = (dur = 2500) => {
 				if (!bar) return;
 				if (overlayIsOpen()) {
-					setOpacity("0");
+					setOpacity('0');
 					hover = false;
 					return;
 				}
 				clearTimeout(idleTimer);
 				idleTimerVersion++;
-				setOpacity("1");
+				setOpacity('1');
 				const thisVersion = idleTimerVersion;
 				idleTimer = setTimeout(() => {
 					if (idleTimerVersion === thisVersion) {
