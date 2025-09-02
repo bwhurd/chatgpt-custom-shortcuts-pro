@@ -18,6 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	// === Unified shortcut helpers (REPLACES 555) ================================
 
+	function sep_storageToUI(str) {
+		// Converts real newlines to literal \n for display in the input
+		return typeof str === 'string' ? str.replace(/\n/g, '\\n') : str;
+	}
+	function sep_UItoStorage(str) {
+		// Converts displayed literal \n back to real newlines for storage/export
+		return typeof str === 'string' ? str.replace(/\\n/g, '\n') : str;
+	}
+
 	// Source of truth for the 10 model-picker slots if storage is empty
 	const DEFAULT_MODEL_PICKER_KEY_CODES = [
 		'Digit1',
@@ -1508,100 +1517,140 @@ document.addEventListener('DOMContentLoaded', () => {
 	 * Initializes default settings if not present in Chrome storage.
 	 * Sets the radio button and checkbox states and stores them if they haven't been defined yet.
 	 */
-	chrome.storage.sync.get(
-		[
-			'hideArrowButtonsCheckbox',
-			'hideCornerButtonsCheckbox',
-			'removeMarkdownOnCopyCheckbox',
-			'moveTopBarToBottomCheckbox',
-			'pageUpDownTakeover',
-			'selectMessagesSentByUserOrChatGptCheckbox',
-			'onlySelectUserCheckbox',
-			'onlySelectAssistantCheckbox',
-			'disableCopyAfterSelectCheckbox',
-			'enableSendWithControlEnterCheckbox',
-			'enableStopWithControlBackspaceCheckbox',
-			'useAltForModelSwitcherRadio',
-			'useControlForModelSwitcherRadio',
-			'rememberSidebarScrollPositionCheckbox',
+	// === Robust Settings Initialization ===
+	// --- Global source of truth for all default settings ---
+	const NBSP = '\u00A0';
+	const DEFAULT_PRESET_DATA = {
+		// UI settings
+		hideArrowButtonsCheckbox: true,
+		hideCornerButtonsCheckbox: true,
+		removeMarkdownOnCopyCheckbox: true,
+		moveTopBarToBottomCheckbox: false,
+		pageUpDownTakeover: true,
+		selectMessagesSentByUserOrChatGptCheckbox: true,
+		onlySelectUserCheckbox: false,
+		onlySelectAssistantCheckbox: false,
+		disableCopyAfterSelectCheckbox: false,
+		rememberSidebarScrollPositionCheckbox: false,
+		fadeSlimSidebarEnabled: false,
+
+		// opacity defaults
+		popupBottomBarOpacityValue: 0.6, // Default: 0.6
+		popupSlimSidebarOpacityValue: 0, // Default: 0 (fully opaque)
+
+		// Shortcut toggles
+		enableSendWithControlEnterCheckbox: true,
+		enableStopWithControlBackspaceCheckbox: true,
+		useAltForModelSwitcherRadio: true,
+		useControlForModelSwitcherRadio: false,
+
+		// Shortcuts (KeyboardEvent.code values)
+		shortcutKeyScrollUpOneMessage: 'KeyA',
+		shortcutKeyScrollDownOneMessage: 'KeyF',
+		shortcutKeyScrollUpTwoMessages: 'ArrowUp',
+		shortcutKeyScrollDownTwoMessages: 'ArrowDown',
+		shortcutKeyCopyLowest: 'KeyC',
+		shortcutKeyEdit: 'KeyE',
+		shortcutKeySendEdit: 'KeyD',
+		shortcutKeyCopyAllResponses: 'BracketLeft',
+		shortcutKeyCopyAllCodeBlocks: 'BracketRight',
+		copyCodeUserSeparator: ' \n \n --- --- --- \n \n',
+		copyAllUserSeparator: ' \n \n --- --- --- \n \n',
+		shortcutKeyNewConversation: 'KeyN',
+		shortcutKeySearchConversationHistory: 'KeyK',
+		shortcutKeyClickNativeScrollToBottom: 'KeyZ',
+		shortcutKeyToggleSidebar: 'KeyS',
+		shortcutKeyActivateInput: 'KeyW',
+		shortcutKeySearchWeb: 'KeyQ',
+		shortcutKeyScrollToTop: 'KeyT',
+		shortcutKeyPreviousThread: 'KeyJ',
+		shortcutKeyNextThread: 'Semicolon',
+		selectThenCopy: 'KeyX',
+		shortcutKeyToggleModelSelector: 'Slash',
+		shortcutKeyRegenerate: 'KeyR',
+		shortcutKeyTemporaryChat: 'KeyP',
+		shortcutKeyStudy: NBSP,
+		shortcutKeyCreateImage: NBSP,
+		shortcutKeyToggleCanvas: NBSP,
+		shortcutKeyToggleDictate: 'KeyY',
+		shortcutKeyCancelDictation: NBSP,
+		shortcutKeyShare: NBSP,
+		shortcutKeyThinkLonger: NBSP,
+		shortcutKeyAddPhotosFiles: NBSP,
+
+		// Model picker keys (number row, 0-9)
+		modelPickerKeyCodes: [
+			'Digit1',
+			'Digit2',
+			'Digit3',
+			'Digit4',
+			'Digit5',
+			'Digit6',
+			'Digit7',
+			'Digit8',
+			'Digit9',
+			'Digit0',
 		],
-		(data) => {
-			const defaults = {
-				hideArrowButtonsCheckbox:
-					data.hideArrowButtonsCheckbox !== undefined ? data.hideArrowButtonsCheckbox : true, // hide arrows by default
-				hideCornerButtonsCheckbox:
-					data.hideCornerButtonsCheckbox === undefined ? true : data.hideCornerButtonsCheckbox,
-				removeMarkdownOnCopyCheckbox:
-					data.removeMarkdownOnCopyCheckbox !== undefined
-						? data.removeMarkdownOnCopyCheckbox
-						: true, // Default to true
-				moveTopBarToBottomCheckbox:
-					data.moveTopBarToBottomCheckbox !== undefined ? data.moveTopBarToBottomCheckbox : false, // Default to false
-				pageUpDownTakeover: data.pageUpDownTakeover !== undefined ? data.pageUpDownTakeover : true, // Default to true
-				selectMessagesSentByUserOrChatGptCheckbox:
-					data.selectMessagesSentByUserOrChatGptCheckbox !== undefined
-						? data.selectMessagesSentByUserOrChatGptCheckbox
-						: true, // Default to true
-				onlySelectUserCheckbox:
-					data.onlySelectUserCheckbox !== undefined ? data.onlySelectUserCheckbox : false, // Default to false
-				onlySelectAssistantCheckbox:
-					data.onlySelectAssistantCheckbox !== undefined ? data.onlySelectAssistantCheckbox : false, // Default to false
-				disableCopyAfterSelectCheckbox:
-					data.disableCopyAfterSelectCheckbox !== undefined
-						? data.disableCopyAfterSelectCheckbox
-						: false, // Default to false
-				enableSendWithControlEnterCheckbox:
-					data.enableSendWithControlEnterCheckbox !== undefined
-						? data.enableSendWithControlEnterCheckbox
-						: true, // Default to true
-				enableStopWithControlBackspaceCheckbox:
-					data.enableStopWithControlBackspaceCheckbox !== undefined
-						? data.enableStopWithControlBackspaceCheckbox
-						: true, // Default to true
-				useAltForModelSwitcherRadio:
-					data.useAltForModelSwitcherRadio !== undefined ? data.useAltForModelSwitcherRadio : true, // Default to true
-				useControlForModelSwitcherRadio:
-					data.useControlForModelSwitcherRadio !== undefined
-						? data.useControlForModelSwitcherRadio
-						: false, // Default to false
-				rememberSidebarScrollPositionCheckbox:
-					data.rememberSidebarScrollPositionCheckbox !== undefined
-						? data.rememberSidebarScrollPositionCheckbox
-						: false, // Default to false
-			};
+	};
+	// Make available everywhere
+	window.DEFAULT_PRESET_DATA = DEFAULT_PRESET_DATA;
 
-			// Update the checkbox and radio button states in the popup based on stored or default values
-			document.getElementById('hideArrowButtonsCheckbox').checked =
-				defaults.hideArrowButtonsCheckbox;
-			document.getElementById('hideCornerButtonsCheckbox').checked =
-				defaults.hideCornerButtonsCheckbox;
-			document.getElementById('removeMarkdownOnCopyCheckbox').checked =
-				defaults.removeMarkdownOnCopyCheckbox;
-			document.getElementById('moveTopBarToBottomCheckbox').checked =
-				defaults.moveTopBarToBottomCheckbox;
-			document.getElementById('pageUpDownTakeover').checked = defaults.pageUpDownTakeover;
-			document.getElementById('selectMessagesSentByUserOrChatGptCheckbox').checked =
-				defaults.selectMessagesSentByUserOrChatGptCheckbox;
-			document.getElementById('onlySelectUserCheckbox').checked = defaults.onlySelectUserCheckbox;
-			document.getElementById('onlySelectAssistantCheckbox').checked =
-				defaults.onlySelectAssistantCheckbox;
-			document.getElementById('disableCopyAfterSelectCheckbox').checked =
-				defaults.disableCopyAfterSelectCheckbox;
-			document.getElementById('enableSendWithControlEnterCheckbox').checked =
-				defaults.enableSendWithControlEnterCheckbox;
-			document.getElementById('enableStopWithControlBackspaceCheckbox').checked =
-				defaults.enableStopWithControlBackspaceCheckbox;
-			document.getElementById('useAltForModelSwitcherRadio').checked =
-				defaults.useAltForModelSwitcherRadio;
-			document.getElementById('useControlForModelSwitcherRadio').checked =
-				defaults.useControlForModelSwitcherRadio;
-			document.getElementById('rememberSidebarScrollPositionCheckbox').checked =
-				defaults.rememberSidebarScrollPositionCheckbox;
-			// Store the defaults if the values are missing
-			chrome.storage.sync.set(defaults);
-		},
-	);
+	// === Robust First-Run Defaults Loader for All Options, Shortcuts, Separators ===
+	(function robustFirstRunDefaultsInit() {
+		const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
 
+		const allKeys = Object.keys(DEFAULT_PRESET_DATA);
+
+		chrome.storage.sync.get(allKeys, (data) => {
+			const patch = {};
+			allKeys.forEach((k) => {
+				if (data[k] === undefined) {
+					patch[k] = DEFAULT_PRESET_DATA[k];
+				}
+			});
+			if (Object.keys(patch).length > 0) {
+				chrome.storage.sync.set(patch, () => {
+					if (typeof window.refreshShortcutInputsFromStorage === 'function') {
+						window.refreshShortcutInputsFromStorage();
+					}
+					['copyCodeUserSeparator', 'copyAllUserSeparator'].forEach((id) => {
+						const el = document.getElementById(id);
+						if (!el) return;
+
+						// Only update if we actually patched this key.
+						if (patch[id] !== undefined) {
+							el.value = sep_storageToUI(patch[id]);
+						}
+					}); // ← keep remaining init logic unchanged
+				});
+			}
+			// Always update UI (even if no patch), for first-run edge case
+			/* ---------- Reflect all settings into UI ----------- */
+			allKeys.forEach((k) => {
+				const el = document.getElementById(k);
+				if (!el) return;
+
+				// --- Checkboxes / radios ---------------------------
+				if (el.type === 'checkbox' || el.type === 'radio') {
+					el.checked = data[k] !== undefined ? data[k] : DEFAULT_PRESET_DATA[k];
+					return;
+				}
+
+				// --- Text / number inputs --------------------------
+				if (typeof DEFAULT_PRESET_DATA[k] === 'string') {
+					const raw = data[k] !== undefined ? data[k] : DEFAULT_PRESET_DATA[k];
+
+					// Show literal "\n" for separator inputs
+					if (k === 'copyCodeUserSeparator' || k === 'copyAllUserSeparator') {
+						el.value = sep_storageToUI(raw);
+					} else {
+						el.value = raw;
+					}
+				}
+			});
+			/* ---------- end reflect ----------------------------- */
+		});
+	})();
 	/**
 	 * Handles checkbox or radio button state changes by saving to Chrome storage and showing a toast.
 	 * Prevents attaching multiple event listeners.
@@ -1770,7 +1819,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		'shortcutKeyPreviousThread',
 		'shortcutKeyNextThread',
 		'selectThenCopy',
-		'shortcutKeyToggleSidebarFoldersButton',
 		'shortcutKeyToggleModelSelector',
 		'shortcutKeyRegenerate',
 		'shortcutKeyTemporaryChat',
@@ -2179,82 +2227,82 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 	});
 
-	// Handling separator keys
-	const separatorKeys = ['copyCode-userSeparator', 'copyAll-userSeparator'];
+	// Handling separator keys (copyCodeUserSeparator & copyAllUserSeparator) -- now robustly stored like 111
 
-	// Get the stored values and set them in the inputs
-	chrome.storage.sync.get(separatorKeys, (data) => {
-		separatorKeys.forEach((id) => {
-			const value = data[id] !== undefined ? data[id] : document.getElementById(id).value;
-			document.getElementById(id).value = value;
-		});
-	});
+	const separatorKeys = ['copyCodeUserSeparator', 'copyAllUserSeparator'];
 
 	// Save separators without trimming or alteration
 	separatorKeys.forEach((id) => {
 		const inputField = document.getElementById(id);
 		if (inputField && !inputField.dataset.listenerAttached) {
+			/* ---------- Persist separator input on blur ---------- */
+			/* keep exact whitespace – no .trim() */
 			inputField.addEventListener('blur', function () {
-				const separatorValue = this.value; // Use exact user input
-				chrome.storage.sync.set({ [id]: separatorValue }, () => {
+				const converted = sep_UItoStorage(this.value); // literal "\n" → real newlines
+				chrome.storage.sync.set({ [id]: converted }, () => {
 					showToast('Separator saved. Reload page to apply changes.');
 				});
+				this.value = sep_storageToUI(converted); // keep UI in literal form
 			});
 			inputField.dataset.listenerAttached = 'true';
 		}
 	});
 
 	const moveTopBarCheckbox = document.getElementById('moveTopBarToBottomCheckbox');
-	const slider = document.getElementById('opacitySlider');
+	const slider = document.getElementById('popupBottomBarOpacityValue');
 	const sliderValueDisplay = document.getElementById('opacityValue');
 	const previewIcon = document.getElementById('opacityPreviewIcon');
 	const tooltipContainer = document.getElementById('opacity-tooltip-container');
 
-	chrome.storage.sync.get('popupBottomBarOpacityValue', ({ popupBottomBarOpacityValue }) => {
-		const val = typeof popupBottomBarOpacityValue === 'number' ? popupBottomBarOpacityValue : 0.6;
-		slider.value = val;
-		sliderValueDisplay.textContent = val.toFixed(2);
-		previewIcon.style.opacity = val;
-	});
+	if (moveTopBarCheckbox && slider && sliderValueDisplay && previewIcon && tooltipContainer) {
+		// Only proceed if all required elements exist
+		chrome.storage.sync.get('popupBottomBarOpacityValue', ({ popupBottomBarOpacityValue }) => {
+			const val = typeof popupBottomBarOpacityValue === 'number' ? popupBottomBarOpacityValue : 0.6;
+			slider.value = val;
+			sliderValueDisplay.textContent = val.toFixed(2);
+			previewIcon.style.opacity = val;
+		});
 
-	function toggleOpacityUI(visible) {
-		tooltipContainer.style.display = visible ? 'flex' : 'none';
+		function toggleOpacityUI(visible) {
+			tooltipContainer.style.display = visible ? 'flex' : 'none';
+		}
+
+		// Update visibility initially and on change
+		chrome.storage.sync.get('moveTopBarToBottomCheckbox', ({ moveTopBarToBottomCheckbox }) => {
+			const isVisible =
+				moveTopBarToBottomCheckbox !== undefined ? moveTopBarToBottomCheckbox : false;
+			moveTopBarCheckbox.checked = isVisible;
+			toggleOpacityUI(isVisible);
+		});
+
+		moveTopBarCheckbox.addEventListener('change', () => {
+			const isChecked = moveTopBarCheckbox.checked;
+			toggleOpacityUI(isChecked);
+			chrome.storage.sync.set({ moveTopBarToBottomCheckbox: isChecked });
+		});
+
+		let sliderTimeout;
+		slider.addEventListener('input', () => {
+			const val = parseFloat(slider.value);
+			sliderValueDisplay.textContent = val.toFixed(2);
+			previewIcon.style.opacity = val;
+
+			clearTimeout(sliderTimeout);
+			sliderTimeout = setTimeout(() => {
+				let numericVal = Number(slider.value);
+				if (Number.isNaN(numericVal)) numericVal = 0.6;
+
+				chrome.storage.sync.set({ popupBottomBarOpacityValue: numericVal }, () => {
+					if (chrome.runtime.lastError) {
+						console.error('Storage set error:', chrome.runtime.lastError);
+					} else {
+						console.log('popupBottomBarOpacityValue set to', numericVal);
+						showToast('Opacity saved. Reload page to apply changes.');
+					}
+				});
+			}, 500);
+		});
 	}
-
-	// Update visibility initially and on change
-	chrome.storage.sync.get('moveTopBarToBottomCheckbox', ({ moveTopBarToBottomCheckbox }) => {
-		const isVisible = moveTopBarToBottomCheckbox !== undefined ? moveTopBarToBottomCheckbox : false;
-		moveTopBarCheckbox.checked = isVisible;
-		toggleOpacityUI(isVisible);
-	});
-
-	moveTopBarCheckbox.addEventListener('change', () => {
-		const isChecked = moveTopBarCheckbox.checked;
-		toggleOpacityUI(isChecked);
-		chrome.storage.sync.set({ moveTopBarToBottomCheckbox: isChecked });
-	});
-
-	let sliderTimeout;
-	slider.addEventListener('input', () => {
-		const val = parseFloat(slider.value);
-		sliderValueDisplay.textContent = val.toFixed(2);
-		previewIcon.style.opacity = val;
-
-		clearTimeout(sliderTimeout);
-		sliderTimeout = setTimeout(() => {
-			let numericVal = Number(slider.value);
-			if (Number.isNaN(numericVal)) numericVal = 0.6;
-
-			chrome.storage.sync.set({ popupBottomBarOpacityValue: numericVal }, () => {
-				if (chrome.runtime.lastError) {
-					console.error('Storage set error:', chrome.runtime.lastError);
-				} else {
-					console.log('popupBottomBarOpacityValue set to', numericVal);
-					showToast('Opacity saved. Reload page to apply changes.');
-				}
-			});
-		}, 500);
-	});
 
 	setTimeout(() => {
 		balanceWrappedLabels();
@@ -2264,31 +2312,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	// === Backup & Restore (Export/Import) ===
 	(function settingsBackupInit() {
-		// Whitelist known keys (includes all shortcuts + options + model picker + prefs)
-		const OPTION_KEYS = [
-			'hideArrowButtonsCheckbox',
-			'hideCornerButtonsCheckbox',
-			'removeMarkdownOnCopyCheckbox',
-			'moveTopBarToBottomCheckbox',
-			'pageUpDownTakeover',
-			'selectMessagesSentByUserOrChatGptCheckbox',
-			'onlySelectUserCheckbox',
-			'onlySelectAssistantCheckbox',
-			'disableCopyAfterSelectCheckbox',
-			'enableSendWithControlEnterCheckbox',
-			'enableStopWithControlBackspaceCheckbox',
-			'useAltForModelSwitcherRadio',
-			'useControlForModelSwitcherRadio',
-			'rememberSidebarScrollPositionCheckbox',
-			'popupBottomBarOpacityValue',
-			'fadeSlimSidebarEnabled',
-			'popupSlimSidebarOpacityValue',
-			'autoOverwrite',
-			'dontAskDuplicateShortcutModal',
-			'copyCode-userSeparator',
-			'copyAll-userSeparator',
-			'modelPickerKeyCodes',
-		];
+		// DRY whitelist: all default keys minus shortcut keys
+		const OPTION_KEYS = Object.keys(DEFAULT_PRESET_DATA).filter(
+			(key) => !shortcutKeys.includes(key),
+		);
 		function getExportKeySet() {
 			return new Set([...shortcutKeys, ...OPTION_KEYS]);
 		}
@@ -2560,7 +2587,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 		}
 
-		function importSettingsObj(src, opts = {}) {
+		function importSettingsObj(src) {
 			const keySet = getExportKeySet();
 			const next = {};
 
@@ -2580,7 +2607,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 
 			// Confirm overwrite
-			const proceed = opts.skipConfirm ? true : window.confirm(t('confirm_import_overwrite'));
+			const proceed = window.confirm(t('confirm_import_overwrite'));
 			if (!proceed) return;
 
 			// Apply to storage
@@ -2603,10 +2630,21 @@ document.addEventListener('DOMContentLoaded', () => {
 					const reflectOption = (key, val) => {
 						const el = document.getElementById(key);
 						if (!el) return;
+
+						// Binary inputs (checkbox / radio)
 						if (el.type === 'checkbox' || el.type === 'radio') {
 							el.checked = !!val;
-						} else if (typeof val === 'string' || typeof val === 'number') {
-							el.value = val;
+							return;
+						}
+
+						// Text / numeric inputs
+						if (typeof val === 'string' || typeof val === 'number') {
+							// Ensure separator fields render with literal "\n"
+							if (key === 'copyCodeUserSeparator' || key === 'copyAllUserSeparator') {
+								el.value = sep_storageToUI(val);
+							} else {
+								el.value = val;
+							}
 						}
 					};
 					Object.keys(next).forEach((k) => {
@@ -2671,8 +2709,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	// ===================== Fade Slim Sidebar =====================
 
-	const fadeSlimSidebarCheckbox = document.getElementById('FadeSlimSidebarCheckbox');
-	const slimSidebarSlider = document.getElementById('slimSidebarOpacitySlider');
+	const fadeSlimSidebarEnabled = document.getElementById('fadeSlimSidebarEnabled');
+	const slimSidebarSlider = document.getElementById('popupSlimSidebarOpacityValue');
 	const slimSidebarSliderValueDisplay = document.getElementById('slimSidebarOpacityValue');
 	const slimSidebarPreviewIcon = document.getElementById('slimSidebarOpacityPreviewIcon');
 	const slimSidebarTooltipContainer = document.getElementById(
@@ -2690,59 +2728,63 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// On load, sync checkbox, slider, and UI from storage, enforce "default to 0" logic
-	chrome.storage.sync.get(['fadeSlimSidebarEnabled', 'popupSlimSidebarOpacityValue'], (data) => {
-		const isEnabled = !!data.fadeSlimSidebarEnabled;
-		let val =
-			typeof data.popupSlimSidebarOpacityValue === 'number'
-				? data.popupSlimSidebarOpacityValue
-				: null;
-		fadeSlimSidebarCheckbox.checked = isEnabled;
-		toggleSlimSidebarOpacityUI(isEnabled);
+	if (fadeSlimSidebarEnabled) {
+		chrome.storage.sync.get(['fadeSlimSidebarEnabled', 'popupSlimSidebarOpacityValue'], (data) => {
+			const isEnabled = !!data.fadeSlimSidebarEnabled;
+			let val =
+				typeof data.popupSlimSidebarOpacityValue === 'number'
+					? data.popupSlimSidebarOpacityValue
+					: null;
+			fadeSlimSidebarEnabled.checked = isEnabled;
+			toggleSlimSidebarOpacityUI(isEnabled);
 
-		// On first enable, force to 0 unless already set
-		if (isEnabled) {
-			if (val === null) {
-				// Set storage and UI to 0
-				val = 0.0;
-				chrome.storage.sync.set({ popupSlimSidebarOpacityValue: val });
-			}
-			setSlimSidebarOpacityUI(val);
-		} else {
-			// Don't touch opacity if disabled
-			if (val !== null) setSlimSidebarOpacityUI(val);
-			else setSlimSidebarOpacityUI(0.0);
-		}
-	});
-
-	// Checkbox toggles fade and ensures opacity is set to 0 if enabling for the first time
-	fadeSlimSidebarCheckbox.addEventListener('change', () => {
-		const isChecked = fadeSlimSidebarCheckbox.checked;
-		toggleSlimSidebarOpacityUI(isChecked);
-
-		if (isChecked) {
-			// Check if value exists—if not, set to 0
-			chrome.storage.sync.get('popupSlimSidebarOpacityValue', (data) => {
-				let val =
-					typeof data.popupSlimSidebarOpacityValue === 'number'
-						? data.popupSlimSidebarOpacityValue
-						: null;
+			// On first enable, force to 0 unless already set
+			if (isEnabled) {
 				if (val === null) {
+					// Set storage and UI to 0
 					val = 0.0;
 					chrome.storage.sync.set({ popupSlimSidebarOpacityValue: val });
-					setSlimSidebarOpacityUI(val);
-				} else {
-					setSlimSidebarOpacityUI(val);
 				}
-				chrome.storage.sync.set({ fadeSlimSidebarEnabled: true }, () => {
+				setSlimSidebarOpacityUI(val);
+			} else {
+				// Don't touch opacity if disabled
+				if (val !== null) setSlimSidebarOpacityUI(val);
+				else setSlimSidebarOpacityUI(0.0);
+			}
+		});
+	}
+
+	// Checkbox toggles fade and ensures opacity is set to 0 if enabling for the first time
+	if (fadeSlimSidebarEnabled) {
+		fadeSlimSidebarEnabled.addEventListener('change', () => {
+			const isChecked = fadeSlimSidebarEnabled.checked;
+			toggleSlimSidebarOpacityUI(isChecked);
+
+			if (isChecked) {
+				// Check if value exists—if not, set to 0
+				chrome.storage.sync.get('popupSlimSidebarOpacityValue', (data) => {
+					let val =
+						typeof data.popupSlimSidebarOpacityValue === 'number'
+							? data.popupSlimSidebarOpacityValue
+							: null;
+					if (val === null) {
+						val = 0.0;
+						chrome.storage.sync.set({ popupSlimSidebarOpacityValue: val });
+						setSlimSidebarOpacityUI(val);
+					} else {
+						setSlimSidebarOpacityUI(val);
+					}
+					chrome.storage.sync.set({ fadeSlimSidebarEnabled: true }, () => {
+						showToast('Options saved. Reload page to apply changes.');
+					});
+				});
+			} else {
+				chrome.storage.sync.set({ fadeSlimSidebarEnabled: false }, () => {
 					showToast('Options saved. Reload page to apply changes.');
 				});
-			});
-		} else {
-			chrome.storage.sync.set({ fadeSlimSidebarEnabled: false }, () => {
-				showToast('Options saved. Reload page to apply changes.');
-			});
-		}
-	});
+			}
+		});
+	}
 
 	// Slider logic – sync value to UI and storage
 	let slimSidebarSliderTimeout;
@@ -2776,63 +2818,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			{ modelPickerKeyCodes: ['', '', '', '', '', '', '', '', '', ''] },
 		);
 
-		const DEFAULT_PRESET_DATA = {
-			hideArrowButtonsCheckbox: true,
-			hideCornerButtonsCheckbox: true,
-			removeMarkdownOnCopyCheckbox: true,
-			moveTopBarToBottomCheckbox: false,
-			pageUpDownTakeover: true,
-			selectMessagesSentByUserOrChatGptCheckbox: true,
-			onlySelectUserCheckbox: false,
-			onlySelectAssistantCheckbox: false,
-			disableCopyAfterSelectCheckbox: false,
-			enableSendWithControlEnterCheckbox: true,
-			enableStopWithControlBackspaceCheckbox: true,
-			useAltForModelSwitcherRadio: true,
-			useControlForModelSwitcherRadio: false,
-			rememberSidebarScrollPositionCheckbox: false,
-			shortcutKeyScrollUpOneMessage: 'KeyA',
-			shortcutKeyScrollDownOneMessage: 'KeyF',
-			shortcutKeyCopyLowest: 'KeyC',
-			shortcutKeyEdit: 'KeyE',
-			shortcutKeySendEdit: 'KeyD',
-			shortcutKeyCopyAllResponses: 'BracketLeft',
-			shortcutKeyCopyAllCodeBlocks: 'BracketRight',
-			shortcutKeyNewConversation: 'KeyN',
-			shortcutKeySearchConversationHistory: 'KeyK',
-			shortcutKeyClickNativeScrollToBottom: 'KeyZ',
-			shortcutKeyToggleSidebar: 'KeyS',
-			shortcutKeyActivateInput: 'KeyW',
-			shortcutKeySearchWeb: 'KeyQ',
-			shortcutKeyScrollToTop: 'KeyT',
-			shortcutKeyPreviousThread: 'KeyJ',
-			shortcutKeyNextThread: 'Semicolon',
-			selectThenCopy: 'KeyX',
-			shortcutKeyToggleSidebarFoldersButton: NBSP,
-			shortcutKeyToggleModelSelector: 'Slash',
-			shortcutKeyRegenerate: 'KeyR',
-			shortcutKeyTemporaryChat: 'KeyP',
-			shortcutKeyStudy: NBSP,
-			shortcutKeyCreateImage: NBSP,
-			shortcutKeyToggleCanvas: NBSP,
-			shortcutKeyToggleDictate: 'KeyY',
-			shortcutKeyCancelDictation: NBSP,
-			shortcutKeyShare: NBSP,
-			shortcutKeyThinkLonger: NBSP,
-			shortcutKeyAddPhotosFiles: NBSP,
-			modelPickerKeyCodes: [
-				'Digit1',
-				'Digit2',
-				'Digit3',
-				'Digit4',
-				'Digit5',
-				'Digit6',
-				'Digit7',
-				'Digit8',
-				'Digit9',
-				'Digit0',
-			],
-		};
+		const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
 
 		// --- Button event handlers ---
 		const clearBtn = document.getElementById('btnClearAllShortcuts');
@@ -2844,7 +2830,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					`This will <strong style="color:#c00;font-weight:700;">clear all shortcut keys</strong>, but will not change any toggles or checkboxes.`,
 					(yes) => {
 						if (yes && typeof window.importSettingsObj === 'function') {
-							window.importSettingsObj(CLEAR_PRESET_DATA);
+							window.importSettingsObj(CLEAR_PRESET_DATA, { skipBrowserConfirm: true });
 						}
 					},
 					{ proceedText: 'Clear all shortcuts?', simple: true, allowHTML: true },
@@ -2858,7 +2844,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					`This will <strong style="color:#c00;font-weight:700;">restore the default values</strong> for all extension options and shortcut keys.`,
 					(yes) => {
 						if (yes && typeof window.importSettingsObj === 'function') {
-							window.importSettingsObj(DEFAULT_PRESET_DATA);
+							window.importSettingsObj(DEFAULT_PRESET_DATA, { skipBrowserConfirm: true });
 						}
 					},
 					{ proceedText: 'Reset all to defaults?', simple: true, allowHTML: true },
@@ -2876,6 +2862,8 @@ function enableEditableOpacity(valueId, sliderId, previewIconId, storageKey, def
 	const valueSpan = document.getElementById(valueId);
 	const slider = document.getElementById(sliderId);
 	const previewIcon = document.getElementById(previewIconId);
+
+	if (!valueSpan || !slider || !previewIcon) return;
 
 	valueSpan.addEventListener('click', startEdit);
 	valueSpan.addEventListener('keydown', (e) => {
@@ -2940,14 +2928,14 @@ function enableEditableOpacity(valueId, sliderId, previewIconId, storageKey, def
 
 enableEditableOpacity(
 	'opacityValue',
-	'opacitySlider',
+	'popupBottomBarOpacityValue',
 	'opacityPreviewIcon',
 	'popupBottomBarOpacityValue',
 	0.6,
 );
 enableEditableOpacity(
 	'slimSidebarOpacityValue',
-	'slimSidebarOpacitySlider',
+	'popupSlimSidebarOpacityValue',
 	'slimSidebarOpacityPreviewIcon',
 	'popupSlimSidebarOpacityValue',
 	0.0,
@@ -3095,10 +3083,48 @@ function modelPickerInitSafe() {
 	let activeChip = null;
 	let activeKeyHandler = null;
 
+	// Helper: track whether focus came from keyboard Tab (vs mouse)
+	function makeTabFocusHelper() {
+		let tabIntent = false;
+		let t = null;
+		const arm = () => {
+			tabIntent = true;
+			clearTimeout(t);
+			t = setTimeout(() => {
+				tabIntent = false;
+			}, 400);
+		};
+		const disarm = () => {
+			tabIntent = false;
+			clearTimeout(t);
+			t = null;
+		};
+		window.addEventListener(
+			'keydown',
+			(e) => {
+				if (e.key === 'Tab') arm();
+			},
+			true,
+		);
+		['mousedown', 'pointerdown', 'touchstart'].forEach((ev) => {
+			window.addEventListener(ev, disarm, true);
+		});
+		return {
+			shouldAutoSetOnFocus() {
+				return tabIntent;
+			},
+			clear() {
+				disarm();
+			},
+		};
+	}
+	const tabFocusHelper = makeTabFocusHelper();
+
 	function cancelActiveCapture() {
 		if (!activeChip || !activeKeyHandler) return;
 		activeChip.removeEventListener('keydown', activeKeyHandler, true);
 		activeChip.classList.remove('listening');
+		activeChip.setAttribute('aria-pressed', 'false');
 		activeChip = null;
 		activeKeyHandler = null;
 		render();
@@ -3109,8 +3135,14 @@ function modelPickerInitSafe() {
 			if (activeChip && activeChip !== chip) cancelActiveCapture();
 			if (activeChip === chip) return;
 			chip.classList.add('listening');
+			chip.setAttribute('aria-pressed', 'true');
 			chip.textContent = 'Set';
 			const onKey = (e) => {
+				// Allow Tab to move focus to the next/prev element and exit "set" mode
+				if (e.key === 'Tab') {
+					cancelActiveCapture();
+					return;
+				}
 				e.preventDefault();
 				e.stopPropagation();
 				const code = e.code;
@@ -3130,7 +3162,9 @@ function modelPickerInitSafe() {
 					});
 					return;
 				}
+				// Ignore pure modifier keys
 				if (/^(Shift|Alt|Control|Meta)(Left|Right)$/.test(code)) return;
+
 				const modelMod =
 					typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
 				const selfOwner = { type: 'model', idx, modifier: modelMod };
@@ -3140,7 +3174,6 @@ function modelPickerInitSafe() {
 
 				const proceedAssign = () => {
 					window.ShortcutUtils.clearOwners?.(conflicts, () => {
-						// After clearing, always get the latest codes from the cache (which was just updated)
 						const codes = window.ShortcutUtils.getModelPickerCodesCache().slice();
 						codes[idx] = code;
 						window.saveModelPickerKeyCodes(codes, () => {
@@ -3178,6 +3211,7 @@ function modelPickerInitSafe() {
 								{ keyLabel, targetLabel: toLabel },
 							);
 						} else {
+							const currentCodes = window.ShortcutUtils.getModelPickerCodesCache();
 							const lines = conflicts.map((c) => {
 								let k = '';
 								if (c.type === 'shortcut') {
@@ -3185,14 +3219,13 @@ function modelPickerInitSafe() {
 									const ch = el?.value?.trim() || '';
 									k = ch || '?';
 								} else if (c.type === 'model') {
-									const cur = codes[c.idx];
+									const cur = currentCodes[c.idx];
 									k = window.ShortcutUtils.displayFromCode
 										? window.ShortcutUtils.displayFromCode(cur)
 										: cur || '?';
 								}
 								return { key: k, from: c.label, to: toLabel };
 							});
-
 							const names = conflicts.map((c) => c.label).join(', ');
 							window.showDuplicateModal(
 								names,
@@ -3221,9 +3254,19 @@ function modelPickerInitSafe() {
 			activeKeyHandler = onKey;
 			chip.focus();
 		};
+		// Mouse/touch click still explicitly starts capture
 		chip.addEventListener('click', startCapture);
+
+		// Keyboard: Enter/Space starts capture when focused
 		chip.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' || e.key === ' ') startCapture();
+		});
+
+		// Keyboard: If focus arrives via Tab, auto-enter capture.
+		chip.addEventListener('focus', () => {
+			// Avoid recursion when we programmatically focus() inside startCapture.
+			if (chip.classList.contains('listening')) return;
+			if (tabFocusHelper.shouldAutoSetOnFocus()) startCapture();
 		});
 	});
 

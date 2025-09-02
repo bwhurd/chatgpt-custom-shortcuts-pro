@@ -3,6 +3,12 @@ node_modules/
 
 # Editor settings (ignore unless you want to share VS Code configs)
 .vscode/
+CGCSP-Github.code-workspace
+
+# Test and Validation
+build-sync.js
+options-storage.js
+settings.json
 
 # Logs
 npm-debug.log*

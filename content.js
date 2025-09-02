@@ -388,7 +388,7 @@ const delays = DELAYS;
 			'useAltForModelSwitcherRadio',
 			'useControlForModelSwitcherRadio',
 			'rememberSidebarScrollPositionCheckbox',
-			'FadeSlimSidebarCheckbox', // (checkbox state: true/false)
+			'fadeSlimSidebarEnabled', // (checkbox state: true/false)
 			'popupSlimSidebarOpacityValue', // (slider value: number)
 		],
 		(data) => {
@@ -461,8 +461,8 @@ const delays = DELAYS;
 			return;
 		}
 
-		chrome.storage.sync.get(['copyAll-userSeparator', 'copyCode-userSeparator'], (data) => {
-			const userSepRaw = data['copyAll-userSeparator'];
+		chrome.storage.sync.get(['copyAllUserSeparator', 'copyCodeUserSeparator'], (data) => {
+			const userSepRaw = data.copyAllUserSeparator;
 			const sep = userSepRaw ? parseSeparator(userSepRaw) : ' \n  \n --- --- --- \n \n';
 
 			const parts = [];
@@ -555,9 +555,9 @@ const delays = DELAYS;
 			showToast('No code boxes found');
 			return;
 		}
-		chrome.storage.sync.get('copyCode-userSeparator', (data) => {
-			const copyCodeSeparator = data['copyCode-userSeparator']
-				? parseSeparator(data['copyCode-userSeparator'])
+		chrome.storage.sync.get('copyCodeUserSeparator', (data) => {
+			const copyCodeSeparator = data.copyCodeUserSeparator
+				? parseSeparator(data.copyCodeUserSeparator)
 				: ' \n  \n --- --- --- \n \n';
 			const formattedBlocks = getAllCodeBlocks();
 			const output = formattedBlocks.join(copyCodeSeparator);
@@ -1317,7 +1317,6 @@ const delays = DELAYS;
 			'shortcutKeyPreviousThread',
 			'shortcutKeyNextThread',
 			'selectThenCopy',
-			'shortcutKeyToggleSidebarFoldersButton',
 			'shortcutKeyClickSendButton',
 			'shortcutKeyClickStopButton',
 			'shortcutKeyToggleModelSelector',
@@ -1355,7 +1354,6 @@ const delays = DELAYS;
 				shortcutKeyPreviousThread: 'j',
 				shortcutKeyNextThread: ';',
 				selectThenCopy: 'x',
-				shortcutKeyToggleSidebarFoldersButton: '',
 				shortcutKeyClickSendButton: 'Enter',
 				shortcutKeyClickStopButton: 'Backspace',
 				shortcutKeyToggleModelSelector: '/',
@@ -2697,20 +2695,6 @@ const delays = DELAYS;
 						}, 50);
 					};
 				})(),
-				[shortcuts.shortcutKeyToggleSidebarFoldersButton]: () => {
-					try {
-						const btn = window.toggleSidebarFoldersButton;
-
-						if (
-							btn &&
-							btn.offsetParent !== null // ensures it's visible (not display:none or hidden)
-						) {
-							btn.click();
-						}
-					} catch {
-						// Catch errors silently
-					}
-				},
 				[shortcuts.shortcutKeyToggleModelSelector]: () => {
 					window.toggleModelSelector();
 				},

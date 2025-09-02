@@ -309,7 +309,7 @@
 		"message": "Import failed: $1"
 	},
 	"toast_import_complete": {
-		"message": "Import complete. Reload page to apply all changes."
+		"message": "Import complete. Close then reopen settings to see changes."
 	},
 	"toast_import_invalid": {
 		"message": "Invalid file. Import aborted."
