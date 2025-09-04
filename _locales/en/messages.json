@@ -21,7 +21,7 @@
 		"message": "Scroll to Bottom"
 	},
 	"label_pgup_pgdown": {
-		"message": "PgUp/PgDown Takeover"
+		"message": "PageUp + PageDown Takeover"
 	},
 	"label_send_top_bar": {
 		"message": "Send Top Bar to Bottom"
@@ -84,19 +84,22 @@
 		"message": "Send and Stop"
 	},
 	"label_join_all": {
-		"message": "Join & Copy All Responses"
+		"message": "Join + Copy All Responses"
 	},
 	"label_join_separator": {
-		"message": "Join & Copy Separator"
+		"message": "Join + Copy Separator"
 	},
 	"label_join_code": {
-		"message": "Join & Copy All Code Boxes"
+		"message": "Join + Copy All Code Boxes"
 	},
 	"label_code_separator": {
 		"message": "Code Box Separator"
 	},
 	"label_hide_arrows": {
-		"message": "Hide Arrow Buttons"
+		"message": "Show Message Navigation Arrows"
+	},
+	"tt_hide_arrows": {
+		"message": "Enable arrow buttons to quickly move to the previous or next message with a click."
 	},
 	"tt_scroll_up_one": {
 		"message": "Scrolls up one message at a time."
@@ -129,19 +132,19 @@
 		"message": "Simulates mouse-selecting text and pressing Ctrl+C. Press repeatedly to cycle through visible messages."
 	},
 	"tt_select_copy_behavior": {
-		"message": "Select any message, only yours, or only ChatGPT’s."
+		"message": "When using the Select + Copy shortcut, you can tweak the selection and copy behavior."
 	},
 	"tt_select_all": {
-		"message": "Cycle through all visible messages."
+		"message": "Pressing the Select + Copy shortcut will cycle through all visible messages."
 	},
 	"tt_select_assistant": {
-		"message": "Only select messages sent by ChatGPT."
+		"message": "Pressing the Select + Copy shortcut will only select messages sent by ChatGPT."
 	},
 	"tt_select_user": {
-		"message": "Only select messages sent by you."
+		"message": "Pressing the Select + Copy shortcut will only select messages sent by you."
 	},
 	"tt_disable_autocopy": {
-		"message": "Check to disable auto-copy (i.e. now it only selects the text)."
+		"message": "Check to disable auto-copy. Select + Copy will only highlight text."
 	},
 	"tt_new_chat": {
 		"message": "Start a new conversation."
@@ -159,10 +162,10 @@
 		"message": "Toggle Search the Web tool."
 	},
 	"tt_prev_thread": {
-		"message": "Click '<'. Use Control+Alt+shortcut to scroll between '<' without clicking."
+		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
 	},
 	"tt_next_thread": {
-		"message": "Click '>'. Use Control+Alt+shortcut to scroll between '>' without clicking."
+		"message": "Alt+{shortcut}: clicks the lowest visible '>' next thread button.  ——————————————————— Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
 	},
 	"tt_edit_msg": {
 		"message": "Click edit on the lowest visible user message. Press again to go to the next one up."
@@ -180,16 +183,13 @@
 		"message": "Join all ChatGPT responses in the conversation and copy to clipboard. Skips user input."
 	},
 	"tt_join_separator": {
-		"message": "Customize separator between joined items. Use a space +\\n for line breaks."
+		"message": "When using the Join + Copy All Responses shortcut, you can insert a custom separator between each response. Include a space before each \\n to insert line breaks."
 	},
 	"tt_join_code": {
-		"message": "Join all code blocks and copy to clipboard. Skips user input."
+		"message": "When using the Join + Copy All Code Boxes shortcut, you can insert a custom separator between each joined code box. Include a space before each \\n to insert line breaks."
 	},
 	"tt_code_separator": {
-		"message": "Customize separator between code blocks. Use a space + \\n for line breaks."
-	},
-	"tt_hide_arrows": {
-		"message": "Hide the up and down arrow buttons."
+		"message": "Customize separator between code blocks. Include a preceding space before each \\n to insert line breaks."
 	},
 	"label_showModelPicker": {
 		"message": "Show Model Picker"
@@ -264,7 +264,7 @@
 		"message": "Toggle the canvas workspace tool."
 	},
 	"label_add_photos_files": {
-		"message": "Add Photos & Files Tool"
+		"message": "Add Photos + Files Tool"
 	},
 	"tt_add_photos_files": {
 		"message": "Attach images or files to a message."
@@ -321,7 +321,7 @@
 		"message": "Scroll Up Two Messages"
 	},
 	"label_clear_reset": {
-		"message": "Clear & Reset"
+		"message": "Clear + Reset"
 	},
 	"btn_clear_all_shortcuts": {
 		"message": "Clear all shortcuts"
@@ -336,7 +336,7 @@
 		"message": "Reset all options and shortcuts to defaults"
 	},
 	"label_backup_restore": {
-		"message": "Backup & Restore"
+		"message": "Backup + Restore"
 	},
 	"btn_export": {
 		"message": "Export Settings"

@@ -95,9 +95,6 @@
 	"label_code_separator": {
 		"message": "Separador de bloques de código"
 	},
-	"label_hide_arrows": {
-		"message": "Ocultar flechas"
-	},
 	"tt_scroll_up_one": {
 		"message": "Desplaza arriba un mensaje."
 	},
@@ -187,9 +184,6 @@
 	},
 	"tt_code_separator": {
 		"message": "Personaliza el separador entre bloques de código. Usa un espacio + \\n para saltos de línea."
-	},
-	"tt_hide_arrows": {
-		"message": "Ocultar los botones de flecha arriba/abajo."
 	},
 	"label_showModelPicker": {
 		"message": "Mostrar selector de modelo"
@@ -343,5 +337,11 @@
 	},
 	"btn_import": {
 		"message": "Importar ajustes"
+	},
+	"label_hide_arrows": {
+		"message": "Mostrar flechas para navegar entre mensajes"
+	},
+	"tt_hide_arrows": {
+		"message": "Activa los botones de flecha para ir al mensaje anterior o siguiente con un clic."
 	}
 }

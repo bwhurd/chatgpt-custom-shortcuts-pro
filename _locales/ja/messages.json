@@ -95,9 +95,6 @@
 	"label_code_separator": {
 		"message": "コードブロックの区切り"
 	},
-	"label_hide_arrows": {
-		"message": "矢印ボタンを非表示"
-	},
 	"tt_scroll_up_one": {
 		"message": "1件ずつ上へスクロールします。"
 	},
@@ -187,9 +184,6 @@
 	},
 	"tt_code_separator": {
 		"message": "コードブロック間の区切りを設定。改行はスペース + \\n を使用。"
-	},
-	"tt_hide_arrows": {
-		"message": "上下の矢印ボタンを隠す。"
 	},
 	"label_showModelPicker": {
 		"message": "モデルピッカーを表示"
@@ -343,5 +337,11 @@
 	},
 	"btn_import": {
 		"message": "設定をインポート"
+	},
+	"label_hide_arrows": {
+		"message": "メッセージ移動の矢印を表示"
+	},
+	"tt_hide_arrows": {
+		"message": "クリックで前/次のメッセージに移動できる矢印ボタンを有効にします。"
 	}
 }

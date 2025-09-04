@@ -128,7 +128,7 @@ function applyVisibilitySettings(data) {
 	const settingsMap = {
 		moveTopBarToBottomCheckbox: false,
 		pageUpDownTakeover: true,
-		hideArrowButtonsCheckbox: true,
+		showLegacyArrowButtonsCheckbox: false,
 		removeMarkdownOnCopyCheckbox: true,
 		selectMessagesSentByUserOrChatGptCheckbox: true,
 		onlySelectUserCheckbox: false,
@@ -374,6 +374,7 @@ const delays = DELAYS;
 	// Fetch initial values from Chrome storage
 	chrome.storage.sync.get(
 		[
+			'showLegacyArrowButtonsCheckbox',
 			'hideArrowButtonsCheckbox',
 			'moveTopBarToBottomCheckbox',
 			'pageUpDownTakeover',
@@ -392,6 +393,17 @@ const delays = DELAYS;
 			'popupSlimSidebarOpacityValue', // (slider value: number)
 		],
 		(data) => {
+			// One-time migration: invert old value into new key, persist, then clean up
+			if (
+				!Object.hasOwn(data, 'showLegacyArrowButtonsCheckbox') &&
+				Object.hasOwn(data, 'hideArrowButtonsCheckbox')
+			) {
+				data.showLegacyArrowButtonsCheckbox = !data.hideArrowButtonsCheckbox;
+				chrome.storage.sync.set({
+					showLegacyArrowButtonsCheckbox: data.showLegacyArrowButtonsCheckbox,
+				});
+				chrome.storage.sync.remove('hideArrowButtonsCheckbox');
+			}
 			applyVisibilitySettings(data);
 		},
 	);
@@ -400,6 +412,15 @@ const delays = DELAYS;
 	chrome.storage.onChanged.addListener((changes, area) => {
 		if (area === 'sync') {
 			const updatedData = {};
+
+			// Back-compat: if old key changes, mirror it inverted into the new key
+			if (
+				Object.hasOwn(changes, 'hideArrowButtonsCheckbox') &&
+				!Object.hasOwn(changes, 'showLegacyArrowButtonsCheckbox')
+			) {
+				updatedData.showLegacyArrowButtonsCheckbox = !changes.hideArrowButtonsCheckbox.newValue;
+			}
+
 			for (const key in changes) {
 				updatedData[key] = changes[key].newValue;
 			}
@@ -672,7 +693,7 @@ const delays = DELAYS;
 
 	function createScrollUpButton() {
 		// Return a harmless node when button is gated off – avoids undefined append
-		if (window.hideArrowButtonsCheckbox) {
+		if (!window.showLegacyArrowButtonsCheckbox) {
 			return null;
 		}
 
@@ -832,7 +853,7 @@ const delays = DELAYS;
 
 	function createScrollDownButton() {
 		// Same defensive return strategy as the up-button
-		if (window.hideArrowButtonsCheckbox) {
+		if (!window.showLegacyArrowButtonsCheckbox) {
 			return null;
 		}
 
@@ -908,10 +929,10 @@ const delays = DELAYS;
 		document.getElementById('upButton')?.remove();
 		document.getElementById('downButton')?.remove();
 
-		// If setting is true, don't add (early return).
-		if (window.hideArrowButtonsCheckbox) return;
+		// New logic: if unchecked (false), do nothing (keep hidden)
+		if (!window.showLegacyArrowButtonsCheckbox) return;
 
-		// Add fresh buttons (will only show if setting is false)
+		// Add fresh buttons (will only show when the checkbox is checked)
 		const upButton = createScrollUpButton();
 		const downButton = createScrollDownButton();
 		appendWithFragment(document.body, upButton, downButton);

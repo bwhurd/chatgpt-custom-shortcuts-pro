@@ -1522,8 +1522,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const NBSP = '\u00A0';
 	const DEFAULT_PRESET_DATA = {
 		// UI settings
-		hideArrowButtonsCheckbox: true,
-		hideCornerButtonsCheckbox: true,
+		showLegacyArrowButtonsCheckbox: false,
 		removeMarkdownOnCopyCheckbox: true,
 		moveTopBarToBottomCheckbox: false,
 		pageUpDownTakeover: true,
@@ -1704,8 +1703,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// Apply the handler to each checkbox and radio button
-	handleStateChange('hideArrowButtonsCheckbox', 'hideArrowButtonsCheckbox');
-	handleStateChange('hideCornerButtonsCheckbox', 'hideCornerButtonsCheckbox');
+	handleStateChange('showLegacyArrowButtonsCheckbox', 'showLegacyArrowButtonsCheckbox');
 	handleStateChange('removeMarkdownOnCopyCheckbox', 'removeMarkdownOnCopyCheckbox');
 	handleStateChange('moveTopBarToBottomCheckbox', 'moveTopBarToBottomCheckbox');
 	handleStateChange('pageUpDownTakeover', 'pageUpDownTakeover');

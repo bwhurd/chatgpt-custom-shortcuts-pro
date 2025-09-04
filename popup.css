@@ -76,11 +76,6 @@ h1 {
 	text-wrap: balance;
 }
 
-.blank-row {
-	grid-column: span 2;
-	height: 8px;
-}
-
 .disabled-section {
 	opacity: 0.2;
 	pointer-events: none;
@@ -390,7 +385,7 @@ h1 {
 .shortcut-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 20px;
+	gap: 4px;
 }
 
 .shortcut-item,
@@ -403,7 +398,7 @@ h1 {
 .shortcut-item {
 	justify-content: space-between;
 	background-color: var(--bg-secondary);
-	padding: 0.75rem;
+	padding: 0.75rem 0.75rem 0.75rem 0.75rem;
 	border: 1px solid var(--border-light);
 	border-radius: 6px;
 	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -1244,3 +1239,37 @@ span.dup-key {
 	word-break: normal !important;
 	overflow-wrap: normal !important;
 }
+
+/* ── iOS-style section header (additive) ───────────────────────────
+   usage: <div class="blank-row section-header">Message Tools</div>
+   - keeps .blank-row defaults for all other cases
+   - text is pressed to the bottom edge of the spacer
+   - low-contrast, tiny, letter-spaced (iOS Settings style)
+------------------------------------------------------------------- */
+
+/* biome-ignore lint/style/noDescendingSpecificity:ignore */
+.blank-row {
+	grid-column: span 2;
+	height: 50px;
+}
+
+.blank-row.section-header {
+	display: flex;
+	align-items: flex-end; /* stick text to the bottom */
+	justify-content: flex-start;
+	padding: 0 0.75rem 2px; /* left aligns with .shortcut-item padding */
+	min-height: 24px; /* a touch taller than your 20px spacer */
+	color: rgba(60, 60, 67, 0.6); /* iOS secondary label color */
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	line-height: 1;
+	text-transform: uppercase;
+	user-select: none;
+	white-space: nowrap;
+	/* inherits grid-column: span 2 and base height from .blank-row */
+}
+
+/* Optional: if you want a hair more breathing room above first tile,
+   uncomment the next line to add a 2–4px buffer (grid gap is already 4px) */
+/* .blank-row.section-header { padding-bottom: 2px; } */

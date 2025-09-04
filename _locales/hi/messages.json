@@ -95,9 +95,6 @@
 	"label_code_separator": {
 		"message": "कोड ब्लॉक विभाजक"
 	},
-	"label_hide_arrows": {
-		"message": "तीर बटन छिपाएँ"
-	},
 	"tt_scroll_up_one": {
 		"message": "हर बार एक संदेश ऊपर स्क्रॉल करता है।"
 	},
@@ -187,9 +184,6 @@
 	},
 	"tt_code_separator": {
 		"message": "कोड ब्लॉकों के बीच का सेपरेटर बदलें. लाइन ब्रेक के लिए स्पेस + \\n इस्तेमाल करें."
-	},
-	"tt_hide_arrows": {
-		"message": "ऊपर/नीचे वाले तीर बटन छिपाएँ."
 	},
 	"label_showModelPicker": {
 		"message": "मॉडल पिकर दिखाएँ"
@@ -343,5 +337,11 @@
 	},
 	"btn_import": {
 		"message": "सेटिंग्स इम्पोर्ट करें"
+	},
+	"label_hide_arrows": {
+		"message": "संदेश नेविगेशन तीर दिखाएँ"
+	},
+	"tt_hide_arrows": {
+		"message": "क्लिक करके पिछले या अगले संदेश पर जाने के लिए तीर बटन सक्षम करें."
 	}
 }
