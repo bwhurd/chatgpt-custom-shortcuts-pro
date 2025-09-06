@@ -32,14 +32,8 @@
 	"tag_new": {
 		"message": "НОВЕ"
 	},
-	"label_copy": {
-		"message": "Копіювати"
-	},
 	"label_strip_md": {
 		"message": "Прибирати Markdown під час копіювання"
-	},
-	"label_select_copy": {
-		"message": "Виділити + Копіювати"
 	},
 	"label_select_copy_behavior": {
 		"message": "Режим «Виділити + Копіювати»"
@@ -59,20 +53,11 @@
 	"label_search_chats": {
 		"message": "Пошук у чатах"
 	},
-	"label_search_web": {
-		"message": "Веб-пошук"
-	},
 	"label_prev_thread": {
 		"message": "До попереднього чату"
 	},
 	"label_next_thread": {
 		"message": "До наступного чату"
-	},
-	"label_send": {
-		"message": "Надіслати"
-	},
-	"label_stop": {
-		"message": "Зупинити"
 	},
 	"tt_send": {
 		"message": "Позначте, щоб Ctrl + Enter надсилав повідомлення."
@@ -116,12 +101,6 @@
 	"tt_opacity_slider": {
 		"message": "Посуньте вправо — нижня панель лишається видимою. Вліво — ховається, доки не наведіть курсор."
 	},
-	"tt_copy_plain": {
-		"message": "Натискає найнижчу видиму стандартну кнопку копіювання."
-	},
-	"tt_strip_md": {
-		"message": "Увімкніть, щоб Alt+C прибирало з тексту Markdown‑символи * і ###, не змінюючи блоки коду. Потрібен доступ до буфера обміну."
-	},
 	"tt_select_copy": {
 		"message": "Імітує виділення мишкою та натискання Ctrl+C. Натискайте кілька разів, щоб перебирати видимі повідомлення."
 	},
@@ -154,12 +133,6 @@
 	},
 	"tt_search_web": {
 		"message": "Увімк./вимк. інструмент «Пошук в інтернеті»."
-	},
-	"tt_prev_thread": {
-		"message": "Клацніть «<». Використовуйте Control+Alt+шорткат, щоб перегортати «<» без кліків."
-	},
-	"tt_next_thread": {
-		"message": "Клацніть «>». Використовуйте Control+Alt+шорткат, щоб перегортати «>» без кліків."
 	},
 	"tt_edit_msg": {
 		"message": "Натисніть «Редагувати» на найнижчому видимому повідомленні користувача. Натисніть ще раз — перехід на одне вище."
@@ -233,32 +206,17 @@
 	"tt_temp_chat": {
 		"message": "Перемкнути тимчасовий чат (доступно до надсилання першого повідомлення)."
 	},
-	"label_think_longer": {
-		"message": "Думати довше"
-	},
 	"tt_think_longer": {
 		"message": "Доступно лише у безплатній версії. Глибше міркування для повнішої відповіді."
-	},
-	"label_study": {
-		"message": "Режим навчання"
 	},
 	"tt_study": {
 		"message": "Перемикає пояснення крок-за-кроком, поєднання понять і закріплення знань."
 	},
-	"label_toggle_create_image": {
-		"message": "Створити зображення"
-	},
 	"tt_toggle_create_image": {
 		"message": "Увімкнути інструмент створення зображень."
 	},
-	"label_toggle_canvas": {
-		"message": "Полотно"
-	},
 	"tt_toggle_canvas": {
 		"message": "Перемкнути робочу область «Полотно»."
-	},
-	"label_add_photos_files": {
-		"message": "Додати фото й файли"
 	},
 	"tt_add_photos_files": {
 		"message": "Прикріпіть зображення чи файли до повідомлення."
@@ -302,9 +260,6 @@
 	"toast_import_failed": {
 		"message": "Помилка імпорту: $1"
 	},
-	"toast_import_complete": {
-		"message": "Імпорт завершено. Перезавантажте сторінку для застосування змін."
-	},
 	"toast_import_invalid": {
 		"message": "Недійсний файл. Імпорт скасовано."
 	},
@@ -343,5 +298,74 @@
 	},
 	"tt_hide_arrows": {
 		"message": "Увімкніть кнопки-стрілки, щоб кліком переходити до попереднього або наступного повідомлення."
+	},
+	"tt_selectThenCopyAllMessages": {
+		"message": "Імітує виділення мишею тексту всіх повідомлень і натискання Ctrl+C. Під час вставлення у Word або в email форматування зберігається."
+	},
+	"tt_selectThenCopyAllMessagesBehavior": {
+		"message": "Виберіть, чи має «Виділити + Копіювати усе» прибирати мітки (наприклад, «ChatGPT сказав:») і що копіювати: усі повідомлення, лише відповіді ChatGPT чи лише ваші повідомлення."
+	},
+	"tt_selectThenCopyAllMessagesBothUserAndChatGpt": {
+		"message": "Включати повідомлення і від вас, і від ChatGPT."
+	},
+	"tt_selectThenCopyAllMessagesOnlyAssistant": {
+		"message": "Включати лише повідомлення ChatGPT (без ваших повідомлень)."
+	},
+	"tt_selectThenCopyAllMessagesOnlyUser": {
+		"message": "Включати лише ваші повідомлення (без відповідей ChatGPT)."
+	},
+	"tt_doNotIncludeLabelsCheckbox": {
+		"message": "Поставте позначку, щоб прибрати «ChatGPT сказав:» та «Ви сказали:» перед кожним повідомленням."
+	},
+	"label_send": {
+		"message": "Надіслати: Ctrl + Enter"
+	},
+	"label_stop": {
+		"message": "Зупинити: Ctrl + Backspace"
+	},
+	"label_copy": {
+		"message": "Натиснути «Копіювати»"
+	},
+	"label_select_copy": {
+		"message": "Вибрати + Копіювати одне повідомлення"
+	},
+	"tt_copy_plain": {
+		"message": "Копіює будь-яке одне повідомлення як звичайний текст. Натисніть ще раз, щоб перемикати видимі кнопки копіювання."
+	},
+	"tt_strip_md": {
+		"message": "Увімкніть, щоб прибирати * і ### Markdown з тексту, скопійованого комбінацією `Натиснути «Копіювати»`. Текст, скопійований із блоку коду, не змінюється."
+	},
+	"tt_prev_thread": {
+		"message": "Alt+{shortcut}: натискає найнижчу видиму кнопку «<» попередньої гілки. ———————————————————  Ctrl+Alt+{shortcut}: прокручує, щоб знайти інші відповіді з кількома гілками."
+	},
+	"tt_next_thread": {
+		"message": "Alt+{shortcut}: натискає найнижчу видиму кнопку «>» наступної гілки.  ——————————————————— Ctrl+Alt+{shortcut}: прокручує, щоб знайти інші відповіді з кількома гілками."
+	},
+	"label_selectThenCopyAllMessages": {
+		"message": "Об’єднати + Копіювати всі повідомлення"
+	},
+	"label_selectThenCopyAllMessagesBehavior": {
+		"message": "Поведінка «Копіювати все»"
+	},
+	"toast_import_complete": {
+		"message": "Імпорт завершено. Закрийте й знову відкрийте налаштування, щоб побачити зміни."
+	},
+	"label_search_web": {
+		"message": "Веб‑пошук"
+	},
+	"label_think_longer": {
+		"message": "Подумати довше"
+	},
+	"label_study": {
+		"message": "Навчання"
+	},
+	"label_toggle_create_image": {
+		"message": "Створити зображення"
+	},
+	"label_toggle_canvas": {
+		"message": "Полотно"
+	},
+	"label_add_photos_files": {
+		"message": "Додати фото й файли"
 	}
 }

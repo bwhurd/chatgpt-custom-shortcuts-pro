@@ -1532,6 +1532,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		disableCopyAfterSelectCheckbox: false,
 		rememberSidebarScrollPositionCheckbox: false,
 		fadeSlimSidebarEnabled: false,
+		selectThenCopyAllMessagesBothUserAndChatGpt: false,
+		selectThenCopyAllMessagesOnlyAssistant: true,
+		selectThenCopyAllMessagesOnlyUser: false,
+		doNotIncludeLabelsCheckbox: false,
 
 		// opacity defaults
 		popupBottomBarOpacityValue: 0.6, // Default: 0.6
@@ -1551,10 +1555,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		shortcutKeyCopyLowest: 'KeyC',
 		shortcutKeyEdit: 'KeyE',
 		shortcutKeySendEdit: 'KeyD',
-		shortcutKeyCopyAllResponses: 'BracketLeft',
 		shortcutKeyCopyAllCodeBlocks: 'BracketRight',
 		copyCodeUserSeparator: ' \n \n --- --- --- \n \n',
-		copyAllUserSeparator: ' \n \n --- --- --- \n \n',
 		shortcutKeyNewConversation: 'KeyN',
 		shortcutKeySearchConversationHistory: 'KeyK',
 		shortcutKeyClickNativeScrollToBottom: 'KeyZ',
@@ -1576,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		shortcutKeyShare: NBSP,
 		shortcutKeyThinkLonger: NBSP,
 		shortcutKeyAddPhotosFiles: NBSP,
+		selectThenCopyAllMessages: 'BracketLeft',
 
 		// Model picker keys (number row, 0-9)
 		modelPickerKeyCodes: [
@@ -1612,7 +1615,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					if (typeof window.refreshShortcutInputsFromStorage === 'function') {
 						window.refreshShortcutInputsFromStorage();
 					}
-					['copyCodeUserSeparator', 'copyAllUserSeparator'].forEach((id) => {
+					['copyCodeUserSeparator'].forEach((id) => {
 						const el = document.getElementById(id);
 						if (!el) return;
 
@@ -1629,18 +1632,18 @@ document.addEventListener('DOMContentLoaded', () => {
 				const el = document.getElementById(k);
 				if (!el) return;
 
-				// --- Checkboxes / radios ---------------------------
 				if (el.type === 'checkbox' || el.type === 'radio') {
+					// --- Checkboxes / radios ---------------------------
 					el.checked = data[k] !== undefined ? data[k] : DEFAULT_PRESET_DATA[k];
 					return;
 				}
 
-				// --- Text / number inputs --------------------------
 				if (typeof DEFAULT_PRESET_DATA[k] === 'string') {
+					// --- Text / number inputs --------------------------
 					const raw = data[k] !== undefined ? data[k] : DEFAULT_PRESET_DATA[k];
 
 					// Show literal "\n" for separator inputs
-					if (k === 'copyCodeUserSeparator' || k === 'copyAllUserSeparator') {
+					if (k === 'copyCodeUserSeparator') {
 						el.value = sep_storageToUI(raw);
 					} else {
 						el.value = raw;
@@ -1656,34 +1659,66 @@ document.addEventListener('DOMContentLoaded', () => {
 	 * @param {string} elementId - The ID of the checkbox or radio button element.
 	 * @param {string} storageKey - The key to store the state in Chrome storage.
 	 */
+	// Handler for checkboxes and radio-like groups (exclusive within each group)
 	function handleStateChange(elementId, storageKey) {
 		const element = document.getElementById(elementId);
 		if (element && !element.dataset.listenerAttached) {
 			element.addEventListener('change', function () {
-				const isChecked = this.checked;
+				const isChecked = this.checked === true;
 				let obj = {};
 
-				if (
-					[
-						'selectMessagesSentByUserOrChatGptCheckbox',
-						'onlySelectUserCheckbox',
-						'onlySelectAssistantCheckbox',
-					].includes(storageKey)
-				) {
-					obj = {
-						selectMessagesSentByUserOrChatGptCheckbox: false,
-						onlySelectUserCheckbox: false,
-						onlySelectAssistantCheckbox: false,
-					};
-					obj[storageKey] = isChecked;
-				} else if (
-					['useAltForModelSwitcherRadio', 'useControlForModelSwitcherRadio'].includes(storageKey)
-				) {
-					obj = {
-						useAltForModelSwitcherRadio: false,
-						useControlForModelSwitcherRadio: false,
-					};
-					obj[storageKey] = isChecked;
+				// Group A: Select + Copy One Behavior (radio group)
+				const groupA = [
+					'selectMessagesSentByUserOrChatGptCheckbox',
+					'onlySelectUserCheckbox',
+					'onlySelectAssistantCheckbox',
+				];
+
+				// Group B: Select + Copy All Behavior (radio group)
+				// Support both naming variants to avoid breakage:
+				// - "EntireConversation..." (prior JS)
+				// - "AllMessages..." (current HTML)
+				const groupB = [
+					'selectAndCopyEntireConversationBothUserAndChatGpt',
+					'selectAndCopyEntireConversationOnlyAssistant',
+					'selectAndCopyEntireConversationOnlyUser',
+					'selectThenCopyAllMessagesBothUserAndChatGpt',
+					'selectThenCopyAllMessagesOnlyAssistant',
+					'selectThenCopyAllMessagesOnlyUser',
+				];
+
+				// Group C: Model switcher (radio group)
+				const modelSwitcherKeys = [
+					'useAltForModelSwitcherRadio',
+					'useControlForModelSwitcherRadio',
+				];
+
+				const isRadioGroupKey =
+					groupA.includes(storageKey) ||
+					groupB.includes(storageKey) ||
+					modelSwitcherKeys.includes(storageKey);
+
+				// For radio groups, ignore "unchecked" events to avoid clearing storage
+				if (isRadioGroupKey && !isChecked) return;
+
+				if (groupA.includes(storageKey)) {
+					obj = groupA.reduce((acc, key) => {
+						acc[key] = false;
+						return acc;
+					}, {});
+					obj[storageKey] = true;
+				} else if (groupB.includes(storageKey)) {
+					obj = groupB.reduce((acc, key) => {
+						acc[key] = false;
+						return acc;
+					}, {});
+					obj[storageKey] = true;
+				} else if (modelSwitcherKeys.includes(storageKey)) {
+					obj = modelSwitcherKeys.reduce((acc, key) => {
+						acc[key] = false;
+						return acc;
+					}, {});
+					obj[storageKey] = true;
 				} else {
 					obj[storageKey] = isChecked;
 				}
@@ -1707,13 +1742,18 @@ document.addEventListener('DOMContentLoaded', () => {
 	handleStateChange('removeMarkdownOnCopyCheckbox', 'removeMarkdownOnCopyCheckbox');
 	handleStateChange('moveTopBarToBottomCheckbox', 'moveTopBarToBottomCheckbox');
 	handleStateChange('pageUpDownTakeover', 'pageUpDownTakeover');
+
+	// Select + Copy One Behavior (Set 1)
 	handleStateChange(
 		'selectMessagesSentByUserOrChatGptCheckbox',
 		'selectMessagesSentByUserOrChatGptCheckbox',
 	);
 	handleStateChange('onlySelectUserCheckbox', 'onlySelectUserCheckbox');
 	handleStateChange('onlySelectAssistantCheckbox', 'onlySelectAssistantCheckbox');
+
+	// Other checkboxes
 	handleStateChange('disableCopyAfterSelectCheckbox', 'disableCopyAfterSelectCheckbox');
+	handleStateChange('doNotIncludeLabelsCheckbox', 'doNotIncludeLabelsCheckbox');
 	handleStateChange('enableSendWithControlEnterCheckbox', 'enableSendWithControlEnterCheckbox');
 	handleStateChange(
 		'enableStopWithControlBackspaceCheckbox',
@@ -1723,6 +1763,32 @@ document.addEventListener('DOMContentLoaded', () => {
 		'rememberSidebarScrollPositionCheckbox',
 		'rememberSidebarScrollPositionCheckbox',
 	);
+
+	// Select + Copy All Behavior (Set 2)
+	// If your HTML uses the "EntireConversation..." IDs/keys:
+	handleStateChange(
+		'selectAndCopyEntireConversationBothUserAndChatGpt',
+		'selectAndCopyEntireConversationBothUserAndChatGpt',
+	);
+	handleStateChange(
+		'selectAndCopyEntireConversationOnlyAssistant',
+		'selectAndCopyEntireConversationOnlyAssistant',
+	);
+	handleStateChange(
+		'selectAndCopyEntireConversationOnlyUser',
+		'selectAndCopyEntireConversationOnlyUser',
+	);
+
+	// If your HTML uses the "AllMessages..." IDs/keys (as shown in your snippet):
+	handleStateChange(
+		'selectThenCopyAllMessagesBothUserAndChatGpt',
+		'selectThenCopyAllMessagesBothUserAndChatGpt',
+	);
+	handleStateChange(
+		'selectThenCopyAllMessagesOnlyAssistant',
+		'selectThenCopyAllMessagesOnlyAssistant',
+	);
+	handleStateChange('selectThenCopyAllMessagesOnlyUser', 'selectThenCopyAllMessagesOnlyUser');
 
 	// Specialized wiring for the Model Picker mode radios (Alt vs Control)
 	// Shows a dupe modal when switching to Alt would collide with popup shortcuts.
@@ -1805,7 +1871,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		'shortcutKeyCopyLowest',
 		'shortcutKeyEdit',
 		'shortcutKeySendEdit',
-		'shortcutKeyCopyAllResponses',
 		'shortcutKeyCopyAllCodeBlocks',
 		'shortcutKeyNewConversation',
 		'shortcutKeySearchConversationHistory',
@@ -1828,6 +1893,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		'shortcutKeyShare',
 		'shortcutKeyThinkLonger',
 		'shortcutKeyAddPhotosFiles',
+		'selectThenCopyAllMessages',
 	];
 	const shortcutKeyValues = {};
 
@@ -2225,9 +2291,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 	});
 
-	// Handling separator keys (copyCodeUserSeparator & copyAllUserSeparator) -- now robustly stored like 111
+	// Handling separator keys (copyCodeUserSeparator) -- now robustly stored like 111
 
-	const separatorKeys = ['copyCodeUserSeparator', 'copyAllUserSeparator'];
+	const separatorKeys = ['copyCodeUserSeparator'];
 
 	// Save separators without trimming or alteration
 	separatorKeys.forEach((id) => {
@@ -2629,16 +2695,16 @@ document.addEventListener('DOMContentLoaded', () => {
 						const el = document.getElementById(key);
 						if (!el) return;
 
-						// Binary inputs (checkbox / radio)
 						if (el.type === 'checkbox' || el.type === 'radio') {
+							// Binary inputs (checkbox / radio)
 							el.checked = !!val;
 							return;
 						}
 
-						// Text / numeric inputs
 						if (typeof val === 'string' || typeof val === 'number') {
+							// Text / numeric inputs
 							// Ensure separator fields render with literal "\n"
-							if (key === 'copyCodeUserSeparator' || key === 'copyAllUserSeparator') {
+							if (key === 'copyCodeUserSeparator') {
 								el.value = sep_storageToUI(val);
 							} else {
 								el.value = val;

@@ -9,6 +9,8 @@ CGCSP-Github.code-workspace
 build-sync.js
 options-storage.js
 settings.json
+moveNewEntriesInMessagesJsonToEnd.py
+messagesJsonToMoveToEnd.txt
 
 # Logs
 npm-debug.log*

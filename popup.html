@@ -16,16 +16,15 @@
     <div class="shortcut-container">
       <h1 class="i18n" data-i18n="popup_title">ChatGPT Custom Shortcuts Pro</h1>
       <div class="shortcut-grid">
-        <!-- ((( Models + Interface Group ))) -->
+        <!-- ((( Models + UI Tweaks Group ))) -->
         <div
           class="blank-row section-header"
           role="heading"
           aria-level="2"
           style="height: 4px !important"
         >
-          Model Picker + Interface
+          Model Picker + UI Tweaks
         </div>
-
         <!-- ### Model Picker ### -->
         <div
           class="shortcut-item class-13"
@@ -319,184 +318,9 @@
             </label>
           </div>
         </div>
-        <!-- ((( Scroll + Jump Group ))) -->
+        <!-- ((( Quick Clicks ))) -->
         <div class="blank-row section-header" role="heading" aria-level="2">
-          Scroll + Jump
-        </div>
-        <!-- ### Scroll to Top ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_top">
-              Scroll to Top
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyScrollToTop"
-              data-sync="shortcutKeyScrollToTop"
-              maxlength="12"
-              name="shortcutKeyScrollToTop"
-              type="text"
-              value="t"
-            />
-          </div>
-        </div>
-        <!-- ### Scroll to Bottom ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_bottom">
-              Scroll to Bottom
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyClickNativeScrollToBottom"
-              data-sync="shortcutKeyClickNativeScrollToBottom"
-              maxlength="12"
-              name="shortcutKeyClickNativeScrollToBottom"
-              type="text"
-              value="z"
-            />
-          </div>
-        </div>
-        <!-- ### Scroll Up One Message ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_up_one">
-              Scroll Up One Message
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyScrollUpOneMessage"
-              data-sync="shortcutKeyScrollUpOneMessage"
-              maxlength="12"
-              name="shortcutKeyScrollUpOneMessage"
-              type="text"
-              value="a"
-            />
-          </div>
-        </div>
-        <!-- ### Scroll Down One Message ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_down_one">
-              Scroll Down One Message
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyScrollDownOneMessage"
-              data-sync="shortcutKeyScrollDownOneMessage"
-              maxlength="12"
-              name="shortcutKeyScrollDownOneMessage"
-              type="text"
-              value="f"
-            />
-          </div>
-        </div>
-        <!-- ### Scroll Up Two Messages ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_up_two">
-              Scroll Up Two Messages
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyScrollUpTwoMessages"
-              data-sync="shortcutKeyScrollUpTwoMessages"
-              maxlength="12"
-              name="shortcutKeyScrollUpTwoMessages"
-              type="text"
-              value="↑"
-            />
-          </div>
-        </div>
-        <!-- ### Scroll Down Two Messages ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_scroll_down_two">
-              Scroll Down Two Messages
-            </span>
-          </div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label"> Alt + </span>
-            <input
-              class="key-input"
-              id="shortcutKeyScrollDownTwoMessages"
-              data-sync="shortcutKeyScrollDownTwoMessages"
-              maxlength="12"
-              name="shortcutKeyScrollDownTwoMessages"
-              type="text"
-              value="↓"
-            />
-          </div>
-        </div>
-        <!-- ### PgUp/PgDown Takeover ### -->
-        <div class="shortcut-item" style="padding-block: 0 !important">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_pgup_pgdown">
-              PgUp/PgDown Takeover
-            </span>
-            <span
-              class="material-symbols-outlined info-icon info-icon-tooltip"
-              tabindex="0"
-              data-tooltip="__MSG_tt_pgup_pgdown__"
-              >info</span
-            >
-          </div>
-          <label class="p-form-switch">
-            <input
-              checked=""
-              id="pageUpDownTakeover"
-              data-sync="pageUpDownTakeover"
-              name="pageUpDownTakeover"
-              type="checkbox"
-            />
-            <span></span>
-          </label>
-        </div>
-        <!-- ### Legacy Arrow Buttons ### -->
-        <div
-          class="shortcut-item"
-          style="padding-top: 4px !important; padding-bottom: 4px !important"
-        >
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_hide_arrows"
-              >Show Legacy Arrow Buttons</span
-            >
-            <span
-              class="material-symbols-outlined info-icon info-icon-tooltip"
-              tabindex="0"
-              data-tooltip="__MSG_tt_hide_arrows__"
-              >info</span
-            >
-          </div>
-          <label class="p-form-switch">
-            <input
-              id="showLegacyArrowButtonsCheckbox"
-              data-sync="showLegacyArrowButtonsCheckbox"
-              name="showLegacyArrowButtonsCheckbox"
-              type="checkbox"
-            />
-            <span></span>
-          </label>
-        </div>
-
-        <!-- ((( Quick Clicks + Navigation Group ))) -->
-        <div class="blank-row section-header" role="heading" aria-level="2">
-          Quick Clicks + Navigation
+          Quick Clicks
         </div>
         <!-- ### New Conversation ### -->
         <div class="shortcut-item">
@@ -689,6 +513,181 @@
             />
           </div>
         </div>
+        <!-- ((( Scroll Group ))) -->
+        <div class="blank-row section-header" role="heading" aria-level="2">
+          Scroll
+        </div>
+        <!-- ### Scroll to Top ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_top">
+              Scroll to Top
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyScrollToTop"
+              data-sync="shortcutKeyScrollToTop"
+              maxlength="12"
+              name="shortcutKeyScrollToTop"
+              type="text"
+              value="t"
+            />
+          </div>
+        </div>
+        <!-- ### Scroll to Bottom ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_bottom">
+              Scroll to Bottom
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyClickNativeScrollToBottom"
+              data-sync="shortcutKeyClickNativeScrollToBottom"
+              maxlength="12"
+              name="shortcutKeyClickNativeScrollToBottom"
+              type="text"
+              value="z"
+            />
+          </div>
+        </div>
+        <!-- ### Scroll Up One Message ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_up_one">
+              Scroll Up One Message
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyScrollUpOneMessage"
+              data-sync="shortcutKeyScrollUpOneMessage"
+              maxlength="12"
+              name="shortcutKeyScrollUpOneMessage"
+              type="text"
+              value="a"
+            />
+          </div>
+        </div>
+        <!-- ### Scroll Down One Message ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_down_one">
+              Scroll Down One Message
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyScrollDownOneMessage"
+              data-sync="shortcutKeyScrollDownOneMessage"
+              maxlength="12"
+              name="shortcutKeyScrollDownOneMessage"
+              type="text"
+              value="f"
+            />
+          </div>
+        </div>
+        <!-- ### Scroll Up Two Messages ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_up_two">
+              Scroll Up Two Messages
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyScrollUpTwoMessages"
+              data-sync="shortcutKeyScrollUpTwoMessages"
+              maxlength="12"
+              name="shortcutKeyScrollUpTwoMessages"
+              type="text"
+              value="↑"
+            />
+          </div>
+        </div>
+        <!-- ### Scroll Down Two Messages ### -->
+        <div class="shortcut-item">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_scroll_down_two">
+              Scroll Down Two Messages
+            </span>
+          </div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label"> Alt + </span>
+            <input
+              class="key-input"
+              id="shortcutKeyScrollDownTwoMessages"
+              data-sync="shortcutKeyScrollDownTwoMessages"
+              maxlength="12"
+              name="shortcutKeyScrollDownTwoMessages"
+              type="text"
+              value="↓"
+            />
+          </div>
+        </div>
+        <!-- ### PgUp/PgDown Takeover ### -->
+        <div class="shortcut-item" style="padding-block: 0 !important">
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_pgup_pgdown">
+              PgUp/PgDown Takeover
+            </span>
+            <span
+              class="material-symbols-outlined info-icon info-icon-tooltip"
+              tabindex="0"
+              data-tooltip="__MSG_tt_pgup_pgdown__"
+              >info</span
+            >
+          </div>
+          <label class="p-form-switch">
+            <input
+              checked=""
+              id="pageUpDownTakeover"
+              data-sync="pageUpDownTakeover"
+              name="pageUpDownTakeover"
+              type="checkbox"
+            />
+            <span></span>
+          </label>
+        </div>
+        <!-- ### Legacy Arrow Buttons ### -->
+        <div
+          class="shortcut-item"
+          style="padding-top: 4px !important; padding-bottom: 4px !important"
+        >
+          <div class="shortcut-label">
+            <span class="i18n" data-i18n="label_hide_arrows"
+              >Show Legacy Arrow Buttons</span
+            >
+            <span
+              class="material-symbols-outlined info-icon info-icon-tooltip"
+              tabindex="0"
+              data-tooltip="__MSG_tt_hide_arrows__"
+              >info</span
+            >
+          </div>
+          <label class="p-form-switch">
+            <input
+              id="showLegacyArrowButtonsCheckbox"
+              data-sync="showLegacyArrowButtonsCheckbox"
+              name="showLegacyArrowButtonsCheckbox"
+              type="checkbox"
+            />
+            <span></span>
+          </label>
+        </div>
+
         <!-- ((( Copy Group ))) -->
         <div class="blank-row section-header" role="heading" aria-level="2">
           Clipboard
@@ -767,7 +766,7 @@
             />
           </div>
         </div>
-        <!-- ### Select + Copy Behavior ### -->
+        <!-- ### Select + Copy One Behavior ### -->
         <div class="shortcut-item" style="padding-bottom: 8px !important">
           <div
             class="shortcut-label info-icon-tooltip class-17"
@@ -777,7 +776,7 @@
               class="i18n force-balance-break"
               data-i18n="label_select_copy_behavior"
             >
-              Select + Copy Behavior
+              Select + Copy One Behavior
             </span>
           </div>
           <div class="icon-input-container class-18">
@@ -846,16 +845,16 @@
             </div>
           </div>
         </div>
-        <!-- ### Join + Copy All Responses ### -->
+        <!-- ### Select + Copy All Messages ### -->
         <div class="shortcut-item">
           <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_join_all">
+            <span class="i18n" data-i18n="label_selectThenCopyAllMessages">
               Join + Copy All Responses
             </span>
             <span
               class="material-symbols-outlined info-icon info-icon-tooltip"
               tabindex="0"
-              data-tooltip="__MSG_tt_join_all__"
+              data-tooltip="__MSG_tt_selectThenCopyAllMessages__"
               >info</span
             >
           </div>
@@ -863,37 +862,92 @@
             <span class="key-text platform-alt-label"> Alt + </span>
             <input
               class="key-input"
-              id="shortcutKeyCopyAllResponses"
-              data-sync="shortcutKeyCopyAllResponses"
+              id="selectThenCopyAllMessages"
+              data-sync="selectThenCopyAllMessages"
               maxlength="12"
-              name="shortcutKeyCopyAllResponses"
+              name="selectThenCopyAllMessages"
               type="text"
               value="["
             />
           </div>
         </div>
-        <!-- ### Join + Copy Separator ### -->
-        <div class="shortcut-item">
-          <div class="shortcut-label">
-            <span class="i18n" data-i18n="label_join_separator"
-              >Join + Copy Separator</span
-            >
+        <!-- ### Select + Copy All Messages Behavior ### -->
+        <div class="shortcut-item" style="padding-bottom: 8px !important">
+          <div
+            class="shortcut-label info-icon-tooltip class-17"
+            data-tooltip="__MSG_tt_selectThenCopyAllMessagesBehavior__"
+          >
             <span
-              class="material-symbols-outlined info-icon info-icon-tooltip"
-              tabindex="0"
-              data-tooltip="__MSG_tt_join_separator__"
-              >info</span
+              class="i18n force-balance-break"
+              data-i18n="label_selectThenCopyAllMessagesBehavior"
             >
+              Select + Copy All Behavior
+            </span>
           </div>
-          <div class="icon-input-container">
-            <input
-              class="material-input-long"
-              id="copyAllUserSeparator"
-              data-sync="copyAllUserSeparator"
-              name="copyAllUserSeparator"
-              type="text"
-              value=" \n  \n --- --- --- \n \n"
-            />
+          <div class="icon-input-container class-18">
+            <!-- Radio Buttons Section -->
+            <div class="class-19">
+              <label
+                class="info-icon-tooltip class-20"
+                data-tooltip="__MSG_tt_selectThenCopyAllMessagesBothUserAndChatGpt__"
+              >
+                <span class="material-symbols-outlined class-21"> forum </span>
+                <input
+                  checked=""
+                  class="material-radio"
+                  id="selectThenCopyAllMessagesBothUserAndChatGpt"
+                  data-sync="selectThenCopyAllMessagesBothUserAndChatGpt"
+                  name="messageSelectionAll"
+                  type="radio"
+                />
+              </label>
+              <label
+                class="info-icon-tooltip class-20"
+                data-tooltip="__MSG_tt_selectThenCopyAllMessagesOnlyAssistant__"
+              >
+                <span class="material-symbols-outlined class-21"> 3p </span>
+                <input
+                  class="material-radio"
+                  id="selectThenCopyAllMessagesOnlyAssistant"
+                  data-sync="selectThenCopyAllMessagesOnlyAssistant"
+                  name="messageSelectionAll"
+                  type="radio"
+                />
+              </label>
+              <label
+                class="info-icon-tooltip class-20"
+                data-tooltip="__MSG_tt_selectThenCopyAllMessagesOnlyUser__"
+              >
+                <span class="material-symbols-outlined class-21">
+                  mode_comment
+                </span>
+                <input
+                  class="material-radio"
+                  id="selectThenCopyAllMessagesOnlyUser"
+                  data-sync="selectThenCopyAllMessagesOnlyUser"
+                  name="messageSelectionAll"
+                  type="radio"
+                />
+              </label>
+            </div>
+            <!-- Checkbox Section -->
+            <div class="class-20">
+              <span
+                class="info-icon-tooltip class-22"
+                data-tooltip="__MSG_tt_doNotIncludeLabelsCheckbox__"
+              >
+                <span class="material-symbols-outlined class-21">
+                  label_off
+                </span>
+              </span>
+              <input
+                class="material-checkbox"
+                id="doNotIncludeLabelsCheckbox"
+                data-sync="doNotIncludeLabelsCheckbox"
+                name="doNotIncludeLabelsCheckbox"
+                type="checkbox"
+              />
+            </div>
           </div>
         </div>
         <!-- ### Join + Copy All Code Boxes ### -->

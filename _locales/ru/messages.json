@@ -32,14 +32,8 @@
 	"tag_new": {
 		"message": "НОВОЕ"
 	},
-	"label_copy": {
-		"message": "Копировать"
-	},
 	"label_strip_md": {
 		"message": "Убирать Markdown при копировании"
-	},
-	"label_select_copy": {
-		"message": "Выделить + Копировать"
 	},
 	"label_select_copy_behavior": {
 		"message": "Режим «Выделить + Копировать»"
@@ -59,20 +53,11 @@
 	"label_search_chats": {
 		"message": "Поиск по чатам"
 	},
-	"label_search_web": {
-		"message": "Веб-поиск"
-	},
 	"label_prev_thread": {
 		"message": "К предыдущему чату"
 	},
 	"label_next_thread": {
 		"message": "К следующему чату"
-	},
-	"label_send": {
-		"message": "Отправить"
-	},
-	"label_stop": {
-		"message": "Стоп"
 	},
 	"tt_send": {
 		"message": "Отметьте, чтобы Ctrl + Enter отправлял сообщение."
@@ -116,12 +101,6 @@
 	"tt_opacity_slider": {
 		"message": "Сдвиньте вправо — нижняя панель видима. Влево — скрыта, пока не наведёте курсор."
 	},
-	"tt_copy_plain": {
-		"message": "Нажимает самую нижнюю видимую встроенную кнопку копирования."
-	},
-	"tt_strip_md": {
-		"message": "Включите, чтобы при Alt+C из текста удалялись Markdown‑символы * и ###, не меняя блоки кода. Нужен доступ к буферу обмена."
-	},
 	"tt_select_copy": {
 		"message": "Имитирует выделение мышью и Ctrl+C. Нажимайте повторно, чтобы по очереди проходить видимые сообщения."
 	},
@@ -154,12 +133,6 @@
 	},
 	"tt_search_web": {
 		"message": "Вкл./выкл. инструмент «Поиск в интернете»."
-	},
-	"tt_prev_thread": {
-		"message": "Нажмите «<». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «<» без кликов."
-	},
-	"tt_next_thread": {
-		"message": "Нажмите «>». Используйте Control+Alt+горячую клавишу, чтобы перелистывать «>» без кликов."
 	},
 	"tt_edit_msg": {
 		"message": "Нажмите «Редактировать» на самом нижнем видимом сообщении пользователя. Нажмите ещё раз — перейдёте к следующему выше."
@@ -233,32 +206,17 @@
 	"tt_temp_chat": {
 		"message": "Переключить временный чат (доступно до отправки первого сообщения)."
 	},
-	"label_think_longer": {
-		"message": "Думать дольше"
-	},
 	"tt_think_longer": {
 		"message": "Доступно только в бесплатной версии. Более глубокие рассуждения для более подробного ответа."
-	},
-	"label_study": {
-		"message": "Режим обучения"
 	},
 	"tt_study": {
 		"message": "Переключить режим с пошаговыми объяснениями, связью понятий и закреплением."
 	},
-	"label_toggle_create_image": {
-		"message": "Создать изображение"
-	},
 	"tt_toggle_create_image": {
 		"message": "Переключить инструмент создания изображений."
 	},
-	"label_toggle_canvas": {
-		"message": "Холст"
-	},
 	"tt_toggle_canvas": {
 		"message": "Переключить рабочее пространство «Холст»."
-	},
-	"label_add_photos_files": {
-		"message": "Добавить фото и файлы"
 	},
 	"tt_add_photos_files": {
 		"message": "Прикрепить к сообщению изображения или файлы."
@@ -302,9 +260,6 @@
 	"toast_import_failed": {
 		"message": "Ошибка импорта: $1"
 	},
-	"toast_import_complete": {
-		"message": "Импорт завершён. Перезагрузите страницу для применения изменений."
-	},
 	"toast_import_invalid": {
 		"message": "Неверный файл. Импорт отменён."
 	},
@@ -343,5 +298,74 @@
 	},
 	"tt_hide_arrows": {
 		"message": "Включите кнопки со стрелками, чтобы по клику переходить к предыдущему или следующему сообщению."
+	},
+	"tt_selectThenCopyAllMessages": {
+		"message": "Имитирует выделение мышью текста всех сообщений и нажатие Ctrl+C. При вставке в Word или письмо сохраняется форматирование."
+	},
+	"tt_selectThenCopyAllMessagesBehavior": {
+		"message": "Выберите: убирать ли метки (например, «ChatGPT сказал:») и что копировать — все сообщения, только ответы ChatGPT или только ваши."
+	},
+	"tt_selectThenCopyAllMessagesBothUserAndChatGpt": {
+		"message": "Включать сообщения и от вас, и от ChatGPT."
+	},
+	"tt_selectThenCopyAllMessagesOnlyAssistant": {
+		"message": "Включать только сообщения ChatGPT (ваши сообщения не копировать)."
+	},
+	"tt_selectThenCopyAllMessagesOnlyUser": {
+		"message": "Включать только ваши сообщения (ответы ChatGPT не копировать)."
+	},
+	"tt_doNotIncludeLabelsCheckbox": {
+		"message": "Отметьте, чтобы удалить «ChatGPT сказал:» и «Вы сказали:» перед каждым сообщением."
+	},
+	"label_send": {
+		"message": "Отправить: Ctrl + Enter"
+	},
+	"label_stop": {
+		"message": "Стоп: Ctrl + Backspace"
+	},
+	"label_copy": {
+		"message": "Нажать «Копировать»"
+	},
+	"label_select_copy": {
+		"message": "Выбрать + Копировать одно сообщение"
+	},
+	"tt_copy_plain": {
+		"message": "Копирует любое одно сообщение как простой текст. Нажмите ещё раз, чтобы переключать видимые кнопки копирования."
+	},
+	"tt_strip_md": {
+		"message": "Включите, чтобы убирать * и ### Markdown из текста, скопированного командой `Нажать «Копировать»`. Текст, скопированный из блока кода, не изменится."
+	},
+	"tt_prev_thread": {
+		"message": "Alt+{shortcut}: нажимает нижнюю видимую кнопку «<» предыдущей ветки. ———————————————————  Ctrl+Alt+{shortcut}: прокручивает, чтобы найти другие ответы с несколькими ветками."
+	},
+	"tt_next_thread": {
+		"message": "Alt+{shortcut}: нажимает нижнюю видимую кнопку «>» следующей ветки.  ——————————————————— Ctrl+Alt+{shortcut}: прокручивает, чтобы найти другие ответы с несколькими ветками."
+	},
+	"label_selectThenCopyAllMessages": {
+		"message": "Объединить + Копировать все сообщения"
+	},
+	"label_selectThenCopyAllMessagesBehavior": {
+		"message": "Поведение «Копировать всё»"
+	},
+	"toast_import_complete": {
+		"message": "Импорт завершён. Закройте и снова откройте настройки, чтобы увидеть изменения."
+	},
+	"label_search_web": {
+		"message": "Веб-поиск"
+	},
+	"label_think_longer": {
+		"message": "Подумать подольше"
+	},
+	"label_study": {
+		"message": "Учиться"
+	},
+	"label_toggle_create_image": {
+		"message": "Создать изображение"
+	},
+	"label_toggle_canvas": {
+		"message": "Холст"
+	},
+	"label_add_photos_files": {
+		"message": "Добавить фото и файлы"
 	}
 }

@@ -1,3 +1,7 @@
+/**
+ * To run this file in VS Code using PowerShell:
+ * Run Command: node validate-keys.js
+ */
 const fs = require('node:fs');
 const cheerio = require('cheerio');
 

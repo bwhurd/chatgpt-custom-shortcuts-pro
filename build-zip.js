@@ -1,5 +1,5 @@
 // build-zip.js
-// run with node build-zip.js
+// run in powershell with: node build-zip.js
 const fs = require('node:fs');
 const path = require('node:path');
 const archiver = require('archiver');

@@ -1265,7 +1265,6 @@ span.dup-key {
 	letter-spacing: 0.06em;
 	line-height: 1;
 	text-transform: uppercase;
-	user-select: none;
 	white-space: nowrap;
 	/* inherits grid-column: span 2 and base height from .blank-row */
 }

@@ -32,14 +32,8 @@
 	"tag_new": {
 		"message": "NUEVO"
 	},
-	"label_copy": {
-		"message": "Copiar"
-	},
 	"label_strip_md": {
 		"message": "Quitar Markdown al copiar"
-	},
-	"label_select_copy": {
-		"message": "Seleccionar + Copiar"
 	},
 	"label_select_copy_behavior": {
 		"message": "Modo «Seleccionar + Copiar»"
@@ -59,20 +53,11 @@
 	"label_search_chats": {
 		"message": "Buscar chats"
 	},
-	"label_search_web": {
-		"message": "Búsqueda web"
-	},
 	"label_prev_thread": {
 		"message": "Ir al hilo anterior"
 	},
 	"label_next_thread": {
 		"message": "Ir al siguiente hilo"
-	},
-	"label_send": {
-		"message": "Enviar"
-	},
-	"label_stop": {
-		"message": "Detener"
 	},
 	"tt_send": {
 		"message": "Marca para que Ctrl + Enter envíe el mensaje."
@@ -116,12 +101,6 @@
 	"tt_opacity_slider": {
 		"message": "Desliza a la derecha para mantener visible la barra inferior. A la izquierda para ocultarla hasta pasar el cursor."
 	},
-	"tt_copy_plain": {
-		"message": "Pulsa el botón de copiar nativo visible más abajo."
-	},
-	"tt_strip_md": {
-		"message": "Activa para quitar * y ### de Markdown del texto copiado con Alt+C, sin cambiar los bloques de código. Requiere acceso al portapapeles."
-	},
 	"tt_select_copy": {
 		"message": "Simula seleccionar con el ratón y pulsar Ctrl+C. Pulsa repetidamente para recorrer los mensajes visibles."
 	},
@@ -154,12 +133,6 @@
 	},
 	"tt_search_web": {
 		"message": "Activar/desactivar Buscar en la Web."
-	},
-	"tt_prev_thread": {
-		"message": "Haz clic en «<». Usa Control+Alt+atajo para desplazarte entre «<» sin hacer clic."
-	},
-	"tt_next_thread": {
-		"message": "Haz clic en «>». Usa Control+Alt+atajo para desplazarte entre «>» sin hacer clic."
 	},
 	"tt_edit_msg": {
 		"message": "Haz clic en Editar en el último mensaje de usuario visible. Presiona de nuevo para subir al siguiente."
@@ -233,32 +206,17 @@
 	"tt_temp_chat": {
 		"message": "Activa/Desactiva Chat temporal (solo antes de enviar el primer mensaje)."
 	},
-	"label_think_longer": {
-		"message": "Pensar más"
-	},
 	"tt_think_longer": {
 		"message": "Solo disponible en la versión gratuita. Activa un razonamiento más profundo para una respuesta más completa."
-	},
-	"label_study": {
-		"message": "Estudiar y aprender"
 	},
 	"tt_study": {
 		"message": "Activa para explicar paso a paso, conectar conceptos y reforzar la comprensión."
 	},
-	"label_toggle_create_image": {
-		"message": "Crear imagen"
-	},
 	"tt_toggle_create_image": {
 		"message": "Activa la herramienta de creación de imágenes."
 	},
-	"label_toggle_canvas": {
-		"message": "Lienzo"
-	},
 	"tt_toggle_canvas": {
 		"message": "Activa el espacio de trabajo de lienzo."
-	},
-	"label_add_photos_files": {
-		"message": "Añadir fotos y archivos"
 	},
 	"tt_add_photos_files": {
 		"message": "Adjunta imágenes o archivos a un mensaje."
@@ -302,9 +260,6 @@
 	"toast_import_failed": {
 		"message": "Error al importar: $1"
 	},
-	"toast_import_complete": {
-		"message": "Importación completa. Recarga la página para aplicar todos los cambios."
-	},
 	"toast_import_invalid": {
 		"message": "Archivo no válido. Importación cancelada."
 	},
@@ -343,5 +298,74 @@
 	},
 	"tt_hide_arrows": {
 		"message": "Activa los botones de flecha para ir al mensaje anterior o siguiente con un clic."
+	},
+	"tt_selectThenCopyAllMessages": {
+		"message": "Simula seleccionar con el ratón el texto de todos los mensajes y presionar Ctrl+C. El texto mantiene el formato al pegar en Word o en un correo."
+	},
+	"tt_selectThenCopyAllMessagesBehavior": {
+		"message": "Elige si quieres omitir etiquetas (como 'ChatGPT dijo:') y si copiar todos los mensajes, solo los de ChatGPT o solo los tuyos."
+	},
+	"tt_selectThenCopyAllMessagesBothUserAndChatGpt": {
+		"message": "Incluye mensajes tuyos y de ChatGPT."
+	},
+	"tt_selectThenCopyAllMessagesOnlyAssistant": {
+		"message": "Incluye solo mensajes de ChatGPT (no los tuyos)."
+	},
+	"tt_selectThenCopyAllMessagesOnlyUser": {
+		"message": "Incluye solo tus mensajes (no las respuestas de ChatGPT)."
+	},
+	"tt_doNotIncludeLabelsCheckbox": {
+		"message": "Marca para quitar 'ChatGPT dijo:' y 'Tú dijiste:' antes de cada mensaje."
+	},
+	"label_send": {
+		"message": "Enviar con Ctrl + Intro"
+	},
+	"label_stop": {
+		"message": "Detener con Ctrl + Retroceso"
+	},
+	"label_copy": {
+		"message": "Clic en Copiar"
+	},
+	"label_select_copy": {
+		"message": "Seleccionar + Copiar un mensaje"
+	},
+	"tt_copy_plain": {
+		"message": "Copia cualquier mensaje como texto sin formato. Pulsa de nuevo para recorrer los botones Copiar visibles."
+	},
+	"tt_strip_md": {
+		"message": "Actívalo para quitar * y ### de Markdown del texto copiado con el atajo `Clic en Copiar`. El texto copiado desde un bloque de código no se modificará."
+	},
+	"tt_prev_thread": {
+		"message": "Alt+{shortcut}: hace clic en el botón «<» de hilo anterior visible más abajo. ———————————————————  Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."
+	},
+	"tt_next_thread": {
+		"message": "Alt+{shortcut}: hace clic en el botón «>» de hilo siguiente visible más abajo.  ——————————————————— Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."
+	},
+	"label_selectThenCopyAllMessages": {
+		"message": "Unir + Copiar todos los mensajes"
+	},
+	"label_selectThenCopyAllMessagesBehavior": {
+		"message": "Modo Copiar todo"
+	},
+	"toast_import_complete": {
+		"message": "Importación completada. Cierra y vuelve a abrir la configuración para ver los cambios."
+	},
+	"label_search_web": {
+		"message": "Búsqueda web"
+	},
+	"label_think_longer": {
+		"message": "Pensar más"
+	},
+	"label_study": {
+		"message": "Estudiar y aprender"
+	},
+	"label_toggle_create_image": {
+		"message": "Crear imagen"
+	},
+	"label_toggle_canvas": {
+		"message": "Lienzo"
+	},
+	"label_add_photos_files": {
+		"message": "Añadir fotos y archivos"
 	}
 }

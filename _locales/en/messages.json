@@ -1,4 +1,4 @@
-﻿{
+{
 	"app_name": {
 		"message": "ChatGPT Custom Shortcuts Pro"
 	},
@@ -32,17 +32,11 @@
 	"tag_new": {
 		"message": "NEW"
 	},
-	"label_copy": {
-		"message": "Copy"
-	},
 	"label_strip_md": {
 		"message": "Strip Markdown on Copy"
 	},
-	"label_select_copy": {
-		"message": "Select + Copy"
-	},
 	"label_select_copy_behavior": {
-		"message": "Select + Copy Behavior"
+		"message": "Select + Copy One Behavior"
 	},
 	"label_new_chat": {
 		"message": "New Conversation"
@@ -59,20 +53,11 @@
 	"label_search_chats": {
 		"message": "Search Chats"
 	},
-	"label_search_web": {
-		"message": "Web Search Tool"
-	},
 	"label_prev_thread": {
 		"message": "Go to Previous Thread"
 	},
 	"label_next_thread": {
 		"message": "Go to Next Thread"
-	},
-	"label_send": {
-		"message": "Send with Control + Enter"
-	},
-	"label_stop": {
-		"message": "Stop with Control + Backspace"
 	},
 	"tt_send": {
 		"message": "Enable to make Control + Enter send the message."
@@ -122,29 +107,23 @@
 	"tt_opacity_slider": {
 		"message": "Slide right to keep the bottom bar visible. Slide left to hide it until you hover."
 	},
-	"tt_copy_plain": {
-		"message": "Activate the lowest visible, native copy button. Press repeatedly to cycle through visible copy buttons."
-	},
-	"tt_strip_md": {
-		"message": "Enable to remove Markdown * and ### from text copied with Alt+C, while leaving code boxes unchanged. Requires clipboard access."
-	},
 	"tt_select_copy": {
-		"message": "Simulates mouse-selecting text and pressing Ctrl+C. Press repeatedly to cycle through visible messages."
+		"message": "Simulates mouse-selecting the text of one message and pressing Ctrl+C. Press repeatedly to cycle through visible messages."
 	},
 	"tt_select_copy_behavior": {
-		"message": "When using the Select + Copy shortcut, you can tweak the selection and copy behavior."
+		"message": "Choose whether to select any message, only ChatGPT's responses, or only your messages."
 	},
 	"tt_select_all": {
-		"message": "Pressing the Select + Copy shortcut will cycle through all visible messages."
+		"message": "Cycle through all visible messages."
 	},
 	"tt_select_assistant": {
-		"message": "Pressing the Select + Copy shortcut will only select messages sent by ChatGPT."
+		"message": "Only select messages sent by ChatGPT."
 	},
 	"tt_select_user": {
-		"message": "Pressing the Select + Copy shortcut will only select messages sent by you."
+		"message": "Only select messages sent by you."
 	},
 	"tt_disable_autocopy": {
-		"message": "Check to disable auto-copy. Select + Copy will only highlight text."
+		"message": "Check to disable auto-copy (i.e. only highlight the text)."
 	},
 	"tt_new_chat": {
 		"message": "Start a new conversation."
@@ -161,12 +140,6 @@
 	"tt_search_web": {
 		"message": "Toggle Search the Web tool."
 	},
-	"tt_prev_thread": {
-		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
-	},
-	"tt_next_thread": {
-		"message": "Alt+{shortcut}: clicks the lowest visible '>' next thread button.  ——————————————————— Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
-	},
 	"tt_edit_msg": {
 		"message": "Click edit on the lowest visible user message. Press again to go to the next one up."
 	},
@@ -180,16 +153,16 @@
 		"message": "Send Edited Message"
 	},
 	"tt_join_all": {
-		"message": "Join all ChatGPT responses in the conversation and copy to clipboard. Skips user input."
+		"message": "Join and copy every ChatGPT response in the conversation. User messages are excluded."
 	},
 	"tt_join_separator": {
-		"message": "When using the Join + Copy All Responses shortcut, you can insert a custom separator between each response. Include a space before each \\n to insert line breaks."
+		"message": "When using the `Join + Copy All Responses` shortcut, you can add a custom separator between responses. To insert line breaks, place a space before each \\n."
 	},
 	"tt_join_code": {
-		"message": "When using the Join + Copy All Code Boxes shortcut, you can insert a custom separator between each joined code box. Include a space before each \\n to insert line breaks."
+		"message": "Join and copy all code boxes in the conversation. Code boxes in user messages are excluded."
 	},
 	"tt_code_separator": {
-		"message": "Customize separator between code blocks. Include a preceding space before each \\n to insert line breaks."
+		"message": "When using the `Join + Copy All Code Boxes` shortcut, you can add a custom separator between each code box. To insert line breaks, place a space before each \\n."
 	},
 	"label_showModelPicker": {
 		"message": "Show Model Picker"
@@ -239,32 +212,17 @@
 	"tt_temp_chat": {
 		"message": "Toggle Temporary Chat (available before you send the first message.)"
 	},
-	"label_think_longer": {
-		"message": "Think Longer Tool"
-	},
 	"tt_think_longer": {
 		"message": "Only available in the free version. Engage deeper reasoning for a more thorough answer."
-	},
-	"label_study": {
-		"message": "Study and Learn Tool"
 	},
 	"tt_study": {
 		"message": "Toggle tool to explain step-by-step, link concepts, and reinforce understanding."
 	},
-	"label_toggle_create_image": {
-		"message": "Create Image Tool"
-	},
 	"tt_toggle_create_image": {
 		"message": "Toggle the image creation tool."
 	},
-	"label_toggle_canvas": {
-		"message": "Canvas Tool"
-	},
 	"tt_toggle_canvas": {
 		"message": "Toggle the canvas workspace tool."
-	},
-	"label_add_photos_files": {
-		"message": "Add Photos + Files Tool"
 	},
 	"tt_add_photos_files": {
 		"message": "Attach images or files to a message."
@@ -308,9 +266,6 @@
 	"toast_import_failed": {
 		"message": "Import failed: $1"
 	},
-	"toast_import_complete": {
-		"message": "Import complete. Close then reopen settings to see changes."
-	},
 	"toast_import_invalid": {
 		"message": "Invalid file. Import aborted."
 	},
@@ -343,5 +298,74 @@
 	},
 	"btn_import": {
 		"message": "Import Settings"
+	},
+	"tt_selectThenCopyAllMessages": {
+		"message": "Simulates mouse-selecting the text of all messages and pressing Ctrl+C. Text keeps formatting when pasting to ms word or an email."
+	},
+	"tt_selectThenCopyAllMessagesBehavior": {
+		"message": "Choose whether Select + Copy All Messages omits labels (e.g. 'ChatGPT said:') and whether to copy all messages, only the ChatGPT responses, or only your messages."
+	},
+	"tt_selectThenCopyAllMessagesBothUserAndChatGpt": {
+		"message": "Include messages sent by both you and ChatGPT."
+	},
+	"tt_selectThenCopyAllMessagesOnlyAssistant": {
+		"message": "Only include messages sent by ChatGPT (i.e. omit user messages)."
+	},
+	"tt_selectThenCopyAllMessagesOnlyUser": {
+		"message": "Only include messages sent by you (i.e. omit ChatGPT responses)."
+	},
+	"tt_doNotIncludeLabelsCheckbox": {
+		"message": "Check to remove 'ChatGPT said:' and 'You said:' before each message."
+	},
+	"label_send": {
+		"message": "Send with Control + Enter"
+	},
+	"label_stop": {
+		"message": "Stop with Control + Backspace"
+	},
+	"label_copy": {
+		"message": "Click Copy Button"
+	},
+	"label_select_copy": {
+		"message": "Select + Copy One Message"
+	},
+	"tt_copy_plain": {
+		"message": "Copy any one message as plain text. Press again to cycle through visible copy buttons."
+	},
+	"tt_strip_md": {
+		"message": "Enable to remove Markdown *s and ###s from text copied with the `Click Copy Button` shortcut. Text copied from a code box will not be altered."
+	},
+	"tt_prev_thread": {
+		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
+	},
+	"tt_next_thread": {
+		"message": "Alt+{shortcut}: clicks the lowest visible '>' next thread button.  ——————————————————— Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
+	},
+	"label_selectThenCopyAllMessages": {
+		"message": "Join + Copy All Messages"
+	},
+	"label_selectThenCopyAllMessagesBehavior": {
+		"message": "Copy All Behavior"
+	},
+	"toast_import_complete": {
+		"message": "Import complete. Close then reopen settings to see changes."
+	},
+	"label_search_web": {
+		"message": "Web Search Tool"
+	},
+	"label_think_longer": {
+		"message": "Think Longer Tool"
+	},
+	"label_study": {
+		"message": "Study and Learn Tool"
+	},
+	"label_toggle_create_image": {
+		"message": "Create Image Tool"
+	},
+	"label_toggle_canvas": {
+		"message": "Canvas Tool"
+	},
+	"label_add_photos_files": {
+		"message": "Add Photos + Files Tool"
 	}
 }

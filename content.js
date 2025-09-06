@@ -139,6 +139,10 @@ function applyVisibilitySettings(data) {
 		useAltForModelSwitcherRadio: true,
 		useControlForModelSwitcherRadio: false,
 		rememberSidebarScrollPositionCheckbox: false,
+		selectThenCopyAllMessagesBothUserAndChatGpt: false,
+		selectThenCopyAllMessagesOnlyAssistant: true,
+		selectThenCopyAllMessagesOnlyUser: false,
+		doNotIncludeLabelsCheckbox: false,
 	};
 
 	for (const key in settingsMap) {
@@ -391,6 +395,10 @@ const delays = DELAYS;
 			'rememberSidebarScrollPositionCheckbox',
 			'fadeSlimSidebarEnabled', // (checkbox state: true/false)
 			'popupSlimSidebarOpacityValue', // (slider value: number)
+			`selectThenCopyAllMessagesBothUserAndChatGpt`,
+			`selectThenCopyAllMessagesOnlyAssistant`,
+			`selectThenCopyAllMessagesOnlyUser`,
+			`doNotIncludeLabelsCheckbox`,
 		],
 		(data) => {
 			// One-time migration: invert old value into new key, persist, then clean up
@@ -474,86 +482,88 @@ const delays = DELAYS;
 			if (toast?.parentNode) toast.parentNode.removeChild(toast);
 		}, delays.buttonFade);
 	}
+	// @note Legacy Copy All Responses
+	//	function copyAll() {
+	//		const proseNodeList = document.querySelectorAll('.prose');
+	//		if (!proseNodeList || proseNodeList.length === 0) {
+	//			showToast('No prose elements found');
+	//			return;
+	//		}
+	//
+	//		chrome.storage.sync.get(['copyAllUserSeparator', 'copyCodeUserSeparator'], (data) => {
+	//			const userSepRaw = data.copyAllUserSeparator;
+	//			const sep = userSepRaw ? parseSeparator(userSepRaw) : ' \n  \n --- --- --- \n \n';
+	//
+	//			const parts = [];
+	//			for (const proseEl of proseNodeList) {
+	//				const text = getFormattedText(proseEl);
+	//				if (text?.trim().length) parts.push(text);
+	//			}
+	//
+	//			const output = parts.join(sep);
+	//
+	//			if (output) {
+	//				navigator.clipboard
+	//					.writeText(output)
+	//					.then(() => showToast('All responses copied to clipboard!'))
+	//					.catch(() => showToast('Error copying content to clipboard!'));
+	//			} else {
+	//				showToast('No content found in the prose elements');
+	//			}
+	//		});
+	//	}
 
-	function copyAll() {
-		const proseNodeList = document.querySelectorAll('.prose');
-		if (!proseNodeList || proseNodeList.length === 0) {
-			showToast('No prose elements found');
-			return;
-		}
+	//  Legacy Used by CopyAll
+	//	function getFormattedText(proseElement) {
+	//		let result = '';
+	//		for (const child of proseElement.childNodes) {
+	//			switch (child.nodeType) {
+	//				case Node.TEXT_NODE: {
+	//					result += child.textContent;
+	//					break;
+	//				}
+	//				case Node.ELEMENT_NODE: {
+	//					switch (child.tagName) {
+	//						case 'BR': {
+	//							result += '\n';
+	//							break;
+	//						}
+	//						case 'P': {
+	//							result += `${getFormattedText(child)}\n\n`;
+	//							break;
+	//						}
+	//						case 'PRE': {
+	//							result += `${processCodeBlock(child.textContent)}\n\n`;
+	//							break;
+	//						}
+	//						case 'OL':
+	//						case 'UL': {
+	//							let items = Array.from(child.querySelectorAll('li'));
+	//							if (child.tagName === 'OL') {
+	//								items = items.map((item, index) => `${index + 1}. ${getFormattedText(item)}\n`);
+	//							} else {
+	//								items = items.map((item) => `- ${getFormattedText(item)}\n`);
+	//							}
+	//							result += `${items.join('')}\n`;
+	//							break;
+	//						}
+	//						default: {
+	//							result += getFormattedText(child);
+	//						}
+	//					}
+	//					break;
+	//				}
+	//			}
+	//		}
+	//		return result;
+	//	}
 
-		chrome.storage.sync.get(['copyAllUserSeparator', 'copyCodeUserSeparator'], (data) => {
-			const userSepRaw = data.copyAllUserSeparator;
-			const sep = userSepRaw ? parseSeparator(userSepRaw) : ' \n  \n --- --- --- \n \n';
-
-			const parts = [];
-			for (const proseEl of proseNodeList) {
-				const text = getFormattedText(proseEl);
-				if (text?.trim().length) parts.push(text);
-			}
-
-			const output = parts.join(sep);
-
-			if (output) {
-				navigator.clipboard
-					.writeText(output)
-					.then(() => showToast('All responses copied to clipboard!'))
-					.catch(() => showToast('Error copying content to clipboard!'));
-			} else {
-				showToast('No content found in the prose elements');
-			}
-		});
-	}
-
-	function getFormattedText(proseElement) {
-		let result = '';
-		for (const child of proseElement.childNodes) {
-			switch (child.nodeType) {
-				case Node.TEXT_NODE: {
-					result += child.textContent;
-					break;
-				}
-				case Node.ELEMENT_NODE: {
-					switch (child.tagName) {
-						case 'BR': {
-							result += '\n';
-							break;
-						}
-						case 'P': {
-							result += `${getFormattedText(child)}\n\n`;
-							break;
-						}
-						case 'PRE': {
-							result += `${processCodeBlock(child.textContent)}\n\n`;
-							break;
-						}
-						case 'OL':
-						case 'UL': {
-							let items = Array.from(child.querySelectorAll('li'));
-							if (child.tagName === 'OL') {
-								items = items.map((item, index) => `${index + 1}. ${getFormattedText(item)}\n`);
-							} else {
-								items = items.map((item) => `- ${getFormattedText(item)}\n`);
-							}
-							result += `${items.join('')}\n`;
-							break;
-						}
-						default: {
-							result += getFormattedText(child);
-						}
-					}
-					break;
-				}
-			}
-		}
-		return result;
-	}
-
-	function processCodeBlock(codeBlockText) {
-		const lines = codeBlockText.split('\n').filter((line) => line.trim() !== ''); // Remove empty lines
-		if (lines.length === 0) return ''; // Skip empty blocks
-		return lines.join('\n'); // Return raw code content without backticks
-	}
+	//  Legacy Used by CopyAll
+	//	function processCodeBlock(codeBlockText) {
+	//		const lines = codeBlockText.split('\n').filter((line) => line.trim() !== ''); // Remove empty lines
+	//		if (lines.length === 0) return ''; // Skip empty blocks
+	//		return lines.join('\n'); // Return raw code content without backticks
+	//	}
 
 	function getAllCodeBlocks() {
 		const codeBoxes = document.querySelectorAll('pre');
@@ -1326,7 +1336,6 @@ const delays = DELAYS;
 			'shortcutKeyCopyLowest',
 			'shortcutKeyEdit',
 			'shortcutKeySendEdit',
-			'shortcutKeyCopyAllResponses',
 			'shortcutKeyCopyAllCodeBlocks',
 			'shortcutKeyClickNativeScrollToBottom',
 			'shortcutKeyScrollToTop',
@@ -1353,6 +1362,7 @@ const delays = DELAYS;
 			'shortcutKeyShare',
 			'shortcutKeyThinkLonger',
 			'shortcutKeyAddPhotosFiles',
+			`selectThenCopyAllMessages`,
 		],
 		(data) => {
 			const shortcutDefaults = {
@@ -1363,7 +1373,6 @@ const delays = DELAYS;
 				shortcutKeyCopyLowest: 'c',
 				shortcutKeyEdit: 'e',
 				shortcutKeySendEdit: 'd',
-				shortcutKeyCopyAllResponses: '[',
 				shortcutKeyCopyAllCodeBlocks: ']',
 				shortcutKeyClickNativeScrollToBottom: 'z',
 				shortcutKeyScrollToTop: 't',
@@ -1390,6 +1399,7 @@ const delays = DELAYS;
 				shortcutKeyShare: '',
 				shortcutKeyThinkLonger: '',
 				shortcutKeyAddPhotosFiles: '',
+				selectThenCopyAllMessages: '[',
 			};
 
 			const shortcuts = {};
@@ -1586,7 +1596,6 @@ const delays = DELAYS;
 					const downButton = document.getElementById('downButton');
 					goDownTwoMessages(downButton || null);
 				},
-				[shortcuts.shortcutKeyCopyAllResponses]: copyAll,
 				[shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
 				[shortcuts.shortcutKeyCopyLowest]: () => {
 					const copyPath = 'M12.668 10.667C12.668';
@@ -2470,16 +2479,9 @@ const delays = DELAYS;
 						};
 					}
 
-					function fragmentHasSemanticList(html) {
-						const div = document.createElement('div');
-						div.innerHTML = html;
-						// True semantic lists (native or ARIA)
-						return !!div.querySelector('ol, ul, [role="list"], [role="listitem"]');
-					}
-
 					async function smartCopyFromRange(range) {
 						const { html, text } = rangeToHTMLAndText(range);
-						const keepHtml = fragmentHasSemanticList(html);
+						const keepHtml = true;
 
 						if (navigator.clipboard && window.ClipboardItem) {
 							const items = keepHtml
@@ -2908,6 +2910,531 @@ const delays = DELAYS;
 					const ICON_PATH_PREFIX = 'M14.3352 10.0257C14.3352'; // think longer icon prefix
 					await clickExposedIconButton(ICON_PATH_PREFIX);
 				},
+				// @note [shortcuts.selectThenCopyAllMessages]: (() => {
+				[shortcuts.selectThenCopyAllMessages]: (() => {
+					const DEBUG = false;
+
+					// Utility: copy HTML + text to clipboard with fallback
+					async function writeClipboardHTMLAndText_EntireConv(html, text) {
+						if (navigator.clipboard && window.ClipboardItem) {
+							try {
+								const item = new ClipboardItem({
+									'text/html': new Blob([html], { type: 'text/html' }),
+									'text/plain': new Blob([text], { type: 'text/plain' }),
+								});
+								await navigator.clipboard.write([item]);
+								return;
+							} catch (e) {
+								if (DEBUG) console.debug('Clipboard write fallback:', e);
+							}
+						}
+						document.addEventListener(
+							'copy',
+							(e) => {
+								e.clipboardData.setData('text/html', html);
+								e.clipboardData.setData('text/plain', text);
+								e.preventDefault();
+							},
+							{ once: true },
+						);
+						document.execCommand('copy');
+					}
+
+					// Utility: create a single Range spanning all specified elements (for visual selection feedback)
+					function createSelectionRangeForEls_EntireConv(els) {
+						try {
+							const selection = window.getSelection?.();
+							if (!selection || !els.length) return null;
+							selection.removeAllRanges();
+
+							function makeTextWalker(root) {
+								return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+									acceptNode(node) {
+										return node.nodeValue?.trim().length
+											? NodeFilter.FILTER_ACCEPT
+											: NodeFilter.FILTER_SKIP;
+									},
+								});
+							}
+
+							function findFirstTextNode(root) {
+								const w = makeTextWalker(root);
+								return w.nextNode();
+							}
+
+							function findLastTextNode(root) {
+								const w = makeTextWalker(root);
+								let last = null;
+								let n = w.nextNode();
+								while (n) {
+									last = n;
+									n = w.nextNode();
+								}
+								return last;
+							}
+
+							const firstEl = els[0];
+							const lastEl = els[els.length - 1];
+							const startNode = findFirstTextNode(firstEl) || firstEl;
+							const endNode = findLastTextNode(lastEl) || lastEl;
+
+							const range = document.createRange();
+							if (startNode.nodeType === Node.TEXT_NODE) {
+								range.setStart(startNode, 0);
+							} else {
+								range.setStart(startNode, 0);
+							}
+							if (endNode.nodeType === Node.TEXT_NODE) {
+								range.setEnd(endNode, endNode.nodeValue.length);
+							} else {
+								range.setEnd(endNode, endNode.childNodes.length);
+							}
+							return range;
+						} catch (err) {
+							if (DEBUG) console.debug('createSelectionRangeForEls_EntireConv error:', err);
+							return null;
+						}
+					}
+
+					// Convert newline characters to in user messages so paste targets keep line breaks.
+					// We conservatively transform all text nodes under the clone (user messages are plain text in a pre-wrap container).
+					function replaceNewlinesWithBr_UserPreWrap(root) {
+						try {
+							const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+							const toProcess = [];
+							let n = walker.nextNode();
+							while (n) {
+								if (n.nodeValue?.includes('\n')) toProcess.push(n);
+								n = walker.nextNode();
+							}
+							for (const textNode of toProcess) {
+								const parts = textNode.nodeValue.split('\n');
+								const frag = document.createDocumentFragment();
+								parts.forEach((part, i) => {
+									if (part) frag.appendChild(document.createTextNode(part));
+									if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
+								});
+								textNode.parentNode.replaceChild(frag, textNode);
+							}
+						} catch (err) {
+							if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
+						}
+					}
+
+					// Identify the content element for a user/assistant turn
+					function findContentElForTurn_EntireConv(container) {
+						const assistantScope = container.matches?.('[data-message-author-role="assistant"]')
+							? container
+							: container.querySelector?.('[data-message-author-role="assistant"]');
+						const userScope = container.matches?.('[data-message-author-role="user"]')
+							? container
+							: container.querySelector?.('[data-message-author-role="user"]');
+						if (assistantScope) {
+							return (
+								assistantScope.querySelector('.whitespace-pre-wrap') ||
+								assistantScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
+								assistantScope
+							);
+						}
+						if (userScope) {
+							return (
+								userScope.querySelector('.whitespace-pre-wrap') ||
+								userScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
+								userScope
+							);
+						}
+						return (
+							container.querySelector?.('.whitespace-pre-wrap') ||
+							container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
+							container
+						);
+					}
+
+					// Checkboxes or booleans -> forced boolean
+					function resolveFlag_EntireConv(v) {
+						return !!(v && typeof v === 'object' && 'checked' in v ? v.checked : v);
+					}
+
+					// Build the processed HTML + Text payload from DOM, honoring role filters and label settings
+					function buildProcessedClipboardPayload_EntireConv({
+						includeAssistant,
+						includeUser,
+						includeLabels,
+					}) {
+						// helper: infer language from code/pre UI
+						function inferLangFromPre(pre) {
+							let lang = '';
+							const codeEl = pre.querySelector('code');
+							if (codeEl) {
+								const cls = Array.from(codeEl.classList || []).find((c) =>
+									c.toLowerCase().startsWith('language-'),
+								);
+								if (cls) lang = cls.split('language-')[1];
+							}
+							if (!lang) {
+								// Try header label inside ChatGPT’s code block UI (e.g., "js")
+								const header = pre.querySelector('.flex.items-center.text-token-text-secondary');
+								const headerText = header?.innerText?.trim();
+								// hyphen placed at end to avoid escape (fixes biome noUselessEscapeInRegex)
+								if (headerText && /^[a-z0-9+.#-]+$/i.test(headerText)) {
+									lang = headerText.toLowerCase();
+								}
+							}
+							return lang;
+						}
+
+						// helper: simplify ChatGPT code block UI to <pre><code class="language-...">...</code></pre>
+						function normalizeCodeBlocksInClone(root) {
+							const pres = Array.from(root.querySelectorAll('pre'));
+							for (const pre of pres) {
+								// Extract code text (prefer innerText to preserve newlines)
+								const codeEl = pre.querySelector('code');
+								let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
+
+								// Remove invisible zero-width/BOM chars (Biome-safe)
+								codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
+
+								// Normalize all line endings to \n first, then we will emit CRLF for Word
+								codeText = codeText.replace(/\r\n?/g, '\n');
+
+								// Trim only trailing whitespace/newlines to avoid a blank line before ```
+								codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
+
+								const lang = inferLangFromPre(pre);
+
+								const preNew = document.createElement('pre');
+								const codeNew = document.createElement('code');
+								if (lang) codeNew.className = `language-${lang}`;
+
+								// Use CRLF so Word keeps the closing fence on its own line
+								const eol = '\r\n';
+								const fenceOpen = `\`\`\`${lang || ''}`;
+								const fenced = `$${fenceOpen}$${eol}$${codeText}$${eol}\`\`\`${eol}`;
+
+								codeNew.textContent = fenced; // literal text inside pre
+								preNew.appendChild(codeNew);
+								pre.replaceWith(preNew);
+							}
+						}
+
+						// Strip Word-confusing data-* attributes (preserve <p> semantics for proper paragraph spacing)
+						function demotePTagsAndStripDataAttrs(root) {
+							for (const el of Array.from(root.querySelectorAll('*'))) {
+								for (const attr of Array.from(el.attributes)) {
+									if (
+										attr.name === 'data-start' ||
+										attr.name === 'data-end' ||
+										attr.name.startsWith('data-')
+									) {
+										el.removeAttribute(attr.name);
+									}
+								}
+							}
+						}
+
+						// Add minimal list guard without altering margins (keeps After: 8pt intact)
+						function addListGuardStyles(el) {
+							const existing = el.getAttribute('style') || '';
+							const guard = 'list-style-type:none;';
+							el.setAttribute('style', existing ? `${existing};${guard}` : guard);
+						}
+
+						// Apply Word-friendly spacing and Segoe UI font to all paragraph-like blocks
+						function applyWordSpacingAndFont_Word(root) {
+							if (!root) return;
+
+							const fontStack =
+								"'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
+							const rules = [
+								`font-family:${fontStack}`,
+								'margin-top:0pt',
+								'margin-bottom:8pt',
+								'line-height:116%',
+								// MSO hints to help Word keep spacing on merge-format paste
+								'mso-margin-top-alt:0pt',
+								'mso-margin-bottom-alt:8pt',
+								'mso-line-height-alt:116%',
+							].join(';');
+
+							// Apply to the container itself
+							const base = root.getAttribute('style') || '';
+							root.setAttribute('style', base ? `${base};${rules}` : rules);
+
+							// Apply to common paragraph-like blocks
+							const selector = 'div, pre, blockquote, li, p, h1, h2, h3, h4, h5, h6';
+							for (const el of root.querySelectorAll(selector)) {
+								const s = el.getAttribute('style') || '';
+								el.setAttribute('style', s ? `${s};${rules}` : rules);
+							}
+						}
+
+						// helper: build plain text where each <pre><code> becomes a fenced block
+						function buildPlainTextWithFences(root) {
+							const clone = root.cloneNode(true);
+
+							// Normalize first (HTML path already inserts fences)
+							normalizeCodeBlocksInClone(clone);
+
+							for (const pre of Array.from(clone.querySelectorAll('pre'))) {
+								const codeEl = pre.querySelector('code');
+								let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
+
+								// Scrub zero-width/BOM and normalize line endings
+								codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
+								codeText = codeText.replace(/\r\n?/g, '\n');
+
+								// Trim only trailing whitespace/newlines so we control spacing around closing fence
+								codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
+
+								const eol = '\r\n';
+								let out;
+
+								// Avoid double-wrapping if already fenced
+								if (codeText.trim().startsWith('```')) {
+									// Ensure exactly one EOL before and after closing fence
+									codeText = codeText.replace(/\n+```$/m, '```'); // collapse blanks before final fence
+									out = `${eol}${codeText}${eol}`;
+								} else {
+									let lang = '';
+									if (codeEl) {
+										const cls = Array.from(codeEl.classList || []).find((c) =>
+											c.toLowerCase().startsWith('language-'),
+										);
+										if (cls) lang = cls.split('language-')[1];
+									}
+									out = `${eol}\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
+								}
+
+								const container = document.createElement('div');
+								container.textContent = out;
+								pre.replaceWith(container);
+							}
+
+							return clone.innerText.replace(/\u00A0/g, ' ').trim();
+						}
+
+						// Get all conversation turns in DOM order
+						const allTurns = Array.from(
+							document.querySelectorAll(
+								'article[data-turn], article[data-testid^="conversation-turn-"]',
+							),
+						);
+
+						// Filter by role
+						const filteredTurns = allTurns.filter((turn) => {
+							const isAssistant = !!turn.querySelector('[data-message-author-role="assistant"]');
+							const isUser = !!turn.querySelector('[data-message-author-role="user"]');
+							if (isAssistant && includeAssistant) return true;
+							if (isUser && includeUser) return true;
+							return false;
+						});
+
+						// Map to content elements
+						const contentEls = filteredTurns
+							.map((turn) => ({
+								el: findContentElForTurn_EntireConv(turn),
+								turn,
+							}))
+							.filter(({ el }) => {
+								if (!el) return false;
+								const txt = (el.innerText || el.textContent || '').trim();
+								return !!txt;
+							});
+
+						// Nothing to copy
+						if (!contentEls.length) return { html: '', text: '' };
+
+						// Build HTML + text blocks
+						const blocksHTML = [];
+						const blocksText = [];
+
+						for (const { el, turn } of contentEls) {
+							const roleContainer = el.closest?.('[data-message-author-role]');
+							const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
+
+							// Determine label source
+							let nativeLabel = '';
+							try {
+								nativeLabel = (
+									turn.querySelector?.('h5.sr-only, h6.sr-only')?.textContent || ''
+								).trim();
+							} catch (_) {
+								/* ignore */
+							}
+							const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
+							const labelText = includeLabels ? nativeLabel || fallbackLabel : '';
+
+							// Clone content for HTML normalization
+							const cloneForHtml = el.cloneNode(true);
+
+							if (role === 'user') {
+								// Preserve user message line breaks visually
+								replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+							}
+
+							// Normalize code blocks and strip list-bait attributes
+							normalizeCodeBlocksInClone(cloneForHtml);
+							demotePTagsAndStripDataAttrs(cloneForHtml);
+
+							// HTML block
+							const turnWrapper = document.createElement('div');
+							turnWrapper.setAttribute('data-role', role);
+
+							if (labelText) {
+								// Real blank paragraph before label
+								const spacerP = document.createElement('p');
+								spacerP.setAttribute(
+									'style',
+									'margin-top:0pt;margin-bottom:8pt;line-height:116%;mso-line-height-alt:116%;mso-line-height-rule:exactly;',
+								);
+								spacerP.innerHTML = '&nbsp;';
+								turnWrapper.appendChild(spacerP);
+
+								// Label as a true paragraph so Word applies paragraph spacing
+								const labelP = document.createElement('p');
+								labelP.setAttribute(
+									'style',
+									[
+										'margin-top:0pt',
+										'margin-bottom:8pt',
+										'line-height:116%',
+										"font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif",
+										'mso-line-height-alt:116%',
+										'mso-line-height-rule:exactly',
+									].join(';'),
+								);
+								// Keep zero-width space to suppress auto-numbering and color the text
+								labelP.innerHTML = `<strong><span style="color: rgb(0, 63, 122);">\u200B${labelText}</span></strong>`;
+								addListGuardStyles(labelP);
+								turnWrapper.appendChild(labelP);
+							}
+
+							// Body content: inject first, then apply paragraph spacing/font to real <p> etc.
+							const bodyDiv = document.createElement('div');
+							bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+							// Apply Word-friendly spacing to real paragraphs (not divs)
+							(function applyWordSpacingAndFont_Word(root) {
+								if (!root) return;
+								const fontStack =
+									"'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
+								const baseRules = [
+									`font-family:${fontStack}`,
+									'line-height:116%',
+									'mso-line-height-alt:116%',
+									'mso-line-height-rule:exactly',
+								].join(';');
+
+								// Apply to container
+								const base = root.getAttribute('style') || '';
+								root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+
+								// Apply to paragraph-like tags Word respects
+								const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
+								root.querySelectorAll(selector).forEach((el) => {
+									const s = el.getAttribute('style') || '';
+									const rules = [
+										`font-family:${fontStack}`,
+										'margin-top:0pt',
+										'margin-bottom:8pt',
+										'line-height:116%',
+										'mso-margin-top-alt:0pt',
+										'mso-margin-bottom-alt:8pt',
+										'mso-line-height-alt:116%',
+										'mso-line-height-rule:exactly',
+									].join(';');
+									el.setAttribute('style', s ? `${s};${rules}` : rules);
+								});
+							})(bodyDiv);
+
+							turnWrapper.appendChild(bodyDiv);
+
+							blocksHTML.push(turnWrapper.outerHTML);
+
+							// Build plain text with fenced code blocks (```lang ... ```)
+							const cloneForText = el.cloneNode(true);
+							if (role === 'user') {
+								// keep user message visual line breaks in text as-is (they are already \n in innerText)
+								// no <br> insertion needed for text variant
+							}
+							const contentText = buildPlainTextWithFences(cloneForText);
+							const textBlock = labelText ? `${labelText}\n${contentText}` : contentText;
+							blocksText.push(textBlock);
+						}
+
+						const html =
+							'<div data-export="chatgpt-shortcuts-entire-conversation">' +
+							blocksHTML.join('') +
+							'</div>';
+						const text = blocksText.join('\n\n');
+
+						return { html, text, contentEls: contentEls.map(({ el }) => el) };
+					}
+
+					return () => {
+						setTimeout(() => {
+							try {
+								// RADIO LOGIC: prioritize "only" options. If neither is selected, include both.
+								const onlyAssistant = resolveFlag_EntireConv(
+									window.selectThenCopyAllMessagesOnlyAssistant || false,
+								);
+								const onlyUser = resolveFlag_EntireConv(
+									window.selectThenCopyAllMessagesOnlyUser || false,
+								);
+
+								let includeAssistant = true;
+								let includeUser = true;
+								if (onlyAssistant) {
+									includeAssistant = true;
+									includeUser = false;
+								} else if (onlyUser) {
+									includeAssistant = false;
+									includeUser = true;
+								} else {
+									includeAssistant = true;
+									includeUser = true;
+								}
+
+								// LABEL LOGIC:
+								// - If includeLabelsAndSeparatorsCheckbox is checked => omit labels
+								// - If doNotIncludeLabelsCheckbox is true => omit labels
+								// - Otherwise => include labels
+								const omitViaSeparators = resolveFlag_EntireConv(
+									window.includeLabelsAndSeparatorsCheckbox,
+								);
+								const omitViaDoNotInclude = resolveFlag_EntireConv(
+									window.doNotIncludeLabelsCheckbox,
+								);
+								const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
+
+								// Build processed clipboard payload directly from DOM (robust), not from selection
+								const { html, text, contentEls } = buildProcessedClipboardPayload_EntireConv({
+									includeAssistant,
+									includeUser,
+									includeLabels,
+								});
+
+								if (!html && !text) return;
+
+								// Create a visual selection spanning first->last message (for user feedback)
+								if (contentEls?.length) {
+									const range = createSelectionRangeForEls_EntireConv(contentEls);
+									// Use optional chaining to safely access Selection API
+									const selection = window.getSelection?.();
+									if (selection && range) {
+										selection.removeAllRanges();
+										selection.addRange(range);
+									}
+								}
+
+								// Programmatically write the processed HTML/Text (this enforces role filtering + label rules)
+								void writeClipboardHTMLAndText_EntireConv(html, text);
+							} catch (err) {
+								if (DEBUG) console.debug('selectThenCopyAllMessages error:', err);
+							}
+						}, 50);
+					};
+				})(),
 			}; // Close keyFunctionMapping object @note Bottom of keyFunctionMapping
 
 			// Assign the functions to the window object for global access
