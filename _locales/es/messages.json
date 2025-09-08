@@ -167,20 +167,11 @@
 	"label_pickModel": {
 		"message": "Elegir modelo"
 	},
-	"tt_pick_model_plain": {
-		"message": "Cambia de modelo con un atajo usando Alt o Control. Haz clic en cualquier número para definir o borrar un atajo propio."
-	},
 	"label_use_alt": {
 		"message": "Usar Alt"
 	},
-	"tt_use_Alt_for_picker": {
-		"message": "Usa Alt+atajo para cambiar de modelo. Haz clic en cualquier número para definir o borrar un atajo propio."
-	},
 	"label_use_control": {
 		"message": "Usar Control"
-	},
-	"tt_use_Control_for_picker": {
-		"message": "Usa Control+atajo para cambiar de modelo. Haz clic en cualquier número para definir o borrar un atajo propio."
 	},
 	"tt_regenerate": {
 		"message": "Pulsa el botón de regenerar más bajo visible."
@@ -367,5 +358,14 @@
 	},
 	"label_add_photos_files": {
 		"message": "Añadir fotos y archivos"
+	},
+	"tt_pick_model_plain": {
+		"message": "Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Usa Control+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Usa Alt+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
 	}
 }

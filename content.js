@@ -3139,35 +3139,6 @@ const delays = DELAYS;
 							el.setAttribute('style', existing ? `${existing};${guard}` : guard);
 						}
 
-						// Apply Word-friendly spacing and Segoe UI font to all paragraph-like blocks
-						function applyWordSpacingAndFont_Word(root) {
-							if (!root) return;
-
-							const fontStack =
-								"'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
-							const rules = [
-								`font-family:${fontStack}`,
-								'margin-top:0pt',
-								'margin-bottom:8pt',
-								'line-height:116%',
-								// MSO hints to help Word keep spacing on merge-format paste
-								'mso-margin-top-alt:0pt',
-								'mso-margin-bottom-alt:8pt',
-								'mso-line-height-alt:116%',
-							].join(';');
-
-							// Apply to the container itself
-							const base = root.getAttribute('style') || '';
-							root.setAttribute('style', base ? `${base};${rules}` : rules);
-
-							// Apply to common paragraph-like blocks
-							const selector = 'div, pre, blockquote, li, p, h1, h2, h3, h4, h5, h6';
-							for (const el of root.querySelectorAll(selector)) {
-								const s = el.getAttribute('style') || '';
-								el.setAttribute('style', s ? `${s};${rules}` : rules);
-							}
-						}
-
 						// helper: build plain text where each <pre><code> becomes a fenced block
 						function buildPlainTextWithFences(root) {
 							const clone = root.cloneNode(true);
@@ -4852,6 +4823,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 // @note Alt+1,2,3 (main), Alt+4 (submenu), Alt+5+ (submenu items); supports legacy submenu, always with gsap feedback & delay
 // ===============================
 (() => {
+	// Shared, mutable ref so live updates affect all closures without reassignment
+	const KEY_CODES = [];
+
 	chrome.storage.sync.get(
 		['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
 		({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
@@ -4867,10 +4841,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 				'Digit9',
 				'Digit0',
 			];
-			const KEY_CODES =
-				Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length === 10
+			// Initialize shared KEY_CODES (mutate the const array)
+			KEY_CODES.splice(
+				0,
+				KEY_CODES.length,
+				...(Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length === 10
 					? modelPickerKeyCodes.slice(0, 10)
-					: DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+					: DEFAULT_MODEL_PICKER_KEY_CODES.slice()),
+			);
 			const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
 			const USE_CTRL = !!useControlForModelSwitcherRadio;
 			const MOD_KEY_TEXT = USE_CTRL ? (IS_MAC ? 'Command' : 'Ctrl') : IS_MAC ? 'Option' : 'Alt';
@@ -4952,8 +4930,46 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 				return false;
 			};
 
+			// Only consider "Model switcher" menus (main or its submenu)
+			// Robust detection:
+			// - has [data-testid^="Model-switCher-"] items
+			// - OR header like "GPT-5" (.__menu-label)
+			// - OR aria-labelledby equals the model switcher trigger button id
+			// - OR aria-labelledby points to a trigger inside a primary model menu
+			const isPrimaryModelMenu = (menuEl) => {
+				if (!menuEl || !(menuEl instanceof Element)) return false;
+				if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true;
+				const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
+				if (/^gpt[\s-]*/i.test(header)) return true;
+				const triggerId = document.querySelector(MENU_BTN)?.id;
+				const labelledby = menuEl.getAttribute('aria-labelledby') || '';
+				if (triggerId && labelledby === triggerId) return true;
+				return false;
+			};
+
+			const isModelMenu = (menuEl) => {
+				if (!menuEl || !(menuEl instanceof Element)) return false;
+				// Direct match
+				if (isPrimaryModelMenu(menuEl)) return true;
+
+				// Submenu: its labelledby points to a trigger that lives inside a primary model menu
+				const labelledby = menuEl.getAttribute('aria-labelledby') || '';
+				const triggerEl = labelledby ? document.getElementById(labelledby) : null;
+				const parentMenu = triggerEl?.closest('[data-radix-menu-content]');
+				if (parentMenu && isPrimaryModelMenu(parentMenu)) return true;
+
+				return false;
+			};
+
+			const getOpenModelMenus = () => {
+				const all = typeof getOpenMenus === 'function'
+					? getOpenMenus()
+					: Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
+				return all.filter(isModelMenu);
+			};
+
 			// Back-compat alias where existing code expects a single menu (the first/leftmost)
-			const getOpenMenu = () => getOpenMenus()[0] || null;
+			const getOpenMenu = () => getOpenModelMenus()[0] || null;
 
 			// Style for shortcut labels
 			(() => {
@@ -4991,7 +5007,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			// Collect items from the *first* open menu (level 1) and, if present, the *second* open menu (level 2).
 			// Cap at 10 items total so the existing key mapping remains stable.
 			function getOrderedMenuItems() {
-				const openMenus = getOpenMenus();
+				const openMenus = getOpenModelMenus();
 				if (!openMenus.length) return [];
 
 				const first = openMenus[0];
@@ -5115,9 +5131,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 						el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
 					};
 
-					// Try to force-open submenu by "hovering" each likely trigger until a second menu appears
+					// Try to force-open submenu by "hovering" each likely trigger until a second model menu appears
 					const forceOpenSubmenu = (done) => {
-						const menus = getOpenMenus();
+						const menus = getOpenModelMenus();
 						if (!menus.length) return done();
 						if (menus.length > 1) return done(); // submenu already present
 
@@ -5135,7 +5151,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 						let i = 0,
 							attempts = 0;
 						const tick = () => {
-							if (getOpenMenus().length > 1) return done();
+							if (getOpenModelMenus().length > 1) return done();
 							if (i < candidates.length) {
 								const el = candidates[i++];
 								hover(el);
@@ -5196,7 +5212,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			(() => {
 				let lastCount = 0;
 				const obs = new MutationObserver(() => {
-					const count = getOpenMenus().length;
+					const count = getOpenModelMenus().length;
 					if (count !== lastCount) {
 						lastCount = count;
 						// debounce a hair to let layout settle
@@ -5267,7 +5283,23 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		};
 
 		const forceOpenSubmenu = (done) => {
-			const menus = getOpenMenus();
+			// Restrict to model menus only
+			const getModelMenus = () => {
+				const all =
+					typeof getOpenMenus === 'function'
+						? getOpenMenus()
+						: Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
+				return all.filter((menuEl) => {
+					if (!menuEl || !(menuEl instanceof Element)) return false;
+					if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true;
+					if (menuEl.querySelector('[data-testid$="-submenu"], [data-testid*="Legacy models"]'))
+						return true;
+					const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
+					return /^gpt[\s-]*/i.test(header);
+				});
+			};
+
+			const menus = getModelMenus();
 			if (!menus.length) return done();
 			if (menus.length > 1) return done(); // already open
 			const triggers = findTriggers(menus[0]);
@@ -5276,7 +5308,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 			let i = 0,
 				polls = 0;
 			const tick = () => {
-				if (getOpenMenus().length > 1) return done();
+				if (getModelMenus().length > 1) return done();
 				if (i < triggers.length) {
 					const el = triggers[i++];
 					hover(el); // covers hover-based submenus
@@ -5312,7 +5344,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 		if (changes.modelPickerKeyCodes) {
 			const val = changes.modelPickerKeyCodes.newValue;
 			if (Array.isArray(val) && val.length === 10) {
-				KEY_CODES = val.slice(0, 10);
+				// Mutate the const array so references stay valid
+				KEY_CODES.splice(0, KEY_CODES.length, ...val.slice(0, 10));
 				// If menu is open, refresh labels to reflect new keys
 				if (
 					document

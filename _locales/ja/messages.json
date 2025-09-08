@@ -167,20 +167,11 @@
 	"label_pickModel": {
 		"message": "モデルを選択"
 	},
-	"tt_pick_model_plain": {
-		"message": "Alt または Control のショートカットでモデルを切り替え。番号をクリックするとカスタムショートカットを設定/解除。"
-	},
 	"label_use_alt": {
 		"message": "Alt を使う"
 	},
-	"tt_use_Alt_for_picker": {
-		"message": "Alt+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
-	},
 	"label_use_control": {
 		"message": "Control を使う"
-	},
-	"tt_use_Control_for_picker": {
-		"message": "Control+ショートカットでモデル切り替え。番号をクリックでカスタムショートカットを設定/解除。"
 	},
 	"tt_regenerate": {
 		"message": "一番下に見えている再生成ボタンをクリック。"
@@ -367,5 +358,14 @@
 	},
 	"label_add_photos_files": {
 		"message": "写真 + ファイルを追加"
+	},
+	"tt_pick_model_plain": {
+		"message": "最初の欄をクリックし、Tabで順送りしてモデル名を表示します。 ——————————————————— 任意のキーでショートカットを設定、Backspaceでクリア、Tabでスキップ"
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Control+{{shortcut}}でモデルを切り替えます。 ——————————————————— 最初の欄をクリックし、Tabで順送りしてモデル名を表示します。 ——————————————————— 任意のキーでショートカットを設定、Backspaceでクリア、Tabでスキップ"
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Alt+{{shortcut}}でモデルを切り替えます。 ——————————————————— 最初の欄をクリックし、Tabで順送りしてモデル名を表示します。 ——————————————————— 任意のキーでショートカットを設定、Backspaceでクリア、Tabでスキップ。"
 	}
 }

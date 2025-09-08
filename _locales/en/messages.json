@@ -173,20 +173,11 @@
 	"label_pickModel": {
 		"message": "Pick Model"
 	},
-	"tt_pick_model_plain": {
-		"message": "Switch ChatGPT models using Shortcut key with Alt or Control. Click any number to set or clear a custom shortcut."
-	},
 	"label_use_alt": {
 		"message": "Use Alt"
 	},
-	"tt_use_Alt_for_picker": {
-		"message": "Use Alt+Shortcut to switch models. Click any number to set or clear a custom shortcut."
-	},
 	"label_use_control": {
 		"message": "Use Control"
-	},
-	"tt_use_Control_for_picker": {
-		"message": "Use Control+Shortcut to switch models. Click any number to set or clear a custom shortcut."
 	},
 	"tt_regenerate": {
 		"message": "Clicks the lowest visible regenerate response button."
@@ -367,5 +358,14 @@
 	},
 	"label_add_photos_files": {
 		"message": "Add Photos + Files Tool"
+	},
+	"tt_pick_model_plain": {
+		"message": "Click the first slot, then press Tab to cycle through and reveal model names. ——————————————————— Press any key to set a shortcut, Backspace to clear, Tab to skip."
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Use Control+{{shortcut}} to switch models. ——————————————————— Click the first slot, then press Tab to cycle through and reveal model names. ——————————————————— Press any key to set a shortcut, Backspace to clear, Tab to skip."
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Use Alt+{{shortcut}} to switch models. ——————————————————— Click the first slot, then press Tab to cycle through and reveal model names. ——————————————————— Press any key to set a shortcut, Backspace to clear, Tab to skip."
 	}
 }
