@@ -20,15 +20,15 @@ const inputs = $('input:not([type=hidden])');
 // We intentionally ignore plain "name" unless it's the intended sync key.
 const expectedKeys = new Set();
 inputs.each((_, el) => {
-	const $el = $(el);
-	const ds = ($el.attr('data-sync') || '').trim();
-	const id = ($el.attr('id') || '').trim();
+  const $el = $(el);
+  const ds = ($el.attr('data-sync') || '').trim();
+  const id = ($el.attr('id') || '').trim();
 
-	if (ds) {
-		expectedKeys.add(ds);
-	} else if (id) {
-		expectedKeys.add(id);
-	}
+  if (ds) {
+    expectedKeys.add(ds);
+  } else if (id) {
+    expectedKeys.add(id);
+  }
 });
 
 // Get keys from JSON
@@ -42,7 +42,7 @@ const unusedInHtml = jsonKeys.filter((k) => !expectedKeys.has(k) && !JSON_ONLY_K
 
 console.log('--- Mismatches (HTML keys not in JSON) ---');
 console.log(
-	missingInJson.length ? missingInJson.map((k) => `KEY not in JSON: ${k}`).join('\n') : 'None!',
+  missingInJson.length ? missingInJson.map((k) => `KEY not in JSON: ${k}`).join('\n') : 'None!',
 );
 
 console.log('\n--- Unused keys in JSON ---');

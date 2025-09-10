@@ -3,7 +3,7 @@ const { runtime } = chrome;
 
 // Listen for keyboard shortcut command
 chrome.commands.onCommand.addListener((command) => {
-	if (command === "open-popup") {
-		chrome.action.openPopup();
-	}
+  if (command === 'open-popup') {
+    chrome.action.openPopup();
+  }
 });
