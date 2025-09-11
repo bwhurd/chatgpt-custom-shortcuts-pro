@@ -5,7 +5,8 @@ ChatGPT Custom Shortcuts Pro
 */
 
 // To do:
-// 3. add shortcuts to move up or down to previous or next conversation
+// 1. add toggle to make inline code clickable to copy
+// 2. add shortcuts to move up or down to previous or next conversation
 
 // =====================================
 // @note Global Functions
@@ -334,14 +335,14 @@ const flashBorder = (el) => {
       {
         boxShadow: `0 0 0 3px ${tertiary}`,
         scale: 0.95,
-        duration: 0.25,
+        duration: 0.15,
         ease: 'power2.out',
       },
     )
     .to(el, {
       boxShadow: `0 0 0 0 ${tertiary}`,
       scale: 1,
-      duration: 0.3,
+      duration: 0.2,
       ease: 'power2.in',
     });
 };
@@ -355,7 +356,7 @@ const DELAYS = {
   beforeSubmenuInteract: 50,
   betweenKeyAttempts: 15,
   afterSubmenuOpen: 50,
-  beforeFinalClick: 300,
+  beforeFinalClick: 150,
 
   // Centralized timeouts
   waitSubmenuEl: 2000, // ms, submenu wait (existing)
@@ -482,88 +483,6 @@ const delays = DELAYS;
       if (toast?.parentNode) toast.parentNode.removeChild(toast);
     }, delays.buttonFade);
   }
-  // @note Legacy Copy All Responses
-  //	function copyAll() {
-  //		const proseNodeList = document.querySelectorAll('.prose');
-  //		if (!proseNodeList || proseNodeList.length === 0) {
-  //			showToast('No prose elements found');
-  //			return;
-  //		}
-  //
-  //		chrome.storage.sync.get(['copyAllUserSeparator', 'copyCodeUserSeparator'], (data) => {
-  //			const userSepRaw = data.copyAllUserSeparator;
-  //			const sep = userSepRaw ? parseSeparator(userSepRaw) : ' \n  \n --- --- --- \n \n';
-  //
-  //			const parts = [];
-  //			for (const proseEl of proseNodeList) {
-  //				const text = getFormattedText(proseEl);
-  //				if (text?.trim().length) parts.push(text);
-  //			}
-  //
-  //			const output = parts.join(sep);
-  //
-  //			if (output) {
-  //				navigator.clipboard
-  //					.writeText(output)
-  //					.then(() => showToast('All responses copied to clipboard!'))
-  //					.catch(() => showToast('Error copying content to clipboard!'));
-  //			} else {
-  //				showToast('No content found in the prose elements');
-  //			}
-  //		});
-  //	}
-
-  //  Legacy Used by CopyAll
-  //	function getFormattedText(proseElement) {
-  //		let result = '';
-  //		for (const child of proseElement.childNodes) {
-  //			switch (child.nodeType) {
-  //				case Node.TEXT_NODE: {
-  //					result += child.textContent;
-  //					break;
-  //				}
-  //				case Node.ELEMENT_NODE: {
-  //					switch (child.tagName) {
-  //						case 'BR': {
-  //							result += '\n';
-  //							break;
-  //						}
-  //						case 'P': {
-  //							result += `${getFormattedText(child)}\n\n`;
-  //							break;
-  //						}
-  //						case 'PRE': {
-  //							result += `${processCodeBlock(child.textContent)}\n\n`;
-  //							break;
-  //						}
-  //						case 'OL':
-  //						case 'UL': {
-  //							let items = Array.from(child.querySelectorAll('li'));
-  //							if (child.tagName === 'OL') {
-  //								items = items.map((item, index) => `${index + 1}. ${getFormattedText(item)}\n`);
-  //							} else {
-  //								items = items.map((item) => `- ${getFormattedText(item)}\n`);
-  //							}
-  //							result += `${items.join('')}\n`;
-  //							break;
-  //						}
-  //						default: {
-  //							result += getFormattedText(child);
-  //						}
-  //					}
-  //					break;
-  //				}
-  //			}
-  //		}
-  //		return result;
-  //	}
-
-  //  Legacy Used by CopyAll
-  //	function processCodeBlock(codeBlockText) {
-  //		const lines = codeBlockText.split('\n').filter((line) => line.trim() !== ''); // Remove empty lines
-  //		if (lines.length === 0) return ''; // Skip empty blocks
-  //		return lines.join('\n'); // Return raw code content without backticks
-  //	}
 
   function getAllCodeBlocks() {
     const codeBoxes = document.querySelectorAll('pre');
@@ -639,13 +558,13 @@ const delays = DELAYS;
 
     if (targetMessage) {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: { y: targetMessage.offsetTop - scrollOffset },
         ease: 'power4.out',
       });
     } else {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: { y: 0 },
         ease: 'power4.out',
       });
@@ -678,7 +597,7 @@ const delays = DELAYS;
 
     if (targetMessage) {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: {
           y: targetMessage.offsetTop - scrollOffset,
         },
@@ -686,7 +605,7 @@ const delays = DELAYS;
       });
     } else {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: {
           y: 0,
         },
@@ -789,13 +708,13 @@ const delays = DELAYS;
 
     if (targetMessage) {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: { y: targetMessage.offsetTop - scrollOffset },
         ease: 'power4.out',
       });
     } else {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         scrollTo: {
           y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
         },
@@ -838,14 +757,14 @@ const delays = DELAYS;
 
     if (targetMessage) {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         overwrite: 'auto',
         scrollTo: { y: virtualTop },
         ease: 'power4.out',
       });
     } else {
       gsap.to(scrollContainer, {
-        duration: 0.6,
+        duration: 0.3,
         overwrite: 'auto',
         scrollTo: {
           y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
@@ -1600,6 +1519,10 @@ const delays = DELAYS;
         [shortcuts.shortcutKeyCopyLowest]: () => {
           const copyPath = 'M12.668 10.667C12.668';
 
+          // Centralized timing constants (all halved)
+          const DELAY_BEFORE_CLICK = 200; // was 350
+          const DELAY_CLIPBOARD_READ = 175; // was 350
+
           // Find the correct (visible) copy button
           const visibleButtons = Array.from(document.querySelectorAll('button')).filter((btn) => {
             if (!btn.querySelector(`svg path[d^="${copyPath}"]`)) return false;
@@ -1629,9 +1552,7 @@ const delays = DELAYS;
             let i = 0;
             let inFence = false;
             while (i < input.length) {
-              // Detect triple backticks
               if (input.startsWith('```', i)) {
-                // If we're outside a fence, this is an opening fence.
                 if (!inFence && i > 0 && input[i - 1] !== '\n') out += '\n';
                 inFence = !inFence;
                 out += '```';
@@ -1644,7 +1565,6 @@ const delays = DELAYS;
             return out;
           };
 
-          // Small helper: normalize then write to clipboard
           const writeNormalized = (str) =>
             navigator.clipboard.writeText(ensureFencesStartOnNewLine(str));
 
@@ -1657,10 +1577,8 @@ const delays = DELAYS;
                 .then((text) => {
                   const trimmed = text.trim();
 
-                  // If it's already a pure fenced block, just normalize (no-op in most cases)
                   if (/^```[\s\S]*```$/.test(trimmed)) return writeNormalized(text);
 
-                  // Optional: user setting to strip markdown outside codeblocks
                   if (
                     isMsgCopy &&
                     typeof window.removeMarkdownOnCopyCheckbox !== 'undefined' &&
@@ -1671,23 +1589,26 @@ const delays = DELAYS;
                     return writeNormalized(cleaned);
                   }
 
-                  // Default path
                   return writeNormalized(text);
                 })
                 .catch(() => {
                   /* silent */
                 });
-            }, 350); // robustness: wait for DOM/clipboard to update
-          }, 350); // align with GSAP animation duration
+            }, DELAY_CLIPBOARD_READ);
+          }, DELAY_BEFORE_CLICK);
         },
-        // @note Edit Shortucut
+        // @note shortcutKeyEDIT
         [shortcuts.shortcutKeyEdit]: () => {
+          // Centralized timing constants (all halved from original)
+          const DELAY_SAFE_CLICK = 200; // after scroll, before click
+          const GSAP_SCROLL_DURATION = 0.2; // smooth scroll duration with GSAP
+          const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
+          const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
+
           // always scroll to center if possible, clamp if not
           const gsapScrollToCenterAndClick = (button) => {
-            // Strong guards against stale or non-elements
             if (!button || !button.isConnected || typeof button.click !== 'function') return;
 
-            // Resolve a valid scroll container; fall back to window if not an Element.
             let container = window;
             try {
               if (typeof getScrollableContainer === 'function') {
@@ -1696,11 +1617,8 @@ const delays = DELAYS;
                   container = candidate;
                 }
               }
-            } catch {
-              /* ignore */
-            }
+            } catch {}
 
-            // Compute geometry relative to the chosen container
             let contTop = 0;
             let contHeight = window.innerHeight;
             if (container !== window) {
@@ -1708,9 +1626,7 @@ const delays = DELAYS;
                 const cr = container.getBoundingClientRect();
                 contTop = cr.top;
                 contHeight = container.clientHeight;
-              } catch {
-                /* fall back to defaults */
-              }
+              } catch {}
             }
 
             const rect = button.getBoundingClientRect();
@@ -1728,37 +1644,31 @@ const delays = DELAYS;
 
             targetY = Math.max(0, Math.min(targetY, maxScroll));
 
-            // Click only if the element still exists at click time
             const safeClick = () => {
-              // Optional chaining keeps this null-safe & satisfies the linter.
               const canClick = button?.isConnected && typeof button?.click === 'function';
               if (!canClick) return;
               try {
                 button.click();
-              } catch {
-                /* noop */
-              }
+              } catch {}
             };
 
             const finish = () => {
-              // Don’t let a missing helper kill the click
               try {
                 if (typeof flashBorder === 'function') flashBorder(button);
               } catch {}
-              setTimeout(safeClick, 200);
+              setTimeout(safeClick, DELAY_SAFE_CLICK);
             };
 
             const animateWithGsap = () => {
               try {
                 if (!window.gsap) return false;
-                // If ScrollToPlugin isn't registered, bail to native fallback
                 const hasScrollTo =
                   (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
                   typeof ScrollToPlugin !== 'undefined';
                 if (!hasScrollTo) return false;
 
                 gsap.to(container, {
-                  duration: 0.6,
+                  duration: GSAP_SCROLL_DURATION,
                   scrollTo: { y: targetY, autoKill: true },
                   ease: 'power4.out',
                   onComplete: finish,
@@ -1769,7 +1679,6 @@ const delays = DELAYS;
               }
             };
 
-            // Run the animation or fall back to native smooth/instant scroll
             if (!animateWithGsap()) {
               try {
                 if (container === window) {
@@ -1780,17 +1689,15 @@ const delays = DELAYS;
                   container.scrollTop = targetY;
                 }
               } catch {
-                // very old browsers: instant
                 if (container === window) window.scrollTo(0, targetY);
                 else container.scrollTop = targetY;
               }
-              setTimeout(finish, 250);
+              setTimeout(finish, DELAY_FALLBACK_FINISH);
             }
           };
 
           setTimeout(() => {
             try {
-              // --- Find all edit buttons as in 111 ---
               const allButtons = Array.from(
                 document.querySelectorAll('button svg path[d^="M11.3312 3.56837C12.7488"]'),
               ).map((svgPath) => svgPath.closest('button'));
@@ -1800,7 +1707,6 @@ const delays = DELAYS;
                 ? composerBackground.getBoundingClientRect()
                 : null;
 
-              // Collect button + rect details, filter out any null/undefined
               const buttonsData = allButtons
                 .filter((btn) => btn !== null)
                 .map((btn) => {
@@ -1808,7 +1714,6 @@ const delays = DELAYS;
                   return { btn, rect };
                 });
 
-              // Exclude buttons that overlap the composer (if composerRect exists)
               const filteredButtonsData = buttonsData.filter(({ rect }) => {
                 if (!composerRect) return true;
                 const overlapsComposer =
@@ -1819,10 +1724,8 @@ const delays = DELAYS;
                 return !overlapsComposer;
               });
 
-              // Sort by rect.top ascending (top-most first, bottom-most last)
               filteredButtonsData.sort((a, b) => a.rect.top - b.rect.top);
 
-              // Check which buttons are fully or partially in the current viewport
               const inViewport = filteredButtonsData.filter(
                 ({ rect }) =>
                   rect.bottom > 0 &&
@@ -1833,37 +1736,31 @@ const delays = DELAYS;
 
               let targetButton = null;
               if (inViewport.length > 0) {
-                // If there's at least one button in the viewport, pick the bottom-most one
                 const target = inViewport.reduce((bottomMost, current) =>
                   current.rect.top > bottomMost.rect.top ? current : bottomMost,
                 );
                 targetButton = target.btn;
               } else {
-                // No button in viewport: scroll up to and center the next higher button
-                // (highest button that is still above the viewport)
                 const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
-
                 if (aboveViewport.length > 0) {
-                  // Among those above the viewport, pick the one closest to the viewport
-                  // i.e. the one with the largest rect.bottom
                   const target = aboveViewport.reduce((closest, current) =>
                     current.rect.bottom > closest.rect.bottom ? current : closest,
                   );
                   targetButton = target.btn;
                 }
-                // If there's none above the viewport, we've likely hit the top; do nothing
               }
 
               if (targetButton) {
                 gsapScrollToCenterAndClick(targetButton);
               }
-            } catch {
-              // Silent fail
-            }
-          }, 50);
+            } catch {}
+          }, DELAY_INITIAL_SCAN);
         },
         [shortcuts.shortcutKeySendEdit]: () => {
           try {
+            // Centralized timing constant
+            const DELAY_BEFORE_CLICK = 250; // was 500ms
+
             // Find all possible send buttons (second button in each container)
             const sendButtons = Array.from(document.querySelectorAll('div.flex.justify-end.gap-2'))
               .map((container) => {
@@ -1889,9 +1786,10 @@ const delays = DELAYS;
             const btn = visibleSendButtons.at(-1);
 
             if (window.gsap) flashBorder(btn);
+
             setTimeout(() => {
               btn.click();
-            }, 500);
+            }, DELAY_BEFORE_CLICK);
           } catch {
             // Fail silently
           }
@@ -1966,7 +1864,7 @@ const delays = DELAYS;
           if (!el) return;
 
           gsap.to(el, {
-            duration: 0.6,
+            duration: 0.3,
             scrollTo: { y: 'max' },
             ease: 'power4.out',
           });
@@ -1977,7 +1875,7 @@ const delays = DELAYS;
           if (!el) return;
 
           gsap.to(el, {
-            duration: 0.6,
+            duration: 0.3,
             scrollTo: { y: 0 },
             ease: 'power4.out',
           });
@@ -2101,7 +1999,11 @@ const delays = DELAYS;
         [shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
           const SCROLL_ANCHOR_PCT =
             typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-          const POST_CLICK_DELAY = 350;
+
+          // Centralized timing constants
+          const DELAY_INITIAL = 25; // was 50
+          const DELAY_POST_CLICK = 175; // was 350
+          const SCROLL_DURATION = 0.2; // was 0.6s
 
           const getScrollableContainer =
             typeof window.getScrollableContainer === 'function'
@@ -2140,14 +2042,13 @@ const delays = DELAYS;
             targetY = Math.max(0, Math.min(targetY, maxScroll));
 
             gsap.to(container, {
-              duration: 0.6,
+              duration: SCROLL_DURATION,
               scrollTo: { y: targetY, autoKill: false },
               ease: 'power4.out',
               onComplete,
             });
           };
 
-          // Check if a button is already at the intended anchor position
           function isButtonCentered(container, btn) {
             if (!window.gsap || !btn) return false;
             const rect = btn.getBoundingClientRect();
@@ -2167,8 +2068,7 @@ const delays = DELAYS;
                 : rect.top - contRect.top + container.scrollTop;
             const targetY = btnTop - anchorPx;
             const delta = Math.abs(currentScroll - targetY);
-            // 2px threshold for "centered"
-            return delta < 2;
+            return delta < 2; // threshold
           }
 
           const getMsgId = (btn) =>
@@ -2182,7 +2082,6 @@ const delays = DELAYS;
             });
           };
 
-          /* -------- Candidate collection & priority logic -------- */
           const collectCandidates = () => {
             const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
               .map((el) => el.previousElementSibling)
@@ -2205,12 +2104,10 @@ const delays = DELAYS;
               : false;
           };
 
-          // Previous candidate logic
           const chooseTarget = (buttons) => {
             const scrollY = window.scrollY;
             const viewH = window.innerHeight;
-
-            const BOTTOM_BUFFER = 85; // px buffer for occlusion by composer or bottom UI
+            const BOTTOM_BUFFER = 85;
 
             const withMeta = buttons.map((btn) => {
               const rect = btn.getBoundingClientRect();
@@ -2223,19 +2120,14 @@ const delays = DELAYS;
               };
             });
 
-            // a) lowest fully visible
             const fully = withMeta.filter((m) => m.fullyVisible);
             if (fully.length) {
               return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
             }
-
-            // b) just above viewport
             const above = withMeta.filter((m) => m.rect.bottom <= 0);
             if (above.length) {
               return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
             }
-
-            // c) lowest overall
             return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
           };
 
@@ -2255,7 +2147,6 @@ const delays = DELAYS;
               let target = chooseTarget(all);
               const container = getScrollableContainer();
 
-              // Only in preview mode: skip already-centered candidate
               if (opts.previewOnly && target && isButtonCentered(container, target)) {
                 const idx = all.indexOf(target);
                 let found = false;
@@ -2266,7 +2157,6 @@ const delays = DELAYS;
                     break;
                   }
                 }
-                // If not found and at the very top, wrap to the last candidate
                 if (!found && all.length > 1) {
                   target = all[all.length - 1];
                 }
@@ -2282,15 +2172,16 @@ const delays = DELAYS;
                 if (!opts.previewOnly) {
                   setTimeout(() => {
                     target.click();
-                    setTimeout(() => recenter(msgId), POST_CLICK_DELAY);
-                  }, POST_CLICK_DELAY);
+                    setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
+                  }, DELAY_POST_CLICK);
                 }
               });
             } catch (_) {
               /* silent */
             }
-          }, 50);
+          }, DELAY_INITIAL);
         },
+
         /*──────────────────────────────────────────────────────────────────────────────
          *  NEXT‑THREAD shortcut – tracks ONE specific button through re‑render
          *────────────────────────────────────────────────────────────────────────────*/
@@ -2302,7 +2193,11 @@ const delays = DELAYS;
         [shortcuts.shortcutKeyNextThread]: (opts = {}) => {
           const SCROLL_ANCHOR_PCT =
             typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-          const POST_CLICK_DELAY = 350;
+
+          // Centralized timing constants (all halved)
+          const DELAY_INITIAL = 25; // was 50
+          const DELAY_POST_CLICK = 200; // was 350
+          const SCROLL_DURATION = 0.2; // was 0.6s
 
           const getScrollableContainer =
             typeof window.getScrollableContainer === 'function'
@@ -2341,14 +2236,13 @@ const delays = DELAYS;
             targetY = Math.max(0, Math.min(targetY, maxScroll));
 
             gsap.to(container, {
-              duration: 0.6,
+              duration: SCROLL_DURATION,
               scrollTo: { y: targetY, autoKill: false },
               ease: 'power4.out',
               onComplete,
             });
           };
 
-          // Check if a button is already at the intended anchor position
           function isButtonCentered(container, btn) {
             if (!window.gsap || !btn) return false;
             const rect = btn.getBoundingClientRect();
@@ -2368,8 +2262,7 @@ const delays = DELAYS;
                 : rect.top - contRect.top + container.scrollTop;
             const targetY = btnTop - anchorPx;
             const delta = Math.abs(currentScroll - targetY);
-            // 2px threshold for "centered"
-            return delta < 2;
+            return delta < 2; // threshold
           }
 
           const getMsgId = (btn) =>
@@ -2383,7 +2276,6 @@ const delays = DELAYS;
             });
           };
 
-          /* -------- Candidate collection & priority logic -------- */
           const collectCandidates = () => {
             const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
               .map((el) => el.previousElementSibling)
@@ -2414,12 +2306,10 @@ const delays = DELAYS;
               : false;
           };
 
-          // Previous candidate logic
           const chooseTarget = (buttons) => {
             const scrollY = window.scrollY;
             const viewH = window.innerHeight;
-
-            const BOTTOM_BUFFER = 85; // px buffer for occlusion by composer or bottom UI
+            const BOTTOM_BUFFER = 85;
 
             const withMeta = buttons.map((btn) => {
               const rect = btn.getBoundingClientRect();
@@ -2432,19 +2322,14 @@ const delays = DELAYS;
               };
             });
 
-            // a) lowest fully visible
             const fully = withMeta.filter((m) => m.fullyVisible);
             if (fully.length) {
               return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
             }
-
-            // b) just above viewport
             const above = withMeta.filter((m) => m.rect.bottom <= 0);
             if (above.length) {
               return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
             }
-
-            // c) lowest overall
             return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
           };
 
@@ -2464,9 +2349,7 @@ const delays = DELAYS;
               let target = chooseTarget(all);
               const container = getScrollableContainer();
 
-              // Only in preview mode: skip already-centered candidate
               if (opts.previewOnly && target && isButtonCentered(container, target)) {
-                // Find previous candidate that is not centered (just before target)
                 const idx = all.indexOf(target);
                 for (let i = idx - 1; i >= 0; --i) {
                   if (!isButtonCentered(container, all[i])) {
@@ -2486,15 +2369,16 @@ const delays = DELAYS;
                 if (!opts.previewOnly) {
                   setTimeout(() => {
                     target.click();
-                    setTimeout(() => recenter(msgId), POST_CLICK_DELAY);
-                  }, POST_CLICK_DELAY);
+                    setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
+                  }, DELAY_POST_CLICK);
                 }
               });
             } catch (_) {
               /* silent */
             }
-          }, 50);
+          }, DELAY_INITIAL);
         },
+
         [shortcuts.selectThenCopy]: (() => {
           window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
           const DEBUG = false;
@@ -3030,6 +2914,13 @@ const delays = DELAYS;
           const MENU_BTN_SELECTOR = `button[id^="radix-"] svg path[d^="${REGEN_BTN_PATH}"]`;
           const MENUITEM_SELECTOR = `div[role="menuitem"] svg path[d^="${REGEN_BTN_PATH}"]`;
 
+          // Clear, centralized timing constants (all already halved)
+          const DELAY_MENU_READY_OPEN = 350; // when menu needs to open
+          const DELAY_MENU_READY_EXPANDED = 250; // when menu is already expanded
+          const DELAY_ITEM_CLICK = 375; // before clicking lowest menu item
+          const DELAY_RETRY_INTERVAL = 25; // between retries for missing menu items
+          const MAX_RETRY_ATTEMPTS = 10; // number of retries allowed
+
           function isVisible(el) {
             const r = el.getBoundingClientRect();
             return (
@@ -3078,16 +2969,20 @@ const delays = DELAYS;
               if (window.gsap) flashBorder(lowestMenuItem);
               setTimeout(() => {
                 lowestMenuItem.click();
-              }, 750);
+              }, DELAY_ITEM_CLICK);
               return;
             }
-            // Retry for up to ~500ms if not found
-            if (attempt < 10) setTimeout(() => clickLowestMenuItem(attempt + 1), 50);
+            // Retry if not found yet
+            if (attempt < MAX_RETRY_ATTEMPTS) {
+              setTimeout(() => clickLowestMenuItem(attempt + 1), DELAY_RETRY_INTERVAL);
+            }
           }
 
           setTimeout(
             () => clickLowestMenuItem(),
-            lowestMenuBtn.getAttribute('aria-expanded') === 'true' ? 500 : 700,
+            lowestMenuBtn.getAttribute('aria-expanded') === 'true'
+              ? DELAY_MENU_READY_EXPANDED
+              : DELAY_MENU_READY_OPEN,
           );
         },
         [shortcuts.shortcutKeyTemporaryChat]: () => {
@@ -3614,7 +3509,7 @@ const delays = DELAYS;
               turnWrapper.setAttribute('data-role', role);
 
               if (labelText) {
-                // Real blank paragraph before label
+                // Real blank paragraph before label for spacing in Word
                 const spacerP = document.createElement('p');
                 spacerP.setAttribute(
                   'style',
@@ -3623,23 +3518,25 @@ const delays = DELAYS;
                 spacerP.innerHTML = '&nbsp;';
                 turnWrapper.appendChild(spacerP);
 
-                // Label as a true paragraph so Word applies paragraph spacing
-                const labelP = document.createElement('p');
-                labelP.setAttribute(
+                // Label as a semantic Heading 2 so Word maps it to its built-in "Heading 2" style
+                // Keep zero-width space to suppress auto-numbering (no forced color)
+                const labelH = document.createElement('h1');
+                labelH.setAttribute(
                   'style',
                   [
+                    "font-family:'Calibri',Arial,sans-serif",
+                    'font-size:18pt',
+                    'font-weight:bold',
                     'margin-top:0pt',
                     'margin-bottom:8pt',
                     'line-height:116%',
-                    "font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif",
                     'mso-line-height-alt:116%',
                     'mso-line-height-rule:exactly',
                   ].join(';'),
                 );
-                // Keep zero-width space to suppress auto-numbering and color the text
-                labelP.innerHTML = `<strong><span style="color: rgb(0, 63, 122);">\u200B${labelText}</span></strong>`;
-                addListGuardStyles(labelP);
-                turnWrapper.appendChild(labelP);
+                labelH.innerHTML = `\u200B${labelText}`;
+                addListGuardStyles(labelH);
+                turnWrapper.appendChild(labelH);
               }
 
               // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
@@ -4121,7 +4018,7 @@ const delays = DELAYS;
 
       // Use GSAP for smooth scrolling with slow end effect
       gsap.to(scrollContainer, {
-        duration: 0.6, // Slightly longer for smoother motion
+        duration: 0.3, // Slightly longer for smoother motion
         scrollTo: {
           y: targetScrollPosition,
         },
@@ -5188,6 +5085,28 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
 
+  // ----- Timing constants (IIFE scope so all closures share them) -----
+  // Keydown flow
+  const DELAY_MAIN_MENU_SETTLE_OPEN_MS = 30; // was 60 (wait after opening main menu)
+  const DELAY_MAIN_MENU_SETTLE_EXPANDED_MS = 0; // when already open
+
+  // Submenu polling loop in keydown flow
+  const SUBMENU_POLL_INTERVAL_MS = 25; // was 50
+  const SUBMENU_MAX_POLLS = 10; // was 20
+
+  // Activation delay (post-labeling) in keydown flow
+  const DELAY_ACTIVATE_TARGET_MS = 375; // was 750
+
+  // Label scheduling in click flows
+  const DELAY_APPLY_HINTS_AFTER_MAIN_MS = 30; // was 60
+  const DELAY_APPLY_HINTS_AFTER_SUBMENU_MS = 45; // was 90
+  const DELAY_APPLY_HINTS_OBSERVER_MS = 25; // was 50
+  const DELAY_APPLY_HINTS_STORAGE_MS = 25; // was 50
+
+  // Optional: micro animation for highlighting menu items
+  const ANIM_FLASH_IN_S = 0.11; // was 0.22
+  const ANIM_FLASH_OUT_S = 0.075; // was 0.15
+
   chrome.storage.sync.get(
     ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
     ({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
@@ -5238,14 +5157,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
             {
               boxShadow: `0 0 0 3px ${tertiary}`,
               scale: 0.95,
-              duration: 0.22,
+              duration: ANIM_FLASH_IN_S,
               ease: 'power2.out',
             },
           )
           .to(el, {
             boxShadow: `0 0 0 0 ${tertiary}`,
             scale: 1,
-            duration: 0.15,
+            duration: ANIM_FLASH_OUT_S,
             ease: 'power2.in',
           });
       };
@@ -5485,7 +5404,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
           const alreadyOpen = ensureMainMenuOpen();
 
-          // Helper: simulate pointerenter/hover on a node
           const hover = (el) => {
             if (!el) return;
             el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
@@ -5494,11 +5412,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
             el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
           };
 
-          // Try to force-open submenu by "hovering" each likely trigger until a second model menu appears
           const forceOpenSubmenu = (done) => {
             const menus = getOpenModelMenus();
             if (!menus.length) return done();
-            if (menus.length > 1) return done(); // submenu already present
+            if (menus.length > 1) return done();
 
             const scope = menus[0];
             const candidates = Array.from(
@@ -5508,8 +5425,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                   ':scope > [role="menuitem"][aria-controls]',
               ),
             );
-
-            if (!candidates.length) return done(); // no submenu on this menu
+            if (!candidates.length) return done();
 
             let i = 0,
               attempts = 0;
@@ -5518,13 +5434,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
               if (i < candidates.length) {
                 const el = candidates[i++];
                 hover(el);
-                // Some Radix builds require a click as well; try a safe click
                 synthClick(el);
                 attempts = 0;
-              } else if (attempts++ > 20) {
+              } else if (attempts++ > SUBMENU_MAX_POLLS) {
                 return done();
               }
-              setTimeout(tick, 50);
+              setTimeout(tick, SUBMENU_POLL_INTERVAL_MS);
             };
             tick();
           };
@@ -5535,7 +5450,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
               if (!mainMenu) return;
 
               forceOpenSubmenu(() => {
-                // After submenu (maybe) appeared, label and activate the target
                 const items = getOrderedMenuItems();
                 applyHints();
 
@@ -5546,10 +5460,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                 setTimeout(() => {
                   synthClick(target.el);
                   flashBottomBar();
-                }, 750);
+                }, DELAY_ACTIVATE_TARGET_MS);
               });
             },
-            alreadyOpen ? 0 : 60,
+            alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
           );
         },
         true,
@@ -5558,7 +5472,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       // Keep click-to-open labels, but also observe DOM so labels appear *when* submenu mounts
       document.addEventListener('click', (e) => {
         if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN))) {
-          setTimeout(applyHints, 60);
+          setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_MAIN_MS);
         }
         const t = e.target instanceof Element ? e.target : null;
         const submenuTriggerClicked = t?.closest(
@@ -5567,7 +5481,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
             '[role="menuitem"][aria-controls]',
         );
         if (submenuTriggerClicked) {
-          setTimeout(applyHints, 90);
+          setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_SUBMENU_MS);
         }
       });
 
@@ -5578,8 +5492,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
           const count = getOpenModelMenus().length;
           if (count !== lastCount) {
             lastCount = count;
-            // debounce a hair to let layout settle
-            setTimeout(applyHints, 50);
+            setTimeout(applyHints, DELAY_APPLY_HINTS_OBSERVER_MS);
           }
         });
         obs.observe(document.documentElement, {
@@ -5599,7 +5512,13 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
     const MENU_BTN = 'button[data-testid="model-switcher-dropdown-button"]';
     const btn = document.querySelector(MENU_BTN);
     if (!btn) return;
-    // Local helpers so we don't depend on closure-scoped functions
+
+    // Centralized timing constants (all halved)
+    const POLL_INTERVAL = 25; // was 50
+    const MAX_POLLS = 10; // was 20
+    const DELAY_AFTER_MAIN = 60; // was 120
+    const DELAY_BEFORE_SUBMENU = 30; // was 60
+
     const pressSpace = (el) => {
       ['keydown', 'keyup'].forEach((type) => {
         el.dispatchEvent(
@@ -5623,12 +5542,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
       el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
     };
+
     const safeClick = (el) => {
       if (!el) return;
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     };
 
-    // Try to find submenu triggers by ARIA *or* visible text (e.g. "Legacy models")
     const findTriggers = (menu) => {
       const ariaMatches = Array.from(
         menu.querySelectorAll(
@@ -5640,13 +5559,11 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       const textMatches = Array.from(menu.querySelectorAll(':scope > [role="menuitem"]')).filter(
         (el) => /legacy|more|advanced|older|models/i.test(el.textContent || ''),
       );
-      // De-dupe while preserving order
       const set = new Set([...ariaMatches, ...textMatches]);
       return Array.from(set);
     };
 
     const forceOpenSubmenu = (done) => {
-      // Restrict to model menus only
       const getModelMenus = () => {
         const all =
           typeof getOpenMenus === 'function'
@@ -5664,7 +5581,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
       const menus = getModelMenus();
       if (!menus.length) return done();
-      if (menus.length > 1) return done(); // already open
+      if (menus.length > 1) return done();
       const triggers = findTriggers(menus[0]);
       if (!triggers.length) return done();
 
@@ -5674,12 +5591,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         if (getModelMenus().length > 1) return done();
         if (i < triggers.length) {
           const el = triggers[i++];
-          hover(el); // covers hover-based submenus
-          safeClick(el); // covers click-based submenus
-        } else if (polls++ > 20) {
+          hover(el);
+          safeClick(el);
+        } else if (polls++ > MAX_POLLS) {
           return done();
         }
-        setTimeout(tick, 50);
+        setTimeout(tick, POLL_INTERVAL);
       };
       tick();
     };
@@ -5688,16 +5605,15 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       if (btn.getAttribute('aria-expanded') === 'true') return cb();
       btn.focus();
       pressSpace(btn);
-      setTimeout(cb, 120);
+      setTimeout(cb, DELAY_AFTER_MAIN);
     };
 
     openMain(() => {
-      // Give Radix a beat to mount the first popper, then force open the second
       setTimeout(() => {
         forceOpenSubmenu(() => {
-          // Labels will be applied by your MutationObserver once the submenu mounts.
+          // Labels applied via MutationObserver once submenu mounts
         });
-      }, 60);
+      }, DELAY_BEFORE_SUBMENU);
     });
   };
 
@@ -5718,7 +5634,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
           setTimeout(() => {
             const menu = getOpenMenu();
             if (menu) applyHints();
-          }, 50);
+          }, DELAY_APPLY_HINTS_STORAGE_MS);
         }
       }
     }
