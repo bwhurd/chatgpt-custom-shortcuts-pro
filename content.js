@@ -1519,9 +1519,9 @@ const delays = DELAYS;
         [shortcuts.shortcutKeyCopyLowest]: () => {
           const copyPath = 'M12.668 10.667C12.668';
 
-          // Centralized timing constants (all halved)
-          const DELAY_BEFORE_CLICK = 200; // was 350
-          const DELAY_CLIPBOARD_READ = 175; // was 350
+          // Timing
+          const DELAY_BEFORE_CLICK = 350;
+          const DELAY_CLIPBOARD_READ = 350;
 
           // Find the correct (visible) copy button
           const visibleButtons = Array.from(document.querySelectorAll('button')).filter((btn) => {
@@ -1541,32 +1541,35 @@ const delays = DELAYS;
 
           if (window.gsap) flashBorder(btn);
 
-          /**
-           * Ensure opening code fences (```) start on their own line.
-           * Example: "Text```js\ncode" -> "Text\n```js\ncode"
-           * Only touches OPENING fences (outside a fence), leaves closing fences untouched.
-           */
-          const ensureFencesStartOnNewLine = (input) => {
+          // Only adjustment: make sure fences are on their own line.
+          const putFencesOnOwnLine = (input) => {
             if (!input || input.indexOf('```') === -1) return input;
             let out = '';
             let i = 0;
             let inFence = false;
+            const isLB = (ch) => ch === '\n' || ch === '\r';
+
             while (i < input.length) {
               if (input.startsWith('```', i)) {
-                if (!inFence && i > 0 && input[i - 1] !== '\n') out += '\n';
-                inFence = !inFence;
+                if (!inFence) {
+                  // Opening fence: ensure it starts on a new line
+                  if (i > 0 && !isLB(input[i - 1])) out += '\n';
+                  out += '```';
+                  i += 3;
+                  inFence = true;
+                  continue;
+                }
+                // Closing fence: ensure following text starts on a new line
                 out += '```';
                 i += 3;
+                inFence = false;
+                if (i < input.length && !isLB(input[i])) out += '\n';
                 continue;
               }
-              out += input[i];
-              i += 1;
+              out += input[i++];
             }
             return out;
           };
-
-          const writeNormalized = (str) =>
-            navigator.clipboard.writeText(ensureFencesStartOnNewLine(str));
 
           setTimeout(() => {
             btn.click();
@@ -1577,8 +1580,12 @@ const delays = DELAYS;
                 .then((text) => {
                   const trimmed = text.trim();
 
-                  if (/^```[\s\S]*```$/.test(trimmed)) return writeNormalized(text);
+                  // If it’s a single fenced block, don’t strip; just ensure fences are on their own line
+                  if (/^```[\s\S]*```$/.test(trimmed)) {
+                    return navigator.clipboard.writeText(putFencesOnOwnLine(text));
+                  }
 
+                  // Strip only OUTSIDE code fences when enabled
                   if (
                     isMsgCopy &&
                     typeof window.removeMarkdownOnCopyCheckbox !== 'undefined' &&
@@ -1586,10 +1593,11 @@ const delays = DELAYS;
                     typeof stripMarkdownOutsideCodeblocks === 'function'
                   ) {
                     const cleaned = stripMarkdownOutsideCodeblocks(text);
-                    return writeNormalized(cleaned);
+                    return navigator.clipboard.writeText(putFencesOnOwnLine(cleaned));
                   }
 
-                  return writeNormalized(text);
+                  // Default: write original with fences isolated
+                  return navigator.clipboard.writeText(putFencesOnOwnLine(text));
                 })
                 .catch(() => {
                   /* silent */
