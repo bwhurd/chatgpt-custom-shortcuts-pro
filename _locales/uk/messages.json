@@ -367,5 +367,41 @@
   },
   "tt_use_Alt_for_picker": {
     "message": "Використовуйте Alt+{{shortcut}}, щоб перемикати моделі. ——————————————————— Клацніть перше поле, потім натисніть Tab, щоб перегортати й побачити назви моделей. ——————————————————— Натисніть будь-яку клавішу, щоб задати гарячу клавішу; Backspace — очистити, Tab — пропустити."
+  },
+  "label_MoreConcise": {
+    "message": "Коротше"
+  },
+  "tt_MoreConcise": {
+    "message": "Скорочує попередню відповідь."
+  },
+  "label_RegenerateAskToChangeResponse": {
+    "message": "Запросити зміни"
+  },
+  "tt_RegenerateAskToChangeResponse": {
+    "message": "Напишіть, як хочете змінити чи покращити попередню відповідь."
+  },
+  "label_RegenerateWithDifferentModel": {
+    "message": "Перегенерувати іншою моделлю"
+  },
+  "tt_RegenerateWithDifferentModel": {
+    "message": "Створює нову відповідь з іншою моделлю ШІ."
+  },
+  "label_ReadAloud": {
+    "message": "Озвучити"
+  },
+  "tt_ReadAloud": {
+    "message": "Натисніть, щоб прослухати відповідь. Натисніть ще раз, щоб зупинити."
+  },
+  "label_BranchInNewChat": {
+    "message": "Продовжити в новому чаті"
+  },
+  "tt_BranchInNewChat": {
+    "message": "Копіює чат до цього моменту й запускає нову розмову з цієї точки — можна спробувати інший шлях, нічого не втрачаючи."
+  },
+  "label_AddDetails": {
+    "message": "Докладніше"
+  },
+  "tt_AddDetails": {
+    "message": "Робить попередню відповідь довшою й докладнішою."
   }
 }

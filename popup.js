@@ -397,14 +397,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const MODEL_NAMES = [
     'GPT-5 Auto', // Slot 1
     'GPT-5 Fast', // Slot 2
-    'GPT-5 Thinking Mini', // Slot 3
-    'GPT-5 Thinking', // Slot 4
-    'GPT-5 Pro', // Slot 5
-    'Legacy Models →', // Slot 6
-    '4o', // Slot 7
-    '4.1', // Slot 8
-    'o3', // Slot 9
-    'o4-mini', // Slot 0
+    'GPT-5 Thinking', // Slot 3
+    'GPT-5 Pro', // Slot 4
+    'Legacy Models →', // Slot 5
+    '4o', // Slot 6
+    '4.1', // Slot 7
+    'o3', // Slot 8
+    'o4-mini', // Slot 9
+    'Show Models', // Slot 0
   ];
   // Expose globally so other scopes (conflict builders, tooltips, modals) can read it
   window.MODEL_NAMES = MODEL_NAMES;
@@ -1568,7 +1568,13 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyNextThread: 'Semicolon',
     selectThenCopy: 'KeyX',
     shortcutKeyToggleModelSelector: 'Slash',
-    shortcutKeyRegenerate: 'KeyR',
+    shortcutKeyRegenerateTryAgain: 'KeyR',
+    shortcutKeyRegenerateMoreConcise: NBSP,
+    shortcutKeyRegenerateAddDetails: NBSP,
+    shortcutKeyRegenerateWithDifferentModel: NBSP,
+    shortcutKeyRegenerateAskToChangeResponse: NBSP,
+    shortcutKeyMoreDotsReadAloud: NBSP,
+    shortcutKeyMoreDotsBranchInNewChat: NBSP,
     shortcutKeyTemporaryChat: 'KeyP',
     shortcutKeyStudy: NBSP,
     shortcutKeyCreateImage: NBSP,
@@ -1883,7 +1889,13 @@ document.addEventListener('DOMContentLoaded', () => {
     'shortcutKeyNextThread',
     'selectThenCopy',
     'shortcutKeyToggleModelSelector',
-    'shortcutKeyRegenerate',
+    'shortcutKeyRegenerateTryAgain',
+    'shortcutKeyRegenerateMoreConcise',
+    'shortcutKeyRegenerateAddDetails',
+    'shortcutKeyRegenerateWithDifferentModel',
+    'shortcutKeyRegenerateAskToChangeResponse',
+    'shortcutKeyMoreDotsReadAloud',
+    'shortcutKeyMoreDotsBranchInNewChat',
     'shortcutKeyTemporaryChat',
     'shortcutKeyStudy',
     'shortcutKeyCreateImage',

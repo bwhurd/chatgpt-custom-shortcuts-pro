@@ -1228,6 +1228,287 @@ const delays = DELAYS;
   // ==== End Exposed Button Click Shared helpers =========
   // ======================================================
 
+  /* ===== Start clickLowestSvgThenSubItemSvg Reusable Radix menu helpers ===== */
+
+  const DEFAULT_MENU_DELAYS = Object.freeze({
+    MENU_READY_OPEN: 350,
+    MENU_READY_EXPANDED: 250,
+    ITEM_CLICK: 375,
+    RETRY_INTERVAL: 25,
+    MAX_RETRY_ATTEMPTS: 10,
+  });
+
+  const MENU_SELECTORS = {
+    buttonPath: (dPrefix) => `button[id^="radix-"] svg path[d^="${safeEsc(dPrefix)}"]`,
+    menuItemPath: (dPrefix) => `div[role="menuitem"] svg path[d^="${safeEsc(dPrefix)}"]`,
+  };
+
+  function safeEsc(s) {
+    try {
+      return CSS?.escape ? CSS.escape(s) : s;
+    } catch (_) {
+      return s;
+    }
+  }
+
+  function isVisible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return (
+      r.top >= 0 &&
+      r.left >= 0 &&
+      r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      r.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+  }
+
+  function lowestVisibleFromPaths(selector, ancestorSelector, excludeAncestorSelector) {
+    const paths = Array.from(document.querySelectorAll(selector));
+    const els = paths
+      .map((p) => p.closest(ancestorSelector))
+      .filter(Boolean)
+      .filter(isVisible)
+      .filter((el) => !excludeAncestorSelector || !el.closest(excludeAncestorSelector));
+    return els.length ? els[els.length - 1] : null;
+  }
+
+  function simulateSpace(el) {
+    for (const type of ['keydown', 'keyup']) {
+      el.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: ' ',
+          code: 'Space',
+          keyCode: 32,
+          charCode: 32,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    }
+  }
+
+  function openRadixMenuIfNeeded(buttonEl, delays = DEFAULT_MENU_DELAYS) {
+    const expanded = buttonEl.getAttribute('aria-expanded') === 'true';
+    if (!expanded) {
+      buttonEl.focus();
+      simulateSpace(buttonEl);
+      return delays.MENU_READY_OPEN;
+    }
+    return delays.MENU_READY_EXPANDED;
+  }
+
+  function clickLowestVisibleMenuItemByPath(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
+    const selector = MENU_SELECTORS.menuItemPath(pathPrefix);
+    const item = lowestVisibleFromPaths(selector, 'div[role="menuitem"]');
+    if (item) {
+      if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
+      setTimeout(() => item.click(), delays.ITEM_CLICK);
+      return true;
+    }
+    if (attempt < delays.MAX_RETRY_ATTEMPTS) {
+      setTimeout(
+        () => clickLowestVisibleMenuItemByPath(pathPrefix, delays, attempt + 1),
+        delays.RETRY_INTERVAL,
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Clicks the lowest visible menu button (optionally excluding ancestors), opens its menu if needed,
+   * then clicks the lowest matching sub-item.
+   * @param {string} firstBtnPathPrefix
+   * @param {string} subItemPathPrefix
+   * @param {string} [excludeAncestorSelector] - Selector string (e.g. "#bottomBarContainer") or omit/undefined
+   * @param {object} [options] - Optional timing overrides
+   */
+  function clickLowestSvgThenSubItemSvg(
+    firstBtnPathPrefix,
+    subItemPathPrefix,
+    excludeAncestorSelector,
+    options = {},
+  ) {
+    const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
+
+    const btnSelector = MENU_SELECTORS.buttonPath(firstBtnPathPrefix);
+    const btn = lowestVisibleFromPaths(btnSelector, 'button', excludeAncestorSelector);
+    if (!btn) return false;
+
+    if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
+
+    const waitMs = openRadixMenuIfNeeded(btn, delays);
+
+    setTimeout(() => {
+      clickLowestVisibleMenuItemByPath(subItemPathPrefix, delays);
+    }, waitMs);
+
+    return true;
+  }
+
+  /* ===== End clickLowestSvgThenSubItemSvg Reusable Radix menu helpers ===== */
+
+  /* ===== Extra helpers: click sub-item by id or id prefix ===== */
+
+  function findLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { prefix = true } = {}) {
+    const selector = prefix ? `[id^="${safeEsc(idOrPrefix)}"]` : `#${safeEsc(idOrPrefix)}`;
+    const candidates = Array.from(document.querySelectorAll(selector));
+    const items = candidates
+      .map(
+        (el) => el.closest('div[role="menuitem"],button[role="menuitem"],[role="menuitem"]') || el,
+      )
+      .filter(isVisible);
+    return items.length ? items[items.length - 1] : null;
+  }
+
+  function clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, options = {}, attempt = 0) {
+    const { delays = DEFAULT_MENU_DELAYS, prefix = true } = options;
+    const item = findLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { prefix });
+    if (item) {
+      if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
+      setTimeout(() => item.click(), delays.ITEM_CLICK);
+      return true;
+    }
+    if (attempt < delays.MAX_RETRY_ATTEMPTS) {
+      setTimeout(
+        () => clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, options, attempt + 1),
+        delays.RETRY_INTERVAL,
+      );
+    }
+    return false;
+  }
+
+  // biome-ignore lint/correctness/noUnusedVariables: allow unused function for now
+  function clickLowestSvgThenSubItemById(firstBtnPathPrefix, idOrPrefix, options = {}) {
+    const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
+    const btn = lowestVisibleFromPaths(MENU_SELECTORS.buttonPath(firstBtnPathPrefix), 'button');
+    if (!btn) return false;
+
+    if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
+    const waitMs = openRadixMenuIfNeeded(btn, delays);
+
+    setTimeout(() => {
+      clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { ...options, delays });
+    }, waitMs);
+
+    return true;
+  }
+  /* ===== End extra helpers ===== */
+
+  /* ===== Helpers: Regenerate, “Ask to change response" Helpers focus a Radix dropdown input ===== */
+
+  function placeCaret(input, { caret = 'end', selectAll = false } = {}) {
+    const len = input.value?.length ?? 0;
+    if (selectAll) {
+      input.setSelectionRange(0, len);
+    } else if (caret === 'start') {
+      input.setSelectionRange(0, 0);
+    } else {
+      input.setSelectionRange(len, len);
+    }
+  }
+
+  function focusLowestVisibleInputBySelector(selector, options = {}, attempt = 0) {
+    const { delays = DEFAULT_MENU_DELAYS, caret = 'end', selectAll = false } = options;
+    const inputs = Array.from(document.querySelectorAll(selector)).filter(isVisible);
+    const target = inputs.length ? inputs[inputs.length - 1] : null;
+
+    if (target) {
+      if (window.gsap && typeof flashBorder === 'function') flashBorder(target);
+      try {
+        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      } catch (_) {}
+      target.removeAttribute?.('disabled');
+      target.focus({ preventScroll: true });
+      placeCaret(target, { caret, selectAll });
+      return true;
+    }
+
+    if (attempt < delays.MAX_RETRY_ATTEMPTS) {
+      setTimeout(
+        () => focusLowestVisibleInputBySelector(selector, options, attempt + 1),
+        delays.RETRY_INTERVAL,
+      );
+    }
+    return false;
+  }
+
+  function runRadixMenuActionFocusInput(firstBtnPathPrefix, inputSelector, options = {}) {
+    const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
+    const btn = lowestVisibleFromPaths(MENU_SELECTORS.buttonPath(firstBtnPathPrefix), 'button');
+    if (!btn) return false;
+
+    if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
+    const waitMs = openRadixMenuIfNeeded(btn, delays);
+
+    setTimeout(() => {
+      focusLowestVisibleInputBySelector(inputSelector, { ...options, delays });
+    }, waitMs);
+
+    return true;
+  }
+
+  function runRadixMenuActionFocusInputByName(firstBtnPathPrefix, inputName, options = {}) {
+    const sel = `input[name="${safeEsc(inputName)}"]`;
+    return runRadixMenuActionFocusInput(firstBtnPathPrefix, sel, options);
+  }
+  /* ===== End input focus helpers ===== */
+
+  /* ===== Toggle Dictation Helpers: click a single visible button by SVG path (simplified) ===== */
+
+  const CLICKABLE_SELECTOR =
+    'button, a, [role="button"], [tabindex], input[type="button"], input[type="submit"]';
+
+  const escCss = (s) => CSS?.escape?.(s) ?? s;
+
+  if (typeof safeClick !== 'function') {
+    // biome-ignore lint/correctness/noUnusedVariables: allow unused function for now
+    function safeClick(el) {
+      if (!el || el.disabled || el.getAttribute?.('aria-disabled') === 'true') return false;
+      try {
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      } catch (_) {
+        try {
+          el.click();
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    }
+  }
+
+  function findClickableBySvgPath(pathPrefix, climbMax = 8) {
+    const path = document.querySelector(`svg path[d^="${escCss(pathPrefix)}"]`);
+    if (!path) return null;
+
+    // Prefer a direct closest() to a standard clickable
+    const direct = path.closest(CLICKABLE_SELECTOR);
+    if (direct) return direct;
+
+    // Fallback: climb up a few levels to find something clickable
+    let el = path;
+    for (let i = 0; i < climbMax && el; i++) {
+      if (el.matches?.(CLICKABLE_SELECTOR)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function clickBySvgPath(pathPrefix) {
+    const el = findClickableBySvgPath(pathPrefix);
+    if (!el) return false;
+    if (window.gsap && typeof flashBorder === 'function') flashBorder(el);
+    return safeClick(el);
+  }
+  /* ===== End simplified helpers ===== */
+
+  /* ===== End helpers ===== */
+
   // ======================================================
   // ==== Shortcut Helpers============
 
@@ -1269,7 +1550,13 @@ const delays = DELAYS;
       'shortcutKeyClickSendButton',
       'shortcutKeyClickStopButton',
       'shortcutKeyToggleModelSelector',
-      'shortcutKeyRegenerate',
+      'shortcutKeyRegenerateTryAgain',
+      'shortcutKeyRegenerateMoreConcise',
+      'shortcutKeyRegenerateAddDetails',
+      'shortcutKeyRegenerateWithDifferentModel',
+      'shortcutKeyRegenerateAskToChangeResponse',
+      'shortcutKeyMoreDotsReadAloud',
+      'shortcutKeyMoreDotsBranchInNewChat',
       'altPageUp',
       'altPageDown',
       'shortcutKeyTemporaryChat',
@@ -1306,7 +1593,13 @@ const delays = DELAYS;
         shortcutKeyClickSendButton: 'Enter',
         shortcutKeyClickStopButton: 'Backspace',
         shortcutKeyToggleModelSelector: '/',
-        shortcutKeyRegenerate: 'r',
+        shortcutKeyRegenerateTryAgain: 'r',
+        shortcutKeyRegenerateMoreConcise: '',
+        shortcutKeyRegenerateAddDetails: '',
+        shortcutKeyRegenerateWithDifferentModel: '',
+        shortcutKeyRegenerateAskToChangeResponse: '',
+        shortcutKeyMoreDotsReadAloud: '',
+        shortcutKeyMoreDotsBranchInNewChat: '',
         altPageUp: 'PageUp',
         altPageDown: 'PageDown',
         shortcutKeyTemporaryChat: 'p',
@@ -2917,81 +3210,89 @@ const delays = DELAYS;
         [shortcuts.shortcutKeyToggleModelSelector]: () => {
           window.toggleModelSelector();
         },
-        [shortcuts.shortcutKeyRegenerate]: () => {
-          const REGEN_BTN_PATH = 'M3.502 16.6663V13.3333C3.502';
-          const MENU_BTN_SELECTOR = `button[id^="radix-"] svg path[d^="${REGEN_BTN_PATH}"]`;
-          const MENUITEM_SELECTOR = `div[role="menuitem"] svg path[d^="${REGEN_BTN_PATH}"]`;
+        // Regenerate: open the kebab/overflow menu, then click the "Regenerate" sub-item.
+        // Note: these two path prefixes can be the same (as in this case) or different for other actions.
+        [shortcuts.shortcutKeyRegenerateTryAgain]: () => {
+          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // sub-item icon path (prefix)
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+        [shortcuts.shortcutKeyRegenerateMoreConcise]: () => {
+          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = 'M10.2002 7.91699L16.8669'; // sub-item icon path (prefix)
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+        [shortcuts.shortcutKeyRegenerateAddDetails]: () => {
+          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = 'M14.3013 12.6816C14.6039'; // sub-item icon path (prefix)
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+        [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
+          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = 'M15.4707 17.137C15.211'; // sub-item icon path (prefix)
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+        [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
+          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu/overflow button icon path (prefix)
+          runRadixMenuActionFocusInputByName(FIRST_BTN_PATH, 'contextual-retry-dropdown-input', {
+            caret: 'end', // 'start' | 'end'
+            selectAll: false, // true to select existing text
+          });
+        },
+        [shortcuts.shortcutKeyMoreDotsReadAloud]: () => {
+          const FIRST_BTN_PATH = 'M15.498 8.50159C16.3254';
+          const SUB_ITEM_BTN_PATH = 'M9.75122 4.09203C9.75122';
+          const EXCLUDE_ANCESTOR = '#bottomBarContainer';
 
-          // Clear, centralized timing constants (all already halved)
-          const DELAY_MENU_READY_OPEN = 350; // when menu needs to open
-          const DELAY_MENU_READY_EXPANDED = 250; // when menu is already expanded
-          const DELAY_ITEM_CLICK = 375; // before clicking lowest menu item
-          const DELAY_RETRY_INTERVAL = 25; // between retries for missing menu items
-          const MAX_RETRY_ATTEMPTS = 10; // number of retries allowed
+          const openMenuSel = 'div[role="menu"][data-state="open"]';
 
-          function isVisible(el) {
-            const r = el.getBoundingClientRect();
-            return (
-              r.top >= 0 &&
-              r.left >= 0 &&
-              r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-              r.right <= (window.innerWidth || document.documentElement.clientWidth)
-            );
-          }
-
-          // Step 1: Find all visible matching menu buttons, pick the lowest one
-          const regenBtnPaths = Array.from(document.querySelectorAll(MENU_BTN_SELECTOR));
-          const visibleBtns = regenBtnPaths
-            .map((path) => path.closest('button'))
-            .filter((btn) => btn && isVisible(btn));
-          if (!visibleBtns.length) return;
-          const lowestMenuBtn = visibleBtns[visibleBtns.length - 1];
-
-          if (window.gsap) flashBorder(lowestMenuBtn);
-
-          // Step 1b: Open menu if not open
-          if (lowestMenuBtn.getAttribute('aria-expanded') !== 'true') {
-            lowestMenuBtn.focus();
-            for (const type of ['keydown', 'keyup']) {
-              lowestMenuBtn.dispatchEvent(
-                new KeyboardEvent(type, {
-                  key: ' ',
-                  code: 'Space',
-                  keyCode: 32,
-                  charCode: 32,
-                  bubbles: true,
-                  cancelable: true,
-                  composed: true,
-                }),
+          function activate(el) {
+            try {
+              el.focus();
+            } catch {}
+            try {
+              el.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
               );
-            }
+              el.dispatchEvent(
+                new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }),
+              );
+            } catch {}
+            try {
+              el.click();
+            } catch {}
           }
 
-          function clickLowestMenuItem(attempt = 0) {
-            const menuItemPaths = Array.from(document.querySelectorAll(MENUITEM_SELECTOR));
-            const visibleMenuItems = menuItemPaths
-              .map((path) => path.closest('div[role="menuitem"]'))
-              .filter((item) => item && isVisible(item));
-            if (visibleMenuItems.length) {
-              const lowestMenuItem = visibleMenuItems[visibleMenuItems.length - 1];
-              if (window.gsap) flashBorder(lowestMenuItem);
-              setTimeout(() => {
-                lowestMenuItem.click();
-              }, DELAY_ITEM_CLICK);
+          // 1) If a Stop item is visible in an open menu, click it (stop playback).
+          const stopInOpenMenu = document.querySelector(
+            `${openMenuSel} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
+          );
+          if (stopInOpenMenu) {
+            if (window.gsap && typeof flashBorder === 'function') flashBorder(stopInOpenMenu);
+            activate(stopInOpenMenu);
+            return;
+          }
+
+          // 2) If the Read Aloud sub-item is already exposed in an open menu, click it directly.
+          const exposedReadAloudPath = document.querySelector(
+            `${openMenuSel} div[role="menuitem"] svg path[d^="${SUB_ITEM_BTN_PATH}"]`,
+          );
+          if (exposedReadAloudPath) {
+            const item = exposedReadAloudPath.closest('div[role="menuitem"]');
+            if (item) {
+              if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
+              activate(item);
               return;
             }
-            // Retry if not found yet
-            if (attempt < MAX_RETRY_ATTEMPTS) {
-              setTimeout(() => clickLowestMenuItem(attempt + 1), DELAY_RETRY_INTERVAL);
-            }
           }
 
-          setTimeout(
-            () => clickLowestMenuItem(),
-            lowestMenuBtn.getAttribute('aria-expanded') === 'true'
-              ? DELAY_MENU_READY_EXPANDED
-              : DELAY_MENU_READY_OPEN,
-          );
+          // 3) Otherwise, open the menu on the lowest eligible "More dots" button and click Read Aloud.
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, EXCLUDE_ANCESTOR);
+        },
+        [shortcuts.shortcutKeyMoreDotsBranchInNewChat]: () => {
+          const FIRST_BTN_PATH = 'M15.498 8.50159C16.3254'; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = 'M3.32996 10H8.01173C8.7455'; // sub-item icon path (prefix)
+          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
         },
         [shortcuts.shortcutKeyTemporaryChat]: () => {
           const sel =
@@ -3023,44 +3324,12 @@ const delays = DELAYS;
             dictateInProgress = false;
           }, 300);
 
-          // Try fallback first (submit dictation)
-          const FALLBACK_ICON_PATH_PREFIX = 'M15.4835 4.14551C15.6794';
-          const fallbackPath = document.querySelector(
-            `svg path[d^="${FALLBACK_ICON_PATH_PREFIX}"]`,
-          );
-          if (fallbackPath) {
-            let el = fallbackPath;
-            for (let i = 0; i < 8 && el; i++) {
-              if (
-                el.tagName === 'BUTTON' ||
-                el.tagName === 'A' ||
-                el.getAttribute('role') === 'button' ||
-                el.tabIndex >= 0
-              ) {
-                if (safeClick(el)) return;
-              }
-              el = el.parentElement;
-            }
-            return;
-          }
+          // Only one button is visible at a time: try "stop/submit" first, then "start".
+          const FALLBACK_ICON_PATH_PREFIX = 'M15.4835 4.14551C15.6794'; // stop/submit
+          const PRIMARY_ICON_PATH_PREFIX = 'M15.7806 10.1963C16.1326'; // start
 
-          // Try primary (start dictation)
-          const PRIMARY_ICON_PATH_PREFIX = 'M15.7806 10.1963C16.1326';
-          const primaryPath = document.querySelector(`svg path[d^="${PRIMARY_ICON_PATH_PREFIX}"]`);
-          if (primaryPath) {
-            let el = primaryPath;
-            for (let i = 0; i < 8 && el; i++) {
-              if (
-                el.tagName === 'BUTTON' ||
-                el.tagName === 'A' ||
-                el.getAttribute('role') === 'button' ||
-                el.tabIndex >= 0
-              ) {
-                if (safeClick(el)) return;
-              }
-              el = el.parentElement;
-            }
-          }
+          if (clickBySvgPath(FALLBACK_ICON_PATH_PREFIX)) return;
+          clickBySvgPath(PRIMARY_ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyCancelDictation]: async () => {
           // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.

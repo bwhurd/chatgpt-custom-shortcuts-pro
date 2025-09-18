@@ -367,5 +367,41 @@
   },
   "tt_use_Alt_for_picker": {
     "message": "Используйте Alt+{{shortcut}}, чтобы переключать модели. ——————————————————— Кликните по первому полю, затем нажмите Tab, чтобы пролистать и увидеть названия моделей. ——————————————————— Нажмите любую клавишу, чтобы задать сочетание; Backspace — очистить, Tab — пропустить."
+  },
+  "label_MoreConcise": {
+    "message": "Короче"
+  },
+  "tt_MoreConcise": {
+    "message": "Делает предыдущий ответ короче."
+  },
+  "label_RegenerateAskToChangeResponse": {
+    "message": "Запросить правки"
+  },
+  "tt_RegenerateAskToChangeResponse": {
+    "message": "Напишите, что вы хотите изменить или улучшить в предыдущем ответе."
+  },
+  "label_RegenerateWithDifferentModel": {
+    "message": "Пересоздать с другой моделью"
+  },
+  "tt_RegenerateWithDifferentModel": {
+    "message": "Создаёт новый ответ с другой моделью ИИ."
+  },
+  "label_ReadAloud": {
+    "message": "Озвучить"
+  },
+  "tt_ReadAloud": {
+    "message": "Нажмите, чтобы прослушать ответ. Нажмите ещё раз, чтобы остановить."
+  },
+  "label_BranchInNewChat": {
+    "message": "Ответвить в новом чате"
+  },
+  "tt_BranchInNewChat": {
+    "message": "Копирует чат до текущего места и начинает новую беседу с этой точки — можно попробовать другой путь, не теряя ни одну из веток."
+  },
+  "label_AddDetails": {
+    "message": "Подробнее"
+  },
+  "tt_AddDetails": {
+    "message": "Делает предыдущий ответ длиннее и подробнее."
   }
 }

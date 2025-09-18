@@ -367,5 +367,41 @@
   },
   "tt_use_Alt_for_picker": {
     "message": "Alt+{{shortcut}}でモデルを切り替えます。 ——————————————————— 最初の欄をクリックし、Tabで順送りしてモデル名を表示します。 ——————————————————— 任意のキーでショートカットを設定、Backspaceでクリア、Tabでスキップ。"
+  },
+  "label_MoreConcise": {
+    "message": "短く"
+  },
+  "tt_MoreConcise": {
+    "message": "直前の回答を短くします。"
+  },
+  "label_RegenerateAskToChangeResponse": {
+    "message": "変更を依頼"
+  },
+  "tt_RegenerateAskToChangeResponse": {
+    "message": "直前の回答をどう変えたい・良くしたいか入力してください。"
+  },
+  "label_RegenerateWithDifferentModel": {
+    "message": "別のモデルで再生成"
+  },
+  "tt_RegenerateWithDifferentModel": {
+    "message": "別のAIモデルで新しい回答を作成します。"
+  },
+  "label_ReadAloud": {
+    "message": "読み上げ"
+  },
+  "tt_ReadAloud": {
+    "message": "押すと回答を読み上げます。もう一度押すと停止します。"
+  },
+  "label_BranchInNewChat": {
+    "message": "新しいチャットで分岐"
+  },
+  "tt_BranchInNewChat": {
+    "message": "ここまでのチャットをコピーし、この時点から新しい会話を開始します。どちらの流れも残したまま別の方向を試せます。"
+  },
+  "label_AddDetails": {
+    "message": "詳しく"
+  },
+  "tt_AddDetails": {
+    "message": "直前の回答に詳細を追加して、長くします。"
   }
 }

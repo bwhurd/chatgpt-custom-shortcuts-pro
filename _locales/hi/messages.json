@@ -367,5 +367,41 @@
   },
   "tt_use_Alt_for_picker": {
     "message": "Alt+{{shortcut}} से मॉडल बदलें. ——————————————————— पहले बॉक्स पर क्लिक करें, फिर Tab दबाकर क्रम से जाएँ और मॉडल के नाम देखें. ——————————————————— शॉर्टकट सेट करने के लिए कोई भी कुंजी दबाएँ, हटाने के लिए Backspace, छोड़ने के लिए Tab."
+  },
+  "label_MoreConcise": {
+    "message": "और संक्षिप्त"
+  },
+  "tt_MoreConcise": {
+    "message": "पिछले जवाब को छोटा करता है।"
+  },
+  "label_RegenerateAskToChangeResponse": {
+    "message": "बदलाव माँगें"
+  },
+  "tt_RegenerateAskToChangeResponse": {
+    "message": "लिखें कि आप पिछले जवाब में क्या बदलना या सुधारना चाहते हैं।"
+  },
+  "label_RegenerateWithDifferentModel": {
+    "message": "दूसरे मॉडल से दोबारा बनाएँ"
+  },
+  "tt_RegenerateWithDifferentModel": {
+    "message": "किसी दूसरे AI मॉडल से नया जवाब बनाता है।"
+  },
+  "label_ReadAloud": {
+    "message": "जोर से पढ़ें"
+  },
+  "tt_ReadAloud": {
+    "message": "जवाब सुनने के लिए दबाएँ। रोकने के लिए फिर दबाएँ।"
+  },
+  "label_BranchInNewChat": {
+    "message": "नए चैट में जारी रखें"
+  },
+  "tt_BranchInNewChat": {
+    "message": "अब तक की चैट कॉपी कर यहीं से नया संवाद शुरू करता है—ताकि आप नया रास्ता आज़मा सकें, बिना कुछ खोए।"
+  },
+  "label_AddDetails": {
+    "message": "और विवरण"
+  },
+  "tt_AddDetails": {
+    "message": "पिछले जवाब को अधिक विवरण के साथ लंबा करता है।"
   }
 }

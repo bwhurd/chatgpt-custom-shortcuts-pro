@@ -367,5 +367,41 @@
   },
   "tt_use_Alt_for_picker": {
     "message": "Usa Alt+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+  },
+  "label_MoreConcise": {
+    "message": "Más breve"
+  },
+  "tt_MoreConcise": {
+    "message": "Acorta la respuesta anterior."
+  },
+  "label_RegenerateAskToChangeResponse": {
+    "message": "Pedir cambios"
+  },
+  "tt_RegenerateAskToChangeResponse": {
+    "message": "Escribe cómo quieres cambiar o mejorar la respuesta anterior."
+  },
+  "label_RegenerateWithDifferentModel": {
+    "message": "Regenerar con otro modelo"
+  },
+  "tt_RegenerateWithDifferentModel": {
+    "message": "Crea una nueva respuesta con otro modelo de IA."
+  },
+  "label_ReadAloud": {
+    "message": "Leer en voz alta"
+  },
+  "tt_ReadAloud": {
+    "message": "Pulsa para oír la respuesta en voz alta. Pulsa de nuevo para detener."
+  },
+  "label_BranchInNewChat": {
+    "message": "Seguir en un chat nuevo"
+  },
+  "tt_BranchInNewChat": {
+    "message": "Copia el chat hasta aquí y abre una conversación nueva desde este punto, para explorar otra vía sin perder ninguna de las dos."
+  },
+  "label_AddDetails": {
+    "message": "Más detalles"
+  },
+  "tt_AddDetails": {
+    "message": "Amplía la respuesta anterior con más detalles."
   }
 }

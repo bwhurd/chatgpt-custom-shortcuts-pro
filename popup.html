@@ -623,19 +623,18 @@
             name="shortcutKeySendEdit" type="text" value="d" />
         </div>
       </div>
-      <!-- ### Regenerate Response ### -->
-      <div class="shortcut-item class-13">
-        <div class="shortcut-label class-13">
-          <span class="i18n" data-i18n="label_regenerate">
-            Regenerate Response
-          </span>
+      <!-- ### Branch In New Chat ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n" data-i18n="label_BranchInNewChat"> Branch In New Chat </span>
           <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_regenerate__">info</span>
+            data-tooltip="__MSG_tt_BranchInNewChat__">info</span>
         </div>
         <div class="shortcut-keys">
           <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" id="shortcutKeyRegenerate" data-sync="shortcutKeyRegenerate" maxlength="12"
-            name="shortcutKeyRegenerate" type="text" value="r" />
+          <input class="key-input" id="shortcutKeyMoreDotsBranchInNewChat"
+            data-sync="shortcutKeyMoreDotsBranchInNewChat" maxlength="12" name="shortcutKeyMoreDotsBranchInNewChat"
+            type="text" value="" />
         </div>
       </div>
       <!-- ### Toggle Temporary Chat ### -->
@@ -679,6 +678,94 @@
           <span class="key-text platform-alt-label"> Alt + </span>
           <input class="key-input" id="shortcutKeyCancelDictation" data-sync="shortcutKeyCancelDictation" maxlength="12"
             name="shortcutKeyCancelDictation" type="text" value="" />
+        </div>
+      </div>
+      <!-- ### Read Aloud ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n" data-i18n="label_ReadAloud"> Read Aloud </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_ReadAloud__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyMoreDotsReadAloud" data-sync="shortcutKeyMoreDotsReadAloud"
+            maxlength="12" name="shortcutKeyMoreDotsReadAloud" type="text" value="" />
+        </div>
+      </div>
+      <!-- ((( Regenerate Group ))) -->
+      <div class="blank-row section-header" role="heading" aria-level="2">
+        Regenerate Response
+      </div>
+      <!-- ### Regenerate Response ### -->
+      <div class="shortcut-item class-13">
+        <div class="shortcut-label class-13">
+          <span class="i18n force-balance-break" data-i18n="label_regenerate">
+            Regenerate Response (Try Again)
+          </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_regenerate__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyRegenerateTryAgain" data-sync="shortcutKeyRegenerateTryAgain"
+            maxlength="12" name="shortcutKeyRegenerateTryAgain" type="text" value="r" />
+        </div>
+      </div>
+      <!-- ### Regenerate With Different Model ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n force-balance-break" data-i18n="label_RegenerateWithDifferentModel"> Regenerate with
+            Different Model </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_RegenerateWithDifferentModel__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyRegenerateWithDifferentModel"
+            data-sync="shortcutKeyRegenerateWithDifferentModel" maxlength="12"
+            name="shortcutKeyRegenerateWithDifferentModel" type="text" value="" />
+        </div>
+      </div>
+      <!-- ### More Concise ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n force-balance-break" data-i18n="label_MoreConcise">More Concise</span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_MoreConcise__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyRegenerateMoreConcise" data-sync="shortcutKeyRegenerateMoreConcise"
+            maxlength="12" name="shortcutKeyRegenerateMoreConcise" type="text" value="q" />
+        </div>
+      </div>
+      <!-- ### Regenerate, Add Details ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n" data-i18n="label_AddDetails"> Add Details </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_AddDetails__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyRegenerateAddDetails" data-sync="shortcutKeyRegenerateAddDetails"
+            maxlength="12" name="shortcutKeyRegenerateAddDetails" type="text" value="" />
+        </div>
+      </div>
+      <!-- ### Ask to Change Response ### -->
+      <div class="shortcut-item">
+        <div class="shortcut-label">
+          <span class="i18n force-balance-break" data-i18n="label_RegenerateAskToChangeResponse">Ask to Change
+            Response</span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_RegenerateAskToChangeResponse__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutRegenerateAskToChangeResponse"
+            data-sync="shortcutRegenerateAskToChangeResponse" maxlength="12"
+            name="shortcutRegenerateAskToChangeResponse" type="text" value="" />
         </div>
       </div>
       <!-- ((( Tools Group ))) -->
