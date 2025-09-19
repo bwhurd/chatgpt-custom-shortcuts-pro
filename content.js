@@ -1238,9 +1238,14 @@ const delays = DELAYS;
     MAX_RETRY_ATTEMPTS: 10,
   });
 
+  const MENU_ITEM_ROLES =
+    ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
+
   const MENU_SELECTORS = {
     buttonPath: (dPrefix) => `button[id^="radix-"] svg path[d^="${safeEsc(dPrefix)}"]`,
-    menuItemPath: (dPrefix) => `div[role="menuitem"] svg path[d^="${safeEsc(dPrefix)}"]`,
+    // Apply the [d^="..."] filter to ALL role types via :is(...)
+    menuItemPath: (dPrefix) => `${MENU_ITEM_ROLES} svg path[d^="${safeEsc(dPrefix)}"]`,
+    menuItemAncestor: MENU_ITEM_ROLES,
   };
 
   function safeEsc(s) {
@@ -1300,7 +1305,7 @@ const delays = DELAYS;
 
   function clickLowestVisibleMenuItemByPath(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
     const selector = MENU_SELECTORS.menuItemPath(pathPrefix);
-    const item = lowestVisibleFromPaths(selector, 'div[role="menuitem"]');
+    const item = lowestVisibleFromPaths(selector, MENU_SELECTORS.menuItemAncestor);
     if (item) {
       if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
       setTimeout(() => item.click(), delays.ITEM_CLICK);
@@ -1454,6 +1459,29 @@ const delays = DELAYS;
   }
   /* ===== End input focus helpers ===== */
 
+  // Click Model by Label helper
+  window.pressModelMenuItemByText = (needle) => {
+    // Looks for any open menu (main or submenu) and clicks the first item containing the needle (case-insensitive)
+    if (!needle) return false;
+    const menus = Array.from(
+      document.querySelectorAll('[data-radix-menu-content][data-state="open"]'),
+    );
+    const lowerNeedle = needle.toLowerCase();
+    for (const menu of menus) {
+      const items = Array.from(
+        menu.querySelectorAll('[role="menuitem"][data-radix-collection-item]'),
+      );
+      for (const item of items) {
+        const s = (item.textContent || '').toLowerCase();
+        if (s.includes(lowerNeedle)) {
+          item.click();
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
   /* ===== Toggle Dictation Helpers: click a single visible button by SVG path (simplified) ===== */
 
   const CLICKABLE_SELECTOR =
@@ -1506,6 +1534,11 @@ const delays = DELAYS;
     return safeClick(el);
   }
   /* ===== End simplified helpers ===== */
+
+  // delayCall: calls a function after a delay with arguments
+  function delayCall(fn, ms, ...args) {
+    setTimeout(() => fn(...args), ms);
+  }
 
   /* ===== End helpers ===== */
 
@@ -1568,7 +1601,9 @@ const delays = DELAYS;
       'shortcutKeyShare',
       'shortcutKeyThinkLonger',
       'shortcutKeyAddPhotosFiles',
-      `selectThenCopyAllMessages`,
+      'selectThenCopyAllMessages',
+      'shortcutKeyThinkingExtended',
+      'shortcutKeyThinkingStandard',
     ],
     (data) => {
       const shortcutDefaults = {
@@ -1612,6 +1647,8 @@ const delays = DELAYS;
         shortcutKeyThinkLonger: '',
         shortcutKeyAddPhotosFiles: '',
         selectThenCopyAllMessages: '[',
+        shortcutKeyThinkingExtended: '',
+        shortcutKeyThinkingStandard: '',
       };
 
       const shortcuts = {};
@@ -3293,6 +3330,21 @@ const delays = DELAYS;
           const FIRST_BTN_PATH = 'M15.498 8.50159C16.3254'; // menu button icon path (prefix)
           const SUB_ITEM_BTN_PATH = 'M3.32996 10H8.01173C8.7455'; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
+        },
+        [shortcuts.shortcutKeyThinkingExtended]: () => {
+          window.toggleModelSelector();
+          delayCall(window.pressModelMenuItemByText, 200, 'longer');
+          const FIRST_BTN_PATH = 'M16.585 10C16.585';
+          const SUB_ITEM_BTN_PATH = 'M10.0007 2.08496C14.3717';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+
+        [shortcuts.shortcutKeyThinkingStandard]: () => {
+          window.toggleModelSelector();
+          delayCall(window.pressModelMenuItemByText, 200, 'longer');
+          const FIRST_BTN_PATH = 'M16.585 10C16.585';
+          const SUB_ITEM_BTN_PATH = 'M10 2.08496C14.3713';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyTemporaryChat]: () => {
           const sel =
@@ -5548,12 +5600,12 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
       const removeAllLabels = () => {
         document.querySelectorAll('.alt-hint').forEach((el) => {
-          el.remove(); // no implicit return from the callback
+          el.remove();
         });
       };
+
       const addLabel = (el, labelText) => {
         if (!el || el.querySelector('.alt-hint')) return;
-        // If label is empty, do not display a hint at all
         if (!labelText || labelText === '—') return;
         const target = el.querySelector('.flex.items-center') || el.querySelector('.flex') || el;
         const span = document.createElement('span');
@@ -5561,6 +5613,152 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
         (target || el).appendChild(span);
       };
+
+      // --- Ultra-light model-name capture: piggybacks on applyHints ---
+
+      function __cspTextNoHint(el) {
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('.alt-hint').forEach((n) => {
+          n.remove();
+        });
+        return (clone.textContent || '').trim().replace(/\s+/g, ' ');
+      }
+
+      // Collect up to 10 names from whatever model menus are currently open.
+      // Main menu contributes slots 1–6; submenu contributes slots 7–10 if present.
+      function __cspCollectModelNames10() {
+        const menus =
+          typeof getOpenModelMenus === 'function'
+            ? getOpenModelMenus().filter(Boolean)
+            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
+
+        if (!menus.length) return null; // no menus open at all
+
+        const names = Array(10).fill('');
+        const main = menus[0];
+
+        // Main menu: take up to 6 direct items (robust to fewer)
+        if (main) {
+          const mainItems = Array.from(
+            main.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
+          );
+          for (let i = 0; i < 6 && i < mainItems.length; i++) {
+            names[i] = __cspTextNoHint(mainItems[i]);
+          }
+        }
+
+        // Submenu: take up to 4 direct items (robust to fewer)
+        const sub = menus[1];
+        if (sub) {
+          const subItems = Array.from(
+            sub.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
+          );
+          for (let j = 0; j < 4 && j < subItems.length; j++) {
+            names[6 + j] = __cspTextNoHint(subItems[j]); // slots 7–10
+          }
+        }
+
+        // Trim all
+        for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
+
+        // Return even if some slots are empty; saver will merge with previous storage
+        return names;
+      }
+
+      // Saver: normalize with regex rules, merge with storage, then persist (1s throttle on identical sets)
+      const __cspSaveModelNames = (() => {
+        let lastSig = '';
+        let lastWrite = 0;
+
+        // Normalize first 6 slots by regex rules; leave submenu (7–10) as scraped
+        function __cspNormalizeLabels(arr10) {
+          const out = Array.isArray(arr10) ? arr10.slice(0, 10) : Array(10).fill('');
+          for (let i = 0; i < out.length; i++) {
+            if (i > 5) continue; // only normalize main menu slots 1–6
+
+            const raw = (out[i] || '').trim();
+            if (!raw) continue;
+            const s = raw.toLowerCase();
+
+            // Regex 1: contains "auto" anywhere → GPT-5 Auto
+            if (s.includes('auto')) {
+              out[i] = 'GPT-5 Auto';
+              continue;
+            }
+            // Regex 2: contains "instant" anywhere → GPT-5 Instant
+            if (s.includes('instant')) {
+              out[i] = 'GPT-5 Instant';
+              continue;
+            }
+            // Regex 3: contains both "thinking" and "mini" in any order/spacing → GPT-5 Thinking Mini
+            if (s.includes('thinking') && s.includes('mini')) {
+              out[i] = 'GPT-5 Thinking Mini';
+              continue;
+            }
+            // Regex 4: contains "longer" anywhere → GPT-5 Thinking
+            if (s.includes('longer')) {
+              out[i] = 'GPT-5 Thinking';
+              continue;
+            }
+
+            // Regex 5: contains "pro" anywhere → GPT-5 Pro
+            if (s.includes('pro')) {
+              out[i] = 'GPT-5 Pro';
+              continue;
+            }
+            // Regex 6: contains "legacy" anywhere → Show Model Picker
+            if (s.includes('legacy')) {
+              out[i] = 'Show Model Picker';
+            }
+          }
+          return out;
+        }
+
+        return (arr10) => {
+          if (!Array.isArray(arr10)) return;
+
+          // If absolutely nothing was observed, skip
+          const observedCount = arr10.filter((s) => (s || '').trim() !== '').length;
+          if (observedCount === 0) return;
+
+          const normalized = __cspNormalizeLabels(arr10);
+          const now = Date.now();
+
+          try {
+            chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
+              const base = Array.isArray(prev) ? prev.slice(0, 10) : Array(10).fill('');
+              const merged = base.map((v, i) => {
+                const nv = (normalized[i] || '').trim();
+                return nv || v || '';
+              });
+
+              const sig = merged.join('|');
+              if (sig === lastSig && now - lastWrite < 1000) return; // throttle identical writes to 1s
+              lastSig = sig;
+              lastWrite = now;
+
+              chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => {});
+            });
+          } catch (_) {}
+        };
+      })();
+
+      function __cspMaybePersistModelNames() {
+        const arr10 = __cspCollectModelNames10();
+        if (arr10) __cspSaveModelNames(arr10);
+      }
+
+      // Respond to popup requests for live names (ensures freshness on popup open)
+      try {
+        chrome.runtime.onMessage.addListener((msg, sendResponse) => {
+          if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
+            const arr10 = __cspCollectModelNames();
+            if (arr10) __cspSaveModelNames(arr10);
+            sendResponse({ modelNames: Array.isArray(arr10) ? arr10 : null });
+          }
+        });
+      } catch (_) {}
 
       // Get all menu items (main menu + open submenu) in order, capped at 10
       // Collect items from the *first* open menu (level 1) and, if present, the *second* open menu (level 2).
@@ -5664,6 +5862,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         for (let i = 0; i < items.length && i < KEY_CODES.length; ++i) {
           addLabel(items[i].el, displayFromCode(KEY_CODES[i]));
         }
+        // Persist labels -> names once menus are present (submenu must be open for full set)
+        __cspMaybePersistModelNames();
       };
       const scheduleHints = () => requestAnimationFrame(applyHints);
 

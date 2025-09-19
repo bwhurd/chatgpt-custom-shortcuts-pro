@@ -403,5 +403,17 @@
   },
   "tt_AddDetails": {
     "message": "Makes the previous response longer with more details."
+  },
+  "label_switchToThinkingExtended": {
+    "message": "Switch model to Thinking Extended"
+  },
+  "tt_switchToThinkingExtended": {
+    "message": "Switch directly to GPT-5 Extended Thinking, which takes more time to handle harder problems."
+  },
+  "label_switchToThinkingStandard": {
+    "message": "Switch model to Thinking Standard"
+  },
+  "tt_switchToThinkingStandard": {
+    "message": "Switch directly to GPT-5 Standard Thinking, which answers faster for most tasks."
   }
 }

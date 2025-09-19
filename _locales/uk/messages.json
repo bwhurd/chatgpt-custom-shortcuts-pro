@@ -403,5 +403,17 @@
   },
   "tt_AddDetails": {
     "message": "Робить попередню відповідь довшою й докладнішою."
+  },
+  "label_switchToThinkingExtended": {
+    "message": "Перемкнути на Розширене мислення"
+  },
+  "tt_switchToThinkingExtended": {
+    "message": "Одразу перейти на GPT-5 Розширене мислення — займає більше часу, але підходить для складних завдань."
+  },
+  "label_switchToThinkingStandard": {
+    "message": "Перемкнути на Стандартне мислення"
+  },
+  "tt_switchToThinkingStandard": {
+    "message": "Одразу перейти на GPT-5 Стандартне мислення — для більшості завдань відповідає швидше."
   }
 }

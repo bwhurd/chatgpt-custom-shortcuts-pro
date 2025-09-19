@@ -403,5 +403,17 @@
   },
   "tt_AddDetails": {
     "message": "Amplía la respuesta anterior con más detalles."
+  },
+  "label_switchToThinkingExtended": {
+    "message": "Cambiar a Pensamiento Extendido"
+  },
+  "tt_switchToThinkingExtended": {
+    "message": "Cambiar directamente a GPT-5 Pensamiento Extendido; tarda más, pero resuelve problemas difíciles."
+  },
+  "label_switchToThinkingStandard": {
+    "message": "Cambiar a Pensamiento Estándar"
+  },
+  "tt_switchToThinkingStandard": {
+    "message": "Cambiar directamente a GPT-5 Pensamiento Estándar, que responde más rápido para la mayoría de tareas."
   }
 }

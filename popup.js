@@ -393,21 +393,57 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.saveShortcutValue = saveShortcutValue;
 
-  // ---------- Static model names for tooltips and picker UI ----------
+  // ---------- Dynamic model names for tooltips and picker UI (keeps variable names) ----------
   const MODEL_NAMES = [
     'GPT-5 Auto', // Slot 1
-    'GPT-5 Fast', // Slot 2
-    'GPT-5 Thinking', // Slot 3
-    'GPT-5 Pro', // Slot 4
-    'Legacy Models →', // Slot 5
-    '4o', // Slot 6
-    '4.1', // Slot 7
-    'o3', // Slot 8
-    'o4-mini', // Slot 9
-    'Show Models', // Slot 0
+    'GPT-5 Instant', // Slot 2
+    'GPT-5 Thinking mini', // Slot 3
+    'GPT-5 Thinking', // Slot 4
+    'GPT-5 Pro', // Slot 5
+    'Show Model Menu', // Slot 6
+    '4o', // Slot 7
+    '4.1', // Slot 8
+    'o3', // Slot 9
+    'o4-mini', // Slot 0
   ];
-  // Expose globally so other scopes (conflict builders, tooltips, modals) can read it
-  window.MODEL_NAMES = MODEL_NAMES;
+  // Initialize global with defaults for instant UI
+  window.MODEL_NAMES = MODEL_NAMES.slice();
+
+  // Hydrate and keep in sync with storage-scraped labels (content.js)
+  (function initModelNamesDynamic() {
+    // Use the current defaults as a fallback if storage is missing any slots
+    const fallbackTen = (window.MODEL_NAMES || []).slice(0, 10);
+
+    function mergeWithFallback(incoming) {
+      const in10 = Array.isArray(incoming) ? incoming.slice(0, 10) : [];
+      return Array(10)
+        .fill('')
+        .map((_, i) => (in10[i] && String(in10[i]).trim()) || fallbackTen[i] || '');
+    }
+
+    function setAndRender(a10) {
+      window.MODEL_NAMES = a10.slice(0, 10);
+      if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+      window.dispatchEvent(
+        new CustomEvent('model-names-updated', { detail: { source: 'storage' } }),
+      );
+    }
+
+    // Load latest from storage when popup opens
+    try {
+      chrome.storage.sync.get('modelNames', ({ modelNames }) => {
+        setAndRender(mergeWithFallback(modelNames));
+      });
+    } catch (_) {
+      setAndRender(fallbackTen);
+    }
+
+    // Update live if content saves new labels while popup is open
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync' || !changes.modelNames) return;
+      setAndRender(mergeWithFallback(changes.modelNames.newValue));
+    });
+  })();
 
   // ---------- Unified registry for model-picker codes ----------
   function getModelPickerCodesCache() {
@@ -1585,6 +1621,10 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyThinkLonger: NBSP,
     shortcutKeyAddPhotosFiles: NBSP,
     selectThenCopyAllMessages: 'BracketLeft',
+    shortcutKeyThinkingExtended: NBSP,
+    shortcutKeyThinkingStandard: NBSP,
+
+    // Other options
 
     // Model picker keys (number row, 0-9)
     modelPickerKeyCodes: [
@@ -1906,6 +1946,8 @@ document.addEventListener('DOMContentLoaded', () => {
     'shortcutKeyThinkLonger',
     'shortcutKeyAddPhotosFiles',
     'selectThenCopyAllMessages',
+    'shortcutKeyThinkingExtended',
+    'shortcutKeyThinkingStandard',
   ];
   const shortcutKeyValues = {};
 
@@ -2630,10 +2672,21 @@ document.addEventListener('DOMContentLoaded', () => {
           out[k] = effectiveShortcutCode(k, stored);
         });
 
-        // If modelPickerKeyCodes missing, include current cache/default so chips roundtrip too
+        // Ensure modelPickerKeyCodes present so chips roundtrip too
         if (!Object.hasOwn(out, 'modelPickerKeyCodes')) {
           const codes = (window.ShortcutUtils?.getModelPickerCodesCache?.() || []).slice(0, 10);
           if (codes.length === 10) out.modelPickerKeyCodes = codes;
+        }
+
+        // Include modelNames (9 labels) even if not in keySet
+        if (!Object.hasOwn(out, 'modelNames')) {
+          const fromStorage = Array.isArray(all.modelNames) ? all.modelNames.slice(0, 9) : null;
+          const fromWindow =
+            Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length >= 9
+              ? window.MODEL_NAMES.slice(0, 9)
+              : null;
+          const names = fromStorage || fromWindow;
+          if (names?.length) out.modelNames = names;
         }
 
         const payload = {
@@ -2645,9 +2698,7 @@ document.addEventListener('DOMContentLoaded', () => {
           data: out,
         };
 
-        const blob = new Blob([JSON.stringify(payload, null, 2)], {
-          type: 'application/json',
-        });
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const dateStr = new Date().toISOString().split('T')[0];
         const filename = `${dateStr}_chatgpt_custom_shortcuts_pro_settings.json`;
 
@@ -2687,6 +2738,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!proceed) return;
 
       // Apply to storage
+      // Apply to storage
       chrome.storage.sync.get(null, (curr) => {
         const merged = { ...curr, ...next };
 
@@ -2708,14 +2760,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!el) return;
 
             if (el.type === 'checkbox' || el.type === 'radio') {
-              // Binary inputs (checkbox / radio)
               el.checked = !!val;
               return;
             }
 
             if (typeof val === 'string' || typeof val === 'number') {
-              // Text / numeric inputs
-              // Ensure separator fields render with literal "\n"
               if (key === 'copyCodeUserSeparator') {
                 el.value = sep_storageToUI(val);
               } else {
@@ -2734,6 +2783,19 @@ document.addEventListener('DOMContentLoaded', () => {
               window.__modelPickerKeyCodes = next.modelPickerKeyCodes.slice(0, 10);
               document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
             } catch (_) {}
+          }
+
+          // If model names provided, update global + UI immediately
+          if (Array.isArray(next.modelNames) && next.modelNames.length >= 5) {
+            const nine = next.modelNames.slice(0, 9);
+            if (nine[4] && /legacy/i.test(nine[4])) {
+              nine[4] = `${nine[4].replace(/→/g, '').trim()} →`;
+            }
+            window.MODEL_NAMES = nine.concat('Show Models');
+            if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+            window.dispatchEvent(
+              new CustomEvent('model-names-updated', { detail: { source: 'import' } }),
+            );
           }
 
           showToast(t('toast_import_complete'));

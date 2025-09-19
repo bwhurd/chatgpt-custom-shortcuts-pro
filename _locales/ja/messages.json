@@ -403,5 +403,17 @@
   },
   "tt_AddDetails": {
     "message": "直前の回答に詳細を追加して、長くします。"
+  },
+  "label_switchToThinkingExtended": {
+    "message": "拡張思考モデルに切り替え"
+  },
+  "tt_switchToThinkingExtended": {
+    "message": "難しい問題向けのGPT-5拡張思考にすぐ切り替えます。少し時間がかかります。"
+  },
+  "label_switchToThinkingStandard": {
+    "message": "標準思考モデルに切り替え"
+  },
+  "tt_switchToThinkingStandard": {
+    "message": "ほとんどのタスクに早く答えるGPT-5標準思考にすぐ切り替えます."
   }
 }

@@ -403,5 +403,17 @@
   },
   "tt_AddDetails": {
     "message": "पिछले जवाब को अधिक विवरण के साथ लंबा करता है।"
+  },
+  "label_switchToThinkingExtended": {
+    "message": "मॉडल बदलें: एक्सटेंडेड थिंकिंग"
+  },
+  "tt_switchToThinkingExtended": {
+    "message": "सीधे GPT-5 एक्सटेंडेड थिंकिंग पर जाएँ, कठिन समस्याओं के लिए थोड़ा अधिक समय लगता है।"
+  },
+  "label_switchToThinkingStandard": {
+    "message": "मॉडल बदलें: स्टैंडर्ड थिंकिंग"
+  },
+  "tt_switchToThinkingStandard": {
+    "message": "सीधे GPT-5 स्टैंडर्ड थिंकिंग पर जाएँ, जो ज़्यादातर कामों में तेज़ जवाब देता है।"
   }
 }
