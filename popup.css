@@ -1165,14 +1165,16 @@ span.dup-key {
 .info-icon-tooltip:hover::after,
 .info-icon-tooltip:focus::after {
   /* ...your existing styles... */
-  transform: translateX(calc(-50% + var(--tooltip-offset-x, 0px)));
+  transform: translateX(calc(-50% + var(--tooltip-offset-x, 0px)))
+    translateY(var(--tooltip-offset-y, 0px));
 }
 
 /* keep the arrow centered with the bubble */
 .info-icon-tooltip:hover::before,
 .info-icon-tooltip:focus::before {
   /* ...your existing styles... */
-  transform: translateX(calc(-50% + var(--tooltip-offset-x, 0px)));
+  transform: translateX(calc(-50% + var(--tooltip-offset-x, 0px)))
+    translateY(var(--tooltip-offset-y, 0px));
 }
 
 .nowrap-label {

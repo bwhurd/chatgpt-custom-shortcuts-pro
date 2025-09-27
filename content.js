@@ -5666,81 +5666,112 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         return names;
       }
 
-      // Saver: normalize with regex rules, merge with storage, then persist (1s throttle on identical sets)
+      // Saver: derive canonical labels from DOM (data-testid + structure), not localized text
       const __cspSaveModelNames = (() => {
         let lastSig = '';
         let lastWrite = 0;
 
-        // Normalize first 6 slots by regex rules; leave submenu (7–10) as scraped
-        function __cspNormalizeLabels(arr10) {
-          const out = Array.isArray(arr10) ? arr10.slice(0, 10) : Array(10).fill('');
-          for (let i = 0; i < out.length; i++) {
-            if (i > 5) continue; // only normalize main menu slots 1–6
+        const __CSP_TESTID_TO_CANON = Object.freeze({
+          'Model-switCher-gpt-5': 'GPT-5 Auto',
+          'Model-switCher-gpt-5-instant': 'GPT-5 Instant',
+          'Model-switCher-gpt-5-t-mini': 'GPT-5 Thinking mini',
+          'Model-switCher-gpt-5-thinking': 'GPT-5 Thinking',
+          'Model-switCher-gpt-4o': '4o',
+          'Model-switCher-gpt-4-1': '4.1',
+          'Model-switCher-o3': 'o3',
+          'Model-switCher-o4-mini': 'o4-mini',
+        });
 
-            const raw = (out[i] || '').trim();
-            if (!raw) continue;
-            const s = raw.toLowerCase();
-
-            // Regex 1: contains "auto" anywhere → GPT-5 Auto
-            if (s.includes('auto')) {
-              out[i] = 'GPT-5 Auto';
-              continue;
-            }
-            // Regex 2: contains "instant" anywhere → GPT-5 Instant
-            if (s.includes('instant')) {
-              out[i] = 'GPT-5 Instant';
-              continue;
-            }
-            // Regex 3: contains both "thinking" and "mini" in any order/spacing → GPT-5 Thinking Mini
-            if (s.includes('thinking') && s.includes('mini')) {
-              out[i] = 'GPT-5 Thinking Mini';
-              continue;
-            }
-            // Regex 4: contains "longer" anywhere → GPT-5 Thinking
-            if (s.includes('longer')) {
-              out[i] = 'GPT-5 Thinking';
-              continue;
-            }
-
-            // Regex 5: contains "pro" anywhere → GPT-5 Pro
-            if (s.includes('pro')) {
-              out[i] = 'GPT-5 Pro';
-              continue;
-            }
-            // Regex 6: contains "legacy" anywhere → Show Model Picker
-            if (s.includes('legacy')) {
-              out[i] = 'Show Model Picker';
-            }
-          }
-          return out;
+        function __cspGetOpenMenus() {
+          const menus = Array.from(
+            document.querySelectorAll('[data-radix-menu-content][data-state="open"][role="menu"]'),
+          );
+          if (menus.length === 0) return { main: null, sub: null };
+          const main = menus[0];
+          const sub = menus.length > 1 ? menus[menus.length - 1] : null;
+          return { main, sub };
         }
 
-        return (arr10) => {
-          if (!Array.isArray(arr10)) return;
+        function __cspCanonicalLabelsFromDOM() {
+          const names = Array(10).fill('');
+          const { main, sub } = __cspGetOpenMenus();
 
-          // If absolutely nothing was observed, skip
-          const observedCount = arr10.filter((s) => (s || '').trim() !== '').length;
-          if (observedCount === 0) return;
+          if (main) {
+            if (main.querySelector('[data-testid="Model-switCher-gpt-5"]')) names[0] = 'GPT-5 Auto';
+            if (main.querySelector('[data-testid="Model-switCher-gpt-5-instant"]'))
+              names[1] = 'GPT-5 Instant';
+            if (main.querySelector('[data-testid="Model-switCher-gpt-5-t-mini"]'))
+              names[2] = 'GPT-5 Thinking mini';
+            if (main.querySelector('[data-testid="Model-switCher-gpt-5-thinking"]'))
+              names[3] = 'GPT-5 Thinking';
 
-          const normalized = __cspNormalizeLabels(arr10);
+            // Pro row: no testid in many locales; detect by first-line "Pro"
+            const proRow = Array.from(main.querySelectorAll('.group.__menu-item')).find((el) => {
+              const firstLine = el.querySelector('.flex.items-center.gap-1, .truncate, .min-w-0');
+              const txt = (firstLine ? firstLine.textContent : el.textContent || '').trim();
+              return /^pro(\b|$)/i.test(txt);
+            });
+            if (proRow) names[4] = 'GPT-5 Pro';
+
+            // Submenu trigger exists (label localized), but we force a canonical name
+            if (main.querySelector('[data-has-submenu]')) names[5] = '→';
+          }
+
+          if (sub && sub !== main) {
+            let idx = 6;
+            const subItems = Array.from(
+              sub.querySelectorAll('.group.__menu-item[role="menuitem"]'),
+            );
+            for (const item of subItems) {
+              const tid = item.getAttribute('data-testid') || '';
+              const canon = __CSP_TESTID_TO_CANON[tid];
+              if (canon) {
+                if (idx < 10) names[idx++] = canon;
+              } else {
+                // Fallback: take the primary label (strip Alt+ hints)
+                const labelEl = item.querySelector('.flex.items-center.gap-1') || item;
+                let label = (labelEl.textContent || '').trim();
+                label = label.replace(/\s*Alt\+.*$/, '').trim();
+                if (idx < 10) names[idx++] = label;
+              }
+            }
+          }
+
+          return names;
+        }
+
+        function __cspMergeAndPersist(candidates) {
           const now = Date.now();
-
           try {
             chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-              const base = Array.isArray(prev) ? prev.slice(0, 10) : Array(10).fill('');
-              const merged = base.map((v, i) => {
-                const nv = (normalized[i] || '').trim();
+              const prevArr = Array.isArray(prev) ? prev.slice(0, 10) : Array(10).fill('');
+              const merged = prevArr.map((v, i) => {
+                const nv = (candidates[i] || '').trim();
                 return nv || v || '';
               });
-
               const sig = merged.join('|');
-              if (sig === lastSig && now - lastWrite < 1000) return; // throttle identical writes to 1s
+              if (sig === lastSig && now - lastWrite < 1000) return;
               lastSig = sig;
               lastWrite = now;
-
               chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => {});
             });
           } catch (_) {}
+        }
+
+        return (arr10) => {
+          // Prefer canonical DOM read. If not available, use current array (collector fallback).
+          const domNames = __cspCanonicalLabelsFromDOM();
+          const hasDom = domNames.some(Boolean);
+          const fallback = Array.isArray(arr10) ? arr10.slice(0, 10) : Array(10).fill('');
+
+          // If we have canonical DOM labels, use them; otherwise use the fallback as-is.
+          const candidates = hasDom ? domNames : fallback;
+
+          // Skip if we truly have nothing
+          const observedCount = candidates.filter((s) => (s || '').trim() !== '').length;
+          if (observedCount === 0) return;
+
+          __cspMergeAndPersist(candidates);
         };
       })();
 
@@ -5753,7 +5784,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       try {
         chrome.runtime.onMessage.addListener((msg, sendResponse) => {
           if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
-            const arr10 = __cspCollectModelNames();
+            const arr10 = __cspCollectModelNames10();
             if (arr10) __cspSaveModelNames(arr10);
             sendResponse({ modelNames: Array.isArray(arr10) ? arr10 : null });
           }

@@ -1043,72 +1043,169 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Compute horizontal offset so tooltip stays within container edges (±padding).
-   * Applies CSS var --tooltip-offset-x on the trigger element.
+   * Compute offsets so the tooltip:
+   * - stays inside the container horizontally
+   * - stays inside the viewport vertically (top/bottom)
+   * - never covers the current mouse pointer (horizontal sidestep)
+   *
+   * Applies CSS vars: --tooltip-offset-x, --tooltip-offset-y, --tooltip-max-fit.
    */
-  function nudgeTooltipIntoBounds(triggerEl, { gap = 6 } = {}) {
-    const boundary = document.querySelector('[data-tooltip-boundary]') || document.body;
+  function nudgeTooltipIntoBounds(
+    triggerEl,
+    { gap = 6, mouse = null, avoidMouseMargin = 10 } = {},
+  ) {
+    const boundary = getTooltipBoundary();
     const text = triggerEl.getAttribute('data-tooltip') || '';
     if (!text) {
       triggerEl.style.removeProperty('--tooltip-offset-x');
+      triggerEl.style.removeProperty('--tooltip-offset-y');
       triggerEl.style.removeProperty('--tooltip-max-fit');
       return;
     }
 
-    /* ---------- 1. figure out the usable area ---------- */
+    // Container horizontal limits (so we don't spill out of cards/panels)
     const cRect = boundary.getBoundingClientRect();
     const usableLeft = cRect.left + gap;
     const usableRight = cRect.right - gap;
     const usableWidth = Math.max(0, usableRight - usableLeft);
 
-    /* ---------- 2. measure bubble *after* width cap ---------- */
-    const meas = getTooltipMeasureEl(); // your hidden measuring div
-    meas.style.maxInlineSize = `${usableWidth}px`; // cap first
-    meas.textContent = text;
-    const bubbleWidth = meas.offsetWidth; // actual width with wrapping
+    // Viewport vertical limits (so we never leave the visible window)
+    const vTop = gap; // viewport top edge
+    const vBottom = window.innerHeight - gap;
 
-    /* expose this cap so CSS matches real width */
+    // Measure bubble after width cap
+    const meas = getTooltipMeasureEl();
+    meas.style.maxInlineSize = `${usableWidth}px`;
+    meas.textContent = text;
+    const bubbleWidth = meas.offsetWidth;
+    const bubbleHeight = meas.offsetHeight;
+
+    // Expose final width cap to CSS so ::after matches measured width
     triggerEl.style.setProperty('--tooltip-max-fit', `${bubbleWidth}px`);
 
-    /* ---------- 3. compute minimal X-offset ---------- */
+    // Base position (assume above trigger with ~8px gap; adjust if your CSS differs)
     const tRect = triggerEl.getBoundingClientRect();
     const bubbleLeft = tRect.left + tRect.width / 2 - bubbleWidth / 2;
     const bubbleRight = bubbleLeft + bubbleWidth;
+    let bubbleTop = tRect.top - bubbleHeight - 8;
+    let bubbleBottom = bubbleTop + bubbleHeight;
 
-    let offset = 0;
-    if (bubbleLeft < usableLeft) offset += usableLeft - bubbleLeft;
-    else if (bubbleRight > usableRight) offset -= bubbleRight - usableRight;
+    // Initial horizontal nudge to fit container
+    let offsetX = 0;
+    if (bubbleLeft < usableLeft) offsetX += usableLeft - bubbleLeft;
+    else if (bubbleRight > usableRight) offsetX -= bubbleRight - usableRight;
 
-    triggerEl.style.setProperty('--tooltip-offset-x', `${Math.round(offset)}px`);
+    // Vertical nudge to fit viewport
+    let offsetY = 0;
+    if (bubbleTop < vTop) offsetY += vTop - bubbleTop;
+    if (bubbleBottom + offsetY > vBottom) offsetY -= bubbleBottom + offsetY - vBottom;
+
+    // Cursor avoidance: If mouse is inside the (offset) bubble, push horizontally
+    if (mouse && Number.isFinite(mouse.x) && Number.isFinite(mouse.y)) {
+      const curLeft = bubbleLeft + offsetX;
+      const curRight = bubbleRight + offsetX;
+      const curTop = bubbleTop + offsetY;
+      const curBottom = bubbleBottom + offsetY;
+
+      const insideHoriz = mouse.x >= curLeft && mouse.x <= curRight;
+      const insideVert = mouse.y >= curTop && mouse.y <= curBottom;
+      if (insideHoriz && insideVert) {
+        const spaceLeft = curLeft - usableLeft;
+        const spaceRight = usableRight - curRight;
+
+        // Choose the side with more horizontal space
+        const moveLeft = spaceLeft >= spaceRight;
+
+        // Compute delta to clear the mouse with a small margin
+        let delta;
+        if (moveLeft) {
+          // Target right edge just to the left of the pointer
+          const targetRight = mouse.x - avoidMouseMargin;
+          delta = targetRight - curRight; // negative => move left
+          // Clamp so we don't go past container left
+          const minDelta = usableLeft - curLeft;
+          if (delta < minDelta) delta = minDelta;
+        } else {
+          // Target left edge just to the right of the pointer
+          const targetLeft = mouse.x + avoidMouseMargin;
+          delta = targetLeft - curLeft; // positive => move right
+          // Clamp so we don't go past container right
+          const maxDelta = usableRight - curRight;
+          if (delta > maxDelta) delta = maxDelta;
+        }
+
+        offsetX += delta;
+
+        // Re-clamp horizontally after the mouse-avoid shift
+        const newLeft = bubbleLeft + offsetX;
+        const newRight = bubbleRight + offsetX;
+        if (newLeft < usableLeft) offsetX += usableLeft - newLeft;
+        else if (newRight > usableRight) offsetX -= newRight - usableRight;
+      }
+    }
+
+    triggerEl.style.setProperty('--tooltip-offset-x', `${Math.round(offsetX)}px`);
+    triggerEl.style.setProperty('--tooltip-offset-y', `${Math.round(offsetY)}px`);
   }
 
   /**
-   * Hook up listeners to recompute on show / hide / resize.
-   * Add data-tooltip-boundary to your main container (e.g., <main data-tooltip-boundary>…)
+   * Hook up listeners to recompute on show / hide / resize / pointer move.
+   * - Horizontal bounds: container with [data-tooltip-boundary] (fallback body)
+   * - Vertical bounds: viewport (so tooltips never leave the visible window)
+   * - Cursor avoidance: bubble never covers current mouse location
    */
   function setupTooltipBoundary() {
     const boundary = getTooltipBoundary();
-    // Include info icons AND model picker chips
     const items = Array.from(
       document.querySelectorAll(
         '.info-icon-tooltip[data-tooltip], .mp-key.custom-tooltip[data-tooltip]',
       ),
     );
-    const opts = { padding: 6 };
+
+    const optsBase = { gap: 6 };
+
+    // Track latest pointer position (rAF-throttled)
+    const pointer = { x: NaN, y: NaN };
+    let pmRAF = 0;
+    function nudgeActiveWithPointer() {
+      const active = items.filter((el) => el.matches(':hover, :focus'));
+      for (const el of active) {
+        nudgeTooltipIntoBounds(el, {
+          ...optsBase,
+          mouse: { x: pointer.x, y: pointer.y },
+        });
+      }
+    }
+    window.addEventListener(
+      'pointermove',
+      (e) => {
+        pointer.x = e.clientX;
+        pointer.y = e.clientY;
+        if (pmRAF) cancelAnimationFrame(pmRAF);
+        pmRAF = requestAnimationFrame(nudgeActiveWithPointer);
+      },
+      { passive: true },
+    );
 
     function onShow(e) {
       const el = e.currentTarget;
-      nudgeTooltipIntoBounds(el, opts);
+      nudgeTooltipIntoBounds(el, {
+        ...optsBase,
+        mouse: { x: pointer.x, y: pointer.y },
+      });
     }
     function onHide(e) {
       e.currentTarget.style.removeProperty('--tooltip-offset-x');
+      e.currentTarget.style.removeProperty('--tooltip-offset-y');
       e.currentTarget.style.removeProperty('--tooltip-max-fit');
     }
-    function onResize() {
-      // Reflow any currently "active" tooltip (hovered/focused)
+    function onResizeOrScroll() {
       const active = items.filter((el) => el.matches(':hover, :focus'));
       for (const el of active) {
-        nudgeTooltipIntoBounds(el, opts);
+        nudgeTooltipIntoBounds(el, {
+          ...optsBase,
+          mouse: { x: pointer.x, y: pointer.y },
+        });
       }
     }
 
@@ -1119,26 +1216,15 @@ document.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('blur', onHide);
     });
 
-    // Recompute on viewport resize (debounced)
     let rid = 0;
-    window.addEventListener(
-      'resize',
-      () => {
-        cancelAnimationFrame(rid);
-        rid = requestAnimationFrame(onResize);
-      },
-      { passive: true },
-    );
+    const raf = (fn) => {
+      cancelAnimationFrame(rid);
+      rid = requestAnimationFrame(fn);
+    };
 
-    // Recompute if the boundary scrolls horizontally
-    boundary.addEventListener(
-      'scroll',
-      () => {
-        cancelAnimationFrame(rid);
-        rid = requestAnimationFrame(onResize);
-      },
-      { passive: true },
-    );
+    window.addEventListener('resize', () => raf(onResizeOrScroll), { passive: true });
+    boundary.addEventListener('scroll', () => raf(onResizeOrScroll), { passive: true });
+    window.addEventListener('scroll', () => raf(onResizeOrScroll), { passive: true });
   }
 
   // Call this once after your initTooltips()
