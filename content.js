@@ -347,6 +347,37 @@ const flashBorder = (el) => {
     });
 };
 
+// Prefer the composer button and verify its data-testid is "stop-button".
+// Fallback also checks for both data-testid and data-test-id.
+function getVisibleStopButton() {
+  const candidates = [];
+
+  const composerBtn = document.getElementById('composer-submit-button');
+  if (
+    composerBtn &&
+    (composerBtn.getAttribute('data-testid') === 'stop-button' ||
+      composerBtn.getAttribute('data-test-id') === 'stop-button')
+  ) {
+    candidates.push(composerBtn);
+  }
+
+  const q = document.querySelector(
+    'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+  );
+  if (q) candidates.push(q);
+
+  for (const btn of candidates) {
+    if (!btn || btn.disabled) continue;
+    const style = window.getComputedStyle(btn);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    const rect = btn.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    if (btn.closest('[aria-hidden="true"]')) continue;
+    return btn;
+  }
+  return null;
+}
+
 // ======================================================
 // ==== @note Delays Shared helpers ========
 
@@ -436,6 +467,191 @@ const delays = DELAYS;
       applyVisibilitySettings(updatedData);
     }
   });
+})();
+
+// ==================================================
+// Custom GPT Menu Utilities
+// Detects and interacts with GPT-specific menu buttons and submenu items,
+// working for both header and bottom bar locations. Exposes helpers for
+// reliable automation of menu navigation in custom GPT interfaces.
+//
+// Example (bind elsewhere via your shortcut system):
+// const SUB_ITEM_BTN_PATH = 'M2.6687 11.333V8.66699C2.6687';
+// window.clickGptMenuThenSubItemSvg(SUB_ITEM_BTN_PATH, { prefer: 'header' /* or 'bottom' */ });
+// ==================================================
+(() => {
+  // Use same timings; prefer existing global if present
+  const DEFAULT_MENU_DELAYS =
+    (typeof window.DEFAULT_MENU_DELAYS === 'object' && window.DEFAULT_MENU_DELAYS) ||
+    Object.freeze({
+      MENU_READY_OPEN: 350,
+      MENU_READY_EXPANDED: 250,
+      ITEM_CLICK: 375,
+      RETRY_INTERVAL: 25,
+      MAX_RETRY_ATTEMPTS: 10,
+    });
+
+  const MENU_ITEM_ROLES =
+    ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
+
+  // Down-chevron in the GPT trigger (text-agnostic)
+  const CHEVRON_PATH_PREFIX = 'M12.1338 5.94433';
+
+  // Call the same flashBorder you already use (support both local symbol and window export)
+  function callFlash(el) {
+    const fn =
+      typeof window.flashBorder === 'function'
+        ? window.flashBorder
+        : typeof self !== 'undefined' && typeof self.flashBorder === 'function'
+          ? self.flashBorder
+          : typeof flashBorder === 'function'
+            ? flashBorder
+            : null;
+
+    if (window.gsap && typeof fn === 'function') fn(el);
+  }
+
+  function safeEsc(s) {
+    try {
+      return CSS?.escape ? CSS.escape(s) : s;
+    } catch (_) {
+      return s;
+    }
+  }
+
+  // Match your existing visibility logic exactly
+  function isVisible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return (
+      r.top >= 0 &&
+      r.left >= 0 &&
+      r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      r.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+  }
+
+  function simulateSpace(el) {
+    for (const type of ['keydown', 'keyup']) {
+      el.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: ' ',
+          code: 'Space',
+          keyCode: 32,
+          charCode: 32,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    }
+  }
+
+  function openRadixMenuIfNeeded(triggerEl, delays = DEFAULT_MENU_DELAYS) {
+    const expanded = triggerEl.getAttribute('aria-expanded') === 'true';
+    if (!expanded) {
+      triggerEl.focus?.();
+      // Same open gesture as your original helper (ensures matching delay/flash feel)
+      simulateSpace(triggerEl);
+      return delays.MENU_READY_OPEN;
+    }
+    return delays.MENU_READY_EXPANDED;
+  }
+
+  function lowestVisibleFromPaths(selector, ancestorSelector, excludeAncestorSelector) {
+    const paths = Array.from(document.querySelectorAll(selector));
+    const els = paths
+      .map((p) => p.closest(ancestorSelector))
+      .filter(Boolean)
+      .filter(isVisible)
+      .filter((el) => !excludeAncestorSelector || !el.closest(excludeAncestorSelector));
+    return els.length ? els[els.length - 1] : null;
+  }
+
+  function clickMenuItemByPathPrefix(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
+    const selector = `${MENU_ITEM_ROLES} svg path[d^="${safeEsc(pathPrefix)}"]`;
+    const item = lowestVisibleFromPaths(selector, MENU_ITEM_ROLES);
+    if (item) {
+      // Flash the menu item with same logic
+      callFlash(item);
+      setTimeout(() => item.click(), delays.ITEM_CLICK);
+      return true;
+    }
+    if (attempt < delays.MAX_RETRY_ATTEMPTS) {
+      setTimeout(
+        () => clickMenuItemByPathPrefix(pathPrefix, delays, attempt + 1),
+        delays.RETRY_INTERVAL,
+      );
+    }
+    return false;
+  }
+
+  // Finds the GPT menu trigger in header or bottom bar (text-agnostic, locale-agnostic)
+  function findGptMenuTrigger() {
+    const scopes = [
+      document.querySelector('#page-header'),
+      document.querySelector('#bottomBarContainer'),
+      document,
+    ];
+
+    for (const scope of scopes) {
+      if (!scope) continue;
+
+      const candidates = Array.from(
+        scope.querySelectorAll(':is(div[type="button"],button)[aria-haspopup="menu"]'),
+      ).filter(isVisible);
+
+      if (!candidates.length) continue;
+
+      // Prefer a candidate containing the expected chevron path
+      const withChevron = candidates.filter((el) =>
+        el.querySelector(`svg path[d^="${safeEsc(CHEVRON_PATH_PREFIX)}"]`),
+      );
+      const pool = withChevron.length ? withChevron : candidates;
+      return pool[pool.length - 1];
+    }
+    return null;
+  }
+
+  /**
+   * Clicks the GPT menu trigger (header or bottom bar), then clicks a submenu item by SVG path 'd' prefix.
+   * Uses the same flash/timing pattern as your clickLowestSvgThenSubItemSvg helper.
+   * @param {string} subItemPathPrefix - SVG path 'd' prefix for the submenu item (e.g., 'M2.6687 11.333V8.66699C2.6687')
+   * @param {object} [options] - Optional timing overrides: { delays: { ...DEFAULT_MENU_DELAYS } }
+   */
+  function clickGptHeaderThenSubItemSvg(subItemPathPrefix, options = {}) {
+    const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
+    const trigger = findGptMenuTrigger();
+    if (!trigger) return false;
+
+    // Flash the trigger exactly like your other helper
+    callFlash(trigger);
+
+    const waitMs = openRadixMenuIfNeeded(trigger, delays);
+    setTimeout(() => {
+      clickMenuItemByPathPrefix(subItemPathPrefix, delays);
+    }, waitMs);
+
+    return true;
+  }
+
+  // Optional: helper to inspect current menu icon path prefixes
+  function debugListOpenMenuItemPathPrefixes(prefixLen = 40) {
+    const paths = Array.from(document.querySelectorAll(`${MENU_ITEM_ROLES} svg path[d]`));
+    const uniq = [...new Set(paths.map((p) => (p.getAttribute('d') || '').slice(0, prefixLen)))];
+    console.log('Menu item path prefixes:', uniq);
+    return uniq;
+  }
+
+  // Expose for your gated GPT-only IIFE / hotkeys
+  window.clickGptHeaderThenSubItemSvg = clickGptHeaderThenSubItemSvg;
+  window.findGptMenuTrigger = findGptMenuTrigger;
+  window.debugListOpenMenuItemPathPrefixes = debugListOpenMenuItemPathPrefixes;
+
+  // Also export flashBorder if your base script didn't (prevents missing flash when our IIFE runs first)
+  if (typeof window.flashBorder !== 'function' && typeof flashBorder === 'function') {
+    window.flashBorder = flashBorder;
+  }
 })();
 
 // =============================
@@ -1604,6 +1820,7 @@ const delays = DELAYS;
       'selectThenCopyAllMessages',
       'shortcutKeyThinkingExtended',
       'shortcutKeyThinkingStandard',
+      'shortcutKeyNewGptConversation',
     ],
     (data) => {
       const shortcutDefaults = {
@@ -1649,6 +1866,7 @@ const delays = DELAYS;
         selectThenCopyAllMessages: '[',
         shortcutKeyThinkingExtended: '',
         shortcutKeyThinkingStandard: '',
+        shortcutKeyNewGptConversation: '',
       };
 
       const shortcuts = {};
@@ -1798,7 +2016,6 @@ const delays = DELAYS;
         );
       }
 
-      // Define the mappings for Ctrl+Key shortcuts dynamically
       const keyFunctionMappingCtrl = {
         Enter: () => {
           try {
@@ -1809,7 +2026,8 @@ const delays = DELAYS;
         },
         Backspace: () => {
           try {
-            document.querySelector('button[data-testid="stop-button"]')?.click();
+            const btn = getVisibleStopButton();
+            btn?.click();
           } catch (e) {
             console.error('Backspace handler failed:', e);
           }
@@ -3438,6 +3656,10 @@ const delays = DELAYS;
           const ICON_PATH_PREFIX = 'M14.3352 10.0257C14.3352'; // think longer icon prefix
           await clickExposedIconButton(ICON_PATH_PREFIX);
         },
+        [shortcuts.shortcutKeyNewGptConversation]: () => {
+          const SUB_ITEM_BTN_PATH = 'M2.6687 11.333V8.66699C2.6687'; // submenu New Conversation with GPT icon path prefix
+          window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH);
+        },
         // @note [shortcuts.selectThenCopyAllMessages]: (() => {
         [shortcuts.selectThenCopyAllMessages]: (() => {
           const DEBUG = false;
@@ -4145,25 +4367,44 @@ const delays = DELAYS;
           }
         }
 
-        // Handle Ctrl/Command‑based shortcuts (model‑menu **toggle** only)
-        // Number‑key selection is left to the IIFE so we don’t duplicate logic.
+        // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
         if (isCtrlPressed && !isAltPressed) {
-          // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
+          // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
           if (
             window.useControlForModelSwitcherRadio === true &&
             (keyIdentifier === modelToggleKey || event.code === modelToggleKey)
           ) {
             event.preventDefault();
             window.toggleModelSelector(); // open / close the menu
-            return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
+            return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
           }
 
-          // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.) stays the same ↓
-          // Try both keyIdentifier and event.code for lookup
+          // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.)
           const ctrlShortcut =
             keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
+
           if (ctrlShortcut) {
-            if (isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code)) {
+            const enabled =
+              isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code);
+
+            if (!enabled) return;
+
+            const isBackspace = keyIdentifier === 'Backspace' || event.code === 'Backspace';
+
+            if (isBackspace) {
+              // Only intercept if a visible Stop button exists; otherwise let native deletion happen.
+              const stopBtn = getVisibleStopButton();
+              if (stopBtn) {
+                event.preventDefault();
+                try {
+                  ctrlShortcut(); // will click the stop button
+                } catch (e) {
+                  console.error('Backspace handler failed:', e);
+                }
+              }
+              // If no visible stop button: do nothing -> native Ctrl+Backspace behavior
+            } else {
+              // Non-Backspace Ctrl shortcuts behave as before
               event.preventDefault();
               ctrlShortcut();
             }
@@ -4728,6 +4969,35 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
               function injectBottomBar(topBarLeft, topBarRight, composerContainer) {
                 /* prevent double‑injection ------------------------------------------ */
                 let bottomBar = document.getElementById('bottomBarContainer');
+
+                /* width + scale helpers: always defined so calls never fail ---------- */
+                function setWidth() {
+                  if (!bottomBar) return;
+                  bottomBar.style.width = window.getComputedStyle(composerContainer).width;
+                }
+                function scaleOnce() {
+                  if (!bottomBar) return 1;
+                  const avail = composerContainer.clientWidth;
+                  const content = bottomBar.scrollWidth;
+                  const s = Math.min(1, avail / content);
+                  bottomBar.style.transform = `scale(${s})`;
+                  bottomBar.style.transformOrigin = 'left center';
+                  return s;
+                }
+                function scaleUntilStable() {
+                  let prev;
+                  const loop = () => {
+                    setWidth();
+                    const curr = scaleOnce();
+                    if (curr !== prev) {
+                      prev = curr;
+                      requestAnimationFrame(loop); // keep looping until stable
+                    }
+                  };
+                  loop();
+                }
+                const debouncedStable = debounce(scaleUntilStable, 60);
+
                 if (!bottomBar) {
                   /* create bar ----------------------------------------------------- */
                   bottomBar = document.createElement('div');
@@ -4747,35 +5017,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                     transition: 'opacity 0.5s',
                   });
 
-                  /* ----------------------------------------------------------------
-									   width + scale logic
-									------------------------------------------------------------------ */
-                  function setWidth() {
-                    bottomBar.style.width = window.getComputedStyle(composerContainer).width;
-                  }
-                  function scaleOnce() {
-                    const avail = composerContainer.clientWidth;
-                    const content = bottomBar.scrollWidth;
-                    const s = Math.min(1, avail / content);
-                    bottomBar.style.transform = `scale(${s})`;
-                    bottomBar.style.transformOrigin = 'left center';
-                    return s;
-                  }
-                  function scaleUntilStable() {
-                    let prev;
-                    const loop = () => {
-                      setWidth();
-                      const curr = scaleOnce();
-                      if (curr !== prev) {
-                        prev = curr;
-                        requestAnimationFrame(loop); // keep looping until stable
-                      }
-                    };
-                    loop();
-                  }
-                  const debouncedStable = debounce(scaleUntilStable, 60);
-
-                  /* observe container resize + window resize ---------------------- */
+                  /* observe container resize + window resize (only once) ----------- */
                   new ResizeObserver(debouncedStable).observe(composerContainer);
                   window.addEventListener('resize', debouncedStable);
 
@@ -4785,14 +5027,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                       typeof window.popupBottomBarOpacityValue === 'number'
                         ? window.popupBottomBarOpacityValue
                         : 0.6;
-                    bottomBar.style.opacity = String(value);
+                    if (bottomBar) bottomBar.style.opacity = String(value);
                   };
 
                   let fadeT;
                   setTimeout(idleOpacity, 2500);
                   bottomBar.addEventListener('mouseover', () => {
                     clearTimeout(fadeT);
-                    bottomBar.style.opacity = '1';
+                    if (bottomBar) bottomBar.style.opacity = '1';
                     if (typeof setGrayscale === 'function') setGrayscale(false);
                   });
                   bottomBar.addEventListener('mouseout', () => {
@@ -4814,7 +5056,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
                   /* run first stable scale pass after insertion ------------------- */
                   requestAnimationFrame(scaleUntilStable);
-                  setTimeout(() => scaleUntilStable(), 1500);
+                  setTimeout(scaleUntilStable, 1500);
 
                   /* gsap intro ---------------------------------------------------- */
                   gsap.set(bottomBar, { opacity: 0, y: 10, display: 'flex' });
@@ -4826,9 +5068,11 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                   });
                 }
 
-                /* ----- left / right containers ------------------------------------ */
+                /* ----- left / center / right containers ------------------------------------ */
                 let left = document.getElementById('bottomBarLeft');
+                let center = document.getElementById('bottomBarCenter');
                 let right = document.getElementById('bottomBarRight');
+
                 if (!left) {
                   left = document.createElement('div');
                   left.id = 'bottomBarLeft';
@@ -4837,6 +5081,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                   left.style.gap = '2px';
                   bottomBar.appendChild(left);
                 }
+
                 if (!right) {
                   right = document.createElement('div');
                   right.id = 'bottomBarRight';
@@ -4847,6 +5092,20 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                   bottomBar.appendChild(right);
                 }
 
+                if (!center) {
+                  center = document.createElement('div');
+                  center.id = 'bottomBarCenter';
+                  center.style.display = 'flex';
+                  center.style.alignItems = 'center';
+                  center.style.gap = '6px';
+                  // ensure the center sits between left and right
+                  bottomBar.insertBefore(center, right);
+                } else if (center.nextSibling !== right) {
+                  // keep center situated between left and right if DOM reorders
+                  bottomBar.insertBefore(center, right);
+                }
+
+                // Clean up left so only static buttons + topBarLeft remain
                 [...left.children].forEach((c) => {
                   const keep = ['static-sidebar-btn', 'static-newchat-btn'];
                   if (!keep.includes(c.dataset.id) && c !== topBarLeft) c.remove();
@@ -4854,6 +5113,42 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
                 if (!left.contains(topBarLeft)) left.appendChild(topBarLeft);
                 if (!right.contains(topBarRight)) right.appendChild(topBarRight);
+
+                // Find and move the model switcher into the center area
+                (function placeModelSwitcherInCenter() {
+                  // robust selector set
+                  const findModelBtn = () =>
+                    document.querySelector('#page-header button[aria-label^="Model selector" i]') ||
+                    document.querySelector(
+                      '#page-header button[data-testid="Model-switCher-dropdown-button"]',
+                    ) ||
+                    document.querySelector(
+                      '#bottomBarContainer button[aria-label^="Model selector" i]',
+                    ) ||
+                    document.querySelector(
+                      'button[data-testid="Model-switCher-dropdown-button"]',
+                    ) ||
+                    document.querySelector('button[aria-label^="Model selector" i]');
+
+                  const btn = findModelBtn();
+                  if (!btn) return;
+
+                  // Prefer moving its flex group wrapper to preserve spacing
+                  let group =
+                    btn.closest('#page-header .flex.items-center') ||
+                    btn.closest('#bottomBarContainer .flex.items-center') ||
+                    btn.closest('.flex.items-center') ||
+                    btn;
+
+                  // If it's already in the center, do nothing
+                  if (center.contains(group)) return;
+
+                  // Avoid accidentally moving the entire right container
+                  if (group === right) group = btn;
+
+                  // Drop the model switcher into the center container
+                  center.appendChild(group);
+                })();
 
                 injectStaticButtons(left);
                 adjustBottomBarTextScaling(bottomBar);
@@ -5069,6 +5364,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                         width:1px!important; height:1px!important; overflow:hidden!important;
                     }
                     div#bottomBarLeft { scale: 0.9; }
+                    div#bottomBarCenter { scale: 0.9; }
                     div#bottomBarRight { scale: 0.85; padding-right: 0em;}
                     #thread-bottom-container {margin-bottom:0em;}
 
@@ -5092,6 +5388,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                     /* one‑line truncation for bottom‑bar text */
                     #bottomBarContainer .truncate,
                     #bottomBarLeft      .truncate,
+                    #bottomBarCenter    .truncate,
                     #bottomBarRight     .truncate {
                     
                     white-space: nowrap !important;   /* single line */
@@ -5103,6 +5400,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 
                     /* ReferenceLocation 101 hide the user setting button in sidebar, but ONLY when moveTopBarToBottomCheckbox feature is enabled */
+
+                    /* Nudge the legacy models submenu (left popper) up by 50px when bottomBarContainer is present */
 
 
 
@@ -5169,14 +5468,33 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
           // -------------------- Section 8. Hide Disclaimers (live observation) --------------------
           setTimeout(() => {
             (() => {
+              // "Important" roots in: English, Spanish, Hindi, Japanese, Ukrainian, Russian
+              const importantRoots = [
+                'important', // English
+                'importante', // Spanish
+                'ज़रूरी', // Hindi (zaruri)
+                '重要', // Japanese
+                'важн', // Russian (catch важную, важное, важно, важная, etc.)
+                'важлив', // Ukrainian (catch важливу, важливо, etc.)
+              ];
+
+              function containsImportantRoot(txt) {
+                return importantRoots.some((root) =>
+                  txt.toLowerCase().includes(root.toLowerCase()),
+                );
+              }
+
               const observer = new MutationObserver(() => {
-                document.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
+                const container = document.getElementById('thread-bottom-container');
+                if (!container) return;
+                container.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
                   const txt = el.textContent.trim().replace(/\s+/g, ' ');
-                  if (txt.includes('Check important info')) {
+                  if (containsImportantRoot(txt)) {
                     el.setAttribute('data-id', 'hide-this-warning');
                   }
                 });
               });
+
               observer.observe(document.body, {
                 childList: true,
                 subtree: true,
@@ -5728,10 +6046,19 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
               if (canon) {
                 if (idx < 10) names[idx++] = canon;
               } else {
-                // Fallback: take the primary label (strip Alt+ hints)
+                // Fallback: extract the primary label without any dynamically-added shortcut hints
                 const labelEl = item.querySelector('.flex.items-center.gap-1') || item;
-                let label = (labelEl.textContent || '').trim();
-                label = label.replace(/\s*Alt\+.*$/, '').trim();
+                let label = __cspTextNoHint(labelEl) || (labelEl.textContent || '').trim();
+
+                // As a future-proof safety net, also strip any trailing "modifier + key" hints that
+                // might be rendered as plain text by upstream changes (mod-agnostic).
+                label = label
+                  .replace(
+                    /\s*(?:Alt|Ctrl|Control|⌘|Cmd|Meta|Win|Option|Opt|Shift)\s*\+\s*\S+$/,
+                    '',
+                  )
+                  .trim();
+
                 if (idx < 10) names[idx++] = label;
               }
             }

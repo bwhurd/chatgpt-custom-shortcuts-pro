@@ -2,6 +2,24 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### [10.06.2025]
++ Added: New Custom GPT Conversation shortcut. Start a new conversation that stays with your current custom GPT, instead of switching back to the main ChatGPT model.
+
++ Features that were added earlier but never made it into the changelog:
+  - Scroll Up Two Messages / Scroll Down Two Messages: Scrolls up or down two messages at a time.
+  - Clear + Reset: Clear all shortcut keys (keeps toggles) or reset all options and shortcuts to defaults.
+  - Select + Copy One Behavior: Choose whether to select any message, only ChatGPT’s responses, or only your messages.
+  - Join + Copy All Messages: Simulates selecting the text of all messages and pressing Ctrl+C. Choose whether to include both user and ChatGPT, only ChatGPT (default), or only your messages; optionally remove “ChatGPT said:” and “You said:” labels.
+  - Join + Copy All Responses: Join and copy every ChatGPT response in the conversation (user messages excluded), with support for a custom separator between responses.
+  - Show Message Navigation Arrows: Enable arrow buttons to quickly move to the previous or next message with a click.
+  - Read Aloud: Press to hear the response read aloud; press again to stop.
+  - Ask to Change Response: Type how you want the previous response changed or improved.
+  - More Concise / Add Details: Make the previous response shorter, or make it longer with more details.
+  - Regenerate with Different Model: Create a new response using a different AI model.
+  - Branch In New Chat: Copies the chat so far and starts a new conversation from this point—so you can explore a new path without losing either thread.
+  - Switch model to Thinking Extended / Standard: Switch directly to GPT-5 Extended Thinking for harder problems, or GPT-5 Standard Thinking for faster answers.
+  - Cancel Dictation: Cancel dictation in progress without transcribing.
+
 #### [8.20.2025]
 + Big update with lots of new functionality:
   - Search filter in icon popup to quickly locate settings

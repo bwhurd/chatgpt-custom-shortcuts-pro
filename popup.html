@@ -237,24 +237,20 @@
         </div>
       </div>
       <!-- ### Remember Sidebar Scroll Position ### -->
-      <div class="shortcut-item class-1" style="padding-top: 4px !important; padding-bottom: 4px !important">
-        <div class="class-2">
-          <!-- Left: label -->
-          <div class="shortcut-label tooltip class-25" data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
-            <span class="i18n force-balance-break" data-i18n="label_rememberSidebarScrollPositionCheckbox">
-              Remember Sidebar Scroll Position
-            </span>
-            <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-              data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">info</span>
-          </div>
-          <!-- Right: toggle switch -->
-          <label class="p-form-switch class-24 tooltip" data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">
-            <input checked="" class="material-checkbox" id="rememberSidebarScrollPositionCheckbox"
-              data-sync="rememberSidebarScrollPositionCheckbox" name="rememberSidebarScrollPositionCheckbox"
-              type="checkbox" />
-            <span></span>
-          </label>
+      <div class="shortcut-item" style="padding-top: 4px !important; padding-bottom: 4px !important">
+        <div class="shortcut-label">
+          <span class="i18n" data-i18n="label_rememberSidebarScrollPositionCheckbox">
+            Remember Sidebar Scroll Position
+          </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_rememberSidebarScrollPositionCheckbox__">info</span>
         </div>
+        <label class="p-form-switch">
+          <input class="material-checkbox" id="rememberSidebarScrollPositionCheckbox"
+            data-sync="rememberSidebarScrollPositionCheckbox" name="rememberSidebarScrollPositionCheckbox"
+            type="checkbox" checked="" />
+          <span></span>
+        </label>
       </div>
       <!-- ### Go to Previous Thread ### -->
       <div class="shortcut-item">
@@ -309,6 +305,21 @@
           <span class="key-text platform-alt-label"> Alt + </span>
           <input class="key-input" id="shortcutKeyShare" data-sync="shortcutKeyShare" maxlength="12"
             name="shortcutKeyShare" type="text" value="" />
+        </div>
+      </div>
+      <!-- ### Custom GPT New Conversation ### -->
+      <div class="shortcut-item" style="padding-block: 0 !important">
+        <div class="shortcut-label">
+          <span class="i18n" data-i18n="label_NewGptConversation">
+            New Custom GPT Conversation
+          </span>
+          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+            data-tooltip="__MSG_tt_NewGptConversation__">info</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label"> Alt + </span>
+          <input class="key-input" id="shortcutKeyNewGptConversation" data-sync="shortcutKeyNewGptConversation"
+            maxlength="12" name="shortcutKeyNewGptConversation" type="text" value="" />
         </div>
       </div>
       <!-- ((( Scroll Group ))) -->
@@ -729,7 +740,7 @@
       <!-- ### Regenerate Response ### -->
       <div class="shortcut-item class-13">
         <div class="shortcut-label class-13">
-          <span class="i18n force-balance-break" data-i18n="label_regenerate">
+          <span class="i18n" data-i18n="label_regenerate">
             Regenerate Response (Try Again)
           </span>
           <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
@@ -744,7 +755,7 @@
       <!-- ### Regenerate With Different Model ### -->
       <div class="shortcut-item">
         <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_RegenerateWithDifferentModel"> Regenerate with
+          <span class="i18n" data-i18n="label_RegenerateWithDifferentModel"> Regenerate with
             Different Model </span>
           <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
             data-tooltip="__MSG_tt_RegenerateWithDifferentModel__">info</span>
@@ -759,7 +770,7 @@
       <!-- ### More Concise ### -->
       <div class="shortcut-item">
         <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_MoreConcise">More Concise</span>
+          <span class="i18n" data-i18n="label_MoreConcise">More Concise</span>
           <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
             data-tooltip="__MSG_tt_MoreConcise__">info</span>
         </div>
@@ -785,16 +796,16 @@
       <!-- ### Ask to Change Response ### -->
       <div class="shortcut-item">
         <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_RegenerateAskToChangeResponse">Ask to Change
+          <span class="i18n" data-i18n="label_RegenerateAskToChangeResponse">Ask to Change
             Response</span>
           <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
             data-tooltip="__MSG_tt_RegenerateAskToChangeResponse__">info</span>
         </div>
         <div class="shortcut-keys">
           <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" id="shortcutRegenerateAskToChangeResponse"
-            data-sync="shortcutRegenerateAskToChangeResponse" maxlength="12"
-            name="shortcutRegenerateAskToChangeResponse" type="text" value="" />
+          <input class="key-input" id="shortcutKeyRegenerateAskToChangeResponse"
+            data-sync="shortcutKeyRegenerateAskToChangeResponse" maxlength="12"
+            name="shortcutKeyRegenerateAskToChangeResponse" type="text" value="" />
         </div>
       </div>
       <!-- ((( Tools Group ))) -->

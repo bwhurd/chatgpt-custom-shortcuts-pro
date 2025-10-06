@@ -1087,8 +1087,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const tRect = triggerEl.getBoundingClientRect();
     const bubbleLeft = tRect.left + tRect.width / 2 - bubbleWidth / 2;
     const bubbleRight = bubbleLeft + bubbleWidth;
-    let bubbleTop = tRect.top - bubbleHeight - 8;
-    let bubbleBottom = bubbleTop + bubbleHeight;
+    const bubbleTop = tRect.top - bubbleHeight - 8;
+    const bubbleBottom = bubbleTop + bubbleHeight;
 
     // Initial horizontal nudge to fit container
     let offsetX = 0;
@@ -1709,6 +1709,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectThenCopyAllMessages: 'BracketLeft',
     shortcutKeyThinkingExtended: NBSP,
     shortcutKeyThinkingStandard: NBSP,
+    shortcutKeyNewGptConversation: NBSP,
 
     // Other options
 
@@ -2034,6 +2035,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'selectThenCopyAllMessages',
     'shortcutKeyThinkingExtended',
     'shortcutKeyThinkingStandard',
+    'shortcutKeyNewGptConversation',
   ];
   const shortcutKeyValues = {};
 
@@ -3355,16 +3357,42 @@ function modelPickerInitSafe() {
   }
 
   chips.forEach((chip, idx) => {
-    const startCapture = () => {
-      if (activeChip && activeChip !== chip) cancelActiveCapture();
-      if (activeChip === chip) return;
-      chip.classList.add('listening');
-      chip.setAttribute('aria-pressed', 'true');
-      chip.textContent = 'Set';
+    // Minimal helper: Focus and start set mode on given chip index, if valid
+    function focusAndStartNextChip(nextIdx) {
+      if (typeof nextIdx !== 'number' || nextIdx < 0 || nextIdx >= chips.length) return;
+      const nextChip = chips[nextIdx];
+      // Prevent recursion: only call startCapture if not already listening
+      if (!nextChip.classList.contains('listening')) {
+        nextChip.focus();
+        setTimeout(() => {
+          // Ensure focus is visible before starting capture
+          if (document.activeElement === nextChip) startCaptureOnIdx(nextIdx);
+        }, 0);
+      }
+    }
+
+    // The main capture routine (moved out for re-use)
+    function startCaptureOnIdx(setIdx) {
+      const currentChip = chips[setIdx];
+      if (activeChip && activeChip !== currentChip) cancelActiveCapture();
+      if (activeChip === currentChip) return;
+
+      currentChip.classList.add('listening');
+      currentChip.setAttribute('aria-pressed', 'true');
+      currentChip.textContent = 'Set';
       const onKey = (e) => {
-        // Allow Tab to move focus to the next/prev element and exit "set" mode
+        // Tab navigation: move to next/prev chip, and enter set mode on that chip
         if (e.key === 'Tab') {
           cancelActiveCapture();
+          // Handle Shift+Tab for backwards navigation
+          const dir = e.shiftKey ? -1 : 1;
+          let nextIdx = setIdx + dir;
+          // Loop around if at ends
+          if (nextIdx < 0) nextIdx = chips.length - 1;
+          if (nextIdx >= chips.length) nextIdx = 0;
+          e.preventDefault();
+          e.stopPropagation();
+          focusAndStartNextChip(nextIdx);
           return;
         }
         e.preventDefault();
@@ -3376,13 +3404,15 @@ function modelPickerInitSafe() {
         }
         if (code === 'Backspace' || code === 'Delete') {
           const codes = window.ShortcutUtils.getModelPickerCodesCache().slice();
-          codes[idx] = '';
+          codes[setIdx] = '';
           window.saveModelPickerKeyCodes(codes, () => {
             cancelActiveCapture();
             if (typeof window.showToast === 'function') {
-              window.showToast(`Cleared key for slot ${idx + 1}.`);
+              window.showToast(`Cleared key for slot ${setIdx + 1}.`);
             }
             render();
+            // Auto-hop to next chip, unless we're at the last chip
+            focusAndStartNextChip(setIdx + 1);
           });
           return;
         }
@@ -3391,7 +3421,7 @@ function modelPickerInitSafe() {
 
         const modelMod =
           typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
-        const selfOwner = { type: 'model', idx, modifier: modelMod };
+        const selfOwner = { type: 'model', idx: setIdx, modifier: modelMod };
         const conflicts = window.ShortcutUtils.buildConflictsForCode
           ? window.ShortcutUtils.buildConflictsForCode(code, selfOwner)
           : [];
@@ -3399,10 +3429,12 @@ function modelPickerInitSafe() {
         const proceedAssign = () => {
           window.ShortcutUtils.clearOwners?.(conflicts, () => {
             const codes = window.ShortcutUtils.getModelPickerCodesCache().slice();
-            codes[idx] = code;
+            codes[setIdx] = code;
             window.saveModelPickerKeyCodes(codes, () => {
               cancelActiveCapture();
               render();
+              // After setting, auto-hop to next chip if not on last
+              focusAndStartNextChip(setIdx + 1);
             });
           });
         };
@@ -3415,7 +3447,7 @@ function modelPickerInitSafe() {
               ? window.ShortcutUtils.displayFromCode(code)
               : code;
             const MODEL_NAMES = window.MODEL_NAMES || [];
-            const toLabel = MODEL_NAMES[idx] || `Model slot ${idx + 1}`;
+            const toLabel = MODEL_NAMES[setIdx] || `Model slot ${setIdx + 1}`;
             if (conflicts.length === 1) {
               const owners = [conflicts[0].label];
               window.showDuplicateModal(
@@ -3473,24 +3505,26 @@ function modelPickerInitSafe() {
           proceedAssign();
         }
       };
-      chip.addEventListener('keydown', onKey, true);
-      activeChip = chip;
+      currentChip.addEventListener('keydown', onKey, true);
+      activeChip = currentChip;
       activeKeyHandler = onKey;
-      chip.focus();
-    };
-    // Mouse/touch click still explicitly starts capture
-    chip.addEventListener('click', startCapture);
+      currentChip.focus();
+    }
+
+    // For event handlers below, always call startCaptureOnIdx(idx) instead of inlining logic
+    // Mouse/touch click starts capture
+    chip.addEventListener('click', () => startCaptureOnIdx(idx));
 
     // Keyboard: Enter/Space starts capture when focused
     chip.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') startCapture();
+      if (e.key === 'Enter' || e.key === ' ') startCaptureOnIdx(idx);
     });
 
     // Keyboard: If focus arrives via Tab, auto-enter capture.
     chip.addEventListener('focus', () => {
-      // Avoid recursion when we programmatically focus() inside startCapture.
+      // Avoid recursion when we programmatically focus() inside startCaptureOnIdx
       if (chip.classList.contains('listening')) return;
-      if (tabFocusHelper.shouldAutoSetOnFocus()) startCapture();
+      if (tabFocusHelper.shouldAutoSetOnFocus()) startCaptureOnIdx(idx);
     });
   });
 
