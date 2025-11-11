@@ -4334,29 +4334,10 @@ if (document.readyState === 'loading') {
     }
   };
 
-  // Optional-permissions helpers (MV3): check then request on user gesture
-  const containsPerms = (q) => new Promise((r) => chrome.permissions.contains(q, r));
-  const requestPerms = (q) => new Promise((r) => chrome.permissions.request(q, r));
-
-  // Keep login minimal (identity only)
-  const ensureIdentity = async () =>
-    (await containsPerms({ permissions: ['identity'] })) ||
-    (await requestPerms({ permissions: ['identity'] }));
-
-  // Save/Restore: ask once for both identity + googleapis origin (single bubble)
-  const ensureDriveAuth = async () => {
-    const haveAll = await containsPerms({
-      permissions: ['identity'],
-      origins: ['https://www.googleapis.com/*'],
-    });
-    return (
-      haveAll ||
-      (await requestPerms({
-        permissions: ['identity'],
-        origins: ['https://www.googleapis.com/*'],
-      }))
-    );
-  };
+  // Optional-permissions are handled in the background now.
+  // No permission prompts will originate from the popup.
+  const ensureIdentity = async () => true;
+  const ensureDriveAuth = async () => true;
 
   const renderUI = (state, email = '') => {
     const { signinRow, syncRow } = els();
@@ -4558,6 +4539,17 @@ if (document.readyState === 'loading') {
       });
     }
   })();
+
+  // If popup remains open through login, refresh UI on success
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'cloudAuth.loggedIn') {
+      try {
+        (async () => {
+          await hydrateAuth();
+        })();
+      } catch (_) {}
+    }
+  });
 })();
 
 /* Sync Settings Button js IIFE */

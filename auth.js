@@ -1,4 +1,4 @@
-/* auth.js — foreground helper; interactive login delegated to background */
+/* auth.js — background-driven login (no permission prompts here) */
 (() => {
   const PROFILE_KEY = 'csp_auth_profile_v1';
   const TOK = 'csp_auth_token_v2',
@@ -9,10 +9,6 @@
   const S = chrome.storage.session;
   const setLocal = (k, v) => chrome.storage.local.set({ [k]: v });
   const now = () => Math.floor(Date.now() / 1000);
-  const hasId = () =>
-    new Promise((r) => chrome.permissions.contains({ permissions: ['identity'] }, r));
-  const reqId = () =>
-    new Promise((r) => chrome.permissions.request({ permissions: ['identity'] }, r));
 
   async function saveTokens(t) {
     const { access_token, refresh_token, expires_in } = t || {};
@@ -36,7 +32,6 @@
     if (!r.ok) throw new Error('TOKEN_ENDPOINT_ERROR');
     return r.json();
   }
-
   async function ensure(interactive = false) {
     const { token, refresh, exp } = await tokens();
     if (token && exp > now()) return token;
@@ -49,17 +44,15 @@
         });
         await saveTokens(t);
         if (t.access_token) return t.access_token;
-      } catch {}
+      } catch (_) {}
     }
     if (!interactive) return '';
-    if (!(await hasId()) && !(await reqId())) throw new Error('PERMISSION_DENIED');
     const res = await new Promise((r) =>
       chrome.runtime.sendMessage({ type: 'cloudAuth.login' }, r),
     );
     if (!res || !res.ok) throw new Error(res?.error || 'LOGIN_FAILED');
     return (await tokens()).token || '';
   }
-
   async function fetchProfile() {
     try {
       const has = await new Promise((r) =>
@@ -73,12 +66,11 @@
         await setLocal(PROFILE_KEY, p);
         return p;
       }
-    } catch {}
+    } catch (_) {}
     const p = { email: '', name: '', sub: '' };
     await setLocal(PROFILE_KEY, p);
     return p;
   }
-
   async function getSavedAuth() {
     const { token, refresh } = await tokens();
     if (!(token || refresh)) {
@@ -88,7 +80,6 @@
     const o = await chrome.storage.local.get(PROFILE_KEY);
     return { profile: o[PROFILE_KEY] || { email: '', name: '', sub: '' } };
   }
-
   async function googleLogin() {
     await S.remove([TOK, REF, EXP]);
     const t = await ensure(true);
@@ -96,15 +87,13 @@
     const profile = await fetchProfile();
     return { profile };
   }
-
   async function googleLogout() {
     await S.remove([TOK, REF, EXP]);
     await setLocal(PROFILE_KEY, null);
     try {
       await window.CloudStorage?._clearKnownFileId?.();
-    } catch {}
+    } catch (_) {}
   }
-
   window.CloudAuth = {
     getSavedAuth,
     googleLogin,
