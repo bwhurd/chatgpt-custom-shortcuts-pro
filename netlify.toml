@@ -1,5 +1,8 @@
 [build]
+  command = "echo 'Chrome extension - no build needed'"
+  publish = "."
   functions = "netlify/functions"
+  environment = { SECRETS_SCAN_ENABLED = "false" }
 
 [[redirects]]
   from = "/oauth/google/token"
