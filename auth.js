@@ -6,7 +6,7 @@
     EXP = 'csp_auth_exp_v2';
   const SCOPES = ['https://www.googleapis.com/auth/drive.appdata'];
   const CLIENT_ID = '327917786122-ha30ge1mejf2rikmk52u2ciu8h9hc2r0.apps.googleusercontent.com';
-  const TOKEN_URL = 'https://YOUR_SITE.netlify.app/oauth/google/token';
+  const TOKEN_URL = 'https://profound-yeot-41eb0a.netlify.app/oauth/google/token';
   const S = chrome.storage.session;
   const setLocal = (k, v) => chrome.storage.local.set({ [k]: v });
   const now = () => Math.floor(Date.now() / 1000);
