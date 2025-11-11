@@ -14,6 +14,19 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body || '{}');
     const { grant_type, code, refresh_token, redirect_uri, client_id } = body;
 
+    const safeHost = (() => {
+      try {
+        return new URL(redirect_uri || '').host;
+      } catch {
+        return 'bad_url';
+      }
+    })();
+    console.log('[google-token] inbound', {
+      grant_type,
+      client_id_ok: client_id === GOOGLE_CLIENT_ID,
+      redirect_host: safeHost,
+    });
+
     if (client_id !== GOOGLE_CLIENT_ID)
       return {
         statusCode: 400,
@@ -44,22 +57,37 @@ exports.handler = async (event) => {
     params.set('client_secret', GOOGLE_CLIENT_SECRET);
     if (grant_type === 'authorization_code') {
       params.set('grant_type', 'authorization_code');
-      params.set('code', code);
+      params.set('code', code ? 'REDACTED' : '');
       params.set('redirect_uri', redirect_uri);
     } else {
       params.set('grant_type', 'refresh_token');
-      params.set('refresh_token', refresh_token);
+      params.set('refresh_token', refresh_token ? 'REDACTED' : '');
     }
 
     const r = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+      // send real values, not redacted
+      body: params
+        .toString()
+        .replace(
+          'REDACTED',
+          grant_type === 'authorization_code' ? code || '' : refresh_token || '',
+        ),
     });
-    const j = await r.json();
+    const text = await r.text();
+    let j;
+    try {
+      j = JSON.parse(text);
+    } catch {
+      j = { raw: text };
+    }
+    console.log('[google-token] google response', { status: r.status, keys: Object.keys(j || {}) });
+
     const status = r.ok ? 200 : 400;
     return { statusCode: status, headers: C(), body: JSON.stringify(j) };
   } catch (e) {
+    console.error('[google-token] server_error', e?.message || e);
     return {
       statusCode: 500,
       headers: C(),
