@@ -1,7 +1,0 @@
-[build]
-  functions = "netlify/functions"
-
-[[redirects]]
-  from = "/oauth/google/token"
-  to = "/.netlify/functions/google-token"
-  status = 200
