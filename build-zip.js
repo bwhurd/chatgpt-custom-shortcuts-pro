@@ -63,18 +63,22 @@ archive.pipe(output);
 
 // 4. Add only the allowed folders/files
 const includeItems = [
-  'lib',
+  'manifest.json',
   '_locales',
+  'lib',
+  'vendor',
+  'background.js',
+  'content.js',
   'popup.js',
   'popup.html',
   'popup.css',
-  'manifest.json',
+  'options-storage.js',
+  'storage.js',
+  'auth.js',
   'icon128.png',
   'icon48.png',
   'icon32.png',
   'icon16.png',
-  'content.js',
-  'background.js',
 ];
 
 includeItems.forEach((item) => {

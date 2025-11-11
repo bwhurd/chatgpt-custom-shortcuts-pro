@@ -1,0 +1,1264 @@
+<body>
+    <!--   Example BLANK placeholder
+                <div class="shortcut-item hidden">
+                    Blank placeholder for grid alignment
+                </div>
+                -->
+    <div class="shortcut-container">
+        <h1 class="i18n" data-i18n="popup_title">ChatGPT Custom Shortcuts Pro</h1>
+
+
+        <div class="ios-searchbar">
+            <div class="ios-searchbar-inner">
+                <input type="search" class="ios-search-input" placeholder="Search"
+                    aria-label="Filter shortcuts by keyword">
+                <button type="button" class="ios-search-cancel" aria-label="Cancel search">Cancel</button>
+            </div>
+        </div>
+        <div class="shortcut-grid">
+            <!-- ((( Models + UI Tweaks Group ))) -->
+
+            <div class="blank-row section-header" role="heading" aria-level="2" style="position: relative; display: flex; align-items: center; justify-content: space-between;
+            height: 26px; line-height: 26px;">
+
+                <span style="margin-left: 0; position: relative; top: 6px;">Switch Models</span>
+
+
+                <div class="p-segmented-controls p-segmented-radius" style="height: 18px; width: auto; display: inline-flex; align-items: center;
+  transform: translate(8px, 0px); white-space: nowrap;">
+
+                    <a href="#" class="active" data-target="useAltForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
+    padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
+                        <span class="i18n" data-i18n="label_use_alt">Use Alt</span>
+                    </a>
+
+                    <a href="#" data-target="useControlForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
+    padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
+                        <span class="i18n" data-i18n="label_use_control">Use Control</span>
+                    </a>
+                </div>
+
+
+            </div>
+
+            <input type="radio" checked="" id="useAltForModelSwitcherRadio" data-sync="useAltForModelSwitcherRadio"
+                name="modelSwitcher" style="display: none;" data-listener-attached="true">
+            <input type="radio" id="useControlForModelSwitcherRadio" data-sync="useControlForModelSwitcherRadio"
+                name="modelSwitcher" style="display: none;" data-listener-attached="true">
+
+            <!-- Model Picker 5×2 grid is injected by popup.js (see modelPickerGridInit IIFE) -->
+            <section id="model-picker-grid" aria-label="Model Shortcuts"
+                style="margin: 0px; grid-column: 1 / -1; width: 100%;">
+                <div class="mp-head" style="display: flex; align-items: center; gap: 8px; margin: 0px 0px 8px;">
+                </div>
+                <div class="shortcut-grid"
+                    style="display: grid; grid-template-columns: repeat(5, minmax(0px, 1fr)); gap: 4px;">
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-0">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="0">GPT-5 Auto</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput0" data-idx="0" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit1" aria-label="Set shortcut for GPT-5 Auto" data-tooltip="Set shortcut for
+GPT-5 Auto" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-1">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="1">GPT-5 Instant</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput1" data-idx="1" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit2" aria-label="Set shortcut for GPT-5 Instant" data-tooltip="Set shortcut for
+GPT-5 Instant" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-2">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="2">GPT-5 mini</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput2" data-idx="2" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit3" aria-label="Set shortcut for GPT-5 mini" data-tooltip="Set shortcut for
+GPT-5 mini" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-3">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="3">GPT-5 Thinking</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput3" data-idx="3" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit4" aria-label="Set shortcut for GPT-5 Thinking" data-tooltip="Set shortcut for
+GPT-5 Thinking" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-4">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="4">GPT-5 Pro</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput4" data-idx="4" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit5" aria-label="Set shortcut for GPT-5 Pro" data-tooltip="Set shortcut for
+GPT-5 Pro" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-5">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="5">→</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput5" data-idx="5" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit6" aria-label="Set shortcut for →" data-tooltip="Set shortcut for
+Legacy Models →" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-6">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="6">4o</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput6" data-idx="6" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit7" aria-label="Set shortcut for 4o" data-tooltip="Set shortcut for
+4o" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-7">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="7">4.1</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput7" data-idx="7" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit8" aria-label="Set shortcut for 4.1" data-tooltip="Set shortcut for
+4.1" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-8">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="8">o3</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput8" data-idx="8" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit9" aria-label="Set shortcut for o3" data-tooltip="Set shortcut for
+o3" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                    <div class="shortcut-item"
+                        style="flex-direction: column; align-items: center; justify-content: center; text-align: center;"
+                        data-tile-id="tile-9">
+                        <div class="shortcut-label" style="margin: 0px 0px 14px;"><span class="mp-label"
+                                style="font-weight:400;" data-idx="9">o4-mini</span></div>
+                        <div class="shortcut-keys" style="justify-content: center; gap: 6px;"><span
+                                class="key-text mp-modifier-text">Alt + </span><input
+                                class="key-input mp-input custom-tooltip" id="mpKeyInput9" data-idx="9" maxlength="12"
+                                type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                                data-key-code="Digit0" aria-label="Set shortcut for o4-mini" data-tooltip="Set shortcut for
+o4-mini" style="width: 3rem; text-align: center;" data-wired="1"></div>
+                    </div>
+                </div>
+            </section>
+            <div id="mp-grid-anchor" style="display: none;"></div>
+
+            <!-- ((( Models + UI Tweaks Group ))) -->
+
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Model Picker + UI Tweaks
+            </div>
+
+            <!-- ### Show Model Picker ### -->
+            <div class="shortcut-item class-13" data-tile-id="tile-0">
+                <div class="shortcut-label class-25">
+                    <span class="i18n" data-i18n="label_showModelPicker" data-original-text="Show Model Picker">Show
+                        Model Picker</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="Show the ChatGPT Plus model picker"
+                        data-tooltip-src="__MSG_tt_showModelPicker_plain__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyToggleModelSelector"
+                        data-sync="shortcutKeyToggleModelSelector" maxlength="12" name="shortcutKeyToggleModelSelector"
+                        type="text" value="/" data-key-code="Slash">
+                </div>
+            </div>
+            <!-- ### Blank Grid Item ### -->
+            <div class="shortcut-item hidden" data-tile-id="tile-1">
+                Blank placeholder for grid alignment
+            </div>
+            <!-- ### Switch to Thinking Standard ### -->
+            <div class="shortcut-item" data-tile-id="tile-2">
+                <div class="shortcut-label">
+                    <span class="i18n force-balance-break" data-i18n="label_switchToThinkingStandard"
+                        data-original-text="Switch model to Thinking Standard">Switch model to<br>Thinking
+                        Standard</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Switch directly to GPT-5
+Standard Thinking, which answers
+faster for most tasks." data-tooltip-src="__MSG_tt_switchToThinkingStandard__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyThinkingStandard" data-sync="shortcutKeyThinkingStandard"
+                        maxlength="12" name="shortcutKeyThinkingStandard" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Switch to Thinking Extended ### -->
+            <div class="shortcut-item class-13" data-tile-id="tile-3">
+                <div class="shortcut-label class-25">
+                    <span class="i18n force-balance-break" data-i18n="label_switchToThinkingExtended"
+                        data-original-text="Switch model to Thinking Extended">Switch model to<br>Thinking
+                        Extended</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Switch directly to GPT-5 Extended
+Thinking, which takes more time
+to handle harder problems." data-tooltip-src="__MSG_tt_switchToThinkingExtended__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyThinkingExtended" data-sync="shortcutKeyThinkingExtended"
+                        maxlength="12" name="shortcutKeyThinkingExtended" type="text" value="" data-key-code="">
+                </div>
+            </div>
+
+            <!-- ((( UI Tweaks ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                UI Tweaks
+            </div>
+            <!-- ### Send Top Bar to Bottom ### -->
+            <div class="shortcut-item class-1" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-4">
+                <div class="class-2">
+                    <!-- Left label with info icon -->
+                    <div class="shortcut-label tooltip class-25" data-tooltip="__MSG_tt_send_top_bar__"
+                        style="position: relative; top: 2px !important">
+                        <span class="i18n force-balance-break" data-i18n="label_send_top_bar"
+                            data-original-text="Send Top Bar to Bottom">Send Top Bar<br>to Bottom</span>
+                        <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable to place the model
+selector below the message box.
+Great for small screens." data-tooltip-src="__MSG_tt_send_top_bar__">info</span>
+                    </div>
+                    <!-- Centre slider -->
+                    <div class="tooltip opacity-tooltip visible-opacity-slider class-26"
+                        data-tooltip="__MSG_tt_opacity_slider__" id="opacity-tooltip-container"
+                        style="margin-top: 2px !important; display: none;">
+                        <div class="opacity-slider-clipper class-5">
+                            <div id="opacity-slider-wrapper" class="class-27">
+                                <div class="class-7">
+                                    <svg id="opacityPreviewIcon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
+                                        class="class-8"
+                                        style="width: 14px !important; height: 14px !important; opacity: 0.6;">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"></circle>
+                                    </svg>
+                                </div>
+                                <input id="popupBottomBarOpacityValue" data-sync="popupBottomBarOpacityValue"
+                                    name="popupBottomBarOpacityValue" type="range" min="0" max="1" step="0.01"
+                                    value="0.6" class="class-9">
+                                <div class="class-10">
+                                    <span class="class-11 i18n" data-i18n="label_opacity">Opacity:</span>
+                                    <span id="opacityValue" class="class-11 opacity-editable" tabindex="0">0.60</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right switch -->
+                    <label class="p-form-switch class-12 tooltip" data-tooltip="__MSG_tt_send_top_bar__">
+                        <input class="material-checkbox" id="moveTopBarToBottomCheckbox"
+                            data-sync="moveTopBarToBottomCheckbox" name="moveTopBarToBottomCheckbox" type="checkbox"
+                            data-listener-attached="true">
+                        <span></span>
+                    </label>
+                </div>
+            </div>
+            <!-- ### Fade Slim Sidebar ### -->
+            <div class="shortcut-item class-1" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-5">
+                <div class="class-2">
+                    <!-- Left: label -->
+                    <div class="shortcut-label tooltip class-25" data-tooltip="__MSG_tt_slim_opacity_slider__"
+                        style="position: relative; top: 2px !important">
+                        <span class="i18n force-balance-break" data-i18n="label_fade_slim_sidebar"
+                            data-original-text="Fade Slim Sidebar">Fade Slim<br>Sidebar</span>
+                        <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Fade the slim sidebar. Hover
+mouse to reveal." data-tooltip-src="__MSG_tt_slim_opacity_slider__">info</span>
+                    </div>
+                    <!-- Centre: opacity slider -->
+                    <div class="tooltip opacity-tooltip visible-opacity-slider class-26"
+                        data-tooltip="__MSG_tt_slim_opacity_slider__" id="slimSidebar-opacity-tooltip-container"
+                        style="margin-top: 2px !important; display: none;">
+                        <div class="opacity-slider-clipper class-5">
+                            <div id="slimSidebar-opacity-slider-wrapper" class="class-27">
+                                <div class="class-7">
+                                    <svg id="slimSidebarOpacityPreviewIcon" viewBox="0 0 24 24"
+                                        xmlns="http://www.w3.org/2000/svg" class="class-8"
+                                        style="width: 14px !important; height: 14px !important; opacity: 0;">
+                                        <circle cx="12" cy="12" r="10" fill="currentColor"></circle>
+                                    </svg>
+                                </div>
+                                <input id="popupSlimSidebarOpacityValue" data-sync="popupSlimSidebarOpacityValue"
+                                    name="popupSlimSidebarOpacityValue" type="range" min="0" max="1" step="0.01"
+                                    value="0.0" class="class-9">
+                                <div class="class-10">
+                                    <span class="class-11 i18n" data-i18n="label_opacity">Opacity:</span>
+                                    <span id="slimSidebarOpacityValue" class="class-11 opacity-editable"
+                                        tabindex="0">0.00</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: toggle switch -->
+                    <label class="p-form-switch class-12 tooltip" data-tooltip="__MSG_tt_slim_opacity_slider__">
+                        <input class="material-checkbox" id="fadeSlimSidebarEnabled" data-sync="fadeSlimSidebarEnabled"
+                            name="fadeSlimSidebarEnabled" type="checkbox">
+                        <span></span>
+                    </label>
+                </div>
+            </div>
+
+
+            <!-- ((( Quick Clicks ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Quick Clicks
+            </div>
+            <!-- ### New Conversation ### -->
+            <div class="shortcut-item" data-tile-id="tile-6">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_new_chat" data-original-text="New Conversation">New
+                        Conversation</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyNewConversation" data-sync="shortcutKeyNewConversation"
+                        maxlength="12" name="shortcutKeyNewConversation" type="text" value="n" data-key-code="KeyN">
+                </div>
+            </div>
+            <!-- ### Focus Chat Input ### -->
+            <div class="shortcut-item" data-tile-id="tile-7">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_focus_input" data-original-text="Focus Chat Input">Focus Chat
+                        Input</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyActivateInput" data-sync="shortcutKeyActivateInput"
+                        maxlength="12" name="shortcutKeyActivateInput" type="text" value="w" data-key-code="KeyW">
+                </div>
+            </div>
+            <!-- ### Toggle Sidebar ### -->
+            <div class="shortcut-item" data-tile-id="tile-8">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_toggle_sidebar" data-original-text="Toggle Sidebar">Toggle
+                        Sidebar</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyToggleSidebar" data-sync="shortcutKeyToggleSidebar"
+                        maxlength="12" name="shortcutKeyToggleSidebar" type="text" value="s" data-key-code="KeyS">
+                </div>
+            </div>
+            <!-- ### Remember Sidebar Scroll Position ### -->
+            <div class="shortcut-item" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-9">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_rememberSidebarScrollPositionCheckbox"
+                        data-original-text="Remember Sidebar Scroll Position">Remember Sidebar Scroll Position</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable to remember the
+sidebar scroll position." data-tooltip-src="__MSG_tt_rememberSidebarScrollPositionCheckbox__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input class="material-checkbox" id="rememberSidebarScrollPositionCheckbox"
+                        data-sync="rememberSidebarScrollPositionCheckbox" name="rememberSidebarScrollPositionCheckbox"
+                        type="checkbox" checked="" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+            <!-- ### Go to Previous Thread ### -->
+            <div class="shortcut-item" data-tile-id="tile-10">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_prev_thread" data-original-text="Go to Previous Thread">Go to
+                        Previous Thread</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="Alt+{shortcut}: clicks the lowest visible '&lt;' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
+                        data-tooltip-src="__MSG_tt_prev_thread__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyPreviousThread" data-sync="shortcutKeyPreviousThread"
+                        maxlength="12" name="shortcutKeyPreviousThread" type="text" value="j" data-key-code="KeyJ">
+                </div>
+            </div>
+            <!-- ### Go to Next Thread ### -->
+            <div class="shortcut-item" data-tile-id="tile-11">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_next_thread" data-original-text="Go to Next Thread">Go to Next
+                        Thread</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="Alt+{shortcut}: clicks the lowest visible '&gt;' next thread button.  ——————————————————— Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
+                        data-tooltip-src="__MSG_tt_next_thread__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyNextThread" data-sync="shortcutKeyNextThread" maxlength="12"
+                        name="shortcutKeyNextThread" type="text" value=";" data-key-code="Semicolon">
+                </div>
+            </div>
+            <!-- ### Search Chats ### -->
+            <div class="shortcut-item" data-tile-id="tile-12">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_search_chats" data-original-text="Search Chats">Search
+                        Chats</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeySearchConversationHistory"
+                        data-sync="shortcutKeySearchConversationHistory" maxlength="12"
+                        name="shortcutKeySearchConversationHistory" type="text" value="k" data-key-code="KeyK">
+                </div>
+            </div>
+            <!-- ### Share ### -->
+            <div class="shortcut-item" data-tile-id="tile-13">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_share" data-original-text="Share">Share</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyShare" data-sync="shortcutKeyShare" maxlength="12"
+                        name="shortcutKeyShare" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Custom GPT New Conversation ### -->
+            <div class="shortcut-item" style="padding-block: 0 !important" data-tile-id="tile-14">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_NewGptConversation"
+                        data-original-text="New Custom GPT Conversation">New Custom GPT Conversation</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Start a new conversation that
+stays with your current custom
+GPT, instead of switching back
+to the main ChatGPT model." data-tooltip-src="__MSG_tt_NewGptConversation__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyNewGptConversation"
+                        data-sync="shortcutKeyNewGptConversation" maxlength="12" name="shortcutKeyNewGptConversation"
+                        type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ((( Scroll Group ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Scroll
+            </div>
+            <!-- ### Scroll to Top ### -->
+            <div class="shortcut-item" data-tile-id="tile-15">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_top" data-original-text="Scroll to Top">Scroll to
+                        Top</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyScrollToTop" data-sync="shortcutKeyScrollToTop"
+                        maxlength="12" name="shortcutKeyScrollToTop" type="text" value="t" data-key-code="KeyT">
+                </div>
+            </div>
+            <!-- ### Scroll to Bottom ### -->
+            <div class="shortcut-item" data-tile-id="tile-16">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_bottom" data-original-text="Scroll to Bottom">Scroll to
+                        Bottom</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyClickNativeScrollToBottom"
+                        data-sync="shortcutKeyClickNativeScrollToBottom" maxlength="12"
+                        name="shortcutKeyClickNativeScrollToBottom" type="text" value="z" data-key-code="KeyZ">
+                </div>
+            </div>
+            <!-- ### Scroll Up One Message ### -->
+            <div class="shortcut-item" data-tile-id="tile-17">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_up_one" data-original-text="Scroll Up One Message">Scroll
+                        Up One Message</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyScrollUpOneMessage"
+                        data-sync="shortcutKeyScrollUpOneMessage" maxlength="12" name="shortcutKeyScrollUpOneMessage"
+                        type="text" value="a" data-key-code="KeyA">
+                </div>
+            </div>
+            <!-- ### Scroll Down One Message ### -->
+            <div class="shortcut-item" data-tile-id="tile-18">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_down_one"
+                        data-original-text="Scroll Down One Message">Scroll Down One Message</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyScrollDownOneMessage"
+                        data-sync="shortcutKeyScrollDownOneMessage" maxlength="12"
+                        name="shortcutKeyScrollDownOneMessage" type="text" value="f" data-key-code="KeyF">
+                </div>
+            </div>
+            <!-- ### Scroll Up Two Messages ### -->
+            <div class="shortcut-item" data-tile-id="tile-19">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_up_two"
+                        data-original-text="Scroll Up Two Messages">Scroll Up Two Messages</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyScrollUpTwoMessages"
+                        data-sync="shortcutKeyScrollUpTwoMessages" maxlength="12" name="shortcutKeyScrollUpTwoMessages"
+                        type="text" value="↑" data-key-code="ArrowUp">
+                </div>
+            </div>
+            <!-- ### Scroll Down Two Messages ### -->
+            <div class="shortcut-item" data-tile-id="tile-20">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_scroll_down_two"
+                        data-original-text="Scroll Down Two Messages">Scroll Down Two Messages</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyScrollDownTwoMessages"
+                        data-sync="shortcutKeyScrollDownTwoMessages" maxlength="12"
+                        name="shortcutKeyScrollDownTwoMessages" type="text" value="↓" data-key-code="ArrowDown">
+                </div>
+            </div>
+            <!-- ### PgUp/PgDown Takeover ### -->
+            <div class="shortcut-item" style="padding-block: 0 !important" data-tile-id="tile-21">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_pgup_pgdown"
+                        data-original-text="PageUp + PageDown Takeover">PageUp + PageDown Takeover</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable to make PageUp and PageDown
+always scroll the conversation." data-tooltip-src="__MSG_tt_pgup_pgdown__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input checked="" id="pageUpDownTakeover" data-sync="pageUpDownTakeover" name="pageUpDownTakeover"
+                        type="checkbox" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+            <!-- ### Legacy Arrow Buttons ### -->
+            <div class="shortcut-item" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-22">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_hide_arrows"
+                        data-original-text="Show Message Navigation Arrows">Show Message Navigation Arrows</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable arrow buttons to quickly
+move to the previous or next
+message with a click." data-tooltip-src="__MSG_tt_hide_arrows__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input id="showLegacyArrowButtonsCheckbox" data-sync="showLegacyArrowButtonsCheckbox"
+                        name="showLegacyArrowButtonsCheckbox" type="checkbox" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+
+            <!-- ((( Copy Group ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Clipboard
+            </div>
+            <!-- ### Copy ### -->
+            <div class="shortcut-item" data-tile-id="tile-23">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_copy" data-original-text="Click Copy Button">Click Copy
+                        Button</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Copy any one message as plain
+text. Press again to cycle
+through visible copy buttons." data-tooltip-src="__MSG_tt_copy_plain__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyCopyLowest" data-sync="shortcutKeyCopyLowest" maxlength="12"
+                        name="shortcutKeyCopyLowest" type="text" value="c" data-key-code="KeyC">
+                </div>
+            </div>
+            <!-- ### Strip Markdown on Copy ### -->
+            <div class="shortcut-item" style="padding-block: 0 !important" data-tile-id="tile-24">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_strip_md" data-original-text="Strip Markdown on Copy">Strip
+                        Markdown on Copy</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="Enable to remove Markdown *s and ###s from text copied with the `Click Copy Button` shortcut. Text copied from a code box will not be altered."
+                        data-tooltip-src="__MSG_tt_strip_md__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input checked="" id="removeMarkdownOnCopyCheckbox" data-sync="removeMarkdownOnCopyCheckbox"
+                        name="removeMarkdownOnCopyCheckbox" type="checkbox" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+            <!-- ### Select + Copy ### -->
+            <div class="shortcut-item" data-tile-id="tile-25">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_select_copy"
+                        data-original-text="Select + Copy One Message">Select + Copy One Message</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Simulates mouse-selecting the
+text of one message and pressing
+Ctrl+C. Press repeatedly to cycle
+through visible messages." data-tooltip-src="__MSG_tt_select_copy__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="selectThenCopy" data-sync="selectThenCopy" maxlength="12"
+                        name="selectThenCopy" type="text" value="x" data-key-code="KeyX">
+                </div>
+            </div>
+            <!-- ### Select + Copy One Behavior ### -->
+            <div class="shortcut-item" style="padding-bottom: 8px !important" data-tile-id="tile-26">
+                <div class="shortcut-label info-icon-tooltip class-17" data-tooltip="Choose whether to select any
+message, only ChatGPT's responses,
+or only your messages." data-tooltip-src="__MSG_tt_select_copy_behavior__">
+                    <span class="i18n force-balance-break" data-i18n="label_select_copy_behavior"
+                        data-original-text="Select + Copy One Behavior">Select + Copy<br>One Behavior</span>
+                </div>
+                <div class="icon-input-container class-18">
+                    <!-- Radio Buttons Section -->
+                    <div class="class-19">
+                        <label class="info-icon-tooltip class-20" data-tooltip="Cycle through all visible messages."
+                            data-tooltip-src="__MSG_tt_select_all__">
+                            <span class="material-symbols-outlined class-21"> forum </span>
+                            <input checked="" class="material-radio" id="selectMessagesSentByUserOrChatGptCheckbox"
+                                data-sync="selectMessagesSentByUserOrChatGptCheckbox" name="messageSelection"
+                                type="radio" data-listener-attached="true">
+                        </label>
+                        <label class="info-icon-tooltip class-20" data-tooltip="Only select messages sent
+by ChatGPT." data-tooltip-src="__MSG_tt_select_assistant__">
+                            <span class="material-symbols-outlined class-21"> 3p </span>
+                            <input class="material-radio" id="onlySelectAssistantCheckbox"
+                                data-sync="onlySelectAssistantCheckbox" name="messageSelection" type="radio"
+                                data-listener-attached="true">
+                        </label>
+                        <label class="info-icon-tooltip class-20" data-tooltip="Only select messages sent by you."
+                            data-tooltip-src="__MSG_tt_select_user__">
+                            <span class="material-symbols-outlined class-21">
+                                mode_comment
+                            </span>
+                            <input class="material-radio" id="onlySelectUserCheckbox" data-sync="onlySelectUserCheckbox"
+                                name="messageSelection" type="radio" data-listener-attached="true">
+                        </label>
+                    </div>
+                    <!-- Checkbox Section -->
+                    <div class="class-20">
+                        <span class="info-icon-tooltip class-22" data-tooltip="Check to disable auto-copy (i.e.
+only highlight the text)." data-tooltip-src="__MSG_tt_disable_autocopy__">
+                            <span class="material-symbols-outlined class-21">
+                                remove_selection
+                            </span>
+                        </span>
+                        <input class="material-checkbox" id="disableCopyAfterSelectCheckbox"
+                            data-sync="disableCopyAfterSelectCheckbox" name="disableCopyAfterSelectCheckbox"
+                            type="checkbox" data-listener-attached="true">
+                    </div>
+                </div>
+            </div>
+            <!-- ### Select + Copy All Messages ### -->
+            <div class="shortcut-item" data-tile-id="tile-27">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_selectThenCopyAllMessages"
+                        data-original-text="Join + Copy All Messages">Join + Copy All Messages</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Simulates mouse-selecting the
+text of all messages and pressing
+Ctrl+C. Text keeps formatting when
+pasting to ms word or an email." data-tooltip-src="__MSG_tt_selectThenCopyAllMessages__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="selectThenCopyAllMessages" data-sync="selectThenCopyAllMessages"
+                        maxlength="12" name="selectThenCopyAllMessages" type="text" value="["
+                        data-key-code="BracketLeft">
+                </div>
+            </div>
+            <!-- ### Select + Copy All Messages Behavior ### -->
+            <div class="shortcut-item" style="padding-bottom: 8px !important" data-tile-id="tile-28">
+                <div class="shortcut-label info-icon-tooltip class-17" data-tooltip="Choose whether Join + Copy All
+includes all messages, only
+ChatGPT responses (default),
+or only your messages." data-tooltip-src="__MSG_tt_selectThenCopyAllMessagesBehavior__">
+                    <span class="i18n force-balance-break" data-i18n="label_selectThenCopyAllMessagesBehavior"
+                        data-original-text="Join + Copy All Behavior">Join + Copy<br>All Behavior</span>
+                </div>
+                <div class="icon-input-container class-18">
+                    <!-- Radio Buttons Section -->
+                    <div class="class-19">
+                        <label class="info-icon-tooltip class-20" data-tooltip="Include messages sent by
+both you and ChatGPT." data-tooltip-src="__MSG_tt_selectThenCopyAllMessagesBothUserAndChatGpt__">
+                            <span class="material-symbols-outlined class-21"> forum </span>
+                            <input checked="" class="material-radio" id="selectThenCopyAllMessagesBothUserAndChatGpt"
+                                data-sync="selectThenCopyAllMessagesBothUserAndChatGpt" name="messageSelectionAll"
+                                type="radio" data-listener-attached="true">
+                        </label>
+                        <label class="info-icon-tooltip class-20" data-tooltip="Only include messages sent by
+ChatGPT (i.e. omit user messages)." data-tooltip-src="__MSG_tt_selectThenCopyAllMessagesOnlyAssistant__">
+                            <span class="material-symbols-outlined class-21"> 3p </span>
+                            <input class="material-radio" id="selectThenCopyAllMessagesOnlyAssistant"
+                                data-sync="selectThenCopyAllMessagesOnlyAssistant" name="messageSelectionAll"
+                                type="radio" data-listener-attached="true">
+                        </label>
+                        <label class="info-icon-tooltip class-20" data-tooltip="Only include messages sent by you
+(i.e. omit ChatGPT responses)." data-tooltip-src="__MSG_tt_selectThenCopyAllMessagesOnlyUser__">
+                            <span class="material-symbols-outlined class-21">
+                                mode_comment
+                            </span>
+                            <input class="material-radio" id="selectThenCopyAllMessagesOnlyUser"
+                                data-sync="selectThenCopyAllMessagesOnlyUser" name="messageSelectionAll" type="radio"
+                                data-listener-attached="true">
+                        </label>
+                    </div>
+                    <!-- Checkbox Section -->
+                    <div class="class-20">
+                        <span class="info-icon-tooltip class-22" data-tooltip="Check to remove 'ChatGPT said:' and
+'You said:' before each message." data-tooltip-src="__MSG_tt_doNotIncludeLabelsCheckbox__">
+                            <span class="material-symbols-outlined class-21">
+                                label_off
+                            </span>
+                        </span>
+                        <input class="material-checkbox" id="doNotIncludeLabelsCheckbox"
+                            data-sync="doNotIncludeLabelsCheckbox" name="doNotIncludeLabelsCheckbox" type="checkbox"
+                            data-listener-attached="true">
+                    </div>
+                </div>
+            </div>
+            <!-- ### Join + Copy All Code Boxes ### -->
+            <div class="shortcut-item" data-tile-id="tile-29">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_join_code" data-original-text="Join + Copy All Code Boxes">Join
+                        + Copy All Code Boxes</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Join and copy all code boxes in
+the conversation. Code boxes in
+user messages are excluded." data-tooltip-src="__MSG_tt_join_code__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyCopyAllCodeBlocks" data-sync="shortcutKeyCopyAllCodeBlocks"
+                        maxlength="12" name="shortcutKeyCopyAllCodeBlocks" type="text" value="]"
+                        data-key-code="BracketRight">
+                </div>
+            </div>
+            <!-- ### Code Box Separator ### -->
+            <div class="shortcut-item" data-tile-id="tile-30">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_code_separator" data-original-text="Code Box Separator">Code Box
+                        Separator</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="When using the `Join + Copy All Code Boxes` shortcut, you can add a custom separator between each code box. To insert line breaks, place a space before each \n."
+                        data-tooltip-src="__MSG_tt_code_separator__">info</span>
+                </div>
+                <div class="icon-input-container">
+                    <input class="material-input-long" id="copyCodeUserSeparator" data-sync="copyCodeUserSeparator"
+                        name="copyCodeUserSeparator" type="text" value=" \n  \n --- --- --- \n \n"
+                        data-listener-attached="true">
+                </div>
+            </div>
+            <!-- ((( Compose + Send Group ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Compose + Send
+            </div>
+            <!-- ### Send with COntorl + Enter ### -->
+            <div class="shortcut-item" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-31">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_send" data-original-text="Send with Control + Enter">Send with
+                        Control + Enter</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable to make Control +
+Enter send the message." data-tooltip-src="__MSG_tt_send__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input checked="" id="enableSendWithControlEnterCheckbox"
+                        data-sync="enableSendWithControlEnterCheckbox" name="enableSendWithControlEnterCheckbox"
+                        type="checkbox" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+            <!-- ### Stop Message Generation with Control + Backspace ### -->
+            <div class="shortcut-item" style="padding-top: 4px !important; padding-bottom: 4px !important"
+                data-tile-id="tile-32">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_stop" data-original-text="Stop with Control + Backspace">Stop
+                        with Control + Backspace</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Enable to make Control + Backspace
+stop response generation." data-tooltip-src="__MSG_tt_stop__">info</span>
+                </div>
+                <label class="p-form-switch">
+                    <input checked="" id="enableStopWithControlBackspaceCheckbox"
+                        data-sync="enableStopWithControlBackspaceCheckbox" name="enableStopWithControlBackspaceCheckbox"
+                        type="checkbox" data-listener-attached="true">
+                    <span></span>
+                </label>
+            </div>
+            <!-- ### Edit Message ### -->
+            <div class="shortcut-item" data-tile-id="tile-33">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_edit_msg" data-original-text="Edit Message">Edit Message</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Click edit on the lowest visible
+user message. Press again to
+go to the next one up." data-tooltip-src="__MSG_tt_edit_msg__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyEdit" data-sync="shortcutKeyEdit" maxlength="12"
+                        name="shortcutKeyEdit" type="text" value="e" data-key-code="KeyE">
+                </div>
+            </div>
+            <!-- ### Send Edited Message ### -->
+            <div class="shortcut-item" data-tile-id="tile-34">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_send_edit" data-original-text="Send Edited Message">Send Edited
+                        Message</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Click 'Send' after editing
+a message." data-tooltip-src="__MSG_tt_send_edit__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeySendEdit" data-sync="shortcutKeySendEdit" maxlength="12"
+                        name="shortcutKeySendEdit" type="text" value="d" data-key-code="KeyD">
+                </div>
+            </div>
+            <!-- ### Branch In New Chat ### -->
+            <div class="shortcut-item" data-tile-id="tile-35">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_BranchInNewChat" data-original-text="Branch In New Chat">Branch
+                        In New Chat</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Copies the chat so far and starts
+a new conversation from this
+point—so you can explore a new path
+without losing either thread." data-tooltip-src="__MSG_tt_BranchInNewChat__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyMoreDotsBranchInNewChat"
+                        data-sync="shortcutKeyMoreDotsBranchInNewChat" maxlength="12"
+                        name="shortcutKeyMoreDotsBranchInNewChat" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Toggle Temporary Chat ### -->
+            <div class="shortcut-item" data-tile-id="tile-36">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_temp_chat" data-original-text="Temporary Chat">Temporary
+                        Chat</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Toggle Temporary Chat (available
+before you send the first message.)" data-tooltip-src="__MSG_tt_temp_chat__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyTemporaryChat" data-sync="shortcutKeyTemporaryChat"
+                        maxlength="12" name="shortcutKeyTemporaryChat" type="text" value="p" data-key-code="KeyP">
+                </div>
+            </div>
+            <!-- ### Dictate ### -->
+            <div class="shortcut-item" data-tile-id="tile-37">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_toggle_dictate" data-original-text="Dictate">Dictate</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Press once to start dictation.
+Press again to submit dictation." data-tooltip-src="__MSG_tt_toggle_dictate__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyToggleDictate" data-sync="shortcutKeyToggleDictate"
+                        maxlength="12" name="shortcutKeyToggleDictate" type="text" value="y" data-key-code="KeyY">
+                </div>
+            </div>
+            <!-- ### Cancel Dictation ### -->
+            <div class="shortcut-item" data-tile-id="tile-38">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_cancel_dictation" data-original-text="Cancel Dictation">Cancel
+                        Dictation</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Cancel dictation in progress
+without transcribing." data-tooltip-src="__MSG_tt_cancel_dictation__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyCancelDictation" data-sync="shortcutKeyCancelDictation"
+                        maxlength="12" name="shortcutKeyCancelDictation" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Read Aloud ### -->
+            <div class="shortcut-item" data-tile-id="tile-39">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_ReadAloud" data-original-text="Read Aloud">Read Aloud</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Press to hear the response read
+aloud. Press again to stop." data-tooltip-src="__MSG_tt_ReadAloud__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyMoreDotsReadAloud" data-sync="shortcutKeyMoreDotsReadAloud"
+                        maxlength="12" name="shortcutKeyMoreDotsReadAloud" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ((( Regenerate Group ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Regenerate Response
+            </div>
+            <!-- ### Regenerate Response ### -->
+            <div class="shortcut-item class-13" data-tile-id="tile-40">
+                <div class="shortcut-label class-13">
+                    <span class="i18n" data-i18n="label_regenerate"
+                        data-original-text="Regenerate Response (Try Again)">Regenerate Response (Try Again)</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Click 'Try Again' on the
+lowest visible response." data-tooltip-src="__MSG_tt_regenerate__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyRegenerateTryAgain"
+                        data-sync="shortcutKeyRegenerateTryAgain" maxlength="12" name="shortcutKeyRegenerateTryAgain"
+                        type="text" value="r" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Regenerate With Different Model ### -->
+            <div class="shortcut-item" data-tile-id="tile-41">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_RegenerateWithDifferentModel"
+                        data-original-text="Regenerate with Different Model">Regenerate with Different Model</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Creates a new response using
+a different AI model." data-tooltip-src="__MSG_tt_RegenerateWithDifferentModel__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyRegenerateWithDifferentModel"
+                        data-sync="shortcutKeyRegenerateWithDifferentModel" maxlength="12"
+                        name="shortcutKeyRegenerateWithDifferentModel" type="text" value="" data-key-code="KeyR">
+                </div>
+            </div>
+            <!-- ### More Concise ### -->
+            <div class="shortcut-item" data-tile-id="tile-42">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_MoreConcise" data-original-text="More Concise">More
+                        Concise</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+                        data-tooltip="Makes the previous response shorter."
+                        data-tooltip-src="__MSG_tt_MoreConcise__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyRegenerateMoreConcise"
+                        data-sync="shortcutKeyRegenerateMoreConcise" maxlength="12"
+                        name="shortcutKeyRegenerateMoreConcise" type="text" value="q" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Regenerate, Add Details ### -->
+            <div class="shortcut-item" data-tile-id="tile-43">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_AddDetails" data-original-text="Add Details">Add Details</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Makes the previous response
+longer with more details." data-tooltip-src="__MSG_tt_AddDetails__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyRegenerateAddDetails"
+                        data-sync="shortcutKeyRegenerateAddDetails" maxlength="12"
+                        name="shortcutKeyRegenerateAddDetails" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Ask to Change Response ### -->
+            <div class="shortcut-item" data-tile-id="tile-44">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_RegenerateAskToChangeResponse"
+                        data-original-text="Ask to Change Response">Ask to Change Response</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Type how you want the previous
+response changed or improved." data-tooltip-src="__MSG_tt_RegenerateAskToChangeResponse__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyRegenerateAskToChangeResponse"
+                        data-sync="shortcutKeyRegenerateAskToChangeResponse" maxlength="12"
+                        name="shortcutKeyRegenerateAskToChangeResponse" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ((( Tools Group ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Message Tools
+            </div>
+            <!-- ### Search the Web ### -->
+            <div class="shortcut-item" data-tile-id="tile-45">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_search_web" data-original-text="Web Search Tool">Web Search
+                        Tool</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeySearchWeb" data-sync="shortcutKeySearchWeb" maxlength="12"
+                        name="shortcutKeySearchWeb" type="text" value="q" data-key-code="KeyQ">
+                </div>
+            </div>
+            <!-- ### Study and Learn ### -->
+            <div class="shortcut-item" data-tile-id="tile-46">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_study" data-original-text="Study and Learn Tool">Study and Learn
+                        Tool</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Toggle tool to explain
+step-by-step, link concepts,
+and reinforce understanding." data-tooltip-src="__MSG_tt_study__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyStudy" data-sync="shortcutKeyStudy" maxlength="12"
+                        name="shortcutKeyStudy" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Create Image Tool ### -->
+            <div class="shortcut-item" data-tile-id="tile-47">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_toggle_create_image"
+                        data-original-text="Create Image Tool">Create Image Tool</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyCreateImage" data-sync="shortcutKeyCreateImage"
+                        maxlength="12" name="shortcutKeyCreateImage" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Canvas Tool ### -->
+            <div class="shortcut-item" data-tile-id="tile-48">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_toggle_canvas" data-original-text="Canvas Tool">Canvas
+                        Tool</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyToggleCanvas" data-sync="shortcutKeyToggleCanvas"
+                        maxlength="12" name="shortcutKeyToggleCanvas" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Add Photos + Files Tool ### -->
+            <div class="shortcut-item" data-tile-id="tile-49">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_add_photos_files"
+                        data-original-text="Add Photos + Files Tool">Add Photos + Files Tool</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyAddPhotosFiles" data-sync="shortcutKeyAddPhotosFiles"
+                        maxlength="12" name="shortcutKeyAddPhotosFiles" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ### Think Longer Tool ### -->
+            <div class="shortcut-item" data-tile-id="tile-50">
+                <div class="shortcut-label">
+                    <span class="i18n" data-i18n="label_think_longer" data-original-text="Think Longer Tool">Think
+                        Longer Tool</span>
+                    <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0" data-tooltip="Only available in the free
+version. Engage deeper reasoning
+for a more thorough answer." data-tooltip-src="__MSG_tt_think_longer__">info</span>
+                </div>
+                <div class="shortcut-keys">
+                    <span class="key-text platform-alt-label">Alt +</span>
+                    <input class="key-input" id="shortcutKeyThinkLonger" data-sync="shortcutKeyThinkLonger"
+                        maxlength="12" name="shortcutKeyThinkLonger" type="text" value="" data-key-code="">
+                </div>
+            </div>
+            <!-- ((( Utilities ))) -->
+            <div class="blank-row section-header" role="heading" aria-level="2">
+                Utilities
+            </div>
+            <!-- ### Clear + Reset ### -->
+            <div class="shortcut-item shortcuts-presets-tile" data-tile-id="tile-51">
+                <div class="shortcut-label" style="flex: 1 1 120px">
+                    <span class="i18n force-balance-break" data-i18n="label_clear_reset"
+                        data-original-text="Clear + Reset">Clear<br>+ Reset</span>
+                </div>
+                <div class="shortcut-keys">
+                    <button id="btnClearAllShortcuts" class="dup-like-btn i18n" data-i18n="btn_clear_all_shortcuts"
+                        data-i18n-title="tt_clear_all_shortcuts" type="button">Clear all shortcuts</button>
+                    <button id="btnResetDefaults" class="dup-like-btn i18n" data-i18n="btn_reset_defaults"
+                        type="button">Reset defaults</button>
+                </div>
+            </div>
+            <!-- ### Backup + Restore ### -->
+            <div class="shortcut-item backup-restore-tile" data-tile-id="tile-52">
+                <div class="shortcut-label" style="flex: 1 1 120px">
+                    <span class="i18n force-balance-break" data-i18n="label_backup_restore"
+                        style="white-space: normal !important; text-wrap: balance"
+                        data-original-text="Backup + Restore">Backup +<br>Restore</span>
+                </div>
+                <div class="shortcut-keys" style="
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              flex-wrap: nowrap;
+              white-space: normal !important;
+              overflow-x: visible !important;
+            ">
+                    <button id="btnExportSettings" class="dup-like-btn" type="button" style="
+                white-space: normal !important;
+                line-height: 1.2;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                        <span class="i18n force-balance-break" data-i18n="btn_export"
+                            style="white-space: normal !important; text-wrap: balance">Export Settings</span>
+                    </button>
+                    <button id="btnImportSettings" class="dup-like-btn" type="button" style="
+                white-space: normal !important;
+                line-height: 1.2;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                        <span class="i18n force-balance-break" data-i18n="btn_import"
+                            style="white-space: normal !important; text-wrap: balance">Import Settings</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ### Google Cloud Sync ### -->
+            <!-- ### Cloud Sync (two-state) ### -->
+            <div class="shortcut-item cloud-sync-tile cloud-sync-span-2" data-tile-id="tile-53">
+                <!-- label -->
+                <div class="shortcut-label" style="flex:1 1 120px; display:flex; align-items:center; gap:8px;">
+                    <span class="msr" aria-hidden="true">cloud_sync</span>
+                    <span class="i18n" data-i18n="label_cloud_sync" data-original-text="Cloud Sync">Cloud Sync</span>
+                </div>
+
+                <!-- action area -->
+                <div class="shortcut-keys cloud-sync-buttons">
+                    <!-- STATE A: not logged in -->
+                    <div id="signinRow" class="cloud-sync-signin" style="display: none;">
+                        <button id="btnGoogleLogin" class="gsi-material-button cloud-gsi-btn" type="button"
+                            aria-label="Continue with Google">
+                            <div class="gsi-material-button-state"></div>
+                            <div class="gsi-material-button-content-wrapper">
+                                <div class="gsi-material-button-icon">
+                                    <!-- google G -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style="display:block">
+                                        <path fill="#EA4335"
+                                            d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z">
+                                        </path>
+                                        <path fill="#4285F4"
+                                            d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z">
+                                        </path>
+                                        <path fill="#FBBC05"
+                                            d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z">
+                                        </path>
+                                        <path fill="#34A853"
+                                            d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z">
+                                        </path>
+                                    </svg>
+                                </div>
+                                <span class="gsi-material-button-contents">Continue with Google</span>
+                                <span style="display:none;">Continue with Google</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- STATE B: logged in -->
+                    <div id="syncRow" class="cloud-sync-actions" style="display: flex;">
+                        <button id="btnSyncToCloud" class="icon-btn dup-like-btn"
+                            title="Upload current settings to cloud" aria-label="Upload current settings to cloud">
+                            <span class="msr" aria-hidden="true" data-default-icon="cloud_upload">cloud_upload</span>
+                            <span class="i18n" data-i18n="btn_sync">Save to Cloud</span>
+                        </button>
+                        <button id="btnRestoreFromCloud" class="icon-btn dup-like-btn"
+                            title="Restore settings from cloud" aria-label="Restore settings from cloud">
+                            <span class="msr" aria-hidden="true"
+                                data-default-icon="cloud_download">cloud_download</span>
+                            <span class="i18n" data-i18n="btn_restore">Restore</span>
+                        </button>
+                    </div>
+
+                    <!-- avatar OR question-mark menu (same button, we just toggle inside) -->
+                    <button id="cloudSyncUserBtn" class="cloud-sync-user-btn" type="button" aria-label="Account / help">
+                        <!-- will show when logged IN -->
+                        <img id="cloudSyncUserAvatar" src="" alt="User Avatar" width="32" height="32" loading="eager"
+                            decoding="async" crossorigin="anonymous" referrerpolicy="no-referrer" style="display:none;">
+                        <!-- will show when NOT logged in -->
+                        <span id="cloudSyncHelpIcon" class="cloud-sync-help-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"
+                                xmlns="http://www.w3.org/2000/svg" class="icon-lg">
+                                <path
+                                    d="M16.585 10C16.585 6.3632 13.6368 3.41504 10 3.41504C6.3632 3.41504 3.41504 6.3632 3.41504 10C3.41504 13.6368 6.3632 16.585 10 16.585C13.6368 16.585 16.585 13.6368 16.585 10ZM17.915 10C17.915 14.3713 14.3713 17.915 10 17.915C5.62867 17.915 2.08496 14.3713 2.08496 10C2.08496 5.62867 5.62867 2.08496 10 2.08496C14.3713 2.08496 17.915 5.62867 17.915 10Z">
+                                </path>
+                                <path
+                                    d="M9.81735 11.5962C9.3582 11.5962 9.08812 11.2829 9.08812 10.84V10.7643C9.08812 10.1269 9.41762 9.7056 10.055 9.33288C10.7519 8.91695 10.9625 8.64686 10.9625 8.1499C10.9625 7.62053 10.552 7.25321 9.9578 7.25321C9.42843 7.25321 9.07191 7.51249 8.89906 7.99325C8.76401 8.33896 8.52093 8.49021 8.19142 8.49021C7.76469 8.49021 7.5 8.22552 7.5 7.81499C7.5 7.58271 7.55402 7.37745 7.66205 7.17218C8.00776 6.45915 8.87205 6 10.0334 6C11.5675 6 12.5993 6.84267 12.5993 8.10128C12.5993 8.91695 12.2049 9.47333 11.4433 9.92167C10.7248 10.3376 10.5628 10.5699 10.4926 11.0236C10.4115 11.3856 10.2009 11.5962 9.81735 11.5962ZM9.82816 14C9.342 14 8.94767 13.6273 8.94767 13.1519C8.94767 12.6766 9.342 12.3038 9.82816 12.3038C10.3197 12.3038 10.714 12.6766 10.714 13.1519C10.714 13.6273 10.3197 14 9.82816 14Z">
+                                </path>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- dropdown (two views) -->
+                    <div id="cloudSyncMenu" class="cloud-sync-menu" aria-label="Cloud sync menu">
+                        <!-- when NOT logged in -->
+                        <div id="cloudSyncMenuLoggedOut" style="display: none;">
+                            <button id="btnGoogleLoginMenu" class="cloud-sync-menu-item" type="button">
+                                <span class="msr" aria-hidden="true">login</span><span>Login with Google</span>
+                            </button>
+                        </div>
+                        <!-- when logged in -->
+                        <div id="cloudSyncMenuLoggedIn" style="display: block;">
+                            <button id="btnLogout" class="cloud-sync-menu-item cloud-sync-menu-logout" type="button">
+                                <span class="msr" aria-hidden="true">logout</span><span>Log out</span>
+                            </button>
+                            <a class="cloud-sync-menu-item" href="https://your-site.example/changelog" target="_blank"
+                                rel="noreferrer">
+                                <span class="msr" aria-hidden="true">article</span><span>Change log</span>
+                            </a>
+                            <a class="cloud-sync-menu-item"
+                                href="https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf/reviews"
+                                target="_blank" rel="noreferrer">
+                                <span class="msr" aria-hidden="true">star_rate</span><span>Leave a review</span>
+                            </a>
+                            <a class="cloud-sync-menu-item" href="https://forms.gle/cq9wuSJXk12unRNA7" target="_blank"
+                                rel="noreferrer">
+                                <span class="msr" aria-hidden="true">bug_report</span><span>Report a bug</span>
+                            </a>
+                            <a class="cloud-sync-menu-item" href="https://forms.gle/cq9wuSJXk12unRNA7" target="_blank"
+                                rel="noreferrer">
+                                <span class="msr" aria-hidden="true">lightbulb</span><span>Suggest a feature</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- status always shown -->
+                <div id="syncStatus" class="status-line" aria-live="polite" data-tone="default">Linked to
+                    bwhurd@gmail.com</div>
+            </div>
+
+
+
+
+        </div>
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 28px 0 8px 0; font-size: 15px;">
+            <a href="https://forms.gle/cq9wuSJXk12unRNA7" target="_blank"
+                style="margin-left: 10%; text-decoration: none; color: #1565c0; font-weight: 500;">
+                Report a Bug or Request a Feature
+            </a>
+            <a href="https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf/reviews"
+                target="_blank" style="margin-right: 10%; text-decoration: none; color: #2e7d32; font-weight: 500;">
+                Leave a review. Pretty please?
+            </a>
+        </div>
+
+    </div>
+
+    <!-- Code to paste over in popup.html (make auth/storage plain so window.* exists) :contentReference[oaicite:5]{index=5} -->
+    <!-- vendor MUST go first so OptionsSync exists -->
+    <script src="vendor/webext-options-sync.js"></script>
+    <script src="options-storage.js"></script>
+    <script src="storage.js"></script>
+    <script src="auth.js"></script>
+    <script src="popup.js"></script>
+
+
+
+
+</body>

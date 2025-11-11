@@ -1,0 +1,21 @@
+{
+  "name": "css-cleanup",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "node clean-css.mjs --css \"C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\scrub-this-css.css\" --html \"C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\based-on-this.html\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "cssnano": "^7.1.2",
+    "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
+    "purgecss": "^7.0.2"
+  }
+}

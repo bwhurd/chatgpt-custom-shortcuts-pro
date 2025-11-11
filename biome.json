@@ -2,7 +2,9 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "root": true,
   "files": {
-    "includes": ["**/*.{js,ts,jsx,tsx,json,css,html}"],
+    "includes": [
+      "**/*.{js,ts,jsx,tsx,json,css,html}"
+    ],
     "ignoreUnknown": false
   },
   "formatter": {
@@ -41,7 +43,10 @@
       "performance": {
         "useTopLevelRegex": "off"
       },
-      "security": "warn",
+      "security": {
+        "recommended": true,
+        "noSecrets": "off"
+      },
       "nursery": {
         "recommended": true
       }
@@ -56,7 +61,13 @@
     }
   },
   "javascript": {
-    "globals": ["chrome", "gsap", "ScrollToPlugin", "Observer", "Flip"],
+    "globals": [
+      "chrome",
+      "gsap",
+      "ScrollToPlugin",
+      "Observer",
+      "Flip"
+    ],
     "formatter": {
       "semicolons": "always",
       "trailingCommas": "all",
@@ -69,7 +80,9 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.css"],
+      "includes": [
+        "**/*.css"
+      ],
       "linter": {
         "rules": {
           "complexity": {

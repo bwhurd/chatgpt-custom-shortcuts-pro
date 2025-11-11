@@ -1,0 +1,19 @@
+CSS cleanup report\nSource CSS: C:\Users\bwhur\Dropbox\CGCSP-Github\scrub-this-css.css\nHTML scanned: C:\Users\bwhur\Dropbox\CGCSP-Github\based-on-this.html\nSafelist entries: 0\nOriginal size: 42.42 KB (43439 bytes)\nAfter purge:   32.13 KB (32906 bytes)\nFinal size:    20.34 KB (20833 bytes)\nRemoved selectors count (purge phase): 95\n\nNotes:\n- mergeRules enabled to combine duplicate selectors.\n- No global rule sorting; only local movement from merges may occur.\n- Prettier formats the final CSS for readability.\n\nRemoved selectors (first 500):\n
+.tooltiptext\n.tooltiptext\n#toast-container .toast\n.disabled-section\n.disabled-section .key-input\n.flash-highlight\n.full-width\n.material-icons-outlined\n.model-picker\n.model-picker-shortcut\n.mp-icons\n.mp-icons .material-symbols-outlined\n.mp-option\n.mp-option input[type="radio"]\n.mp-option-text\n.mp-option .info-icon\n.mp-options\n.new-emoji-indicator\n.new-feature-tag\n.shortcut-column\n.tooltip .tooltiptext\n.tooltip-area\n.tooltip:hover .tooltiptext\n.mp-option-text.i18n\n.opacity-slider::-webkit-slider-runnable-track\n
+.opacity-slider::-moz-range-track\n.opacity-slider::-webkit-slider-thumb\n
+.opacity-slider::-moz-range-thumb\n.class-3\n.class-4\n.class-6\n.class-14\n.class-15\n.class-16\n.class-23\n.class-24\n.class-28\n.class-29\n.class-30\n.class-31\n#dup-overlay\n#dup-box\n#dup-box h2\n#dup-msg\n#dup-box label\n#dup-dont\n.dup-btns\n#dup-no\n
+#dup-yes\n#dup-no:hover\n
+#dup-no:focus-visible\n#dup-no:active\n#dup-yes\n#dup-yes:hover\n
+#dup-yes:focus-visible\n#dup-yes:active\nspan.dup-key\n.mp-key\n.mp-key:hover\n
+.mp-key:focus\n
+.mp-key.listening\n.mp-key:focus\n.mp-key--shift-left.custom-tooltip:hover::after\n
+.mp-key--shift-left.custom-tooltip:focus::after\n
+.mp-key--shift-left.custom-tooltip:focus-visible::after\n
+.mp-key--shift-left.custom-tooltip:focus-within::after\n.mp-key--shift-left.custom-tooltip:hover::before\n
+.mp-key--shift-left.custom-tooltip:focus::before\n
+.mp-key--shift-left.custom-tooltip:focus-visible::before\n
+.mp-key--shift-left.custom-tooltip:focus-within::before\n.ios-searchbar.focused .ios-search-cancel\n.shortcut-container.filtering-active .blank-row\n.shortcut-container.filtering-active .shortcut-grid\n.shortcut-container.filtering-active .shortcut-grid > .shortcut-item\n.nowrap-label\n#dup-line1\n
+#dup-box *\n.p-segmented-internal-radius a\n
+.p-segmented-internal-radius a:not(:first-child)\n.p-segmented-controls-alt > *:not(:first-child)\n.p-segmented-controls-alt > *.active\n.p-segmented-outline\n.p-segmented-outline a:not(:first-child)\n.p-segmented-controls-outline-alt a:not(:first-child)\n.p-segmented-controls-outline-alt\n.p-segmented-controls-outline-alt a\n
+.p-segmented-controls-outline-alt button\n.p-segmented-controls-outline-alt a.active\n
+.p-segmented-controls-outline-alt button.active\n.icon-only\n.spinner\n.cloud-sync-menu.open\n.cloud-sync-menu.open-up\n.cloud-sync-menu.align-left\n.cloud-sync-user-btn img[src=""]\n

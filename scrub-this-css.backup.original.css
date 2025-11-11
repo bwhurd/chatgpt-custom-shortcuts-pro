@@ -1,0 +1,612 @@
+/* ── google settings sync grid item  ─────────────────────────── */
+.msr {
+  font-family: "Material Symbols Rounded", sans-serif;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 500,
+    "GRAD" 0,
+    "opsz" 24;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+.icon-only {
+  width: 48px;
+  height: 48px;
+  justify-content: center;
+}
+.status-line {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* make ONLY this tile span both columns + allow wrapping */
+.shortcut-grid > .cloud-sync-span-2 {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* label stays on the left */
+.cloud-sync-span-2 .shortcut-label {
+  flex: 0 0 auto;
+}
+
+/* buttons container (anchor for dropdown) */
+.cloud-sync-span-2 .cloud-sync-buttons {
+  position: relative; /* dropdown will now anchor here */
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 240px;
+  width: 100%;
+}
+
+/* before login row */
+.cloud-sync-span-2 .cloud-sync-signin {
+  flex: 1 1 auto;
+  display: flex; /* JS will toggle to none when logged in */
+  justify-content: flex-end;
+}
+
+/* logged-in row (hidden by default; JS toggles to flex when logged in) */
+.cloud-sync-span-2 .cloud-sync-actions {
+  flex: 1 1 auto;
+  display: none; /* let JS control visibility */
+  gap: 12px;
+  align-items: center;
+  position: static; /* menu will anchor to .cloud-sync-buttons instead */
+}
+
+/* spread Sync + Restore evenly; avatar is fixed width */
+.cloud-sync-span-2 .cloud-sync-actions > button:not(.cloud-sync-user-btn) {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+/* avatar button (circular) */
+.cloud-sync-user-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.cloud-sync-user-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* dropdown menu */
+.cloud-sync-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-light, #d1d5db);
+  border-radius: 8px;
+  min-width: 190px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+  padding: 6px 0;
+  z-index: 100;
+  display: none;
+}
+.cloud-sync-menu.open {
+  display: block;
+}
+.cloud-sync-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.cloud-sync-menu-item:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+.cloud-sync-menu-logout {
+  color: #b91c1c;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  margin-bottom: 4px;
+}
+
+/* status full width below controls */
+.cloud-sync-span-2 #syncStatus {
+  flex: 1 1 100%;
+  white-space: normal;
+}
+
+/* mobile: let grid behave normally */
+@media (max-width: 600px) {
+  .shortcut-grid > .cloud-sync-span-2 {
+    grid-column: auto;
+  }
+  .cloud-sync-span-2 .cloud-sync-buttons {
+    flex-wrap: wrap;
+  }
+}
+
+/* whichever state is visible should also stretch */
+.cloud-sync-span-2 .cloud-sync-buttons > #signinRow,
+.cloud-sync-span-2 .cloud-sync-buttons > #syncRow {
+  display: flex;
+  gap: 12px;
+  flex: 1 1 0;
+  justify-content: space-between; /* <- even horizontal spread */
+}
+
+/* only stretch the two action buttons, never the avatar */
+.cloud-sync-span-2 #syncRow > button {
+  flex: 1 1 0;
+  justify-content: center;
+}
+.cloud-sync-user-btn {
+  flex: 0 0 auto; /* fixed size */
+}
+
+/* when only the login row is shown, center the single button */
+.cloud-sync-span-2 .cloud-sync-buttons > #signinRow:only-child {
+  justify-content: center;
+  gap: 0;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* ── Continue with Google Css  ───────────────────────────
+------------------------------------------------------------------- */
+
+.gsi-material-button {
+  user-select: none;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #f2f2f2;
+  background-image: none;
+  border: none;
+  -webkit-border-radius: 20px;
+  border-radius: 20px;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  cursor: pointer;
+  font-family: "Roboto", arial, sans-serif;
+  font-size: 14px;
+  height: 40px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0 12px;
+  position: relative;
+  text-align: center;
+  -webkit-transition:
+    background-color 0.218s,
+    border-color 0.218s,
+    box-shadow 0.218s;
+  transition:
+    background-color 0.218s,
+    border-color 0.218s,
+    box-shadow 0.218s;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: auto;
+  max-width: 400px;
+  min-width: min-content;
+}
+
+.gsi-material-button .gsi-material-button-icon {
+  height: 20px;
+  margin-right: 12px;
+  min-width: 20px;
+  width: 20px;
+}
+
+.gsi-material-button .gsi-material-button-content-wrapper {
+  -webkit-align-items: center;
+  align-items: center;
+  display: flex;
+  -webkit-flex-direction: row;
+  flex-direction: row;
+  -webkit-flex-wrap: nowrap;
+  flex-wrap: nowrap;
+  height: 100%;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+}
+
+.gsi-material-button .gsi-material-button-contents {
+  -webkit-flex-grow: 1;
+  flex-grow: 1;
+  font-family: "Roboto", arial, sans-serif;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.gsi-material-button .gsi-material-button-state {
+  -webkit-transition: opacity 0.218s;
+  transition: opacity 0.218s;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.gsi-material-button:disabled {
+  cursor: default;
+  background-color: #ffffff61;
+}
+
+.gsi-material-button:disabled .gsi-material-button-state {
+  background-color: #1f1f1f1f;
+}
+
+.gsi-material-button:disabled .gsi-material-button-contents {
+  opacity: 38%;
+}
+
+.gsi-material-button:disabled .gsi-material-button-icon {
+  opacity: 38%;
+}
+
+.gsi-material-button:not(:disabled):active .gsi-material-button-state,
+.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
+  background-color: #001d35;
+  opacity: 12%;
+}
+
+.gsi-material-button:not(:disabled):hover {
+  -webkit-box-shadow:
+    0 1px 2px 0 rgba(60, 64, 67, 0.3),
+    0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  box-shadow:
+    0 1px 2px 0 rgba(60, 64, 67, 0.3),
+    0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+  background-color: #001d35;
+  opacity: 8%;
+}
+
+/* ── End Google Css  ───────────────────────────
+------------------------------------------------------------------- */
+
+/* make ONLY the cloud sync tile span both grid columns */
+.shortcut-grid > .cloud-sync-span-2 {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap; /* lets status go to next line */
+  gap: 8px;
+}
+
+/* label on the left */
+.cloud-sync-span-2 .shortcut-label {
+  flex: 0 0 auto;
+}
+
+/* buttons container (anchor for dropdown) */
+.cloud-sync-span-2 .cloud-sync-buttons {
+  position: relative; /* dropdown anchors here */
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 240px;
+  width: 100%;
+}
+
+/* signin row (before login) */
+.cloud-sync-span-2 .cloud-sync-signin {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* logged-in row */
+.cloud-sync-span-2 .cloud-sync-actions {
+  flex: 1 1 auto;
+  display: flex !important; /* override inline */
+  gap: 12px;
+  align-items: center;
+  position: relative; /* for the dropdown */
+}
+
+/* spread Sync + Restore, but leave room for avatar */
+.cloud-sync-span-2 .cloud-sync-actions > button:not(.cloud-sync-user-btn) {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+/* avatar button (like chatgpt) */
+.cloud-sync-user-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cloud-sync-user-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* dropdown menu */
+.cloud-sync-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-light, #d1d5db);
+  border-radius: 8px;
+  min-width: 190px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+  padding: 6px 0;
+  z-index: 100;
+  display: none; /* toggled via JS */
+}
+
+.cloud-sync-menu.open {
+  display: block;
+}
+
+.cloud-sync-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cloud-sync-menu-item:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.cloud-sync-menu-logout {
+  color: #b91c1c;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+  margin-bottom: 4px;
+}
+
+/* STATUS: force to next line, full width, not squashed */
+.cloud-sync-span-2 #syncStatus {
+  flex: 1 1 100%;
+  margin-top: 2px;
+  white-space: normal;
+}
+
+/* keep mobile behavior sensible */
+@media (max-width: 600px) {
+  .shortcut-grid > .cloud-sync-span-2 {
+    grid-column: auto;
+  }
+  .cloud-sync-span-2 .cloud-sync-buttons {
+    flex-wrap: wrap;
+  }
+}
+
+/* dropdown flip helpers */
+.cloud-sync-menu.open-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.cloud-sync-menu.align-left {
+  right: auto;
+  left: 0;
+}
+
+.cloud-sync-user-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid transparent;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.cloud-sync-help-icon {
+  display: inline-flex;
+}
+
+.cloud-sync-menu.open-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.cloud-sync-menu.align-left {
+  right: auto;
+  left: 0;
+}
+
+/* Hide avatar <img> when it's empty so we never show a broken frame */
+.cloud-sync-user-btn img[src=""],
+.cloud-sync-user-btn img:not([src]) {
+  display: none !important;
+}
+/* When <img> is visible, ensure it fills the circle crisply */
+.cloud-sync-user-btn img {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* ===== Google material icon CSS ===== */
+.gsi-material-button {
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  -webkit-appearance: none;
+  background-color: #f2f2f2;
+  background-image: none;
+  border: none;
+  -webkit-border-radius: 20px;
+  border-radius: 20px;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  cursor: pointer;
+  font-family: "Roboto", arial, sans-serif;
+  font-size: 14px;
+  height: 40px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  text-align: center;
+  -webkit-transition:
+    background-color 0.218s,
+    border-color 0.218s,
+    box-shadow 0.218s;
+  transition:
+    background-color 0.218s,
+    border-color 0.218s,
+    box-shadow 0.218s;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: 40px;
+  max-width: 400px;
+  min-width: min-content;
+}
+
+.gsi-material-button .gsi-material-button-icon {
+  height: 20px;
+  margin-right: 12px;
+  min-width: 20px;
+  width: 20px;
+  margin: 0;
+  padding: 10px;
+}
+
+.gsi-material-button .gsi-material-button-content-wrapper {
+  -webkit-align-items: center;
+  align-items: center;
+  display: flex;
+  -webkit-flex-direction: row;
+  flex-direction: row;
+  -webkit-flex-wrap: nowrap;
+  flex-wrap: nowrap;
+  height: 100%;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+}
+
+.gsi-material-button .gsi-material-button-contents {
+  -webkit-flex-grow: 1;
+  flex-grow: 1;
+  font-family: "Roboto", arial, sans-serif;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.gsi-material-button .gsi-material-button-state {
+  -webkit-transition: opacity 0.218s;
+  transition: opacity 0.218s;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.gsi-material-button:disabled {
+  cursor: default;
+  background-color: #ffffff61;
+}
+
+.gsi-material-button:disabled .gsi-material-button-state {
+  background-color: #1f1f1f1f;
+}
+
+.gsi-material-button:disabled .gsi-material-button-contents {
+  opacity: 38%;
+}
+
+.gsi-material-button:disabled .gsi-material-button-icon {
+  opacity: 38%;
+}
+
+.gsi-material-button:not(:disabled):active .gsi-material-button-state,
+.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
+  background-color: #001d35;
+  opacity: 12%;
+}
+
+.gsi-material-button:not(:disabled):hover {
+  -webkit-box-shadow:
+    0 1px 2px 0 rgba(60, 64, 67, 0.3),
+    0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  box-shadow:
+    0 1px 2px 0 rgba(60, 64, 67, 0.3),
+    0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+  background-color: #001d35;
+  opacity: 8%;
+}
+
+/* ===== End Google material icon CSS ===== */
+
+/* ===== Begin Custom Sync ButtonStyles ===== */

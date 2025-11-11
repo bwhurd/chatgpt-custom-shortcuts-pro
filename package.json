@@ -11,14 +11,18 @@
     "lint": "biome lint .",
     "format": "biome format . --write",
     "check": "biome check .",
-    "zip": "node build-zip.js"
+    "zip": "node build-zip.js",
+    "clean": "node clean-css.mjs --css C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\scrub-this-css.css --html C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\based-on-this.html"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@biomejs/biome": "^2.2.4",
-    "archiver": "^7.0.1"
+    "@biomejs/biome": "^2.3.2",
+    "archiver": "^7.0.1",
+    "cssnano": "^7.1.2",
+    "postcss": "^8.5.6",
+    "purgecss": "^7.0.2"
   },
   "dependencies": {
     "acorn": "^8.15.0",
