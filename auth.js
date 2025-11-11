@@ -34,8 +34,11 @@
   }
   async function ensure(interactive = false) {
     const { token, refresh, exp } = await tokens();
+    // Valid token — use it
     if (token && exp > now()) return token;
-    if (refresh) {
+
+    // Only attempt a refresh on an explicit user action
+    if (interactive && refresh) {
       try {
         const t = await exchange({
           grant_type: 'refresh_token',
@@ -44,9 +47,15 @@
         });
         await saveTokens(t);
         if (t.access_token) return t.access_token;
-      } catch (_) {}
+      } catch (_) {
+        // fall through to full login
+      }
     }
+
+    // If not interactive, don't silently call the broker
     if (!interactive) return '';
+
+    // Interactive full login via background broker (launchWebAuthFlow)
     const res = await new Promise((r) =>
       chrome.runtime.sendMessage({ type: 'cloudAuth.login' }, r),
     );
@@ -90,6 +99,10 @@
   async function googleLogout() {
     await S.remove([TOK, REF, EXP]);
     await setLocal(PROFILE_KEY, null);
+    try {
+      // Reset Identity API state so no silent auth can occur
+      await chrome.identity.clearAllCachedAuthTokens();
+    } catch (_) {}
     try {
       await window.CloudStorage?._clearKnownFileId?.();
     } catch (_) {}

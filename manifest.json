@@ -56,12 +56,6 @@
       "description": "Show the popup"
     }
   },
-  "oauth2": {
-    "client_id": "327917786122-ha30ge1mejf2rikmk52u2ciu8h9hc2r0.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/drive.appdata"
-    ]
-  },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' data:; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://profound-yeot-41eb0a.netlify.app;"
   }
