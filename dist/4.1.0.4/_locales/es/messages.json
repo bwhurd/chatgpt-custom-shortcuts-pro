@@ -1,0 +1,521 @@
+{
+	"app_name": {
+		"message": "ChatGPT Atajos Personalizados Plus"
+	},
+	"app_description": {
+		"message": "Atajos personalizados para ChatGPT: teclas para subir/bajar, copiar, unir respuestas, iniciar chats y mostrar/ocultar barra lateral."
+	},
+	"popup_title": {
+		"message": "ChatGPT Atajos Personalizados Plus"
+	},
+	"label_scroll_up_one": {
+		"message": "Subir un mensaje"
+	},
+	"label_scroll_down_one": {
+		"message": "Bajar un mensaje"
+	},
+	"label_scroll_top": {
+		"message": "Ir al principio"
+	},
+	"label_scroll_bottom": {
+		"message": "Ir al final"
+	},
+	"label_pgup_pgdown": {
+		"message": "Reasignar PgUp/PgDown"
+	},
+	"label_send_top_bar": {
+		"message": "Mover barra superior abajo"
+	},
+	"label_opacity": {
+		"message": "Opacidad:"
+	},
+	"tag_new": {
+		"message": "NUEVO"
+	},
+	"label_strip_md": {
+		"message": "Quitar Markdown al copiar"
+	},
+	"label_select_copy_behavior": {
+		"message": "Modo «Seleccionar + Copiar»"
+	},
+	"label_new_chat": {
+		"message": "Nueva conversación"
+	},
+	"label_focus_input": {
+		"message": "Enfocar campo de chat"
+	},
+	"label_toggle_sidebar": {
+		"message": "Mostrar/ocultar barra lateral"
+	},
+	"label_toggle_sidebar_folders": {
+		"message": "Carpetas de la barra lateral — en reparación"
+	},
+	"label_search_chats": {
+		"message": "Buscar chats"
+	},
+	"label_prev_thread": {
+		"message": "Ir al hilo anterior"
+	},
+	"label_next_thread": {
+		"message": "Ir al siguiente hilo"
+	},
+	"tt_send": {
+		"message": "Marca para que Ctrl + Enter envíe el mensaje."
+	},
+	"tt_stop": {
+		"message": "Marca para que Ctrl + Retroceso detenga la generación de respuesta."
+	},
+	"label_send_stop": {
+		"message": "Enviar y detener"
+	},
+	"label_join_all": {
+		"message": "Unir y copiar todas las respuestas"
+	},
+	"label_join_separator": {
+		"message": "Separador al unir y copiar"
+	},
+	"label_join_code": {
+		"message": "Unir y copiar todos los bloques de código"
+	},
+	"label_code_separator": {
+		"message": "Separador de bloques de código"
+	},
+	"tt_scroll_up_one": {
+		"message": "Desplaza arriba un mensaje."
+	},
+	"tt_scroll_down_one": {
+		"message": "Desplaza abajo un mensaje."
+	},
+	"tt_scroll_top": {
+		"message": "Desplaza hasta el primer mensaje."
+	},
+	"tt_scroll_bottom": {
+		"message": "Desplaza hasta el final."
+	},
+	"tt_pgup_pgdown": {
+		"message": "Activa para que PageUp y PageDown siempre desplacen la conversación."
+	},
+	"tt_send_top_bar": {
+		"message": "Activa para poner el selector de modelo debajo del cuadro de mensaje. Ideal en pantallas pequeñas."
+	},
+	"tt_opacity_slider": {
+		"message": "Desliza a la derecha para mantener visible la barra inferior. A la izquierda para ocultarla hasta pasar el cursor."
+	},
+	"tt_select_copy": {
+		"message": "Simula seleccionar con el ratón y pulsar Ctrl+C. Pulsa repetidamente para recorrer los mensajes visibles."
+	},
+	"tt_select_copy_behavior": {
+		"message": "Selecciona cualquier mensaje, solo los tuyos o solo los de ChatGPT."
+	},
+	"tt_select_all": {
+		"message": "Recorre todos los mensajes visibles."
+	},
+	"tt_select_assistant": {
+		"message": "Solo selecciona los mensajes de ChatGPT."
+	},
+	"tt_select_user": {
+		"message": "Solo selecciona tus mensajes."
+	},
+	"tt_disable_autocopy": {
+		"message": "Marca para desactivar el copiado automático (ahora solo selecciona el texto)."
+	},
+	"tt_new_chat": {
+		"message": "Inicia una conversación nueva."
+	},
+	"tt_focus_input": {
+		"message": "Enfoca el campo de entrada."
+	},
+	"tt_toggle_sidebar": {
+		"message": "Mostrar/ocultar la barra lateral."
+	},
+	"tt_search_chats": {
+		"message": "Buscar chats."
+	},
+	"tt_search_web": {
+		"message": "Activar/desactivar Buscar en la Web."
+	},
+	"tt_edit_msg": {
+		"message": "Haz clic en Editar en el último mensaje de usuario visible. Presiona de nuevo para subir al siguiente."
+	},
+	"tt_send_edit": {
+		"message": "Haz clic en «Enviar» tras editar un mensaje."
+	},
+	"label_edit_msg": {
+		"message": "Editar mensaje"
+	},
+	"label_send_edit": {
+		"message": "Enviar mensaje editado"
+	},
+	"tt_join_all": {
+		"message": "Unir todas las respuestas de ChatGPT de la conversación y copiarlas al portapapeles. Omite la entrada del usuario."
+	},
+	"tt_join_separator": {
+		"message": "Personaliza el separador entre elementos unidos. Usa un espacio +\\n para saltos de línea."
+	},
+	"tt_join_code": {
+		"message": "Unir todos los bloques de código y copiar al portapapeles. Omite la entrada del usuario."
+	},
+	"tt_code_separator": {
+		"message": "Personaliza el separador entre bloques de código. Usa un espacio + \\n para saltos de línea."
+	},
+	"label_showModelPicker": {
+		"message": "Mostrar selector de modelo"
+	},
+	"tt_showModelPicker_plain": {
+		"message": "Mostrar el selector de modelo de ChatGPT Plus"
+	},
+	"tt_regenerate": {
+		"message": "Pulsa el botón de regenerar más bajo visible."
+	},
+	"label_regenerate": {
+		"message": "Regenerar respuesta"
+	},
+	"label_rememberSidebarScrollPositionCheckbox": {
+		"message": "Recordar posición de desplazamiento de la barra lateral"
+	},
+	"tt_rememberSidebarScrollPositionCheckbox": {
+		"message": "Activa para recordar la posición de desplazamiento de la barra lateral."
+	},
+	"label_fade_slim_sidebar": {
+		"message": "Atenuar barra lateral fina"
+	},
+	"tt_slim_opacity_slider": {
+		"message": "Atenúa la barra lateral fina. Pasa el cursor para mostrarla."
+	},
+	"label_temp_chat": {
+		"message": "Chat temporal"
+	},
+	"tt_temp_chat": {
+		"message": "Activa/Desactiva Chat temporal (solo antes de enviar el primer mensaje)."
+	},
+	"tt_think_longer": {
+		"message": "Solo disponible en la versión gratuita. Activa un razonamiento más profundo para una respuesta más completa."
+	},
+	"tt_study": {
+		"message": "Activa para explicar paso a paso, conectar conceptos y reforzar la comprensión."
+	},
+	"tt_toggle_create_image": {
+		"message": "Activa la herramienta de creación de imágenes."
+	},
+	"tt_toggle_canvas": {
+		"message": "Activa el espacio de trabajo de lienzo."
+	},
+	"tt_add_photos_files": {
+		"message": "Adjunta imágenes o archivos a un mensaje."
+	},
+	"label_toggle_dictate": {
+		"message": "Dictar"
+	},
+	"tt_toggle_dictate": {
+		"message": "Pulsa una vez para empezar a dictar. Pulsa de nuevo para enviar el dictado."
+	},
+	"label_cancel_dictation": {
+		"message": "Cancelar dictado"
+	},
+	"tt_cancel_dictation": {
+		"message": "Cancela el dictado en curso sin transcribir."
+	},
+	"label_share": {
+		"message": "Compartir"
+	},
+	"tt_share": {
+		"message": "Crea un enlace para compartir la conversación."
+	},
+	"tt_backup_restore": {
+		"message": "Exporta o importa todos los ajustes de la extensión."
+	},
+	"tt_export": {
+		"message": "Exporta tus ajustes a un archivo JSON."
+	},
+	"tt_import": {
+		"message": "Importa ajustes desde un archivo JSON."
+	},
+	"toast_export_success": {
+		"message": "Ajustes exportados a un archivo. Revisa tu carpeta de descargas."
+	},
+	"toast_import_no_compatible": {
+		"message": "No se encontraron ajustes compatibles en el archivo."
+	},
+	"confirm_import_overwrite": {
+		"message": "¿Importar ajustes del archivo y sobrescribir los valores actuales?"
+	},
+	"toast_import_failed": {
+		"message": "Error al importar: $1"
+	},
+	"toast_import_invalid": {
+		"message": "Archivo no válido. Importación cancelada."
+	},
+	"label_scroll_down_two": {
+		"message": "Bajar dos mensajes"
+	},
+	"label_scroll_up_two": {
+		"message": "Subir dos mensajes"
+	},
+	"label_clear_reset": {
+		"message": "Borrar y restablecer"
+	},
+	"tt_clear_all_shortcuts": {
+		"message": "Borrar atajos (mantener interruptores)"
+	},
+	"tt_reset_defaults": {
+		"message": "Restablece todas las opciones y atajos a los valores por defecto"
+	},
+	"label_backup_restore": {
+		"message": "Respaldo y restaurar"
+	},
+	"label_hide_arrows": {
+		"message": "Mostrar flechas para navegar entre mensajes"
+	},
+	"tt_hide_arrows": {
+		"message": "Activa los botones de flecha para ir al mensaje anterior o siguiente con un clic."
+	},
+	"tt_selectThenCopyAllMessages": {
+		"message": "Simula seleccionar con el ratón el texto de todos los mensajes y presionar Ctrl+C. El texto mantiene el formato al pegar en Word o en un correo."
+	},
+	"tt_selectThenCopyAllMessagesBehavior": {
+		"message": "Elige si quieres omitir etiquetas (como 'ChatGPT dijo:') y si copiar todos los mensajes, solo los de ChatGPT o solo los tuyos."
+	},
+	"tt_selectThenCopyAllMessagesBothUserAndChatGpt": {
+		"message": "Incluye mensajes tuyos y de ChatGPT."
+	},
+	"tt_selectThenCopyAllMessagesOnlyAssistant": {
+		"message": "Incluye solo mensajes de ChatGPT (no los tuyos)."
+	},
+	"tt_selectThenCopyAllMessagesOnlyUser": {
+		"message": "Incluye solo tus mensajes (no las respuestas de ChatGPT)."
+	},
+	"tt_doNotIncludeLabelsCheckbox": {
+		"message": "Marca para quitar 'ChatGPT dijo:' y 'Tú dijiste:' antes de cada mensaje."
+	},
+	"label_send": {
+		"message": "Enviar con Ctrl + Intro"
+	},
+	"label_stop": {
+		"message": "Detener con Ctrl + Retroceso"
+	},
+	"label_copy": {
+		"message": "Clic en Copiar"
+	},
+	"label_select_copy": {
+		"message": "Seleccionar + Copiar un mensaje"
+	},
+	"tt_copy_plain": {
+		"message": "Copia cualquier mensaje como texto sin formato. Pulsa de nuevo para recorrer los botones Copiar visibles."
+	},
+	"tt_strip_md": {
+		"message": "Actívalo para quitar * y ### de Markdown del texto copiado con el atajo `Clic en Copiar`. El texto copiado desde un bloque de código no se modificará."
+	},
+	"tt_prev_thread": {
+		"message": "Alt+{shortcut}: hace clic en el botón «<» de hilo anterior visible más abajo. ———————————————————  Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."
+	},
+	"tt_next_thread": {
+		"message": "Alt+{shortcut}: hace clic en el botón «>» de hilo siguiente visible más abajo.  ——————————————————— Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."
+	},
+	"label_selectThenCopyAllMessages": {
+		"message": "Unir + Copiar todos los mensajes"
+	},
+	"label_selectThenCopyAllMessagesBehavior": {
+		"message": "Modo Copiar todo"
+	},
+	"toast_import_complete": {
+		"message": "Importación completada. Cierra y vuelve a abrir la configuración para ver los cambios."
+	},
+	"label_search_web": {
+		"message": "Búsqueda web"
+	},
+	"label_think_longer": {
+		"message": "Pensar más"
+	},
+	"label_study": {
+		"message": "Estudiar y aprender"
+	},
+	"label_toggle_create_image": {
+		"message": "Crear imagen"
+	},
+	"label_toggle_canvas": {
+		"message": "Lienzo"
+	},
+	"label_add_photos_files": {
+		"message": "Añadir fotos y archivos"
+	},
+	"tt_pick_model_plain": {
+		"message": "Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+	},
+	"tt_use_Control_for_picker": {
+		"message": "Usa Control+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+	},
+	"tt_use_Alt_for_picker": {
+		"message": "Usa Alt+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
+	},
+	"label_MoreConcise": {
+		"message": "Más breve"
+	},
+	"tt_MoreConcise": {
+		"message": "Acorta la respuesta anterior."
+	},
+	"label_RegenerateAskToChangeResponse": {
+		"message": "Pedir cambios"
+	},
+	"tt_RegenerateAskToChangeResponse": {
+		"message": "Escribe cómo quieres cambiar o mejorar la respuesta anterior."
+	},
+	"label_RegenerateWithDifferentModel": {
+		"message": "Regenerar con otro modelo"
+	},
+	"tt_RegenerateWithDifferentModel": {
+		"message": "Crea una nueva respuesta con otro modelo de IA."
+	},
+	"label_ReadAloud": {
+		"message": "Leer en voz alta"
+	},
+	"tt_ReadAloud": {
+		"message": "Pulsa para oír la respuesta en voz alta. Pulsa de nuevo para detener."
+	},
+	"label_BranchInNewChat": {
+		"message": "Seguir en un chat nuevo"
+	},
+	"tt_BranchInNewChat": {
+		"message": "Copia el chat hasta aquí y abre una conversación nueva desde este punto, para explorar otra vía sin perder ninguna de las dos."
+	},
+	"label_AddDetails": {
+		"message": "Más detalles"
+	},
+	"tt_AddDetails": {
+		"message": "Amplía la respuesta anterior con más detalles."
+	},
+	"label_switchToThinkingExtended": {
+		"message": "Cambiar a Pensamiento Extendido"
+	},
+	"tt_switchToThinkingExtended": {
+		"message": "Cambiar directamente a GPT-5 Pensamiento Extendido; tarda más, pero resuelve problemas difíciles."
+	},
+	"label_switchToThinkingStandard": {
+		"message": "Cambiar a Pensamiento Estándar"
+	},
+	"tt_switchToThinkingStandard": {
+		"message": "Cambiar directamente a GPT-5 Pensamiento Estándar, que responde más rápido para la mayoría de tareas."
+	},
+	"label_pickModel": {
+		"message": "Elegir modelo"
+	},
+	"label_use_alt": {
+		"message": "Usar Alt"
+	},
+	"label_use_control": {
+		"message": "Usar Control"
+	},
+	"btn_export": {
+		"message": "Exportar ajustes"
+	},
+	"btn_import": {
+		"message": "Importar ajustes"
+	},
+	"btn_clear_all_shortcuts": {
+		"message": "Borrar atajos"
+	},
+	"btn_reset_defaults": {
+		"message": "Restablecer"
+	},
+	"label_NewGptConversation": {
+		"message": "Nueva conversación con GPT personalizado"
+	},
+	"tt_NewGptConversation": {
+		"message": "Inicia una nueva conversación con tu GPT personalizado actual, sin volver al modelo principal de ChatGPT."
+	},
+	"section_switch_models": {
+		"message": "Cambiar modelo"
+	},
+	"section_model_picker_tweaks": {
+		"message": "Elegir modelo"
+	},
+	"label_blank_placeholder": {
+		"message": "Espacio en blanco para alinear la cuadrícula"
+	},
+	"section_ui_tweaks": {
+		"message": "Ajustes UI"
+	},
+	"section_quick_clicks": {
+		"message": "Clics rápidos"
+	},
+	"section_scroll": {
+		"message": "Scroll"
+	},
+	"section_clipboard": {
+		"message": "Portapapeles"
+	},
+	"section_compose_send": {
+		"message": "Escribir + Enviar"
+	},
+	"section_regenerate": {
+		"message": "Regenerar respuesta"
+	},
+	"section_message_tools": {
+		"message": "Herramientas"
+	},
+	"section_utilities": {
+		"message": "Utilidades"
+	},
+	"tt_cloud_sync_desc": {
+		"message": "Sincroniza los ajustes con tu Google Drive. No se recopilan datos. Solo para tu comodidad."
+	},
+	"btn_google_continue": {
+		"message": "Continuar con Google"
+	},
+	"btn_google_continue_aria": {
+		"message": "Continuar con Google"
+	},
+	"btn_google_continue_title": {
+		"message": "Continuar con Google"
+	},
+	"tt_upload_cloud": {
+		"message": "Subir ajustes actuales a la nube"
+	},
+	"tt_restore_cloud": {
+		"message": "Restaurar ajustes desde la nube"
+	},
+	"tt_logout": {
+		"message": "Cerrar sesión"
+	},
+	"status_not_linked": {
+		"message": "No vinculado"
+	},
+	"status_signin_failed": {
+		"message": "Acceso cancelado o fallido"
+	},
+	"status_sync_unavailable": {
+		"message": "Sincronización no disponible"
+	},
+	"status_saving": {
+		"message": "Guardando…"
+	},
+	"status_saved": {
+		"message": "Guardado en la nube"
+	},
+	"status_restore_unavailable": {
+		"message": "Restauración no disponible"
+	},
+	"status_restoring": {
+		"message": "Restaurando…"
+	},
+	"status_no_backup": {
+		"message": "Sin copia en la nube"
+	},
+	"status_restored": {
+		"message": "Restaurado desde la nube"
+	},
+	"status_save_failed": {
+		"message": "Error al guardar"
+	},
+	"status_restore_failed": {
+		"message": "Error al restaurar"
+	},
+	"label_showShortcuts": {
+		"message": "Mostrar atajos"
+	},
+	"tt_showShortcuts_plain": {
+		"message": "En el chat se muestran solo los atajos asignados."
+	},
+	"label_cloud_sync": {
+		"message": "Sinc. en la nube"
+	}
+}

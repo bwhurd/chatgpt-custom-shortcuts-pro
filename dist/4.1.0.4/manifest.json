@@ -23,7 +23,12 @@
     "storage"
   ],
   "optional_permissions": [
-    "identity"
+    "identity",
+    "identity.email"
+  ],
+  "optional_host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://accounts.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"
