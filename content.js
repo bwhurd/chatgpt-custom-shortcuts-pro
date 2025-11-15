@@ -7324,18 +7324,24 @@ setTimeout(() => {
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
   function buildModelSwitcherGrid(cfg) {
-    const CAP = window.ModelLabels.MAX_SLOTS;
+    const VISIBLE = 10;
 
-    // Names and codes from hydration; fall back to shared defaults if needed
-    const namesSrc =
+    const isLegacyArrow = (s) => {
+      const t = (s ?? '').toString().trim();
+      if (!t) return false;
+      if (t === '→') return true;
+      if (/^legacy\s*models?/i.test(t)) return true;
+      return /legacy/i.test(t) && t.includes('→');
+    };
+
+    const rawNames =
       Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length
-        ? window.MODEL_NAMES.slice(0, CAP)
-        : window.ModelLabels.defaultNames();
+        ? window.MODEL_NAMES.slice()
+        : window.ModelLabels?.defaultNames?.() || [];
+    const arrowIdx = rawNames.findIndex(isLegacyArrow);
+    const names = rawNames.filter((n) => !isLegacyArrow(n)).slice(0, VISIBLE);
 
-    // Display-friendly tweak: show “Legacy Models →” instead of bare “→”
-    const names = window.ModelLabels.prettifyForPopup(namesSrc).slice(0, CAP);
-
-    const buildDefaultCodes = (n = CAP) => {
+    const buildDefaultCodes = (n = VISIBLE) => {
       const base = [
         'Digit1',
         'Digit2',
@@ -7352,10 +7358,15 @@ setTimeout(() => {
       return base.slice(0, n);
     };
 
-    const codes =
+    let codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
-        ? window.__modelPickerKeyCodes.slice(0, CAP)
-        : buildDefaultCodes(CAP);
+        ? window.__modelPickerKeyCodes.slice()
+        : buildDefaultCodes(names.length);
+
+    // Align codes to filtered names: drop the arrow slot if codes still include it
+    if (arrowIdx >= 0 && codes.length > names.length) codes.splice(arrowIdx, 1);
+    codes = codes.slice(0, names.length);
+    while (codes.length < names.length) codes.push('');
 
     const esc = (s) =>
       String(s).replace(
@@ -7374,22 +7385,20 @@ setTimeout(() => {
     const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Control + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
 
     const rows = [];
-    for (let i = 0; i < CAP; i++) {
+    for (let i = 0; i < names.length; i++) {
       const rawCode = codes[i];
       if (!isAssigned(rawCode)) continue;
-
       const label = names[i] ? esc(names[i]) : `Slot ${i + 1}`;
       const val = displayFromCode(rawCode);
-
       rows.push(`
-        <div class="shortcut-item">
-          <div class="shortcut-label"><span>${label}</span></div>
-          <div class="shortcut-keys">
-            <span class="key-text platform-alt-label">${modLabel}</span>
-            <input class="key-input" disabled maxlength="12" value="${val}" />
-          </div>
+      <div class="shortcut-item">
+        <div class="shortcut-label"><span>${label}</span></div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label">${modLabel}</span>
+          <input class="key-input" disabled maxlength="12" value="${val}" />
         </div>
-      `);
+      </div>
+    `);
     }
 
     if (!rows.length) return '';
@@ -7398,11 +7407,9 @@ setTimeout(() => {
 <div class="section-header" role="heading" aria-level="2" style="margin-top:0;padding-left:12px;font-size:12px;font-family:ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol';font-weight:600;line-height:12px;letter-spacing:0.72px;text-transform:uppercase;color:rgba(60,60,67,0.6);">
   Switch Models
 </div>
-
-    <div class="model-picker-shortcut-grid">
-      ${rows.join('')}
-    </div>
-  `;
+<div class="model-picker-shortcut-grid">
+  ${rows.join('')}
+</div>`;
   }
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
@@ -7685,12 +7692,18 @@ setTimeout(() => {
 
   const hydrateModelData = () =>
     new Promise((resolve) => {
-      if (!isExtensionAlive()) {
-        resolve();
-        return;
-      }
-      const CAP = window.ModelLabels.MAX_SLOTS;
-      const buildDefaultCodes = (n = CAP) => {
+      if (!isExtensionAlive()) return resolve();
+
+      const VISIBLE = 10;
+      const isLegacyArrow = (s) => {
+        const t = (s ?? '').toString().trim();
+        if (!t) return false;
+        if (t === '→') return true;
+        if (/^legacy\s*models?/i.test(t)) return true;
+        return /legacy/i.test(t) && t.includes('→');
+      };
+      const defaultNames = () => window.ModelLabels?.defaultNames?.() || [];
+      const buildDefaultCodes = (n = VISIBLE) => {
         const base = [
           'Digit1',
           'Digit2',
@@ -7709,33 +7722,30 @@ setTimeout(() => {
 
       try {
         chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes'], (res = {}) => {
-          if (!isExtensionAlive()) {
-            resolve();
-            return;
-          }
+          if (!isExtensionAlive()) return resolve();
           if (chrome.runtime.lastError) {
             console.warn('[CSP] storage.get(model*) failed:', chrome.runtime.lastError);
-            resolve();
-            return;
+            return resolve();
           }
           try {
-            // Names: prefer storage, fallback to shared defaults; keep canonical entries (e.g., '→')
-            const names = Array.isArray(res.modelNames)
-              ? res.modelNames.slice(0, CAP)
-              : window.ModelLabels.defaultNames();
-            while (names.length < CAP) names.push('');
+            const rawNames = Array.isArray(res.modelNames)
+              ? res.modelNames.slice()
+              : defaultNames();
+            const arrowIdx = rawNames.findIndex(isLegacyArrow);
+            const names = rawNames.filter((n) => !isLegacyArrow(n)).slice(0, VISIBLE);
+            while (names.length < VISIBLE) names.push('');
 
-            // Codes: prefer storage, fallback to digit defaults; pad to CAP
-            const picker = Array.isArray(res.modelPickerKeyCodes)
-              ? res.modelPickerKeyCodes.slice(0, CAP)
-              : buildDefaultCodes(CAP);
-            while (picker.length < CAP) picker.push('');
+            let codes = Array.isArray(res.modelPickerKeyCodes)
+              ? res.modelPickerKeyCodes.slice()
+              : buildDefaultCodes(names.length);
 
-            // Guard against invalidated context mid-callback
-            if (isExtensionAlive()) {
-              window.MODEL_NAMES = names;
-              window.__modelPickerKeyCodes = picker;
-            }
+            // If storage codes still include the legacy slot, drop it to align with filtered names
+            if (arrowIdx >= 0 && codes.length > names.length) codes.splice(arrowIdx, 1);
+            codes = codes.slice(0, names.length);
+            while (codes.length < names.length) codes.push('');
+
+            window.MODEL_NAMES = names;
+            window.__modelPickerKeyCodes = codes;
           } catch (err) {
             console.warn('[CSP] hydrateModelData error:', err);
           }
