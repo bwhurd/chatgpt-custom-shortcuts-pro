@@ -2,6 +2,12 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### [10.15.2025]
+  - Backup and restore user settings with your google account. Your data is private and not exposed to us or third parties. 
+  - Support for switching between all current models (GPT 5.1, 5, 4o, 4.1, 3o)
+  - Use Control+/ to show all assigned shortcuts. Model picker keys display incorrectly in the overlay (but correct in settings), and the fix is expected to post around 11/17/2025.
+
+
 #### [10.06.2025]
 + Added: New Custom GPT Conversation shortcut. Start a new conversation that stays with your current custom GPT, instead of switching back to the main ChatGPT model.
 
