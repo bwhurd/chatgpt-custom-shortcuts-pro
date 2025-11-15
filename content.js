@@ -5837,8 +5837,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   const DELAY_MAIN_MENU_SETTLE_EXPANDED_MS = 0; // when already open
 
   // Submenu polling loop in keydown flow
-  const SUBMENU_POLL_INTERVAL_MS = 25; // was 50
-  const SUBMENU_MAX_POLLS = 10; // was 20
 
   // Activation delay (post-labeling) in keydown flow
   const DELAY_ACTIVATE_TARGET_MS = 375; // was 750
@@ -5856,26 +5854,34 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   chrome.storage.sync.get(
     ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
     ({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
-      const DEFAULT_MODEL_PICKER_KEY_CODES = [
-        'Digit1',
-        'Digit2',
-        'Digit3',
-        'Digit4',
-        'Digit5',
-        'Digit6',
-        'Digit7',
-        'Digit8',
-        'Digit9',
-        'Digit0',
-      ];
-      // Initialize shared KEY_CODES (mutate the const array)
-      KEY_CODES.splice(
-        0,
-        KEY_CODES.length,
-        ...(Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length === 10
-          ? modelPickerKeyCodes.slice(0, 10)
-          : DEFAULT_MODEL_PICKER_KEY_CODES.slice()),
-      );
+      // Capacity and defaults: show as many as needed, up to MAX_SLOTS
+      const MAX_SLOTS = 15;
+      const buildDefaultCodes = (n = MAX_SLOTS) => {
+        const base = [
+          'Digit1',
+          'Digit2',
+          'Digit3',
+          'Digit4',
+          'Digit5',
+          'Digit6',
+          'Digit7',
+          'Digit8',
+          'Digit9',
+          'Digit0',
+        ];
+        while (base.length < n) base.push('');
+        return base.slice(0, n);
+      };
+
+      // Initialize shared KEY_CODES (mutate the const array to keep references alive)
+      const incoming = Array.isArray(modelPickerKeyCodes)
+        ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
+        : [];
+      while (incoming.length < MAX_SLOTS) incoming.push('');
+      const effective = incoming.some(Boolean) ? incoming : buildDefaultCodes(MAX_SLOTS);
+      KEY_CODES.splice(0, KEY_CODES.length, ...effective);
+
+      // Platform + modifier label
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
       const USE_CTRL = !!useControlForModelSwitcherRadio;
       const MOD_KEY_TEXT = USE_CTRL ? (IS_MAC ? 'Command' : 'Ctrl') : IS_MAC ? 'Option' : 'Alt';
@@ -5883,9 +5889,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
       // Helper: Alt/Option or Ctrl/Command
       const modPressed = (e) => (USE_CTRL ? (IS_MAC ? e.metaKey : e.ctrlKey) : e.altKey);
-      const synthClick = (el) => {
-        el?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      };
 
       const flashMenuItem = (el) => {
         if (!el || !window.gsap) return;
@@ -6034,181 +6037,102 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       // --- Ultra-light model-name capture: piggybacks on applyHints ---
 
       function __cspTextNoHint(el) {
-        if (!el) return '';
-        // Prefer the *primary* label row, not descriptive subtext.
-        const primary =
-          el.querySelector('.flex.items-center.gap-1') || // standard title span
-          el.querySelector('.flex.items-center') || // fallback title container
-          el.querySelector('.flex.min-w-0.grow.items-center .truncate') || // "Pro" row title
-          el.querySelector('.truncate') || // generic title
-          el;
-
-        const node = primary.cloneNode(true);
-        node;
-        node
-          .querySelectorAll(
-            '.alt-hint, .text-xs, .not-group-data-disabled\\:text-token-text-tertiary',
-          )
-          .forEach((n) => {
-            n.remove();
-          });
-
-        // Strip any inline "Mod+Key" noise if upstream renders it as plain text
-        const txt = (node.textContent || '').replace(/\s+/g, ' ').trim();
-        return txt
-          .replace(/\s*(?:Alt|Ctrl|Control|⌘|Cmd|Meta|Win|Option|Opt|Shift)\s*\+\s*\S+$/, '')
-          .trim();
+        return window.ModelLabels.textNoHint(el);
       }
 
-      // Collect up to 10 names from whatever model menus are currently open.
-      // Main menu contributes slots 1–6; submenu contributes slots 7–10 if present.
-      function __cspCollectModelNames10() {
+      const __cspIsSubmenuTrigger = (el) => window.ModelLabels.isSubmenuTrigger(el);
+      const __cspNormTid = (tid) => window.ModelLabels.normTid(tid);
+
+      // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
+      function __cspCollectModelNamesN() {
+        const CAP = window.ModelLabels.MAX_SLOTS;
         const menus =
           typeof getOpenModelMenus === 'function'
             ? getOpenModelMenus().filter(Boolean)
             : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
 
-        if (!menus.length) return null; // no menus open at all
+        if (!menus.length) return null;
 
-        const names = Array(10).fill('');
-        const main = menus[0];
-
-        // Main menu: take up to 6 direct items (robust to fewer)
-        if (main) {
-          const mainItems = Array.from(
-            main.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
+        const out = [];
+        for (const menu of menus) {
+          const items = Array.from(
+            menu.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
           );
-          for (let i = 0; i < 6 && i < mainItems.length; i++) {
-            names[i] = __cspTextNoHint(mainItems[i]);
+          for (const it of items) {
+            if (out.length >= CAP) break;
+            out.push(__cspTextNoHint(it));
           }
+          if (out.length >= CAP) break;
         }
-
-        // Submenu: take up to 4 direct items (robust to fewer)
-        const sub = menus[1];
-        if (sub) {
-          const subItems = Array.from(
-            sub.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
-          );
-          for (let j = 0; j < 4 && j < subItems.length; j++) {
-            names[6 + j] = __cspTextNoHint(subItems[j]); // slots 7–10
-          }
-        }
-
-        // Trim all
-        for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
-
-        // Return even if some slots are empty; saver will merge with previous storage
-        return names;
+        return out.map((s) => (s || '').trim());
       }
-
       // Saver: derive canonical labels from DOM (data-testid + structure), not localized text
       const __cspSaveModelNames = (() => {
         let lastSig = '';
         let lastWrite = 0;
 
-        const __CSP_TESTID_TO_CANON = Object.freeze({
-          'Model-switCher-gpt-5': 'GPT-5 Auto',
-          'Model-switCher-gpt-5-instant': 'GPT-5 Instant',
-          'Model-switCher-gpt-5-t-mini': 'GPT-5 mini',
-          'Model-switCher-gpt-5-thinking': 'GPT-5 Thinking',
-          'Model-switCher-gpt-4o': '4o',
-          'Model-switCher-gpt-4-1': '4.1',
-          'Model-switCher-o3': 'o3',
-          'Model-switCher-o4-mini': 'o4-mini',
-        });
-
-        function __cspGetOpenMenus() {
-          const menus = Array.from(
-            document.querySelectorAll('[data-radix-menu-content][data-state="open"][role="menu"]'),
-          );
-          if (menus.length === 0) return { main: null, sub: null };
-          const main = menus[0];
-          const sub = menus.length > 1 ? menus[menus.length - 1] : null;
-          return { main, sub };
-        }
+        // Single source of truth (shared/model-picker-labels.js)
+        const TESTID_CANON = window.ModelLabels.TESTID_CANON;
+        const MAIN_CANON_BY_INDEX = window.ModelLabels.MAIN_CANON_BY_INDEX;
+        const mapSubmenuLabel = window.ModelLabels.mapSubmenuLabel;
 
         function __cspCanonicalLabelsFromDOM() {
-          const names = Array(10).fill('');
-          const { main, sub } = __cspGetOpenMenus();
+          const CAP = window.ModelLabels.MAX_SLOTS;
+          const names = Array(CAP).fill('');
 
-          // --- Helpers ---
-          const MAIN_CANON_BY_INDEX = [
-            'GPT-5 Auto',
-            'GPT-5 Instant',
-            'GPT-5 mini',
-            'GPT-5 Thinking',
-            'GPT-5 Pro',
-          ];
-          const mapSubmenuLabel = (s) => {
-            const t = (s || '').normalize('NFKD');
-            if (/\bo4\s*-\s*mini\b/i.test(t) || /\bo4\s*mini\b/i.test(t) || /\bo4-?mini\b/i.test(t))
-              return 'o4-mini';
-            if (/\bo3\b/i.test(t)) return 'o3';
-            if (/\b4\.?1\b/i.test(t)) return '4.1';
-            if (/\b4o\b/i.test(t) || /\bgpt[-\s]?4o\b/i.test(t)) return '4o';
-            return '';
-          };
+          const menus =
+            typeof getOpenModelMenus === 'function'
+              ? getOpenModelMenus().filter(Boolean)
+              : Array.from(
+                  document.querySelectorAll('[data-radix-menu-content][data-state="open"]'),
+                );
 
-          // --- MAIN MENU (slots 0–5) ---
+          if (!menus.length) return names;
+
+          let idx = 0;
+
+          // Main menu first
+          const main = menus[0];
           if (main) {
-            // Direct children only; avoids grabbing templates
             const mainItems = Array.from(
               main.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
             );
+            for (let i = 0; i < mainItems.length && idx < CAP; i++) {
+              const item = mainItems[i];
+              let label = '';
 
-            // Data-testids are language-agnostic: fill what we can
-            if (main.querySelector('[data-testid="Model-switCher-gpt-5"]')) names[0] = 'GPT-5 Auto';
-            if (main.querySelector('[data-testid="Model-switCher-gpt-5-instant"]'))
-              names[1] = 'GPT-5 Instant';
-            if (main.querySelector('[data-testid="Model-switCher-gpt-5-t-mini"]'))
-              names[2] = 'GPT-5 mini';
-            if (main.querySelector('[data-testid="Model-switCher-gpt-5-thinking"]'))
-              names[3] = 'GPT-5 Thinking';
-
-            // Pro row: language-agnostic structure — disabled item with a trailing button
-            if (!names[4]) {
-              const disabledWithButton = mainItems.find(
-                (el) => el.matches('[aria-disabled="true"]') && el.querySelector('button'),
-              );
-              if (disabledWithButton) names[4] = 'GPT-5 Pro';
-            }
-
-            // Index fallback keeps us robust if testids disappear but order stays
-            for (let i = 0; i < 5 && i < mainItems.length; i++) {
-              if (!names[i]) names[i] = MAIN_CANON_BY_INDEX[i];
-            }
-
-            // Submenu trigger → canonical arrow
-            if (main.querySelector('[data-has-submenu]')) names[5] = '→';
-          }
-
-          // --- SUBMENU (slots 6–9) ---
-          if (sub && sub !== main) {
-            let idx = 6;
-            const subItems = Array.from(
-              sub.querySelectorAll(':scope > .group.__menu-item[role="menuitem"]'),
-            );
-
-            for (const item of subItems) {
-              if (idx >= 10) break;
-
-              // Testid takes priority
-              const tid = item.getAttribute('data-testid') || '';
-              const canon = __CSP_TESTID_TO_CANON[tid];
-              if (canon) {
-                names[idx++] = canon;
-                continue;
+              if (__cspIsSubmenuTrigger(item)) {
+                label = '→'; // canonical for submenu trigger (not a model)
+              } else {
+                const tid = __cspNormTid(item.getAttribute('data-testid'));
+                label = (tid && TESTID_CANON[tid]) || '';
+                if (!label) label = __cspTextNoHint(item);
+                if (!label && i < MAIN_CANON_BY_INDEX.length) label = MAIN_CANON_BY_INDEX[i];
               }
 
-              // Fallback: derive from visible primary label (language-agnostic regex mapping)
-              const labelEl = item.querySelector('.flex.items-center.gap-1') || item;
-              const primary = __cspTextNoHint(labelEl) || (labelEl.textContent || '').trim();
-              const mapped = mapSubmenuLabel(primary);
-              names[idx++] = mapped || primary;
+              names[idx++] = (label || '').trim();
             }
           }
 
-          // Trim
+          // Any additional open menus (submenus) in order
+          for (let m = 1; m < menus.length && idx < CAP; m++) {
+            const subItems = Array.from(
+              menus[m].querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
+            );
+            for (const item of subItems) {
+              if (idx >= CAP) break;
+              const tid = __cspNormTid(item.getAttribute('data-testid'));
+              let label = (tid && TESTID_CANON[tid]) || '';
+              if (!label) {
+                const primary = item.querySelector('.flex.items-center.gap-1') || item;
+                const txt = __cspTextNoHint(primary);
+                label = mapSubmenuLabel(txt) || txt;
+              }
+              names[idx++] = (label || '').trim();
+            }
+          }
+
+          while (names.length < CAP) names.push('');
           for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
           return names;
         }
@@ -6216,11 +6140,14 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         function __cspMergeAndPersist(candidates) {
           const now = Date.now();
           try {
+            const CAP = window.ModelLabels.MAX_SLOTS;
             chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-              const prevArr = Array.isArray(prev) ? prev.slice(0, 10) : Array(10).fill('');
-              const merged = prevArr.map((v, i) => {
+              const prevArr = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
+              while (prevArr.length < CAP) prevArr.push('');
+              const merged = Array.from({ length: CAP }, (_, i) => {
                 const nv = (candidates[i] || '').trim();
-                return nv || v || '';
+                const pv = (prevArr[i] || '').trim();
+                return nv || pv || '';
               });
               const sig = merged.join('|');
               if (sig === lastSig && now - lastWrite < 1000) return;
@@ -6231,15 +6158,15 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
           } catch (_) {}
         }
 
-        return (arr10) => {
-          // Canonical DOM + fallback text merged PER SLOT.
-          // Preserves your slot 5 "→" and fills 0–4 from either source.
+        return (arrN) => {
+          const CAP = window.ModelLabels.MAX_SLOTS;
           const domNames = __cspCanonicalLabelsFromDOM();
-          const fallback = Array.isArray(arr10) ? arr10.slice(0, 10) : Array(10).fill('');
+          const fallback = Array.isArray(arrN) ? arrN.slice(0, CAP) : Array(CAP).fill('');
+          while (fallback.length < CAP) fallback.push('');
 
-          const candidates = Array.from({ length: 10 }, (_, i) => {
-            const d = (domNames[i] || '').trim(); // canonical (includes '→' for slot 5)
-            const f = (fallback[i] || '').trim(); // text extraction ('Auto', etc.)
+          const candidates = Array.from({ length: CAP }, (_, i) => {
+            const d = (domNames[i] || '').trim();
+            const f = (fallback[i] || '').trim();
             return d || f || '';
           });
 
@@ -6249,17 +6176,17 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       })();
 
       function __cspMaybePersistModelNames() {
-        const arr10 = __cspCollectModelNames10();
-        if (arr10) __cspSaveModelNames(arr10);
+        const arr = __cspCollectModelNamesN();
+        if (arr) __cspSaveModelNames(arr);
       }
 
       // Respond to popup requests for live names (ensures freshness on popup open)
       try {
-        chrome.runtime.onMessage.addListener((msg, sendResponse) => {
+        chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
-            const arr10 = __cspCollectModelNames10();
-            if (arr10) __cspSaveModelNames(arr10);
-            sendResponse({ modelNames: Array.isArray(arr10) ? arr10 : null });
+            const arr = __cspCollectModelNamesN();
+            if (arr) __cspSaveModelNames(arr);
+            sendResponse({ modelNames: Array.isArray(arr) ? arr : null });
           }
         });
       } catch (_) {}
@@ -6268,31 +6195,32 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       // Collect items from the *first* open menu (level 1) and, if present, the *second* open menu (level 2).
       // Cap at 10 items total so the existing key mapping remains stable.
       function getOrderedMenuItems() {
-        const openMenus = getOpenModelMenus();
-        if (!openMenus.length) return [];
+        const cap = window.ModelLabels?.MAX_SLOTS || 15;
+        const menus =
+          typeof getOpenModelMenus === 'function'
+            ? getOpenModelMenus()
+            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
 
-        const first = openMenus[0];
-        const second = openMenus[1] || null;
+        if (!menus.length) return [];
+        const result = [];
 
-        // Use direct-children to avoid grabbing nested/hidden templates
-        const firstItems = Array.from(
-          first.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
-        );
-        const result = firstItems.map((el, i) => ({
-          el,
-          menu: 'main',
-          idx: i,
-        }));
-
-        if (second) {
-          const secondItems = Array.from(
-            second.querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
+        for (let m = 0; m < menus.length; m++) {
+          const all = Array.from(
+            menus[m].querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
           );
-          secondItems.forEach((el, j) => {
-            result.push({ el, menu: 'submenu', idx: j });
+
+          // For the main menu, filter out the submenu trigger (arrow)
+          const filtered = m === 0 ? all.filter((el) => !__cspIsSubmenuTrigger(el)) : all;
+
+          filtered.forEach((el, idx) => {
+            if (result.length < cap) {
+              result.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
+            }
           });
+
+          if (result.length >= cap) break;
         }
-        return result.slice(0, 10);
+        return result;
       }
 
       function displayFromCode(code) {
@@ -6371,6 +6299,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       };
       const scheduleHints = () => requestAnimationFrame(applyHints);
 
+      // Expose a minimal hook so outer listeners can refresh labels when keys change
+      window.__mp_applyHints = applyHints;
+
       // --- KEY HANDLING ---
       window.addEventListener(
         'keydown',
@@ -6385,42 +6316,59 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
           const alreadyOpen = ensureMainMenuOpen();
 
-          const hover = (el) => {
+          // Robust activator: focus + pointer + mouse + keyboard confirm (covers Radix commit paths)
+          const activateMenuItem = (el) => {
             if (!el) return;
+
+            el.focus?.();
+
             el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
             el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
             el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
             el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+
+            el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+            el.dispatchEvent(
+              new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+            el.dispatchEvent(
+              new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
           };
 
-          const forceOpenSubmenu = (done) => {
-            const menus = getOpenModelMenus();
-            if (!menus.length) return done();
-            if (menus.length > 1) return done();
+          // Always open both menus using the same robust flow as toggleModelSelector
+          const openBothMenus = (done) => {
+            // Trigger robust flow that opens main + legacy submenu
+            if (typeof window.toggleModelSelector === 'function') {
+              window.toggleModelSelector();
+            } else {
+              // Fallback: try to at least open main
+              ensureMainMenuOpen();
+            }
 
-            const scope = menus[0];
-            const candidates = Array.from(
-              scope.querySelectorAll(
-                ':scope > [role="menuitem"][data-has-submenu], ' +
-                  ':scope > [role="menuitem"][aria-haspopup="menu"], ' +
-                  ':scope > [role="menuitem"][aria-controls]',
-              ),
-            );
-            if (!candidates.length) return done();
-
-            let i = 0,
-              attempts = 0;
+            // Wait until two model menus are open, then continue
+            let polls = 0;
             const tick = () => {
-              if (getOpenModelMenus().length > 1) return done();
-              if (i < candidates.length) {
-                const el = candidates[i++];
-                hover(el);
-                synthClick(el);
-                attempts = 0;
-              } else if (attempts++ > SUBMENU_MAX_POLLS) {
-                return done();
-              }
-              setTimeout(tick, SUBMENU_POLL_INTERVAL_MS);
+              const menus = getOpenModelMenus();
+              if (menus.length > 1) return done();
+              if (polls++ > 60) return done(); // ~1.8s max
+              setTimeout(tick, 30);
             };
             tick();
           };
@@ -6430,7 +6378,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
               const mainMenu = getOpenMenu();
               if (!mainMenu) return;
 
-              forceOpenSubmenu(() => {
+              openBothMenus(() => {
                 const items = getOrderedMenuItems();
                 applyHints();
 
@@ -6439,7 +6387,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                 if (!target) return;
                 if (window.gsap) flashMenuItem(target.el);
                 setTimeout(() => {
-                  synthClick(target.el);
+                  activateMenuItem(target.el);
                   flashBottomBar();
                 }, DELAY_ACTIVATE_TARGET_MS);
               });
@@ -6488,18 +6436,15 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
     },
   );
 
-  // Alt+/ opens the menu and *forces* the submenu to be visible (self-contained)
+  // Alt+/ opens the menu and forces the “Legacy models” submenu to be visible (robust to current DOM)
   window.toggleModelSelector = () => {
     const MENU_BTN = 'button[data-testid="model-switcher-dropdown-button"]';
     const btn = document.querySelector(MENU_BTN);
     if (!btn) return;
 
-    // Centralized timing constants (all halved)
-    const POLL_INTERVAL = 25; // was 50
-    const MAX_POLLS = 10; // was 20
-    const DELAY_AFTER_MAIN = 60; // was 120
-    const DELAY_BEFORE_SUBMENU = 30; // was 60
+    // Tunables
 
+    // Helpers
     const pressSpace = (el) => {
       ['keydown', 'keyup'].forEach((type) => {
         el.dispatchEvent(
@@ -6515,7 +6460,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         );
       });
     };
-
     const hover = (el) => {
       if (!el) return;
       el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
@@ -6523,101 +6467,171 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
       el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
     };
-
     const safeClick = (el) => {
       if (!el) return;
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     };
 
-    const findTriggers = (menu) => {
-      const ariaMatches = Array.from(
+    // Identify menus that belong to the model switcher (matches your 555 HTML)
+    const isModelMenuEl = (menuEl) => {
+      if (!menuEl || !(menuEl instanceof Element)) return false;
+      if (menuEl.querySelector('[data-testid^="model-switcher-"]')) return true; // current
+      if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true; // legacy casing
+      if (menuEl.querySelector('[data-testid$="-submenu"]')) return true; // e.g., “Legacy models-submenu”
+      const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
+      return /^gpt[\s.-]*/i.test(header);
+    };
+
+    const getModelMenus = () => {
+      const all =
+        typeof getOpenMenus === 'function'
+          ? getOpenMenus()
+          : Array.from(
+              document.querySelectorAll(
+                '[data-radix-menu-content][data-state="open"][role="menu"]',
+              ),
+            );
+      return all.filter(isModelMenuEl);
+    };
+
+    // Find the specific “Legacy models” trigger inside the main menu
+    const findLegacyTrigger = (menu) => {
+      if (!menu) return null;
+
+      // 1) Exact data-testid match from your HTML (note the space)
+      const el = menu.querySelector(
+        ':scope > [role="menuitem"][data-testid="Legacy models-submenu"]',
+      );
+      if (el) return el;
+
+      // 2) Any submenu-capable item whose data-testid mentions “legacy”
+      const candidates = Array.from(
         menu.querySelectorAll(
           ':scope > [role="menuitem"][data-has-submenu], ' +
             ':scope > [role="menuitem"][aria-haspopup="menu"], ' +
             ':scope > [role="menuitem"][aria-controls]',
         ),
       );
-      const textMatches = Array.from(menu.querySelectorAll(':scope > [role="menuitem"]')).filter(
-        (el) => /legacy|more|advanced|older|models/i.test(el.textContent || ''),
+      const byTid = candidates.find((n) =>
+        (n.getAttribute('data-testid') || '').toLowerCase().includes('legacy'),
       );
-      const set = new Set([...ariaMatches, ...textMatches]);
-      return Array.from(set);
+      if (byTid) return byTid;
+
+      // 3) Text content fallback
+      const byText = candidates.find((n) => /legacy\s*models?/i.test(n.textContent || ''));
+      if (byText) return byText;
+
+      // 4) Last resort: if there’s exactly one submenu trigger, use it
+      if (candidates.length === 1) return candidates[0];
+
+      return null;
+    };
+
+    const waitForMainOpen = (cb) => {
+      if (btn.getAttribute('aria-expanded') === 'true') return cb();
+      btn.focus();
+      pressSpace(btn);
+
+      let tries = 0;
+      const poll = () => {
+        const menus = getModelMenus();
+        if (menus.length > 0 || tries++ > 50) return cb(); // up to ~1.5s
+        setTimeout(poll, 30);
+      };
+      poll();
+    };
+
+    const pressKey = (el, key, code) => {
+      ['keydown', 'keyup'].forEach((type) => {
+        el.dispatchEvent(
+          new KeyboardEvent(type, {
+            key,
+            code,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
+        );
+      });
     };
 
     const forceOpenSubmenu = (done) => {
-      const getModelMenus = () => {
-        const all =
-          typeof getOpenMenus === 'function'
-            ? getOpenMenus()
-            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
-        return all.filter((menuEl) => {
-          if (!menuEl || !(menuEl instanceof Element)) return false;
-          if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true;
-          if (menuEl.querySelector('[data-testid$="-submenu"], [data-testid*="Legacy models"]'))
-            return true;
-          const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
-          return /^gpt[\s-]*/i.test(header);
-        });
-      };
+      // If already open, we’re done
+      if (getModelMenus().length > 1) return done();
 
       const menus = getModelMenus();
       if (!menus.length) return done();
-      if (menus.length > 1) return done();
-      const triggers = findTriggers(menus[0]);
-      if (!triggers.length) return done();
 
-      let i = 0,
-        polls = 0;
+      const main = menus[0];
+      const trigger = findLegacyTrigger(main);
+      if (!trigger) return done();
+
+      let polls = 0;
       const tick = () => {
-        if (getModelMenus().length > 1) return done();
-        if (i < triggers.length) {
-          const el = triggers[i++];
-          hover(el);
-          safeClick(el);
-        } else if (polls++ > MAX_POLLS) {
+        const currentMenus = getModelMenus();
+        if (currentMenus.length > 1 || trigger.getAttribute('aria-expanded') === 'true') {
+          // Let labels render (if needed)
+          setTimeout(() => window.__mp_applyHints?.(), 25);
           return done();
         }
-        setTimeout(tick, POLL_INTERVAL);
+
+        // Try multiple strategies in sequence to satisfy Radix submenu behavior
+        switch (polls % 4) {
+          case 0:
+            // Hover (Radix often opens submenu on pointer enter)
+            hover(trigger);
+            trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+            break;
+          case 1:
+            // Click (some menus toggle on click)
+            safeClick(trigger);
+            break;
+          case 2:
+            // Keyboard open (ArrowRight is a common submenu open action)
+            trigger.focus();
+            pressKey(trigger, 'ArrowRight', 'ArrowRight');
+            break;
+          case 3:
+            // Keyboard fallback (Enter)
+            trigger.focus();
+            pressKey(trigger, 'Enter', 'Enter');
+            break;
+        }
+
+        if (polls++ > 60) return done(); // ~1.8s total attempts
+        setTimeout(tick, 30);
       };
       tick();
     };
 
-    const openMain = (cb) => {
-      if (btn.getAttribute('aria-expanded') === 'true') return cb();
-      btn.focus();
-      pressSpace(btn);
-      setTimeout(cb, DELAY_AFTER_MAIN);
-    };
-
-    openMain(() => {
-      setTimeout(() => {
-        forceOpenSubmenu(() => {
-          // Labels applied via MutationObserver once submenu mounts
-        });
-      }, DELAY_BEFORE_SUBMENU);
+    // Open main menu, then open the Legacy submenu
+    waitForMainOpen(() => {
+      // Let Radix mount main content before searching
+      setTimeout(() => forceOpenSubmenu(() => {}), 40);
     });
   };
 
   // Listen for modelPickerKeyCodes changes and update in real-time
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
-    if (changes.modelPickerKeyCodes) {
-      const val = changes.modelPickerKeyCodes.newValue;
-      if (Array.isArray(val) && val.length === 10) {
-        // Mutate the const array so references stay valid
-        KEY_CODES.splice(0, KEY_CODES.length, ...val.slice(0, 10));
-        // If menu is open, refresh labels to reflect new keys
-        if (
-          document
-            .querySelector('button[data-testid="model-switcher-dropdown-button"]')
-            ?.getAttribute('aria-expanded') === 'true'
-        ) {
-          setTimeout(() => {
-            const menu = getOpenMenu();
-            if (menu) applyHints();
-          }, DELAY_APPLY_HINTS_STORAGE_MS);
-        }
-      }
+    if (!changes.modelPickerKeyCodes) return;
+
+    const val = changes.modelPickerKeyCodes.newValue;
+    if (!Array.isArray(val)) return;
+
+    const cap = window.ModelLabels.MAX_SLOTS;
+    const next = val.slice(0, cap);
+    while (next.length < cap) next.push('');
+
+    // Mutate the const array so references stay valid
+    KEY_CODES.splice(0, KEY_CODES.length, ...next);
+
+    // If menu is open, refresh labels to reflect new keys
+    const btn = document.querySelector('button[data-testid="model-switcher-dropdown-button"]');
+    if (btn?.getAttribute('aria-expanded') === 'true') {
+      setTimeout(() => {
+        window.__mp_applyHints?.();
+      }, DELAY_APPLY_HINTS_STORAGE_MS);
     }
   });
 })();
@@ -7309,22 +7323,39 @@ setTimeout(() => {
 
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
-  function buildModelSwitcherGrid() {
-    const names = (window.MODEL_NAMES || []).slice(0, 10);
-    const codes = Array.isArray(window.__modelPickerKeyCodes)
-      ? window.__modelPickerKeyCodes.slice(0, 10)
-      : [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
+  function buildModelSwitcherGrid(cfg) {
+    const CAP = window.ModelLabels.MAX_SLOTS;
+
+    // Names and codes from hydration; fall back to shared defaults if needed
+    const namesSrc =
+      Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length
+        ? window.MODEL_NAMES.slice(0, CAP)
+        : window.ModelLabels.defaultNames();
+
+    // Display-friendly tweak: show “Legacy Models →” instead of bare “→”
+    const names = window.ModelLabels.prettifyForPopup(namesSrc).slice(0, CAP);
+
+    const buildDefaultCodes = (n = CAP) => {
+      const base = [
+        'Digit1',
+        'Digit2',
+        'Digit3',
+        'Digit4',
+        'Digit5',
+        'Digit6',
+        'Digit7',
+        'Digit8',
+        'Digit9',
+        'Digit0',
+      ];
+      while (base.length < n) base.push('');
+      return base.slice(0, n);
+    };
+
+    const codes =
+      Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
+        ? window.__modelPickerKeyCodes.slice(0, CAP)
+        : buildDefaultCodes(CAP);
 
     const esc = (s) =>
       String(s).replace(
@@ -7332,8 +7363,18 @@ setTimeout(() => {
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
       );
 
+    // Platform-aware modifier label for the model picker (Alt vs Control/Command)
+    const isMac = (() => {
+      const ua = navigator.userAgent || '';
+      const plat = navigator.platform || '';
+      const uaDataPlat = navigator.userAgentData?.platform ?? '';
+      return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
+    })();
+    const useCtrl = !!cfg?.useControlForModelSwitcherRadio;
+    const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Control + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
+
     const rows = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < CAP; i++) {
       const rawCode = codes[i];
       if (!isAssigned(rawCode)) continue;
 
@@ -7341,14 +7382,14 @@ setTimeout(() => {
       const val = displayFromCode(rawCode);
 
       rows.push(`
-      <div class="shortcut-item">
-        <div class="shortcut-label"><span>${label}</span></div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" disabled maxlength="12" value="${val}" />
+        <div class="shortcut-item">
+          <div class="shortcut-label"><span>${label}</span></div>
+          <div class="shortcut-keys">
+            <span class="key-text platform-alt-label">${modLabel}</span>
+            <input class="key-input" disabled maxlength="12" value="${val}" />
+          </div>
         </div>
-      </div>
-    `);
+      `);
     }
 
     if (!rows.length) return '';
@@ -7365,7 +7406,6 @@ setTimeout(() => {
   }
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
-
   const buildOverlayHtml = (cfg) => {
     const sections = [
       {
@@ -7442,7 +7482,7 @@ setTimeout(() => {
     const out = [];
     out.push(`<div class="shortcut-container">
     <h1 class="i18n" data-i18n="popup_title">ChatGPT Custom Shortcuts Pro</h1>
-    ${buildModelSwitcherGrid()}
+    ${buildModelSwitcherGrid(cfg)}
     <div class="shortcut-grid">`);
 
     for (const section of sections) {
@@ -7612,32 +7652,6 @@ setTimeout(() => {
 
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // ---- 5) Read settings and open overlay on Ctrl+/ ----
-  const DEFAULT_MODEL_NAMES = [
-    'GPT-5 Auto',
-    'GPT-5 Instant',
-    'GPT-5 mini',
-    'GPT-5 Thinking',
-    'GPT-5 Pro',
-    'Show Menu →',
-    '4o',
-    '4.1',
-    'o3',
-    'o4-mini',
-  ];
-
-  const DEFAULT_MODEL_PICKER_CODES = [
-    'Digit1',
-    'Digit2',
-    'Digit3',
-    'Digit4',
-    'Digit5',
-    'Digit6',
-    'Digit7',
-    'Digit8',
-    'Digit9',
-    'Digit0',
-  ];
-
   const isExtensionAlive = () =>
     typeof chrome !== 'undefined' &&
     !!chrome.runtime &&
@@ -7675,6 +7689,24 @@ setTimeout(() => {
         resolve();
         return;
       }
+      const CAP = window.ModelLabels.MAX_SLOTS;
+      const buildDefaultCodes = (n = CAP) => {
+        const base = [
+          'Digit1',
+          'Digit2',
+          'Digit3',
+          'Digit4',
+          'Digit5',
+          'Digit6',
+          'Digit7',
+          'Digit8',
+          'Digit9',
+          'Digit0',
+        ];
+        while (base.length < n) base.push('');
+        return base.slice(0, n);
+      };
+
       try {
         chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes'], (res = {}) => {
           if (!isExtensionAlive()) {
@@ -7687,15 +7719,19 @@ setTimeout(() => {
             return;
           }
           try {
-            const names =
-              Array.isArray(res.modelNames) && res.modelNames.length === 10
-                ? res.modelNames.slice(0, 10)
-                : DEFAULT_MODEL_NAMES;
-            const picker =
-              Array.isArray(res.modelPickerKeyCodes) && res.modelPickerKeyCodes.length === 10
-                ? res.modelPickerKeyCodes.slice(0, 10)
-                : DEFAULT_MODEL_PICKER_CODES;
-            // guard against invalidated context mid-callback
+            // Names: prefer storage, fallback to shared defaults; keep canonical entries (e.g., '→')
+            const names = Array.isArray(res.modelNames)
+              ? res.modelNames.slice(0, CAP)
+              : window.ModelLabels.defaultNames();
+            while (names.length < CAP) names.push('');
+
+            // Codes: prefer storage, fallback to digit defaults; pad to CAP
+            const picker = Array.isArray(res.modelPickerKeyCodes)
+              ? res.modelPickerKeyCodes.slice(0, CAP)
+              : buildDefaultCodes(CAP);
+            while (picker.length < CAP) picker.push('');
+
+            // Guard against invalidated context mid-callback
             if (isExtensionAlive()) {
               window.MODEL_NAMES = names;
               window.__modelPickerKeyCodes = picker;

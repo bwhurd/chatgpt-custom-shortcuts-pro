@@ -1,3 +1,4 @@
+// Webext-options-sync.js
 // Minimal stub for dev/unpacked so code doesn't crash.
 // For real features, replace with the real webext-options-sync.
 class OptionsSync {

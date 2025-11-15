@@ -1,13 +1,17 @@
 # Dependencies
 node_modules/
 
+# Tools
+tools/
+css-cleanup/
+.css-cleanup/
+
 # Editor settings (ignore unless you want to share VS Code configs)
 .vscode/
 CGCSP-Github.code-workspace
 
-# Test and Validation
+# Test and Validation helpers
 build-sync.js
-options-storage.js
 settings.json
 moveNewEntriesInMessagesJsonToEnd.py
 messagesJsonToMoveToEnd.txt
@@ -17,6 +21,7 @@ moveAndRenameNumberedLanguageFiles.ps1
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # OS junk
 .DS_Store
@@ -27,4 +32,13 @@ Thumbs.db
 .env.local
 
 # Excel files
-*.xlsxdist\*.zip
+*.xlsx
+
+# Packed extensions / keys
+*.zip
+*.crx
+*.pem
+
+# Coverage (if you add tests later)
+coverage/
+.nyc_output/

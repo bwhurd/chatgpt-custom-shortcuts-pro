@@ -77,7 +77,7 @@
           </div>
         </div>
       </div>
-      <!-- ((( Models + UI Tweaks Group ))) -->
+      <!-- ((( Models Picker Grid ))) -->
 
       <div class="blank-row section-header" role="heading" aria-level="2" style="position: relative; display: flex; align-items: center; justify-content: space-between;
             height: 26px; line-height: 26px;">
@@ -107,7 +107,7 @@
       <input type="radio" id="useControlForModelSwitcherRadio" data-sync="useControlForModelSwitcherRadio"
         name="modelSwitcher" style="display: none;">
 
-      <!-- Model Picker 5×2 grid is injected by popup.js (see modelPickerGridInit IIFE) -->
+      <!-- Model Picker 5×2 or more grid is injected by popup.js (see modelPickerGridInit IIFE) -->
       <div id="mp-grid-anchor"></div>
 
       <!-- ((( Models + UI Tweaks Group ))) -->
@@ -1035,6 +1035,10 @@
   <script src="options-storage.js"></script>
   <script src="storage.js"></script>
   <script src="auth.js"></script>
+
+  <!-- Single source of truth for model labels; must load before popup.js -->
+  <script src="shared/model-picker-labels.js"></script>
+
   <script src="popup.js"></script>
 
 

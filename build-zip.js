@@ -67,6 +67,7 @@ const includeItems = [
   '_locales',
   'lib',
   'vendor',
+  'shared',
   'background.js',
   'content.js',
   'popup.js',

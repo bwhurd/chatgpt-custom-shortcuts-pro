@@ -1,4 +1,5 @@
 # Privacy Statement
+
 Effective: November 12, 2025
 
 - We use your data only to save your extension settings. If you turn on Cloud Sync, we back up those settings to your own Google Drive.

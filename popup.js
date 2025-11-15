@@ -393,55 +393,124 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.saveShortcutValue = saveShortcutValue;
 
-  // ---------- Dynamic model names for tooltips and picker UI (keeps variable names) ----------
-  const MODEL_NAMES = [
-    'GPT-5 Auto', // Slot 1
-    'GPT-5 Instant', // Slot 2
-    'GPT-5 mini', // Slot 3
-    'GPT-5 Thinking', // Slot 4
-    'GPT-5 Pro', // Slot 5
-    'Legacy Models →', // Slot 6
-    '4o', // Slot 7
-    '4.1', // Slot 8
-    'o3', // Slot 9
-    'o4-mini', // Slot 0
-  ];
-  // Initialize global with defaults for instant UI
-  window.MODEL_NAMES = MODEL_NAMES.slice();
+  // ---------- Dynamic model names for tooltips and picker UI (shared-first, skip Legacy/→, 10 slots) ----------
+  (() => {
+    // Canonical 10-name order (main 3, then submenu) — matches your shared mapping
+    const CANON_ORDER_10 = [
+      'GPT-5.1 Auto',
+      'GPT-5.1 Instant',
+      'GPT-5.1 Thinking',
+      'GPT-5 Instant',
+      'GPT-5 mini',
+      'GPT-5 Thinking',
+      '4o',
+      '4.1',
+      'o3',
+      'o4-mini',
+    ];
 
-  // Hydrate and keep in sync with storage-scraped labels (content.js)
-  (function initModelNamesDynamic() {
-    // Use the current defaults as a fallback if storage is missing any slots
-    const fallbackTen = (window.MODEL_NAMES || []).slice(0, 10);
+    const isLegacyArrow = (s) => {
+      const t = (s ?? '').toString().trim();
+      if (!t) return false;
+      if (t === '→') return true;
+      if (/^legacy\s*models?/i.test(t)) return true;
+      if (/legacy/i.test(t) && t.includes('→')) return true;
+      return false;
+    };
+
+    // Seed names from shared defaults if available; otherwise from CANON_ORDER_10
+    function seedFromSharedOrCanon10() {
+      const shared = window.ModelLabels?.defaultNames?.() || [];
+      const filtered = (Array.isArray(shared) ? shared : []).filter((v) => !isLegacyArrow(v));
+      const out = [];
+      for (const n of filtered) {
+        if (!n) continue;
+        if (out.length < 10) out.push(String(n).trim());
+      }
+      for (const n of CANON_ORDER_10) {
+        if (out.length >= 10) break;
+        if (!out.includes(n)) out.push(n);
+      }
+      return out.slice(0, 10);
+    }
 
     function mergeWithFallback(incoming) {
-      const in10 = Array.isArray(incoming) ? incoming.slice(0, 10) : [];
+      const in10 = (Array.isArray(incoming) ? incoming : []).filter((v) => !isLegacyArrow(v));
+      const fb10 = seedFromSharedOrCanon10();
       return Array(10)
         .fill('')
-        .map((_, i) => (in10[i] && String(in10[i]).trim()) || fallbackTen[i] || '');
+        .map((_, i) => (in10[i] && String(in10[i]).trim()) || fb10[i] || '');
     }
 
-    function setAndRender(a10) {
+    function setAndRender(a10, source = 'bootstrap') {
       window.MODEL_NAMES = a10.slice(0, 10);
       if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
-      window.dispatchEvent(
-        new CustomEvent('model-names-updated', { detail: { source: 'storage' } }),
-      );
+      window.dispatchEvent(new CustomEvent('model-names-updated', { detail: { source } }));
     }
 
-    // Load latest from storage when popup opens
+    // Defaults for instant UI (correct, no Legacy/→)
+    window.MODEL_NAMES = seedFromSharedOrCanon10();
+    window.MODEL_NAMES_META = { arrowIndex: -1, rawCount: 0 };
+
+    // Late update when shared/model-picker-labels.js finishes loading
+    if (!window.ModelLabels?.defaultNames) {
+      let tries = 0;
+      const t = setInterval(() => {
+        if (window.ModelLabels?.defaultNames) {
+          clearInterval(t);
+          setAndRender(seedFromSharedOrCanon10(), 'shared-ready');
+        } else if (++tries > 12) {
+          clearInterval(t);
+        }
+      }, 25);
+    }
+
+    // Load latest from storage when popup opens; keep legacy migration
     try {
-      chrome.storage.sync.get('modelNames', ({ modelNames }) => {
-        setAndRender(mergeWithFallback(modelNames));
-      });
+      chrome.storage.sync.get(
+        ['modelNames', 'modelPickerKeyCodes', 'modelKeysSkipLegacyMigratedV1'],
+        ({ modelNames, modelPickerKeyCodes, modelKeysSkipLegacyMigratedV1 }) => {
+          const raw = Array.isArray(modelNames) ? modelNames.slice(0, 15) : [];
+          const arrowIndex = raw.findIndex(isLegacyArrow);
+          window.MODEL_NAMES_META = { arrowIndex, rawCount: raw.length };
+
+          setAndRender(mergeWithFallback(raw), 'storage');
+
+          if (arrowIndex >= 0 && !modelKeysSkipLegacyMigratedV1) {
+            const rawCodes = Array.isArray(modelPickerKeyCodes) ? modelPickerKeyCodes.slice() : [];
+            // Only migrate if there are EXTRA slots beyond the visible 10.
+            // Never splice a clean 10-slot array (prevents losing Digit4/5 on reload).
+            if (rawCodes.length > 10) {
+              const next = rawCodes.slice();
+              if (arrowIndex < next.length) next.splice(arrowIndex, 1);
+              const ten = next.slice(0, 10);
+              while (ten.length < 10) ten.push('');
+              chrome.storage.sync.set(
+                { modelPickerKeyCodes: ten, modelKeysSkipLegacyMigratedV1: true },
+                () => {
+                  window.__modelPickerKeyCodes = ten.slice();
+                  try {
+                    document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+                  } catch (_) {}
+                },
+              );
+            } else {
+              // Nothing to migrate; just mark done so it never runs again.
+              chrome.storage.sync.set({ modelKeysSkipLegacyMigratedV1: true });
+            }
+          }
+        },
+      );
     } catch (_) {
-      setAndRender(fallbackTen);
+      setAndRender(window.MODEL_NAMES, 'fallback');
     }
 
-    // Update live if content saves new labels while popup is open
+    // Keep popup in sync if content.js updates labels while popup is open
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync' || !changes.modelNames) return;
-      setAndRender(mergeWithFallback(changes.modelNames.newValue));
+      const raw = Array.isArray(changes.modelNames.newValue) ? changes.modelNames.newValue : [];
+      window.MODEL_NAMES_META = { arrowIndex: raw.findIndex(isLegacyArrow), rawCount: raw.length };
+      setAndRender(mergeWithFallback(raw), 'storage:onChanged');
     });
   })();
 
@@ -469,19 +538,68 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /** Hydrate cache from storage and notify listeners once */
+  /** Hydrate cache from storage and notify listeners once (normalized, skips Legacy/→) */
   function initModelPickerCodesCache() {
     if (window.__modelPickerHydrating) return window.__modelPickerHydrating;
-    window.__modelPickerHydrating = new Promise((resolve) => {
-      chrome.storage.sync.get('modelPickerKeyCodes', ({ modelPickerKeyCodes }) => {
-        window.__modelPickerKeyCodes =
-          Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length === 10
-            ? modelPickerKeyCodes.slice(0, 10)
-            : DEFAULT_MODEL_PICKER_KEY_CODES.slice();
 
-        // Broadcast a one-time custom event so editors can render after hydration
-        document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-        resolve(window.__modelPickerKeyCodes);
-      });
+    const DEFAULT_10 = [
+      'Digit1',
+      'Digit2',
+      'Digit3',
+      'Digit4',
+      'Digit5',
+      'Digit6',
+      'Digit7',
+      'Digit8',
+      'Digit9',
+      'Digit0',
+    ];
+    const isLegacyArrow = (s) => {
+      const t = (s ?? '').toString().trim();
+      if (!t) return false;
+      if (t === '→') return true; // canonical saved by content.js
+      if (/^legacy\s*models?/i.test(t)) return true;
+      if (/legacy/i.test(t) && t.includes('→')) return true;
+      return false;
+    };
+    const normalizeCodes = (codes, names) => {
+      // Respect actual storage; don't splice here. Migration (if any) happens elsewhere.
+      const hasArray = Array.isArray(codes);
+      const arr = hasArray ? codes.slice() : [];
+      const out = arr.slice(0, 10);
+      while (out.length < 10) out.push('');
+      // Only fall back to defaults when the key is truly missing (not an array)
+      return hasArray ? out : DEFAULT_10.slice();
+    };
+
+    window.__modelPickerHydrating = new Promise((resolve) => {
+      chrome.storage.sync.get(
+        ['modelPickerKeyCodes', 'modelNames', 'modelKeysSkipLegacyMigratedV1'],
+        ({ modelPickerKeyCodes, modelNames, modelKeysSkipLegacyMigratedV1 }) => {
+          const normalized = normalizeCodes(modelPickerKeyCodes, modelNames);
+          window.__modelPickerKeyCodes = normalized;
+
+          // Persist a clean, exactly-10 array once, so future loads are aligned
+          const needsMigration =
+            !modelKeysSkipLegacyMigratedV1 ||
+            !Array.isArray(modelPickerKeyCodes) ||
+            modelPickerKeyCodes.length !== 10;
+
+          const done = () => {
+            document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+            resolve(window.__modelPickerKeyCodes);
+          };
+
+          if (needsMigration) {
+            chrome.storage.sync.set(
+              { modelPickerKeyCodes: normalized, modelKeysSkipLegacyMigratedV1: true },
+              done,
+            );
+          } else {
+            done();
+          }
+        },
+      );
     });
     return window.__modelPickerHydrating;
   }
@@ -2743,9 +2861,70 @@ document.addEventListener('DOMContentLoaded', () => {
         return window.__revShortcutLabelMapForExport;
       }
 
+      // Normalize a single model-picker entry to a code or '' (model grid uses '' for empty; not NBSP)
+      function normalizeMpVal(v) {
+        const s = normalizeShortcutVal(v); // returns code or NBSP
+        return s === '\u00A0' ? '' : s;
+      }
+
+      // Prefer live UI → then storage → then cache → then defaults; always return exactly 10 strings
+      function readModelPickerCodes10(all) {
+        const byId = (i) => document.getElementById(`mpKeyInput${i}`);
+        const inputs = document.querySelectorAll('#model-picker-grid .mp-input');
+        const map = getReverseMap();
+        const toCode =
+          window.ShortcutUtils?.charToCode ??
+          (typeof charToCode === 'function' ? charToCode : null);
+        const fromUI = [];
+
+        // Try reading straight from the visible grid
+        for (let i = 0; i < 10; i++) {
+          const el = byId(i) || inputs[i];
+          let c = el?.dataset?.keyCode || '';
+          if (!c && el) {
+            const visible = (el.value || '').trim();
+            if (visible) {
+              c = toCode?.(visible) || map.exact[visible] || map.lower[visible.toLowerCase()] || '';
+            }
+          }
+          fromUI.push(normalizeMpVal(c));
+        }
+
+        // If the grid exists and we captured something, use it (even if empties are present)
+        const gridPresent = !!document.getElementById('model-picker-grid');
+        if (gridPresent) {
+          while (fromUI.length < 10) fromUI.push('');
+          return fromUI.slice(0, 10);
+        }
+
+        // Fallback to storage → cache → defaults
+        const storageRaw = Array.isArray(all?.modelPickerKeyCodes) ? all.modelPickerKeyCodes : null;
+        const cacheRaw =
+          (typeof getModelPickerCodesCache === 'function' && getModelPickerCodesCache()) ||
+          window.__modelPickerKeyCodes ||
+          null;
+        const defaults = [
+          'Digit1',
+          'Digit2',
+          'Digit3',
+          'Digit4',
+          'Digit5',
+          'Digit6',
+          'Digit7',
+          'Digit8',
+          'Digit9',
+          'Digit0',
+        ];
+
+        const source = storageRaw || cacheRaw || defaults;
+        const out = [];
+        for (let i = 0; i < 10; i++) out.push(normalizeMpVal(source[i] || ''));
+        return out;
+      }
+
+      // Derive a robust value for each single-key shortcut input by DOM ID
       function effectiveShortcutCode(id, stored) {
-        // 0) If the user explicitly cleared this shortcut, preserve the clear in the export.
-        //    NBSP is our canonical "cleared" sentinel for shortcut fields.
+        // 0) Preserve explicit clear
         if (stored === '\u00A0') return '\u00A0';
 
         // 1) If storage holds a real value, export it (normalize in case it's a label/char).
@@ -2753,8 +2932,7 @@ document.addEventListener('DOMContentLoaded', () => {
           return normalizeShortcutVal(stored);
         }
 
-        // 2) Only for truly "unset" keys (no storage record), derive an effective value
-        //    so first-time exports include defaults currently visible in the UI.
+        // 2) Only for truly "unset" keys (no storage record), derive from UI/defaults.
         const el = document.getElementById(id);
 
         // Prefer dataset (already a KeyboardEvent.code)
@@ -2764,22 +2942,29 @@ document.addEventListener('DOMContentLoaded', () => {
         // Try the visible label/character in the input
         const visible = el?.value?.trim() || '';
         if (visible) {
-          let code = (window.ShortcutUtils?.charToCode ?? charToCode)(visible) || '';
-          if (!code) {
-            const map = getReverseMap();
-            code = map.exact[visible] || map.lower[visible.toLowerCase()] || '';
+          const toCode =
+            window.ShortcutUtils?.charToCode ??
+            (typeof charToCode === 'function' ? charToCode : null);
+          if (toCode) {
+            const k = toCode(visible) || '';
+            if (k) return k;
           }
+          const map = getReverseMap();
+          const code = map.exact[visible] || map.lower[visible.toLowerCase()] || '';
           if (code) return code;
         }
 
         // HTML default attribute (single character) → code
         const defAttr = el?.getAttribute('value')?.trim() || '';
         if (defAttr) {
-          const c = (window.ShortcutUtils?.charToCode ?? charToCode)(defAttr) || '';
+          const toCode =
+            window.ShortcutUtils?.charToCode ??
+            (typeof charToCode === 'function' ? charToCode : null);
+          const c = toCode ? toCode(defAttr) : '';
           if (c) return c;
         }
 
-        // Final fallback for known edge cases (e.g., "/")
+        // Final fallback for known edge cases
         const fallback = DEFAULT_SHORTCUT_CODE_FALLBACKS?.[id] || '';
         return fallback || '\u00A0';
       }
@@ -2792,23 +2977,16 @@ document.addEventListener('DOMContentLoaded', () => {
           if (Object.hasOwn(all, k)) out[k] = all[k];
         });
 
-        // Ensure EVERY shortcut key is present using "effective" value (not NBSP if a default exists)
+        // Ensure EVERY shortcut key is present using "effective" value
         shortcutKeys.forEach((k) => {
           const stored = Object.hasOwn(all, k) ? all[k] : undefined;
           out[k] = effectiveShortcutCode(k, stored);
         });
 
-        // Ensure modelPickerKeyCodes present (always 10)
-        if (!Object.hasOwn(out, 'modelPickerKeyCodes')) {
-          const codes = (
-            typeof getModelPickerCodesCache === 'function'
-              ? getModelPickerCodesCache()
-              : window.__modelPickerKeyCodes || DEFAULT_MODEL_PICKER_KEY_CODES
-          ).slice(0, 10);
-          if (codes.length === 10) out.modelPickerKeyCodes = codes;
-        }
+        // Always export exactly the 10 visible model-picker codes (trim/pad, normalized)
+        out.modelPickerKeyCodes = readModelPickerCodes10(all);
 
-        // Include modelNames (10 labels). Preserve your "→" for slot 5.
+        // Include modelNames (10 labels). Preserve/normalize arrow for slot 5 if present.
         {
           const storageNames = Array.isArray(all.modelNames) ? all.modelNames.slice(0, 10) : null;
           const windowNames =
@@ -2816,9 +2994,9 @@ document.addEventListener('DOMContentLoaded', () => {
               ? window.MODEL_NAMES.slice(0, 10)
               : null;
 
-          // Prefer storage → window → defaults, trim, normalize "->" to "→"
-          const names10 = (storageNames || windowNames || MODEL_NAMES).slice(0, 10).map((s) =>
-            String(s ?? '')
+          const base = storageNames || windowNames || [];
+          const names10 = Array.from({ length: 10 }, (_, i) =>
+            String(base[i] ?? '')
               .replace(/->/g, '→')
               .trim(),
           );
@@ -2915,9 +3093,11 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           // If model picker codes provided, refresh local cache/UI
-          if (Array.isArray(next.modelPickerKeyCodes) && next.modelPickerKeyCodes.length === 10) {
+          if (Array.isArray(next.modelPickerKeyCodes) && next.modelPickerKeyCodes.length) {
             try {
-              window.__modelPickerKeyCodes = next.modelPickerKeyCodes.slice(0, 10);
+              const ten = next.modelPickerKeyCodes.slice(0, 10);
+              while (ten.length < 10) ten.push('');
+              window.__modelPickerKeyCodes = ten;
               document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
             } catch (_) {}
           }
@@ -3086,14 +3266,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* === Shortcuts Presets (Clear All / Reset Defaults) Tile === */
   (function shortcutsPresetsInit() {
-    // --- PRESET DATA ---
+    // --- constants ---
     const NBSP = '\u00A0';
+    const EMPTY_MODEL_PICKER = Array(10).fill('');
+    const DEFAULT_MODEL_PICKER = [
+      'Digit1',
+      'Digit2',
+      'Digit3',
+      'Digit4',
+      'Digit5',
+      'Digit6',
+      'Digit7',
+      'Digit8',
+      'Digit9',
+      'Digit0',
+    ];
+
+    // Clear all shortcuts (single-key fields → NBSP; model picker → empty strings)
     const CLEAR_PRESET_DATA = Object.assign(
       Object.fromEntries(shortcutKeys.map((k) => [k, NBSP])),
-      { modelPickerKeyCodes: ['', '', '', '', '', '', '', '', '', ''] },
+      { modelPickerKeyCodes: EMPTY_MODEL_PICKER.slice() },
     );
 
     const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
+
+    // Persist model picker codes, refresh cache + UI, and optionally toast
+    function applyModelPickerCodes(codes, toastMsg) {
+      const ten = codes.slice(0, 10);
+      while (ten.length < 10) ten.push('');
+
+      const finish = () => {
+        try {
+          window.__modelPickerKeyCodes = ten.slice();
+          document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+          if (typeof window.modelPickerInputsRender === 'function') {
+            window.modelPickerInputsRender();
+          }
+        } catch (_) {}
+        window.toast?.show?.(toastMsg || 'Model picker updated. Reload page to apply changes.');
+      };
+
+      // Persist codes AND mark migration done so later reloads never splice them out.
+      chrome.storage.sync.set(
+        { modelPickerKeyCodes: ten, modelKeysSkipLegacyMigratedV1: true },
+        (err) => {
+          if (chrome.runtime?.lastError) {
+            // Fallback through existing helper if needed
+            try {
+              window.saveModelPickerKeyCodes(ten, finish);
+            } catch (_) {
+              finish();
+            }
+          } else {
+            finish();
+          }
+        },
+      );
+    }
 
     // --- Button event handlers ---
     const clearBtn = document.getElementById('btnClearAllShortcuts');
@@ -3103,10 +3332,28 @@ document.addEventListener('DOMContentLoaded', () => {
       clearBtn.addEventListener('click', () => {
         window.showDuplicateModal(
           `This will <strong style="color:#c00;font-weight:700;">clear all shortcut keys</strong>, but will not change any toggles or checkboxes.`,
-          (yes) => {
-            if (yes && typeof window.importSettingsObj === 'function') {
-              window.importSettingsObj(CLEAR_PRESET_DATA, { skipBrowserConfirm: true });
+          async (yes) => {
+            if (!yes) return;
+
+            // 1) Persist NBSP for all single‑key shortcuts in one write
+            const clearedShortcuts = Object.fromEntries(shortcutKeys.map((k) => [k, NBSP]));
+            try {
+              await chrome.storage.sync.set(clearedShortcuts);
+            } catch (e) {
+              console.error('clear all: failed to set shortcuts', e);
             }
+
+            // 2) Persistently clear the 5×2 model picker grid (10 empty strings)
+            const TEN_EMPTY = EMPTY_MODEL_PICKER.slice(0, 10);
+            window.saveModelPickerKeyCodes(TEN_EMPTY, () => {
+              // 3) Force rehydrate and UI refresh; with Replacement #1 there is no fallback to defaults
+              window.__modelPickerKeyCodes = TEN_EMPTY.slice();
+              document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+              if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+              if (typeof window.modelPickerInputsRender === 'function')
+                window.modelPickerInputsRender();
+              window.toast?.show?.('All model shortcuts cleared. Reload page to apply changes.');
+            });
           },
           { proceedText: 'Clear all shortcuts?', simple: true, allowHTML: true },
         );
@@ -3118,9 +3365,18 @@ document.addEventListener('DOMContentLoaded', () => {
         window.showDuplicateModal(
           `This will <strong style="color:#c00;font-weight:700;">restore the default values</strong> for all extension options and shortcut keys.`,
           (yes) => {
-            if (yes && typeof window.importSettingsObj === 'function') {
+            if (!yes) return;
+
+            // 1) Restore all options/shortcuts from your defaults object
+            if (typeof window.importSettingsObj === 'function') {
               window.importSettingsObj(DEFAULT_PRESET_DATA, { skipBrowserConfirm: true });
             }
+
+            // 2) Repopulate the model picker with the original 1..0 defaults
+            // Also set the migration flag so a later reload does NOT splice the 5th slot.
+            chrome.storage.sync.set({ modelKeysSkipLegacyMigratedV1: true }, () => {
+              applyModelPickerCodes(DEFAULT_MODEL_PICKER, 'Model shortcuts restored to defaults.');
+            });
           },
           { proceedText: 'Reset all to defaults?', simple: true, allowHTML: true },
         );
@@ -3430,13 +3686,12 @@ function modelPickerInitSafe() {
       currentChip.setAttribute('aria-pressed', 'true');
       currentChip.textContent = 'Set';
       const onKey = (e) => {
-        // Tab navigation: move to next/prev chip, and enter set mode on that chip
-        if (e.key === 'Tab') {
+        // Tab/Enter navigation while listening: move to next/prev chip and keep listening
+        if (e.key === 'Tab' || e.key === 'Enter') {
           cancelActiveCapture();
-          // Handle Shift+Tab for backwards navigation
-          const dir = e.shiftKey ? -1 : 1;
+          // Enter always goes forward; Tab respects Shift for reverse
+          const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1;
           let nextIdx = setIdx + dir;
-          // Loop around if at ends
           if (nextIdx < 0) nextIdx = chips.length - 1;
           if (nextIdx >= chips.length) nextIdx = 0;
           e.preventDefault();
@@ -3588,7 +3843,16 @@ function modelPickerInitSafe() {
   document.addEventListener('modelPickerHydrated', render);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && changes.modelPickerKeyCodes) {
-      render();
+      // Always re-read the latest modelPickerKeyCodes from Chrome storage
+      chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
+        const arr = Array.isArray(data.modelPickerKeyCodes)
+          ? data.modelPickerKeyCodes.slice(0, 15)
+          : [];
+        while (arr.length < 15) arr.push('');
+        window.__modelPickerKeyCodes = arr;
+        if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+        if (typeof window.modelPickerInputsRender === 'function') window.modelPickerInputsRender();
+      });
     }
   });
   render();
@@ -3601,201 +3865,19 @@ if (document.readyState === 'loading') {
   modelPickerInitSafe();
 }
 
-// Search Filter IIFE
-
-(() => {
-  let container,
-    bar,
-    input,
-    idx = [],
-    altTables;
-  const qSel = (s) => Array.from((container || document).querySelectorAll(s));
-  const tok = (s) =>
-    (s || '')
-      .toLowerCase()
-      .replace(/[_-]+/g, ' ')
-      .split(/[^a-z0-9]+/g)
-      .filter(Boolean);
-  const loadAlt = () => {
-    if (altTables) return altTables;
-    altTables = [];
-    const guesses = [
-      window.APP_LOCALE_MESSAGES,
-      window.I18N_MESSAGES,
-      window.localeMessages,
-      window.messages,
-    ];
-    // Avoid returning a value from forEach callback (Biome: useIterableCallbackReturn)
-    guesses.forEach((t) => {
-      if (t) altTables.push(t);
-    });
-    try {
-      const el = document.getElementById('i18n-messages');
-      if (el?.textContent) altTables.push(JSON.parse(el.textContent));
-    } catch {}
-    return altTables;
-  };
-
-  const getMsg = (key) => {
-    if (!key) return '';
-    try {
-      if (chrome?.i18n?.getMessage) {
-        const s = chrome.i18n.getMessage(key);
-        if (s) return s;
-      }
-    } catch {}
-    for (const tbl of loadAlt()) {
-      if (!tbl) continue;
-      if (typeof tbl[key] === 'string') return tbl[key];
-      if (tbl[key]?.message) return String(tbl[key].message);
-    }
-    return '';
-  };
-  const resolveMSG = (v) => {
-    const m = /^__MSG_([A-Za-z0-9_]+)__$/.exec(v || '');
-    return m ? getMsg(m[1]) : v || '';
-  };
-
-  const collect = (tile) => {
-    const out = [];
-
-    // Visible strings and inline text
-    tile.querySelectorAll('[data-i18n]').forEach((el) => {
-      const k = el.getAttribute('data-i18n');
-      const msg = getMsg(k);
-      if (msg) out.push(msg);
-
-      const txt = (el.textContent || '').trim();
-      if (txt) out.push(txt);
-    });
-
-    // Tooltips (avoid returning from forEach)
-    tile.querySelectorAll('[data-tooltip]').forEach((el) => {
-      const tooltip = resolveMSG(el.getAttribute('data-tooltip') || '');
-      if (tooltip) out.push(tooltip);
-    });
-
-    // Common ARIA/title/placeholder attributes
-    ['aria-label', 'title', 'placeholder'].forEach((attr) => {
-      const raw = tile.getAttribute(attr);
-      if (raw) {
-        const val = resolveMSG(raw);
-        if (val) out.push(val);
-      }
-    });
-
-    // Shortcut key labels/inputs
-    tile
-      .querySelectorAll('.shortcut-keys .key-text, .shortcut-keys input.key-input')
-      .forEach((el) => {
-        const val = (el.value || el.textContent || '').trim();
-        if (val) out.push(val);
-      });
-
-    return out.filter(Boolean);
-  };
-
-  const build = () => {
-    const tiles = qSel('.shortcut-item');
-    idx = tiles.map((el, i) => {
-      el.dataset.tileId ||= `tile-${i}`;
-      const words = new Set(collect(el).flatMap(tok));
-      return { el, words };
-    });
-  };
-
-  const match = (set, t) => {
-    if (set.has(t)) return true; // exact token match
-    for (const w of set) {
-      // partial, anywhere in the word
-      if (w.includes(t)) return true;
-    }
-    return false;
-  };
-
-  const apply = (q) => {
-    const tokens = tok(q),
-      all = tokens.length === 0;
-    idx.forEach(({ el, words }) => {
-      const ok = all || tokens.every((t) => match(words, t));
-      el.style.display = ok ? '' : 'none';
-    });
-    bar?.classList.toggle('active', !all);
-    container?.classList.toggle('filtering-active', !all);
-  };
-
-  const injectBar = () => {
-    if (container.querySelector('.ios-searchbar')) return;
-    const title = container.querySelector('h1.i18n[data-i18n="popup_title"]');
-    const grid = container.querySelector('.shortcut-grid');
-    bar = document.createElement('div');
-    bar.className = 'ios-searchbar';
-    bar.innerHTML = `<div class="ios-searchbar-inner">
-  <input type="search" class="ios-search-input" placeholder="Search" aria-label="Filter shortcuts by keyword">
-  <button type="button" class="ios-search-cancel" aria-label="Cancel search">Cancel</button></div>`;
-    const parent = grid?.parentNode ?? title?.parentNode ?? container;
-    const refNode = grid ?? title?.nextSibling ?? container.firstChild;
-    parent.insertBefore(bar, refNode);
-    input = bar.querySelector('.ios-search-input');
-    const cancel = bar.querySelector('.ios-search-cancel');
-    input.addEventListener('input', () => apply(input.value));
-    input.addEventListener('search', () => apply(input.value));
-    input.addEventListener('focus', () => bar.classList.add('focused'));
-    input.addEventListener('blur', () => {
-      if (!input.value) bar.classList.remove('focused');
-    });
-    cancel.addEventListener('click', () => {
-      input.value = '';
-      apply('');
-      input.blur();
-    });
-
-    // Focus the input when bar is injected
-    setTimeout(() => {
-      input.focus();
-      // Optionally select all text if needed:
-      // input.select();
-    }, 0);
-  };
-
-  const observe = () => {
-    let t;
-    const deb = () => {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        build();
-        apply(input?.value || '');
-      }, 80);
-    };
-    const mo = new MutationObserver(() => deb());
-    mo.observe(container, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['data-i18n', 'data-tooltip', 'title', 'aria-label', 'placeholder'],
-    });
-  };
-
-  const run = () => {
-    container = document.querySelector('.shortcut-container');
-    if (!container) return;
-    injectBar();
-    build();
-    observe();
-    // Start with an empty query; input may not be wired yet.
-    apply('');
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run, { once: true });
-  } else {
-    run();
-  }
-})();
+chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
+  const arr = Array.isArray(data.modelPickerKeyCodes) ? data.modelPickerKeyCodes.slice(0, 15) : [];
+  while (arr.length < 15) arr.push('');
+  window.__modelPickerKeyCodes = arr;
+  if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+  if (typeof window.modelPickerInputsRender === 'function') window.modelPickerInputsRender();
+});
 
 // ===== @note Model Picker 5×2 Inputs Grid (unified: build + capture + save + react) =====
 (function modelPickerInputsGridInitV2() {
   let tries = 0;
+  // Exactly 10 slots (5×2); removes unused "Slot 11–15"
+  const MAX_SLOTS = 10;
 
   const onReady = (fn) =>
     document.readyState === 'loading'
@@ -3829,16 +3911,16 @@ if (document.readyState === 'loading') {
     const head = document.createElement('div');
     head.className = 'mp-head';
     head.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0 0 8px 0;';
-    head.innerHTML = `
-    `;
+    head.innerHTML = ``;
 
     const grid = document.createElement('div');
     grid.className = 'shortcut-grid';
     grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < MAX_SLOTS; i++) {
       const item = document.createElement('div');
       item.className = 'shortcut-item';
+      item.setAttribute('data-slot', String(i));
       item.style.cssText =
         'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;';
 
@@ -3876,12 +3958,22 @@ if (document.readyState === 'loading') {
     if (anchor.id === 'mp-grid-anchor') anchor.style.display = 'none';
   }
 
-  const getCodes = () => (window.ShortcutUtils.getModelPickerCodesCache() || []).slice();
-  const setCodes = (codes, cb) =>
-    window.saveModelPickerKeyCodes(codes, () => {
+  const getCodes = () => {
+    const src = Array.isArray(window.__modelPickerKeyCodes)
+      ? window.__modelPickerKeyCodes
+      : window.ShortcutUtils.getModelPickerCodesCache?.() || [];
+    const raw = src.slice(0, MAX_SLOTS);
+    while (raw.length < MAX_SLOTS) raw.push('');
+    return raw;
+  };
+  const setCodes = (codes, cb) => {
+    const out = (codes || []).slice(0, MAX_SLOTS);
+    while (out.length < MAX_SLOTS) out.push('');
+    window.saveModelPickerKeyCodes(out, () => {
       renderInputs();
       cb?.();
     });
+  };
   const displayFrom = (c) => window.ShortcutUtils.displayFromCode?.(c) || c || '';
 
   // Live mode cache ('alt' | 'ctrl'); kept in sync with storage
@@ -4089,21 +4181,97 @@ if (document.readyState === 'loading') {
     return code || alias[r] || alias[r.toLowerCase()] || '';
   }
 
+  // Normalize a few legacy/edge cases and provide a fallback when e.code is missing/unidentified
+  function normalizeCode(e) {
+    const code = e.code && e.code !== 'Unidentified' ? e.code : keyToCode(e.key);
+
+    // Map legacy/alias forms
+    switch (code) {
+      case 'OSLeft':
+        return 'MetaLeft';
+      case 'OSRight':
+        return 'MetaRight';
+      case 'Spacebar':
+        return 'Space';
+      case 'Left':
+        return 'ArrowLeft';
+      case 'Right':
+        return 'ArrowRight';
+      case 'Up':
+        return 'ArrowUp';
+      case 'Down':
+        return 'ArrowDown';
+      case 'Del':
+        return 'Delete';
+      case 'Esc':
+        return 'Escape';
+      default:
+        return code || 'Unidentified';
+    }
+  }
+
+  // Fallback from key -> code for older/odd browsers (best‑effort common cases)
+  function keyToCode(key) {
+    switch (key) {
+      case ' ':
+      case 'Spacebar':
+        return 'Space';
+      case 'Esc':
+        return 'Escape';
+      case 'Del':
+        return 'Delete';
+      case 'Left':
+        return 'ArrowLeft';
+      case 'Right':
+        return 'ArrowRight';
+      case 'Up':
+        return 'ArrowUp';
+      case 'Down':
+        return 'ArrowDown';
+      default:
+        return key || '';
+    }
+  }
+
   function onKeyDown(e) {
     const inp = e.currentTarget;
     const idx = Number(inp.getAttribute('data-idx') || '0');
 
-    if (e.key === 'Tab' || e.key.startsWith('Arrow')) return;
+    // Treat Tab/Enter as navigation only – never assign them as shortcuts
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1; // Enter => forward
+      let next = idx + dir;
+      const max = 9;
+      if (next < 0) next = max;
+      if (next > max) next = 0;
+      const nextEl = document.getElementById(`mpKeyInput${next}`);
+      if (nextEl) nextEl.focus();
+      return;
+    }
+
+    // Ignore pure modifier-only presses or auto-repeat holds
+    const c = e.code || '';
+    if (
+      /^(Shift|Alt|Control|Meta|OS|Fn)(Left|Right)?$/.test(c) ||
+      e.key === 'AltGraph' ||
+      e.repeat
+    ) {
+      return;
+    }
+
+    // Capture everything else (Arrow*, Home/End/Page*, Insert, PrintScreen, etc.)
     e.preventDefault();
     e.stopPropagation();
 
-    // Mirror your 111 guard to avoid input-flicker
+    // Avoid input-flicker
     inp.dataset.justHandled = '1';
     setTimeout(() => {
       inp.dataset.justHandled = '';
     }, 60);
 
-    const code = e.code;
+    const code = normalizeCode(e);
 
     if (code === 'Escape') {
       const current = inp.dataset.keyCode || '';
@@ -4113,7 +4281,6 @@ if (document.readyState === 'loading') {
     if (code === 'Backspace' || code === 'Delete') {
       return clearAt(idx);
     }
-    if (/^(Shift|Alt|Control|Meta|Fn)(Left|Right)?$/.test(code)) return;
 
     assignAt(idx, code);
   }
@@ -4228,14 +4395,211 @@ if (document.readyState === 'loading') {
     waitForDeps(() => {
       buildGridSection();
       initModelModeFromStorage(); // ← initialize mode cache from storage
-      renderAll();
       wireInputsAndReset();
       wireReactivity();
+      // Render after codes hydrate so names/codes are aligned on first paint
+      if (window.__modelPickerHydrating?.then) {
+        window.__modelPickerHydrating.then(() => renderAll());
+      } else {
+        renderAll();
+      }
     }),
   );
 
   // Expose renderer for external triggers
   window.modelPickerInputsRender = renderAll;
+})();
+
+// Search Filter IIFE
+
+(() => {
+  let container,
+    bar,
+    input,
+    idx = [],
+    altTables;
+  const qSel = (s) => Array.from((container || document).querySelectorAll(s));
+  const tok = (s) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .split(/[^a-z0-9]+/g)
+      .filter(Boolean);
+  const loadAlt = () => {
+    if (altTables) return altTables;
+    altTables = [];
+    const guesses = [
+      window.APP_LOCALE_MESSAGES,
+      window.I18N_MESSAGES,
+      window.localeMessages,
+      window.messages,
+    ];
+    // Avoid returning a value from forEach callback (Biome: useIterableCallbackReturn)
+    guesses.forEach((t) => {
+      if (t) altTables.push(t);
+    });
+    try {
+      const el = document.getElementById('i18n-messages');
+      if (el?.textContent) altTables.push(JSON.parse(el.textContent));
+    } catch {}
+    return altTables;
+  };
+
+  const getMsg = (key) => {
+    if (!key) return '';
+    try {
+      if (chrome?.i18n?.getMessage) {
+        const s = chrome.i18n.getMessage(key);
+        if (s) return s;
+      }
+    } catch {}
+    for (const tbl of loadAlt()) {
+      if (!tbl) continue;
+      if (typeof tbl[key] === 'string') return tbl[key];
+      if (tbl[key]?.message) return String(tbl[key].message);
+    }
+    return '';
+  };
+  const resolveMSG = (v) => {
+    const m = /^__MSG_([A-Za-z0-9_]+)__$/.exec(v || '');
+    return m ? getMsg(m[1]) : v || '';
+  };
+
+  const collect = (tile) => {
+    const out = [];
+
+    // Visible strings and inline text
+    tile.querySelectorAll('[data-i18n]').forEach((el) => {
+      const k = el.getAttribute('data-i18n');
+      const msg = getMsg(k);
+      if (msg) out.push(msg);
+
+      const txt = (el.textContent || '').trim();
+      if (txt) out.push(txt);
+    });
+
+    // Tooltips (avoid returning from forEach)
+    tile.querySelectorAll('[data-tooltip]').forEach((el) => {
+      const tooltip = resolveMSG(el.getAttribute('data-tooltip') || '');
+      if (tooltip) out.push(tooltip);
+    });
+
+    // Common ARIA/title/placeholder attributes
+    ['aria-label', 'title', 'placeholder'].forEach((attr) => {
+      const raw = tile.getAttribute(attr);
+      if (raw) {
+        const val = resolveMSG(raw);
+        if (val) out.push(val);
+      }
+    });
+
+    // Shortcut key labels/inputs
+    tile
+      .querySelectorAll('.shortcut-keys .key-text, .shortcut-keys input.key-input')
+      .forEach((el) => {
+        const val = (el.value || el.textContent || '').trim();
+        if (val) out.push(val);
+      });
+
+    return out.filter(Boolean);
+  };
+
+  const build = () => {
+    const tiles = qSel('.shortcut-item');
+    idx = tiles.map((el, i) => {
+      el.dataset.tileId ||= `tile-${i}`;
+      const words = new Set(collect(el).flatMap(tok));
+      return { el, words };
+    });
+  };
+
+  const match = (set, t) => {
+    if (set.has(t)) return true; // exact token match
+    for (const w of set) {
+      // partial, anywhere in the word
+      if (w.includes(t)) return true;
+    }
+    return false;
+  };
+
+  const apply = (q) => {
+    const tokens = tok(q),
+      all = tokens.length === 0;
+    idx.forEach(({ el, words }) => {
+      const ok = all || tokens.every((t) => match(words, t));
+      el.style.display = ok ? '' : 'none';
+    });
+    bar?.classList.toggle('active', !all);
+    container?.classList.toggle('filtering-active', !all);
+  };
+
+  const injectBar = () => {
+    if (container.querySelector('.ios-searchbar')) return;
+    const title = container.querySelector('h1.i18n[data-i18n="popup_title"]');
+    const grid = container.querySelector('.shortcut-grid');
+    bar = document.createElement('div');
+    bar.className = 'ios-searchbar';
+    bar.innerHTML = `<div class="ios-searchbar-inner">
+  <input type="search" class="ios-search-input" placeholder="Search" aria-label="Filter shortcuts by keyword">
+  <button type="button" class="ios-search-cancel" aria-label="Cancel search">Cancel</button></div>`;
+    const parent = grid?.parentNode ?? title?.parentNode ?? container;
+    const refNode = grid ?? title?.nextSibling ?? container.firstChild;
+    parent.insertBefore(bar, refNode);
+    input = bar.querySelector('.ios-search-input');
+    const cancel = bar.querySelector('.ios-search-cancel');
+    input.addEventListener('input', () => apply(input.value));
+    input.addEventListener('search', () => apply(input.value));
+    input.addEventListener('focus', () => bar.classList.add('focused'));
+    input.addEventListener('blur', () => {
+      if (!input.value) bar.classList.remove('focused');
+    });
+    cancel.addEventListener('click', () => {
+      input.value = '';
+      apply('');
+      input.blur();
+    });
+
+    // Focus the input when bar is injected
+    setTimeout(() => {
+      input.focus();
+      // Optionally select all text if needed:
+      // input.select();
+    }, 0);
+  };
+
+  const observe = () => {
+    let t;
+    const deb = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        build();
+        apply(input?.value || '');
+      }, 80);
+    };
+    const mo = new MutationObserver(() => deb());
+    mo.observe(container, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['data-i18n', 'data-tooltip', 'title', 'aria-label', 'placeholder'],
+    });
+  };
+
+  const run = () => {
+    container = document.querySelector('.shortcut-container');
+    if (!container) return;
+    injectBar();
+    build();
+    observe();
+    // Start with an empty query; input may not be wired yet.
+    apply('');
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
+  } else {
+    run();
+  }
 })();
 
 // Segmented Controls JS
@@ -4334,10 +4698,20 @@ if (document.readyState === 'loading') {
     }
   };
 
-  // Optional-permissions are handled in the background now.
-  // No permission prompts will originate from the popup.
-  const ensureIdentity = async () => true;
-  const ensureDriveAuth = async () => true;
+  // Request optional permissions ONLY from the popup (user gesture).
+  const contains = (o) => new Promise((r) => chrome.permissions.contains(o, r));
+  const request = (o) => new Promise((r) => chrome.permissions.request(o, r));
+  // Only request 'identity' — do NOT request 'identity.email' unless user explicitly opts in.
+  const ensureIdentity = async () => {
+    const id = { permissions: ['identity'] };
+    if (!(await contains(id))) {
+      const ok = await request(id); // must run inside the click handler call stack
+      if (!ok) return false;
+    }
+    return true;
+  };
+  // Drive access uses bearer tokens; 'identity' is sufficient for OAuth.
+  const ensureDriveAuth = async () => ensureIdentity();
 
   const renderUI = (state, email = '') => {
     const { signinRow, syncRow } = els();

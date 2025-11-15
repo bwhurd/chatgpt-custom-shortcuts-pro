@@ -3,7 +3,7 @@
   "name": "__MSG_app_name__",
   "default_locale": "en",
   "description": "__MSG_app_description__",
-  "version": "4.1.0.4",
+  "version": "4.2.1.0",
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -38,6 +38,7 @@
         "lib/ScrollToPlugin.min.js",
         "lib/Observer.min.js",
         "lib/Flip.min.js",
+        "shared/model-picker-labels.js",
         "content.js"
       ],
       "run_at": "document_idle"

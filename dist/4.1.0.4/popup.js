@@ -4339,16 +4339,16 @@ if (document.readyState === 'loading') {
   const ensureIdentity = async () => true;
   const ensureDriveAuth = async () => true;
 
-  const renderUI = (state, email = '') => {
-    const { signinRow, syncRow } = els();
+  const renderUI = (state) => {
+    const { signinRow, syncRow } = els;
     if (state === 'in') {
       if (signinRow) signinRow.style.display = 'none';
-      if (syncRow) syncRow.style.display = 'contents'; // flatten so its children order with label/status
-      setStatus(email ? `Linked to ${email}` : 'Linked');
+      if (syncRow) syncRow.style.display = 'contents';
+      setStatus('Linked');
     } else {
       if (signinRow) signinRow.style.display = 'flex';
       if (syncRow) syncRow.style.display = 'none';
-      setStatus(chrome.i18n.getMessage('status_not_linked'));
+      setStatus(chrome.i18n.getMessage('status_not_linked') || 'Not linked');
     }
   };
 

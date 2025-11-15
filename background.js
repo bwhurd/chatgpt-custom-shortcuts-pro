@@ -35,9 +35,8 @@
 
   const hasIdentity = () =>
     new Promise((r) => chrome.permissions.contains({ permissions: ['identity'] }, r));
-  const reqIdentity = () =>
-    new Promise((r) => chrome.permissions.request({ permissions: ['identity'] }, r));
-
+  // Do NOT call chrome.permissions.request here. MV3 service workers lack user gestures.
+  // The popup must request optional permissions before we run the broker flow.
   async function saveTokens(t) {
     const { access_token, refresh_token, expires_in } = t || {};
     const exp = expires_in ? now() + expires_in - 60 : 0;
@@ -56,15 +55,12 @@
     if (!r.ok) throw new Error('TOKEN_ENDPOINT_ERROR');
     return r.json();
   }
-
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'cloudAuth.login') {
       (async () => {
         try {
-          // Only request identity; do NOT request googleapis host origin
-          if (!(await hasIdentity()) && !(await reqIdentity()))
-            throw new Error('PERMISSION_DENIED');
-
+          // Identity permission must already be granted by the popup's user gesture.
+          if (!(await hasIdentity())) throw new Error('PERMISSION_DENIED');
           const state = rnd();
           const resp = await chrome.identity.launchWebAuthFlow({
             url: authUrl(state),
