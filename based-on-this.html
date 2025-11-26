@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined">
+<link rel="stylesheet" href="{{ url_for('static', filename='my-chords.css') }}">
+
+<h2 class="mb-3">My chord library</h2>
+
+<div class="d-flex mb-3 gap-2">
+    <button id="add-group" class="btn btn-sm btn-primary">Add group</button>
+    <button id="save-library" class="btn btn-sm btn-success">Save</button>
+</div>
+
+{% if groups|length == 0 %}
+<p>No chords defined yet.</p>
+{% endif %}
+
+<div id="groups-root">
+    {% for group in groups %}
+    <div class="group mb-4">
+        <div class="d-flex align-items-center mb-2">
+            <input class="form-control form-control-sm group-name" value="{{ group.group }}">
+            <button class="btn btn-sm btn-outline-danger ms-2 remove-group">&times;</button>
+        </div>
+
+        <div class="d-grid chord-grid"
+            style="grid-gap: 3rem; grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));">
+            {% for chord in group.chords %}
+            {% set diag = chord.diagram %}
+            <div class="text-center chord-card mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="material-icons-outlined chord-handle"
+                        style="cursor: move; font-size: 18px;">drag_indicator</span>
+                    <span class="chord-title flex-grow-1 text-truncate mx-1">{{ chord.name }}</span>
+                    <span class="material-icons-outlined chord-edit"
+                        style="cursor: pointer; font-size: 18px;">edit</span>
+                </div>
+
+                <div class="chord-edit-fields mb-2" style="display: none;">
+                    <input class="form-control form-control-sm mb-1 chord-name-input" value="{{ chord.name }}">
+                    <input class="form-control form-control-sm chord-shape-input" value="{{ chord.shape }}">
+                </div>
+
+                <table class="chord-diagram">
+                    <thead>
+                        <tr>
+                            <th class="chord-header-spacer"></th>
+                            {% for x in diag.header %}
+                            {# positional class for nut clipping #}
+                            {% set pos_class = 'string-col' %}
+                            {% if loop.first %}
+                            {% set pos_class = pos_class + ' string-left' %}
+                            {% elif loop.last %}
+                            {% set pos_class = pos_class + ' string-right' %}
+                            {% endif %}
+
+                            {# visual class based on symbol #}
+                            {% if x in ['x', 'X'] %}
+                            {% set cls = 'chord-header-muted ' + pos_class %}
+                            {% elif x in ['o', 'O'] %}
+                            {% set cls = 'chord-header-open ' + pos_class %}
+                            {% else %}
+                            {% set cls = 'chord-header-fret ' + pos_class %}
+                            {% endif %}
+
+                            <th class="{{ cls }}">
+                                {% if x in ['x','X','o','O'] %}
+                                <span class="chord-header-label">{{ x }}</span>
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in diag.rows %}
+                        <tr>
+                            <td class="chord-fret-label">{{ row.fret }}</td>
+                            {% for mark in row.strings %}
+                            <td
+                                class="chord-string-cell{% if loop.first %} string-left{% elif loop.last %} string-right{% endif %}">
+                                <div class="chord-dot-wrap">
+                                    <div class="chord-dot {{ 'chord-dot-filled' if mark == 1 }}"></div>
+                                </div>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        <!-- Fretted numbers below diagram -->
+                        <tr class="chord-footer-row">
+                            <td class="chord-footer-spacer"></td>
+                            {% for x in diag.header %}
+                            <td class="chord-footer-cell">
+                                {% if x not in ['x', 'X', 'o', 'O'] %}
+                                <span class="chord-footer-label">{{ x }}</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                    </tbody>
+                </table>
+
+
+            </div>
+            {% endfor %}
+        </div>
+
+        <button class="btn btn-sm btn-outline-primary add-chord">Add chord</button>
+        <hr class="border border-primary" />
+    </div>
+    {% endfor %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+    (function () {
+        const groupsRoot = document.getElementById('groups-root');
+        const addGroupBtn = document.getElementById('add-group');
+        const saveBtn = document.getElementById('save-library');
+
+        function buildDataFromDOM() {
+            const groups = [];
+            groupsRoot.querySelectorAll('.group').forEach(groupEl => {
+                const nameInput = groupEl.querySelector('.group-name');
+                const groupName = nameInput ? nameInput.value.trim() : '';
+                const chords = [];
+                groupEl.querySelectorAll('.chord-card').forEach(card => {
+                    const nameInput = card.querySelector('.chord-name-input');
+                    const shapeInput = card.querySelector('.chord-shape-input');
+                    const titleEl = card.querySelector('.chord-title');
+                    const name = (nameInput && nameInput.value ? nameInput.value : (titleEl ? titleEl.textContent : '')).trim();
+                    const shape = shapeInput ? shapeInput.value.trim() : '';
+                    if (!shape) return;
+                    chords.push({ name: name || '(unnamed)', shape: shape });
+                });
+                groups.push({ group: groupName || 'Group', chords: chords });
+            });
+            return groups;
+        }
+
+        function wireChordCard(card) {
+            const editBtn = card.querySelector('.chord-edit');
+            const fields = card.querySelector('.chord-edit-fields');
+            const title = card.querySelector('.chord-title');
+            const nameInput = card.querySelector('.chord-name-input');
+            const shapeInput = card.querySelector('.chord-shape-input');
+
+            if (!editBtn || !fields || !title || !nameInput || !shapeInput) return;
+
+            editBtn.addEventListener('click', () => {
+                const visible = fields.style.display !== 'none';
+                fields.style.display = visible ? 'none' : '';
+                if (!visible) {
+                    nameInput.focus();
+                    nameInput.select();
+                }
+            });
+
+            function apply() {
+                title.textContent = nameInput.value.trim() || '(unnamed)';
+            }
+
+            nameInput.addEventListener('blur', apply);
+            shapeInput.addEventListener('blur', apply);
+
+            nameInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    shapeInput.focus();
+                }
+            });
+            shapeInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    shapeInput.blur();
+                }
+            });
+        }
+
+        function wireGroup(groupEl) {
+            const addChordBtn = groupEl.querySelector('.add-chord');
+            const removeGroupBtn = groupEl.querySelector('.remove-group');
+            const grid = groupEl.querySelector('.chord-grid');
+
+            if (addChordBtn && grid) {
+                addChordBtn.addEventListener('click', () => {
+                    const card = document.createElement('div');
+                    card.className = 'text-center chord-card mb-3';
+                    card.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="material-icons-outlined chord-handle" style="cursor: move; font-size: 18px;">drag_indicator</span>
+              <span class="chord-title flex-grow-1 text-truncate mx-1">(new)</span>
+              <span class="material-icons-outlined chord-edit" style="cursor: pointer; font-size: 18px;">edit</span>
+            </div>
+            <div class="chord-edit-fields mb-2">
+              <input class="form-control form-control-sm mb-1 chord-name-input" value="">
+              <input class="form-control form-control-sm chord-shape-input" value="">
+            </div>
+            <small class="text-muted">Diagram updates after Save</small>
+          `;
+                    grid.appendChild(card);
+                    wireChordCard(card);
+                });
+            }
+
+            if (removeGroupBtn) {
+                removeGroupBtn.addEventListener('click', () => {
+                    groupEl.remove();
+                });
+            }
+
+            if (grid) {
+                Sortable.create(grid, {
+                    group: 'chords',
+                    handle: '.chord-handle',
+                    animation: 150
+                });
+            }
+        }
+
+        function init() {
+            groupsRoot.querySelectorAll('.chord-card').forEach(wireChordCard);
+            groupsRoot.querySelectorAll('.group').forEach(wireGroup);
+
+            if (addGroupBtn) {
+                addGroupBtn.addEventListener('click', () => {
+                    const groupEl = document.createElement('div');
+                    groupEl.className = 'group mb-4';
+                    groupEl.innerHTML = `
+            <div class="d-flex align-items-center mb-2">
+              <input class="form-control form-control-sm group-name" value="New group">
+              <button class="btn btn-sm btn-outline-danger ms-2 remove-group">&times;</button>
+            </div>
+            <div class="d-grid chord-grid"
+                 style="grid-gap: 3rem; grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));"></div>
+            <button class="btn btn-sm btn-outline-primary add-chord">Add chord</button>
+            <hr class="border border-primary" />
+          `;
+                    groupsRoot.appendChild(groupEl);
+                    wireGroup(groupEl);
+                });
+            }
+
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async () => {
+                    const payload = buildDataFromDOM();
+                    try {
+                        await fetch("{{ url_for('my_chords_edit') }}", {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        window.location.reload();
+                    } catch (e) {
+                        alert('Save failed');
+                    }
+                });
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+</script>
+
+{% endblock %}

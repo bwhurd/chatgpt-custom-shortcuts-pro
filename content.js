@@ -7382,7 +7382,7 @@ setTimeout(() => {
       return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
     })();
     const useCtrl = !!cfg?.useControlForModelSwitcherRadio;
-    const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Control + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
+    const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Ctrl + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
 
     const rows = [];
     for (let i = 0; i < names.length; i++) {

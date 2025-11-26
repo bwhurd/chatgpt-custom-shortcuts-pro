@@ -1,0 +1,1088 @@
+/* file: my-chords.css */
+
+/* =========================================
+   Design tokens
+   ========================================= */
+:root {
+    /* Colors */
+    --color-bg: #343237;
+    --color-fg: #efeffc;
+
+    /* Typography */
+    --font-base: system-ui, sans-serif;
+    --font-chord: 'NunitoChord', var(--font-base);
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+
+    /* Radii */
+    --radius-xxs: .25rem;
+    /* small card/group corners */
+    --radius-xs: .5rem;
+    /* larger card corners */
+    --radius-pill: 999px;
+    /* fully rounded */
+
+    /* Spacing */
+    --space-1: .25rem;
+    --space-2: .5rem;
+    --space-3: .75rem;
+
+    /* Diagram: geometry & ratios */
+    --diagram-u: 28px;
+    /* updated from 24px */
+    --diagram-string-gap: .7;
+    --diagram-string-width: .1;
+    --diagram-fretline-width: .1;
+    --diagram-nutline-width: .2;
+    --diagram-nut-bump: 0.1;
+
+    --diagram-header-row-h: .2;
+    --diagram-header-font-scale: .5;
+
+    --diagram-fret-label-col-w: .7;
+    --diagram-fret-label-font-scale: .5;
+    /* was .45 */
+    --diagram-fret-label-translate-x: -.37;
+    /* multipliers of --u */
+    --diagram-fret-label-translate-y: .05;
+
+    --diagram-row1-h: 1;
+    --diagram-row2-h: 1.07;
+    --diagram-row3-h: 1.09;
+    --diagram-row4-h: 1.09;
+
+    --diagram-dot-size: .5;
+    /* 0.5 x 0.5 of unit */
+
+    /* NEW: Offsets for header/footer labels */
+    --diagram-header-offset: 0.2;
+    /* units above nut for X/O */
+    --diagram-footer-offset: 0.05;
+    /* units below last fret for numbers */
+}
+
+/* =========================================
+   Page base
+   ========================================= */
+/* page colours */
+body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+}
+
+/* Nunito medium for numbers / X O */
+@font-face {
+    font-family: 'NunitoChord';
+    src: url('/static/Nunito-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* =========================================
+   Layout wrappers – unchanged (tokenized)
+   ========================================= */
+#groups-root {
+    margin-top: var(--space-2);
+}
+
+.group {
+    padding: var(--space-1) var(--space-1) var(--space-3);
+    border-radius: var(--radius-xxs);
+}
+
+.chord-card {
+    border-radius: var(--radius-xs);
+    padding: var(--space-1);
+}
+
+/* =========================================
+   Diagram geometry
+   ========================================= */
+.chord-diagram {
+    /* local aliases (allowing easy overrides per-diagram if needed) */
+    --u: var(--diagram-u);
+    --string-gap: var(--diagram-string-gap);
+    --string-width: var(--diagram-string-width);
+    --fretline-width: var(--diagram-fretline-width);
+    --nutline-width: var(--diagram-nutline-width);
+
+    --header-row-h: var(--diagram-header-row-h);
+    --header-font-scale: var(--diagram-header-font-scale);
+
+    --fret-label-col-w: var(--diagram-fret-label-col-w);
+    --fret-label-font-scale: var(--diagram-fret-label-font-scale);
+    --fret-label-tx: var(--diagram-fret-label-translate-x);
+    --fret-label-ty: var(--diagram-fret-label-translate-y);
+
+    --row1-h: var(--diagram-row1-h);
+    --row2-h: var(--diagram-row2-h);
+    --row3-h: var(--diagram-row3-h);
+    --row4-h: var(--diagram-row4-h);
+
+    --dot-size: var(--diagram-dot-size);
+
+    table-layout: fixed;
+    border-collapse: collapse;
+    margin: 0 auto;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-chord);
+}
+
+/* column widths */
+.chord-diagram thead th:first-child,
+.chord-diagram tbody td.chord-fret-label {
+    width: calc(var(--u) * var(--fret-label-col-w));
+}
+
+.chord-diagram thead th:not(:first-child),
+.chord-diagram tbody td.chord-string-cell {
+    width: calc(var(--u) * var(--string-gap));
+}
+
+/* header row and nut */
+.chord-diagram thead tr {
+    height: calc(var(--u) * var(--header-row-h));
+    position: relative;
+}
+
+.chord-diagram thead th {
+    padding: 0;
+    border: 0;
+    text-align: center;
+    vertical-align: bottom;
+    font-size: calc(var(--u) * var(--header-font-scale));
+    font-weight: var(--font-weight-medium);
+}
+
+/* header classes */
+.chord-header-muted,
+.chord-header-open,
+.chord-header-fret {
+    color: var(--color-fg);
+    font-weight: var(--font-weight-medium);
+}
+
+/* Nut: single pill spanning all strings, uses --nutline-width */
+.chord-diagram thead tr::after {
+    content: "";
+    position: absolute;
+    /* Bump out nut by .12 units on each side (tweak as needed) */
+    left: calc(var(--u) * var(--fret-label-col-w) + (var(--u) * var(--string-gap) / 2) - var(--u) * var(--string-width) - var(--u) * var(--diagram-nut-bump));
+    right: calc((var(--u) * var(--string-gap) / 2) - var(--u) * var(--string-width) - var(--u) * var(--diagram-nut-bump));
+    bottom: 0;
+    height: calc(var(--u) * var(--nutline-width));
+    background: var(--color-fg);
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* header cells above nut, no borders */
+.chord-diagram thead th:not(.chord-header-spacer) {
+    border-bottom: none;
+    position: relative;
+    z-index: 1;
+}
+
+/* fret-row heights */
+.chord-diagram tbody tr:nth-child(1) {
+    height: calc(var(--u) * var(--row1-h));
+}
+
+.chord-diagram tbody tr:nth-child(2) {
+    height: calc(var(--u) * var(--row2-h));
+}
+
+.chord-diagram tbody tr:nth-child(3) {
+    height: calc(var(--u) * var(--row3-h));
+}
+
+.chord-diagram tbody tr:nth-child(4) {
+    height: calc(var(--u) * var(--row4-h));
+}
+
+/* left-side fret numbers */
+.chord-fret-label {
+    font-size: calc(var(--u) * var(--fret-label-font-scale));
+    /* was .45, now .5 */
+    text-align: right;
+    padding: 0;
+    border: 0;
+    transform:
+        translateX(calc(var(--fret-label-tx) * var(--u))) translateY(calc(var(--fret-label-ty) * var(--u)));
+    vertical-align: middle;
+    font-weight: var(--font-weight-medium);
+    /* was 700 */
+}
+
+/* string verticals */
+.chord-string-cell {
+    position: relative;
+    padding: 0;
+    border: 0;
+}
+
+.chord-string-cell::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(var(--u) * var(--string-width));
+    background: var(--color-fg);
+}
+
+/* horizontal fret lines – single pseudo element */
+.chord-string-cell::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(var(--u) * var(--fretline-width));
+    background: var(--color-fg);
+}
+
+.string-left::before {
+    left: 50%;
+}
+
+.string-right::before {
+    right: 50%;
+}
+
+/* last fret line visible */
+.chord-diagram tbody tr:last-child .chord-string-cell::before {
+    display: block;
+}
+
+/* Offset header labels above nut */
+.chord-diagram thead th .chord-header-label {
+    display: inline-block;
+    position: relative;
+    /* Move up by --diagram-header-offset */
+    top: calc(-1 * var(--u) * var(--diagram-header-offset));
+}
+
+/* Footer row for string numbers (below diagram) */
+.chord-footer-row {
+    height: 0;
+}
+
+.chord-footer-spacer {
+    /* Empty cell left of numbers */
+    width: calc(var(--u) * var(--fret-label-col-w));
+    padding: 0;
+    border: 0;
+}
+
+.chord-footer-cell {
+    text-align: center;
+    padding: 0;
+    border: 0;
+    height: 0;
+    position: relative;
+}
+
+.chord-footer-label {
+    display: inline-block;
+    position: relative;
+    /* Move down by --diagram-footer-offset from bottom of diagram */
+    top: calc(var(--u) * var(--diagram-footer-offset));
+    font-size: calc(var(--u) * var(--header-font-scale));
+    color: var(--color-fg);
+    font-family: var(--font-chord);
+    font-weight: var(--font-weight-medium);
+    pointer-events: none;
+}
+
+/* dot wrapper & dots */
+.chord-dot-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* Dots: 0.6 x 0.6, circular, absolutely centred */
+.chord-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(var(--u) * var(--dot-size));
+    height: calc(var(--u) * var(--dot-size));
+    border-radius: var(--radius-pill);
+}
+
+.chord-dot-filled {
+    background: var(--color-fg);
+}
+
+/* editor handles */
+.chord-handle {
+    cursor: move;
+}
+
+.chord-edit {
+    cursor: pointer;
+}
+
+
+.chord-title {
+    margin-bottom: 0.15rem;
+}
+
+
+/* Shrink chord card icons and show only on hover */
+.chord-card .material-icons-outlined.chord-handle,
+.chord-card .material-icons-outlined.chord-edit {
+    font-size: 12.6px !important;
+    /* 18px * 0.7 = 12.6px */
+    opacity: 0;
+    transition: opacity 0.18s;
+    pointer-events: none;
+}
+
+.chord-card:hover .material-icons-outlined.chord-handle,
+.chord-card:hover .material-icons-outlined.chord-edit {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+
+/* end of file */
+
+/* =========================================
+   Changes to integrate Above
+   ========================================= */
+
+
+:root {
+    / Surface+text / --surface: #343237;
+    --surface-elevated: #2a282d;
+    --text-primary: #f5f4ee;
+    --text-secondary: #ececf7;
+    --accent: #43dfe7;
+    --border-subtle: rgba(236, 236, 247, 0.12);
+    --focus-ring: rgba(67, 223, 231, 0.55);
+    --text-on-accent: #0e1b1b;
+
+    / Radii / --radius-s: 10px;
+    --radius-m: 12px;
+    --radius-pill: 999px;
+
+    / Shadows / --shadow-elevated: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 10px 28px rgba(0, 0, 0, 0.35);
+
+    / Type scale / --fz-12: 0.75rem;
+    --fz-14: 0.875rem;
+    --fz-16: 1rem;
+    --fz-18: 1.125rem;
+    --fz-22: 1.375rem;
+    --fz-28: 1.75rem;
+
+    / Spacing / --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+}
+
+/ Surface changes /:root {
+    color-scheme: dark;
+}
+
+body {
+    margin: 0;
+    background:
+        radial-gradient(120% 200% at 50% -80%, #3a3840 0%, var(--surface) 58%),
+        var(--surface);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: var(--fz-14);
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+}
+
+body>.row {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding: clamp(1.25rem, 1rem + 1.5vw, 2.5rem) clamp(1rem, 2.5vw, 2rem) 3rem;
+}
+
+/ Heading changes / h2.mb-3 {
+    margin: 0 0 .75rem;
+    font-weight: 600;
+    font-size: clamp(var(--fz-22), 1.25rem + 1vw, var(--fz-28));
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+h2.mb-3::after {
+    content: "";
+    display: block;
+    height: 1px;
+    margin-top: .45rem;
+    background: linear-gradient(90deg, rgba(67, 223, 231, .35), rgba(67, 223, 231, 0) 55%);
+    border-radius: 1px;
+}
+
+/ Button changes / .btn {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid var(--border-subtle) !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    color: var(--text-primary) !important;
+    border-radius: var(--radius-pill) !important;
+    padding: .5rem .9rem !important;
+    font-weight: 600 !important;
+    font-size: var(--fz-14) !important;
+    line-height: 1 !important;
+    letter-spacing: -0.01em !important;
+    box-shadow: none !important;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .02s ease;
+}
+
+.btn-sm {
+    padding: .45rem .75rem !important;
+    font-size: var(--fz-12) !important;
+}
+
+.btn:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.btn:active {
+    transform: translateY(0.5px);
+}
+
+.btn:disabled,
+.btn[disabled] {
+    opacity: .55 !important;
+    cursor: not-allowed !important;
+}
+
+/ Primary (Save) / #save-library,
+.btn-success {
+    background: var(--accent) !important;
+    border-color: transparent !important;
+    color: var(--text-on-accent) !important;
+}
+
+#save-library:hover,
+.btn-success:hover {
+    background: #56e3ea !important;
+}
+
+#save-library:active,
+.btn-success:active {
+    background: #1bcad5 !important;
+}
+
+/ Secondary (Add group) / #add-group,
+.btn-primary {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+}
+
+/ Outline variants (Add chord / remove) / .btn-outline-primary,
+.add-chord {
+    background: transparent !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-outline-primary:hover,
+.add-chord:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.btn-outline-danger,
+.remove-group {
+    background: transparent !important;
+    border-color: var(--border-subtle) !important;
+    color: rgba(236, 236, 247, .75) !important;
+}
+
+/ Focus ring / .btn:focus {
+    outline: none !important;
+}
+
+.btn:focus-visible,
+.remove-group:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6), 0 0 0 4px var(--focus-ring) !important;
+}
+
+/ Group changes / #groups-root {
+    margin-top: var(--space-2);
+}
+
+.group {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-m);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-elevated);
+}
+
+@media (min-width: 768px) {
+    .group {
+        padding: var(--space-5);
+    }
+}
+
+/ Group header row / .group>.d-flex.align-items-center {
+    gap: var(--space-2);
+    margin-bottom: var(--space-3) !important;
+}
+
+/ Editable section header / .group-name.form-control {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    color: var(--text-primary) !important;
+    padding: .35rem .5rem !important;
+    font-weight: 600 !important;
+    font-size: clamp(var(--fz-16), .95rem + .3vw, var(--fz-18)) !important;
+    line-height: 1.3 !important;
+    box-shadow: none !important;
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.group-name.form-control:hover {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(236, 236, 247, 0.08) !important;
+}
+
+.group-name.form-control:focus {
+    outline: none !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(236, 236, 247, 0.14) !important;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, .6), 0 0 0 4px var(--focus-ring) !important;
+}
+
+/ Delete button reveal / .remove-group {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    border-radius: var(--radius-pill) !important;
+    display: inline-grid !important;
+    place-items: center !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.group:hover .remove-group,
+.group:focus-within .remove-group {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.remove-group:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--accent) !important;
+    border-color: rgba(67, 223, 231, .45) !important;
+}
+
+/ Group divider / .group>hr.border {
+    border: 0 !important;
+    height: 1px !important;
+    margin: var(--space-4) 0 var(--space-2) !important;
+    background: linear-gradient(90deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, .06) 100%);
+}
+
+
+/* Section header input as minimalist, Apple-like inline header */
+.group-name {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 1.125rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    outline: none;
+    transition: background 0.18s, box-shadow 0.18s;
+    border-radius: var(--radius-xxs);
+    cursor: text;
+}
+
+.group-name:hover,
+.group-name:focus {
+    background: rgba(67, 223, 231, 0.06);
+}
+
+.group-name:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+    background: rgba(67, 223, 231, 0.10);
+}
+
+
+:root {
+    /* ------------------------------------------------------------------
+     Color palette and theme variables
+     ------------------------------------------------------------------ */
+    --surface: #343237;
+    --surface-elevated: #2a282d;
+    --text-primary: #f5f4ee;
+    --text-secondary: #ececf7;
+    --accent: #43dfe7;
+    --border-subtle: rgba(255, 255, 255, 0.15);
+    --focus-ring: rgba(67, 223, 231, 0.5);
+
+    /* For compatibility with existing references in the diagram code */
+    --color-bg: var(--surface);
+    --color-fg: var(--text-primary);
+
+    /* ------------------------------------------------------------------
+     Typography and sizing
+     ------------------------------------------------------------------ */
+    --font-base: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+        sans-serif;
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+
+    --radius-xxs: 0.25rem;
+    --radius-xs: 0.5rem;
+    --radius-pill: 999px;
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+
+    /* ------------------------------------------------------------------
+     Chord diagram geometry
+     ------------------------------------------------------------------ */
+    --diagram-u: 28px;
+    /* updated from 24px */
+    --diagram-string-gap: 0.7;
+    --diagram-string-width: 0.1;
+    --diagram-fretline-width: 0.1;
+    --diagram-nutline-width: 0.2;
+    --diagram-nut-bump: 0.1;
+
+    --diagram-header-row-h: 0.2;
+    --diagram-header-font-scale: 0.5;
+
+    --diagram-fret-label-col-w: 0.7;
+    --diagram-fret-label-font-scale: 0.5;
+    --diagram-fret-label-translate-x: -0.37;
+    --diagram-fret-label-translate-y: 0.05;
+
+    --diagram-row1-h: 1;
+    --diagram-row2-h: 1.07;
+    --diagram-row3-h: 1.09;
+    --diagram-row4-h: 1.09;
+
+    --diagram-dot-size: 0.5;
+
+    --diagram-header-offset: 0.2;
+    --diagram-footer-offset: 0.05;
+}
+
+/* ------------------------------------------------------------------
+   Base page layout and typography
+   ------------------------------------------------------------------ */
+body {
+    margin: 0 auto;
+    padding: 2rem;
+    max-width: 60rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-base);
+    line-height: 1.5;
+}
+
+h2.mb-3 {
+    font-size: 1.5rem;
+    font-weight: var(--font-weight-medium);
+    margin-bottom: 1.5rem !important;
+    color: var(--text-primary);
+}
+
+/* Subtle horizontal rule for separation */
+hr.border.border-primary {
+    border: none;
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 2rem 0;
+}
+
+/* ------------------------------------------------------------------
+   Buttons (override Bootstrap classes)
+   ------------------------------------------------------------------ */
+.btn {
+    font-family: var(--font-base);
+    font-weight: var(--font-weight-medium);
+    border: none !important;
+    border-radius: var(--radius-pill) !important;
+    padding: 0.375rem 0.75rem !important;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s, filter 0.2s;
+}
+
+/* Primary and success as accent vs. neutral */
+.btn-primary {
+    background-color: #47464b !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-primary:hover {
+    filter: brightness(1.15);
+}
+
+.btn-success {
+    background-color: var(--accent) !important;
+    color: var(--surface) !important;
+}
+
+.btn-success:hover {
+    filter: brightness(1.1);
+}
+
+/* Outline variants */
+.btn-outline-primary {
+    background: transparent !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-outline-primary:hover {
+    filter: brightness(1.3);
+}
+
+.btn-outline-danger {
+    background: transparent !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: #ff6b6b !important;
+}
+
+.btn-outline-danger:hover {
+    filter: brightness(1.3);
+}
+
+/* ------------------------------------------------------------------
+   Group containers
+   ------------------------------------------------------------------ */
+.group {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: 1rem;
+    position: relative;
+    margin-bottom: 2rem !important;
+}
+
+.group .d-flex.align-items-center.mb-2 {
+    margin-bottom: 1rem !important;
+    position: relative;
+}
+
+/* Section header input as inline "title" */
+.group-name {
+    background: transparent !important;
+    border: none !important;
+    font-size: 1.125rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    flex-grow: 1;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    outline: none;
+}
+
+.group-name:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.group-name:focus {
+    outline: 2px solid var(--focus-ring);
+}
+
+/* Delete button hidden until hover/focus */
+.remove-group {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    font-size: 1rem !important;
+}
+
+.d-flex.align-items-center.mb-2:hover .remove-group,
+.d-flex.align-items-center.mb-2:focus-within .remove-group {
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------------
+   Chord cards
+   ------------------------------------------------------------------ */
+.chord-card {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: var(--space-2);
+    transition: box-shadow 0.2s;
+}
+
+.chord-card:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* Title in accent color */
+.chord-title {
+    margin-bottom: 0.15rem;
+    color: var(--accent);
+    font-weight: var(--font-weight-medium);
+    font-size: 0.95rem;
+}
+
+/* Edit fields restyle */
+.chord-edit-fields input {
+    background: #1F1E22 !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: var(--text-secondary) !important;
+    border-radius: var(--radius-xxs) !important;
+    font-family: var(--font-base);
+    font-size: 0.9rem;
+}
+
+.chord-edit-fields input:focus {
+    outline: 2px solid var(--focus-ring);
+}
+
+/* Handle and edit icons */
+.chord-handle,
+.chord-edit {
+    color: var(--accent) !important;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    cursor: pointer;
+    font-size: 1rem !important;
+}
+
+/* Show icons on hover */
+.chord-card:hover .chord-handle,
+.chord-card:hover .chord-edit {
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------------
+   Diagram geometry (from existing snippet, adapted to new variables)
+   ------------------------------------------------------------------ */
+.chord-diagram {
+    --u: var(--diagram-u);
+    --string-gap: var(--diagram-string-gap);
+    --string-width: var(--diagram-string-width);
+    --fretline-width: var(--diagram-fretline-width);
+    --nutline-width: var(--diagram-nutline-width);
+
+    --header-row-h: var(--diagram-header-row-h);
+    --header-font-scale: var(--diagram-header-font-scale);
+
+    --fret-label-col-w: var(--diagram-fret-label-col-w);
+    --fret-label-font-scale: var(--diagram-fret-label-font-scale);
+    --fret-label-tx: var(--diagram-fret-label-translate-x);
+    --fret-label-ty: var(--diagram-fret-label-translate-y);
+
+    --row1-h: var(--diagram-row1-h);
+    --row2-h: var(--diagram-row2-h);
+    --row3-h: var(--diagram-row3-h);
+    --row4-h: var(--diagram-row4-h);
+
+    --dot-size: var(--diagram-dot-size);
+
+    table-layout: fixed;
+    border-collapse: collapse;
+    margin: 0 auto;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-base);
+}
+
+/* Column widths for fret labels vs strings */
+.chord-diagram thead th:first-child,
+.chord-diagram tbody td.chord-fret-label {
+    width: calc(var(--u) * var(--fret-label-col-w));
+}
+
+.chord-diagram thead th:not(:first-child),
+.chord-diagram tbody td.chord-string-cell {
+    width: calc(var(--u) * var(--string-gap));
+}
+
+/* Header row for 'nut' area */
+.chord-diagram thead tr {
+    height: calc(var(--u) * var(--header-row-h));
+    position: relative;
+}
+
+.chord-diagram thead th {
+    padding: 0;
+    border: 0;
+    text-align: center;
+    vertical-align: bottom;
+    font-size: calc(var(--u) * var(--header-font-scale));
+    font-weight: var(--font-weight-medium);
+    position: relative;
+    z-index: 1;
+}
+
+.chord-diagram thead tr::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--u) * var(--fret-label-col-w) + (var(--u) * var(--string-gap) / 2) - var(--u) * var(--string-width) - var(--u) * var(--diagram-nut-bump));
+    right: calc((var(--u) * var(--string-gap) / 2) - var(--u) * var(--string-width) - var(--u) * var(--diagram-nut-bump));
+    bottom: 0;
+    height: calc(var(--u) * var(--nutline-width));
+    background: var(--text-primary);
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Basic coloring */
+.chord-header-muted,
+.chord-header-open,
+.chord-header-fret {
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+}
+
+/* Fret row heights */
+.chord-diagram tbody tr:nth-child(1) {
+    height: calc(var(--u) * var(--row1-h));
+}
+
+.chord-diagram tbody tr:nth-child(2) {
+    height: calc(var(--u) * var(--row2-h));
+}
+
+.chord-diagram tbody tr:nth-child(3) {
+    height: calc(var(--u) * var(--row3-h));
+}
+
+.chord-diagram tbody tr:nth-child(4) {
+    height: calc(var(--u) * var(--row4-h));
+}
+
+/* Left fret labels */
+.chord-fret-label {
+    font-size: calc(var(--u) * var(--fret-label-font-scale));
+    text-align: right;
+    padding: 0;
+    border: 0;
+    transform: translateX(calc(var(--fret-label-tx) * var(--u))) translateY(calc(var(--fret-label-ty) * var(--u)));
+    vertical-align: middle;
+    font-weight: var(--font-weight-medium);
+}
+
+/* Vertical strings */
+.chord-string-cell {
+    position: relative;
+    padding: 0;
+    border: 0;
+}
+
+.chord-string-cell::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(var(--u) * var(--string-width));
+    background: var(--text-primary);
+}
+
+.chord-string-cell::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(var(--u) * var(--fretline-width));
+    background: var(--text-primary);
+}
+
+.string-left::before {
+    left: 50%;
+}
+
+.string-right::before {
+    right: 50%;
+}
+
+/* Last fret line visible */
+.chord-diagram tbody tr:last-child .chord-string-cell::before {
+    display: block;
+}
+
+/* Offset header labels above the nut */
+.chord-diagram thead th .chord-header-label {
+    display: inline-block;
+    position: relative;
+    top: calc(-1 * var(--u) * var(--diagram-header-offset));
+}
+
+/* Footer row for string numbers */
+.chord-footer-row {
+    height: 0;
+}
+
+.chord-footer-spacer {
+    width: calc(var(--u) * var(--fret-label-col-w));
+    padding: 0;
+    border: 0;
+}
+
+.chord-footer-cell {
+    text-align: center;
+    padding: 0;
+    border: 0;
+    height: 0;
+    position: relative;
+}
+
+.chord-footer-label {
+    display: inline-block;
+    position: relative;
+    top: calc(var(--u) * var(--diagram-footer-offset));
+    font-size: calc(var(--u) * var(--header-font-scale));
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+    pointer-events: none;
+}
+
+/* Dots on fretboard */
+.chord-dot-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.chord-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(var(--u) * var(--dot-size));
+    height: calc(var(--u) * var(--dot-size));
+    border-radius: var(--radius-pill);
+}
+
+.chord-dot-filled {
+    background: var(--text-primary);
+}
+
+/* Drag handles */
+.chord-handle {
+    cursor: grab;
+}
+
+.chord-handle:active {
+    cursor: grabbing;
+}

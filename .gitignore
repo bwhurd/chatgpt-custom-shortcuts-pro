@@ -38,6 +38,7 @@ Thumbs.db
 *.zip
 *.crx
 *.pem
+*.ps1
 
 # Coverage (if you add tests later)
 coverage/
