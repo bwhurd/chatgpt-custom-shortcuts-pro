@@ -35,6 +35,9 @@
 	"label_strip_md": {
 		"message": "Quitar Markdown al copiar"
 	},
+	"label_click_inline_code": {
+		"message": "Copiar código en línea al hacer clic"
+	},
 	"label_select_copy_behavior": {
 		"message": "Modo «Seleccionar + Copiar»"
 	},
@@ -304,6 +307,9 @@
 	},
 	"tt_strip_md": {
 		"message": "Actívalo para quitar * y ### de Markdown del texto copiado con el atajo `Clic en Copiar`. El texto copiado desde un bloque de código no se modificará."
+	},
+	"tt_click_inline_code": {
+		"message": "Haz clic en el código en línea para copiarlo."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: hace clic en el botón «<» de hilo anterior visible más abajo. ———————————————————  Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."

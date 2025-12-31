@@ -35,6 +35,9 @@
 	"label_strip_md": {
 		"message": "コピー時にMarkdownを除去"
 	},
+	"label_click_inline_code": {
+		"message": "インラインコードをクリックしてコピー"
+	},
 	"label_select_copy_behavior": {
 		"message": "「選択＋コピー」の動作"
 	},
@@ -304,6 +307,9 @@
 	},
 	"tt_strip_md": {
 		"message": "有効にすると、`コピーをクリック` ショートカットでコピーしたテキストから Markdown の * と ### を取り除きます。コード枠からのコピーは変更しません。"
+	},
+	"tt_click_inline_code": {
+		"message": "インラインコードをクリックしてコピー。"
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: 画面で一番下に見えている「<」前のスレッドボタンをクリック。 ———————————————————  Ctrl+Alt+{shortcut}: 複数スレッドの他の回答を見つけるためにスクロール。"

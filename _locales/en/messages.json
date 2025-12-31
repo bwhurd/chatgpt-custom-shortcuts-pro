@@ -35,6 +35,9 @@
 	"label_strip_md": {
 		"message": "Strip Markdown on Copy"
 	},
+	"label_click_inline_code": {
+		"message": "Click Inline Code to Copy"
+	},
 	"label_select_copy_behavior": {
 		"message": "Select + Copy One Behavior"
 	},
@@ -304,6 +307,9 @@
 	},
 	"tt_strip_md": {
 		"message": "Enable to remove Markdown *s and ###s from text copied with the `Click Copy Button` shortcut. Text copied from a code box will not be altered."
+	},
+	"tt_click_inline_code": {
+		"message": "Click inline code to copy."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."

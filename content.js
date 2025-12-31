@@ -5,8 +5,7 @@ ChatGPT Custom Shortcuts Pro
 */
 
 // To do:
-// 1. add toggle to make inline code clickable to copy
-// 2. add shortcuts to move up or down to previous or next conversation
+// 1. add shortcuts to move up or down to previous or next conversation
 
 // =====================================
 // @note Global Functions
@@ -55,6 +54,53 @@ function getScrollableContainer() {
     container = container.parentElement;
   }
   return document.scrollingElement || document.documentElement;
+}
+
+function getComposerTopEdge() {
+  const pickTop = (el) => {
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return Number.isFinite(rect?.top) ? rect.top : null;
+  };
+
+  const container = document.getElementById('thread-bottom-container');
+  if (container) {
+    const marker = container.querySelector('.absolute.start-0.end-0.bottom-full.z-20');
+    const markerTop = pickTop(marker);
+    if (markerTop !== null) return markerTop;
+
+    const formTop = pickTop(container.querySelector('form[data-type="unified-composer"]'));
+    if (formTop !== null) return formTop;
+
+    const backgroundTop = pickTop(container.querySelector('#composer-background'));
+    if (backgroundTop !== null) return backgroundTop;
+  }
+
+  const fallbackBackgroundTop = pickTop(document.getElementById('composer-background'));
+  if (fallbackBackgroundTop !== null) return fallbackBackgroundTop;
+
+  const fallbackFormTop = pickTop(document.querySelector('form[data-type="unified-composer"]'));
+  if (fallbackFormTop !== null) return fallbackFormTop;
+
+  return null;
+}
+
+// Visible for lowest-item shortcuts means "above the composer's top edge"; anything under it is treated as occluded.
+function isAboveComposer(rect, el) {
+  const composerTop = getComposerTopEdge();
+  if (!Number.isFinite(composerTop)) return true;
+
+  if (el) {
+    const composerAncestor = el.closest(
+      '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background',
+    );
+    if (composerAncestor) return true;
+  }
+
+  if (!rect || !Number.isFinite(rect.bottom)) return true;
+
+  const CLIP_BUFFER = 1;
+  return rect.bottom <= composerTop - CLIP_BUFFER;
 }
 
 // =======================
@@ -144,6 +190,7 @@ function applyVisibilitySettings(data) {
     selectThenCopyAllMessagesOnlyAssistant: true,
     selectThenCopyAllMessagesOnlyUser: false,
     doNotIncludeLabelsCheckbox: false,
+    clickToCopyInlineCodeEnabled: false,
   };
 
   for (const key in settingsMap) {
@@ -427,6 +474,7 @@ const delays = DELAYS;
       'rememberSidebarScrollPositionCheckbox',
       'fadeSlimSidebarEnabled', // (checkbox state: true/false)
       'popupSlimSidebarOpacityValue', // (slider value: number)
+      'clickToCopyInlineCodeEnabled', // (checkbox state: true/false)
       `selectThenCopyAllMessagesBothUserAndChatGpt`,
       `selectThenCopyAllMessagesOnlyAssistant`,
       `selectThenCopyAllMessagesOnlyUser`,
@@ -495,7 +543,7 @@ const delays = DELAYS;
     ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
 
   // Down-chevron in the GPT trigger (text-agnostic)
-  const CHEVRON_PATH_PREFIX = 'M12.1338 5.94433';
+  const CHEVRON_ICON_TOKENS = ['M12.1338 5.94433', '#ba3792'];
 
   // Call the same flashBorder you already use (support both local symbol and window export)
   function callFlash(el) {
@@ -511,24 +559,13 @@ const delays = DELAYS;
     if (window.gsap && typeof fn === 'function') fn(el);
   }
 
-  function safeEsc(s) {
-    try {
-      return CSS?.escape ? CSS.escape(s) : s;
-    } catch (_) {
-      return s;
-    }
-  }
-
-  // Match your existing visibility logic exactly
+  // Visibility matches viewport bounds and clips anything under the composer
   function isVisible(el) {
     if (!el) return false;
     const r = el.getBoundingClientRect();
-    return (
-      r.top >= 0 &&
-      r.left >= 0 &&
-      r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-      r.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    return r.top >= 0 && r.left >= 0 && r.bottom <= vh && r.right <= vw && isAboveComposer(r, el);
   }
 
   function simulateSpace(el) {
@@ -569,7 +606,7 @@ const delays = DELAYS;
   }
 
   function clickMenuItemByPathPrefix(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
-    const selector = `${MENU_ITEM_ROLES} svg path[d^="${safeEsc(pathPrefix)}"]`;
+    const selector = withPrefix(svgSelectorForTokens(pathPrefix), MENU_ITEM_ROLES);
     const item = lowestVisibleFromPaths(selector, MENU_ITEM_ROLES);
     if (item) {
       // Flash the menu item with same logic
@@ -605,7 +642,7 @@ const delays = DELAYS;
 
       // Prefer a candidate containing the expected chevron path
       const withChevron = candidates.filter((el) =>
-        el.querySelector(`svg path[d^="${safeEsc(CHEVRON_PATH_PREFIX)}"]`),
+        el.querySelector(svgSelectorForTokens(CHEVRON_ICON_TOKENS)),
       );
       const pool = withChevron.length ? withChevron : candidates;
       return pool[pool.length - 1];
@@ -616,7 +653,7 @@ const delays = DELAYS;
   /**
    * Clicks the GPT menu trigger (header or bottom bar), then clicks a submenu item by SVG path 'd' prefix.
    * Uses the same flash/timing pattern as your clickLowestSvgThenSubItemSvg helper.
-   * @param {string} subItemPathPrefix - SVG path 'd' prefix for the submenu item (e.g., 'M2.6687 11.333V8.66699C2.6687')
+   * @param {string|string[]} subItemPathPrefix - SVG path 'd' prefix or icon tokens (e.g., 'M2.6687 11.333V8.66699C2.6687' or ['oldPath','newIconId'])
    * @param {object} [options] - Optional timing overrides: { delays: { ...DEFAULT_MENU_DELAYS } }
    */
   function clickGptHeaderThenSubItemSvg(subItemPathPrefix, options = {}) {
@@ -1099,7 +1136,7 @@ const delays = DELAYS;
 
   // "More" submenu trigger (match by icon path, not text)
   const MORE_ICON_PATH_PREFIX = 'M15.498 8.50159';
-  const MORE_TRIGGER_SEL = `div[role="menuitem"][aria-haspopup="menu"] svg path[d^="${MORE_ICON_PATH_PREFIX}"]`;
+  const MORE_TRIGGER_SEL = `div[role="menuitem"][aria-haspopup="menu"] svg path[d^="${MORE_ICON_PATH_PREFIX}"], div[role="menuitem"][aria-haspopup="menu"] svg use[href*="#f6d0e2"]`;
 
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -1299,15 +1336,28 @@ const delays = DELAYS;
     return true;
   };
 
-  const findMenuItemByPath = (iconPathPrefix) => {
+  const normalizeIconTokens = (tokens) =>
+    Array.isArray(tokens) ? tokens.filter(Boolean) : [tokens];
+
+  const buildIconSelector = (tokens) =>
+    normalizeIconTokens(tokens)
+      .map((token) => {
+        const safe = String(token).replace(/(["\\])/g, '\\$1');
+        return `svg path[d^="${safe}"], svg use[href*="${safe}"]`;
+      })
+      .join(', ');
+
+  const findMenuItemByPath = (iconTokens, { rootMenus } = {}) => {
     // Match both menuitem and menuitemradio for maximum compatibility
     const sel = `div[role="menuitem"], div[role="menuitemradio"]`;
-    for (const menu of getOpenMenus()) {
+    const iconSelector = buildIconSelector(iconTokens);
+    const menus = rootMenus?.length ? rootMenus : getOpenMenus();
+    for (const menu of menus) {
       // Find all possible menu items
       const items = Array.from(menu.querySelectorAll(sel));
       // For each item, check if its icon matches the prefix
       for (const item of items) {
-        const path = item.querySelector(`svg path[d^="${iconPathPrefix}"]`);
+        const path = item.querySelector(iconSelector);
         if (path) return item;
       }
     }
@@ -1317,9 +1367,23 @@ const delays = DELAYS;
   const runActionByIcon = async (iconPathPrefix, delays = DELAYS) => {
     const opened = await openComposerMenuAndMore(delays);
     if (!opened) return;
-    const item = await waitFor(() => findMenuItemByPath(iconPathPrefix), {
-      timeout: delays.waitActionItem,
-    });
+    const item = await waitFor(
+      () => {
+        const menus = getOpenMenus();
+        if (!menus.length) return null;
+
+        // Prefer top-most open menu first (likely the submenu), but also search the parent
+        const [maybeSubmenu, maybeRoot] =
+          menus.length > 1 ? [menus[menus.length - 1], menus[menus.length - 2]] : [menus[0], null];
+
+        const foundSub = findMenuItemByPath(iconPathPrefix, { rootMenus: [maybeSubmenu] });
+        if (foundSub) return foundSub;
+        return maybeRoot ? findMenuItemByPath(iconPathPrefix, { rootMenus: [maybeRoot] }) : null;
+      },
+      {
+        timeout: delays.waitActionItem,
+      },
+    );
     if (!item) return;
     flashBorder(item);
     await sleep(delays.beforeFinalClick);
@@ -1342,7 +1406,7 @@ const delays = DELAYS;
       pick = (paths) => paths[0], // customize if multiple matches
     } = {},
   ) => {
-    const pathSelector = `svg path[d^="${iconPathPrefix}"]`;
+    const pathSelector = buildIconSelector(iconPathPrefix);
 
     const getClickableAncestor = (node) => {
       const isClickable = (el) =>
@@ -1457,10 +1521,30 @@ const delays = DELAYS;
   const MENU_ITEM_ROLES =
     ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
 
+  const toTokenArray = (tokenOrTokens) =>
+    Array.isArray(tokenOrTokens) ? tokenOrTokens.filter(Boolean) : [tokenOrTokens].filter(Boolean);
+
+  const svgSelectorForTokens = (tokenOrTokens) =>
+    toTokenArray(tokenOrTokens)
+      .map((token) => {
+        const escapedPath = safeEsc(token);
+        const escapedHref = String(token).replace(/(["\\])/g, '\\$1');
+        return [`svg path[d^="${escapedPath}"]`, `svg use[href*="${escapedHref}"]`].join(', ');
+      })
+      .join(', ');
+
+  const withPrefix = (selectorList, prefix) =>
+    selectorList
+      .split(',')
+      .map((s) => `${prefix} ${s.trim()}`)
+      .join(', ');
+
   const MENU_SELECTORS = {
-    buttonPath: (dPrefix) => `button[id^="radix-"] svg path[d^="${safeEsc(dPrefix)}"]`,
-    // Apply the [d^="..."] filter to ALL role types via :is(...)
-    menuItemPath: (dPrefix) => `${MENU_ITEM_ROLES} svg path[d^="${safeEsc(dPrefix)}"]`,
+    buttonPath: (tokenOrTokens) =>
+      withPrefix(svgSelectorForTokens(tokenOrTokens), 'button[id^="radix-"]'),
+    // Apply the icon filter to ALL role types via :is(...)
+    menuItemPath: (tokenOrTokens) =>
+      withPrefix(svgSelectorForTokens(tokenOrTokens), MENU_ITEM_ROLES),
     menuItemAncestor: MENU_ITEM_ROLES,
   };
 
@@ -1475,12 +1559,9 @@ const delays = DELAYS;
   function isVisible(el) {
     if (!el) return false;
     const r = el.getBoundingClientRect();
-    return (
-      r.top >= 0 &&
-      r.left >= 0 &&
-      r.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-      r.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    return r.top >= 0 && r.left >= 0 && r.bottom <= vh && r.right <= vw && isAboveComposer(r, el);
   }
 
   function lowestVisibleFromPaths(selector, ancestorSelector, excludeAncestorSelector) {
@@ -1519,17 +1600,50 @@ const delays = DELAYS;
     return delays.MENU_READY_EXPANDED;
   }
 
-  function clickLowestVisibleMenuItemByPath(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
-    const selector = MENU_SELECTORS.menuItemPath(pathPrefix);
-    const item = lowestVisibleFromPaths(selector, MENU_SELECTORS.menuItemAncestor);
+  function findLowestMenuItemByPathInMenu(menuEl, pathPrefix) {
+    if (!menuEl) return null;
+    const iconSelector = svgSelectorForTokens(pathPrefix);
+    const icons = Array.from(menuEl.querySelectorAll(iconSelector));
+    const candidates = icons
+      .map((icon) => icon.closest(MENU_SELECTORS.menuItemAncestor))
+      .filter(Boolean);
+
+    if (!candidates.length) return null;
+
+    const seen = new Set();
+    const unique = [];
+    for (const item of candidates) {
+      if (seen.has(item)) continue;
+      seen.add(item);
+      unique.push(item);
+    }
+
+    unique.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+    return unique[unique.length - 1] || null;
+  }
+
+  function clickLowestVisibleMenuItemByPath(pathPrefix, options = {}, attempt = 0) {
+    const { delays = DEFAULT_MENU_DELAYS, menuRootSelector } = options;
+    const menuEl = menuRootSelector ? document.querySelector(menuRootSelector) : null;
+    let item = null;
+    if (menuRootSelector) {
+      const menus = menuEl ? [menuEl] : getOpenMenus().slice().reverse();
+      for (const menu of menus) {
+        item = findLowestMenuItemByPathInMenu(menu, pathPrefix);
+        if (item) break;
+      }
+    } else {
+      const baseSelector = MENU_SELECTORS.menuItemPath(pathPrefix);
+      item = lowestVisibleFromPaths(baseSelector, MENU_SELECTORS.menuItemAncestor);
+    }
     if (item) {
       if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
-      setTimeout(() => item.click(), delays.ITEM_CLICK);
+      setTimeout(() => smartClick(item), delays.ITEM_CLICK);
       return true;
     }
     if (attempt < delays.MAX_RETRY_ATTEMPTS) {
       setTimeout(
-        () => clickLowestVisibleMenuItemByPath(pathPrefix, delays, attempt + 1),
+        () => clickLowestVisibleMenuItemByPath(pathPrefix, options, attempt + 1),
         delays.RETRY_INTERVAL,
       );
     }
@@ -1560,8 +1674,14 @@ const delays = DELAYS;
 
     const waitMs = openRadixMenuIfNeeded(btn, delays);
 
+    const menuRootSelector =
+      options.menuRootSelector ||
+      (btn.id
+        ? `[role="menu"][aria-labelledby="${safeEsc(btn.id)}"][data-state="open"]`
+        : null);
+
     setTimeout(() => {
-      clickLowestVisibleMenuItemByPath(subItemPathPrefix, delays);
+      clickLowestVisibleMenuItemByPath(subItemPathPrefix, { delays, menuRootSelector });
     }, waitMs);
 
     return true;
@@ -1727,15 +1847,23 @@ const delays = DELAYS;
   }
 
   function findClickableBySvgPath(pathPrefix, climbMax = 8) {
-    const path = document.querySelector(`svg path[d^="${escCss(pathPrefix)}"]`);
-    if (!path) return null;
+    const tokens = toTokenArray(pathPrefix);
+    let node = null;
+
+    for (const token of tokens) {
+      node =
+        document.querySelector(`svg path[d^="${escCss(token)}"]`) ||
+        document.querySelector(`svg use[href*="${token.replace(/(["\\])/g, '\\$1')}"]`);
+      if (node) break;
+    }
+    if (!node) return null;
 
     // Prefer a direct closest() to a standard clickable
-    const direct = path.closest(CLICKABLE_SELECTOR);
+    const direct = node.closest(CLICKABLE_SELECTOR);
     if (direct) return direct;
 
     // Fallback: climb up a few levels to find something clickable
-    let el = path;
+    let el = node;
     for (let i = 0; i < climbMax && el; i++) {
       if (el.matches?.(CLICKABLE_SELECTOR)) return el;
       el = el.parentElement;
@@ -1764,39 +1892,114 @@ const delays = DELAYS;
 
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
-  const isFullyInViewport = (rect) => {
+  // copy-lowest run coordination to avoid overlapping delays
+  let copyLowestRunToken = 0;
+  const copyLowestDelayCancels = new Set();
+
+  const cancelCopyLowestDelays = () => {
+    copyLowestDelayCancels.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* noop */
+      }
+    });
+    copyLowestDelayCancels.clear();
+  };
+
+  const delayCopyLowest = (ms, runToken) =>
+    new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        copyLowestDelayCancels.delete(cancel);
+        resolve(runToken === copyLowestRunToken);
+      }, ms);
+      const cancel = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        copyLowestDelayCancels.delete(cancel);
+        resolve(false);
+      };
+      copyLowestDelayCancels.add(cancel);
+    });
+
+  const isFullyInViewport = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
-    return rect.top >= 0 && rect.left >= 0 && rect.bottom <= vh && rect.right <= vw;
-  };
-
-  const findButtonsBySvgPathPrefix = (dPrefix) => {
-    if (!dPrefix) return [];
-    return Array.from(document.querySelectorAll('button')).filter(
-      (btn) => !!btn.querySelector(`svg path[d^="${dPrefix}"]`),
+    return (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= vh &&
+      rect.right <= vw &&
+      isAboveComposer(rect, el)
     );
   };
 
-  const findLowestVisibleButtonBySvgPath = (dPrefix) => {
-    const candidates = findButtonsBySvgPathPrefix(dPrefix).filter((btn) =>
-      isFullyInViewport(btn.getBoundingClientRect()),
+  const findButtonsBySvgPathPrefix = (tokenOrTokens) => {
+    if (!tokenOrTokens) return [];
+    const selector = withPrefix(svgSelectorForTokens(tokenOrTokens), 'button');
+    const matches = Array.from(document.querySelectorAll(selector)).map((el) =>
+      el.closest('button'),
     );
-    if (!candidates.length) return null;
+    return matches.filter(Boolean);
+  };
 
-    // Sort visually top→bottom, then left→right as a stable tiebreaker
-    candidates.sort((a, b) => {
+  const getVisibleCopyButtonsSorted = (tokenOrTokens) => {
+    const set = new Set();
+    const push = (list = []) => {
+      list.forEach((el) => {
+        if (el) set.add(el);
+      });
+    };
+
+    // Primary: test-id buttons
+    push(Array.from(document.querySelectorAll('button[data-testid="copy-turn-action-button"]')));
+    // Secondary: icon-based matches
+    push(findButtonsBySvgPathPrefix(tokenOrTokens));
+
+    const arr = Array.from(set).filter((btn) => isFullyInViewport(btn));
+    arr.sort((a, b) => {
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
       return ra.top - rb.top || ra.left - rb.left;
     });
-    return candidates[candidates.length - 1];
+    return arr;
   };
 
   async function copyFromLowestButton(dPrefix, opts = {}) {
     const { delayBeforeClick = 350, delayClipboardRead = 350 } = opts;
 
-    const btn = findLowestVisibleButtonBySvgPath(dPrefix);
-    if (!btn) return;
+    cancelCopyLowestDelays();
+    const runToken = ++copyLowestRunToken;
+
+    const buttons = getVisibleCopyButtonsSorted(dPrefix);
+    if (!buttons.length) return;
+
+    const now = Date.now();
+    const RECENT_MS = 1500;
+    const last = window.__copyLowestState || {};
+    let target = buttons[buttons.length - 1]; // lowest visible by default
+
+    const tokensKey = toTokenArray(dPrefix).join('|');
+    const isRecent = last.time && now - last.time <= RECENT_MS && last.tokensKey === tokensKey;
+
+    if (isRecent) {
+      const prevIdx = last.el ? buttons.indexOf(last.el) : -1;
+      if (prevIdx >= 0 && buttons.length) {
+        // Move one up; wrap back to the lowest when we were at the highest.
+        const nextIdx = (prevIdx - 1 + buttons.length) % buttons.length;
+        target = buttons[nextIdx];
+      }
+    }
+
+    window.__copyLowestState = { time: now, el: target, tokensKey };
+
+    const btn = target;
 
     const isMsgCopy = btn.getAttribute('data-testid') === 'copy-turn-action-button';
 
@@ -1804,16 +2007,21 @@ const delays = DELAYS;
       window.flashBorder(btn);
     }
 
-    await delay(delayBeforeClick);
+    const shouldClick = await delayCopyLowest(delayBeforeClick, runToken);
+    if (!shouldClick || runToken !== copyLowestRunToken) return;
     btn.click();
-    await delay(delayClipboardRead);
+    const shouldRead = await delayCopyLowest(delayClipboardRead, runToken);
+    if (!shouldRead || runToken !== copyLowestRunToken) return;
 
     if (!navigator.clipboard || !navigator.clipboard.readText || !navigator.clipboard.writeText)
       return;
 
     try {
+      if (runToken !== copyLowestRunToken) return;
       const text = await navigator.clipboard.readText();
+      if (runToken !== copyLowestRunToken) return;
       const processed = sanitizeCopiedText(text, { isMsgCopy });
+      if (runToken !== copyLowestRunToken) return;
       await navigator.clipboard.writeText(processed);
     } catch {
       /* silent */
@@ -2144,38 +2352,45 @@ const delays = DELAYS;
 
       function stripMarkdownOutsideCodeblocks(text) {
         return splitByCodeFences(text)
-          .map((seg) => (seg.isCode || seg.isInline ? seg.text : removeMarkdown(seg.text)))
+          .map((seg) =>
+            seg.isCode || seg.isInline ? seg.text : removeMarkdown(seg.text, { trimResult: false }),
+          )
           .join('');
       }
 
-      function removeMarkdown(text) {
-        return (
-          text
-            // Images: ![alt](url) → alt
-            .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-            // Links: [text](url) → text
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            // Bold: **text** or __text__ (only when not inside words)
-            .replace(/(^|[^\w\\])\*\*(.*?)\*\*(?!\w)/g, '$1$2')
-            .replace(/(^|[^\w])__(.*?)__(?!\w)/g, '$1$2')
-            // Italic: *text* or _text_ (only when not inside words)
-            .replace(/(^|[^\w\\])\*(.*?)\*(?!\w)/g, '$1$2')
-            .replace(/(^|[^\w])_(.*?)_(?!\w)/g, '$1$2')
-            // Headings
-            .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-            // Blockquotes
-            .replace(/^\s{0,3}>\s?/gm, '')
-            // Ordered / unordered lists
-            .replace(/^\s{0,3}(\d+)\.\s+/gm, '$1. ')
-            .replace(/^\s{0,3}[-*+]\s+/gm, '- ')
-            // Horizontal rules
-            .replace(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
-            // Collapse extra blank lines
-            .replace(/\n{3,}/g, '\n\n')
-            // Unescape common escapes
-            .replace(/\\([_*[\](){}#+\-!.>])/g, '$1')
-            .trim()
-        );
+      function removeMarkdown(text, { trimResult = true } = {}) {
+        const result = text
+          // Images: ![alt](url) → alt
+          .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+          // Links: [text](url) → text
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+          // Bold: **text** or __text__ (only when not inside words)
+          .replace(/(^|[^\w\\])\*\*(.*?)\*\*(?!\w)/g, '$1$2')
+          .replace(/(^|[^\w])__(.*?)__(?!\w)/g, '$1$2')
+          // Italic: *text* or _text_ (only when not inside words)
+          .replace(/(^|[^\w\\])\*(.*?)\*(?!\w)/g, '$1$2')
+          .replace(/(^|[^\w])_(.*?)_(?!\w)/g, '$1$2')
+          // Fallback: strip any remaining bold markers
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/__(.*?)__/g, '$1')
+          // Headings
+          .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+          // Blockquotes
+          .replace(/^\s{0,3}>\s?/gm, '')
+          // Ordered / unordered lists (preserve indentation)
+          .replace(/^([ \t]*)(\d+)\.\s+/gm, '$1$2. ')
+          .replace(/^([ \t]*)[-*+]\s+/gm, '$1- ')
+          // Horizontal rules
+          .replace(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
+          // Collapse extra blank lines
+          .replace(/\n{3,}/g, '\n\n')
+          // Strip any remaining stray bold markers (e.g., split across inline code)
+          .replace(/\*\*/g, '')
+          .replace(/__/g, '')
+          // Unescape common escapes
+          .replace(/\\([_*[\](){}#+\-!.>])/g, '$1');
+
+        return trimResult ? result.trim() : result;
       }
 
       // Expose helpers globally so sanitizeCopiedText can find them in MV3 scope
@@ -2246,7 +2461,7 @@ const delays = DELAYS;
         },
         [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
         [shortcuts.shortcutKeyCopyLowest]: () => {
-          const copyPath = 'M12.668 10.667C12.668';
+          const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
           copyFromLowestButton(copyPath, {
             delayBeforeClick: 350,
             delayClipboardRead: 350,
@@ -2353,31 +2568,31 @@ const delays = DELAYS;
 
           setTimeout(() => {
             try {
+              const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
+              const editSelectors = [
+                'button[aria-label="Edit message"]',
+                withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
+              ];
+
               const allButtons = Array.from(
-                document.querySelectorAll('button svg path[d^="M11.3312 3.56837C12.7488"]'),
-              ).map((svgPath) => svgPath.closest('button'));
+                new Set(
+                  editSelectors
+                    .flatMap((sel) =>
+                      Array.from(document.querySelectorAll(sel)).map(
+                        (node) => node.closest('button') || node,
+                      ),
+                    )
+                    .filter(Boolean),
+                ),
+              );
 
-              const composerBackground = document.getElementById('composer-background');
-              const composerRect = composerBackground
-                ? composerBackground.getBoundingClientRect()
-                : null;
-
-              const buttonsData = allButtons
+              const filteredButtonsData = allButtons
                 .filter((btn) => btn !== null)
                 .map((btn) => {
                   const rect = btn.getBoundingClientRect();
                   return { btn, rect };
-                });
-
-              const filteredButtonsData = buttonsData.filter(({ rect }) => {
-                if (!composerRect) return true;
-                const overlapsComposer =
-                  rect.bottom > composerRect.top &&
-                  rect.top < composerRect.bottom &&
-                  rect.right > composerRect.left &&
-                  rect.left < composerRect.right;
-                return !overlapsComposer;
-              });
+                })
+                .filter(({ btn, rect }) => isAboveComposer(rect, btn));
 
               filteredButtonsData.sort((a, b) => a.rect.top - b.rect.top);
 
@@ -2416,34 +2631,108 @@ const delays = DELAYS;
             // Centralized timing constant
             const DELAY_BEFORE_CLICK = 250; // was 500ms
 
-            // Find all possible send buttons (second button in each container)
-            const sendButtons = Array.from(document.querySelectorAll('div.flex.justify-end.gap-2'))
-              .map((container) => {
-                const buttons = container.querySelectorAll('button');
-                return buttons.length >= 2 ? buttons[1] : null;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+
+            const isVisible = (btn) => {
+              if (!btn || btn.disabled) return false;
+              if (btn.closest('[aria-hidden="true"]')) return false;
+              const style = window.getComputedStyle(btn);
+              if (
+                style.display === 'none' ||
+                style.visibility === 'hidden' ||
+                style.opacity === '0'
+              )
+                return false;
+              const rect = btn.getBoundingClientRect();
+              return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                rect.bottom > 0 &&
+                rect.right > 0 &&
+                rect.top < viewportHeight &&
+                rect.left < viewportWidth &&
+                isAboveComposer(rect, btn)
+              );
+            };
+
+            // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
+            const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
+              .map((ta) => {
+                // Scope to the edit card around the textarea
+                const editCard =
+                  ta.closest('.bg-token-main-surface-tertiary') ||
+                  ta.closest('.rounded-3xl') ||
+                  ta.closest('[data-message-id]') ||
+                  ta.parentElement;
+                if (!editCard) return null;
+
+                const buttonRow =
+                  editCard.querySelector('div.flex.justify-end.gap-2') ||
+                  editCard.querySelector('div.flex.justify-end');
+                if (!buttonRow) return null;
+
+                const buttons = Array.from(buttonRow.querySelectorAll('button'));
+                if (!buttons.length) return null;
+
+                const hasCancel = buttons.some((btn) =>
+                  /cancel/i.test(
+                    (
+                      btn.textContent ||
+                      btn.innerText ||
+                      btn.getAttribute('aria-label') ||
+                      ''
+                    ).trim(),
+                  ),
+                );
+                if (!hasCancel) return null;
+
+                const sendBtn =
+                  buttons.find((btn) =>
+                    /send/i.test(
+                      (
+                        btn.textContent ||
+                        btn.innerText ||
+                        btn.getAttribute('aria-label') ||
+                        ''
+                      ).trim(),
+                    ),
+                  ) ||
+                  buttons[1] ||
+                  buttons[0];
+
+                return sendBtn || null;
               })
               .filter(Boolean);
 
-            // Only those visible in the viewport
-            const visibleSendButtons = sendButtons.filter((btn) => {
-              const rect = btn.getBoundingClientRect();
-              return (
-                rect.top >= 0 &&
-                rect.left >= 0 &&
-                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-              );
-            });
+            // Fallback: legacy selector in case no textarea-based forms are visible
+            const fallbackButtons = Array.from(
+              document.querySelectorAll('div.flex.justify-end.gap-2'),
+            )
+              .map((container) => {
+                const buttons = container.querySelectorAll('button');
+                return buttons.length >= 2 ? buttons[1] : buttons[buttons.length - 1] || null;
+              })
+              .filter(Boolean);
+
+            const candidateButtons =
+              textareaSendButtons.length > 0 ? textareaSendButtons : fallbackButtons;
+
+            const visibleSendButtons = candidateButtons.filter(isVisible);
 
             if (!visibleSendButtons.length) return;
 
             // The lowest visible one (last in DOM order)
-            const btn = visibleSendButtons.at(-1);
+            const btn = visibleSendButtons.reduce((bottomMost, current) => {
+              const bottomRect = bottomMost.getBoundingClientRect();
+              const currentRect = current.getBoundingClientRect();
+              return currentRect.top >= bottomRect.top ? current : bottomMost;
+            });
 
             if (window.gsap) flashBorder(btn);
 
             setTimeout(() => {
-              btn.click();
+              safeClick(btn);
             }, DELAY_BEFORE_CLICK);
           } catch {
             // Fail silently
@@ -2648,7 +2937,7 @@ const delays = DELAYS;
         },
         [shortcuts.shortcutKeySearchWeb]: async () => {
           // Unique config for this action
-          const ICON_PATH_PREFIX = 'M10 2.125C14.3492'; // globe icon prefix
+          const ICON_PATH_PREFIX = ['M10 2.125C14.3492', '#6b0d8c']; // globe icon prefix
           await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
@@ -2741,10 +3030,16 @@ const delays = DELAYS;
             const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
               .map((el) => el.previousElementSibling)
               .filter((el) => el?.tagName === 'BUTTON');
-            const pathBtns = Array.from(
-              document.querySelectorAll('button svg path[d^="M11.5292 3.7793"]'),
-            ).map((p) => p.closest('button'));
-            return [...divBtns, ...pathBtns].filter(Boolean);
+            const iconSelectors = [
+              'button[aria-label="Previous response"]',
+              withPrefix(svgSelectorForTokens(['M11.5292 3.7793', '#8ee2e9']), 'button'),
+            ];
+            const iconBtns = iconSelectors.flatMap((sel) =>
+              Array.from(document.querySelectorAll(sel)).map(
+                (node) => node.closest('button') || node,
+              ),
+            );
+            return [...divBtns, ...iconBtns].filter(Boolean);
           };
 
           const isOverlapComposer = (rect) => {
@@ -2935,9 +3230,15 @@ const delays = DELAYS;
             const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
               .map((el) => el.previousElementSibling)
               .filter((el) => el?.tagName === 'BUTTON');
-            const pathBtns = Array.from(
-              document.querySelectorAll('button svg path[d^="M7.52925 3.7793"]'),
-            ).map((p) => p.closest('button'));
+            const iconSelectors = [
+              'button[aria-label="Next response"]',
+              withPrefix(svgSelectorForTokens(['M7.52925 3.7793', '#b140e7']), 'button'),
+            ];
+            const pathBtns = iconSelectors.flatMap((sel) =>
+              Array.from(document.querySelectorAll(sel)).map(
+                (node) => node.closest('button') || node,
+              ),
+            );
 
             // Exclude "Thought for" buttons
             const isExcluded = (btn) => {
@@ -3567,35 +3868,35 @@ const delays = DELAYS;
         // Regenerate: open the kebab/overflow menu, then click the "Regenerate" sub-item.
         // Note: these two path prefixes can be the same (as in this case) or different for other actions.
         [shortcuts.shortcutKeyRegenerateTryAgain]: () => {
-          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // sub-item icon path (prefix)
+          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyRegenerateMoreConcise]: () => {
-          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = 'M10.2002 7.91699L16.8669'; // sub-item icon path (prefix)
+          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = ['M10.2002 7.91699L16.8669', '#155a34']; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyRegenerateAddDetails]: () => {
-          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = 'M14.3013 12.6816C14.6039'; // sub-item icon path (prefix)
+          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = ['M14.3013 12.6816C14.6039', '#71a046']; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
-          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = 'M15.4707 17.137C15.211'; // sub-item icon path (prefix)
+          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = ['M15.4707 17.137C15.211', '#77bc5f']; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
-          const FIRST_BTN_PATH = 'M3.502 16.6663V13.3333C3.502'; // menu/overflow button icon path (prefix)
+          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu/overflow button icon path (prefix)
           runRadixMenuActionFocusInputByName(FIRST_BTN_PATH, 'contextual-retry-dropdown-input', {
             caret: 'end', // 'start' | 'end'
             selectAll: false, // true to select existing text
           });
         },
         [shortcuts.shortcutKeyMoreDotsReadAloud]: () => {
-          const FIRST_BTN_PATH = 'M15.498 8.50159C16.3254';
-          const SUB_ITEM_BTN_PATH = 'M9.75122 4.09203C9.75122';
+          const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2'];
+          const SUB_ITEM_BTN_PATH = ['M9.75122 4.09203C9.75122', '#54f145'];
           const EXCLUDE_ANCESTOR = '#bottomBarContainer';
 
           const openMenuSel = 'div[role="menu"][data-state="open"]';
@@ -3628,9 +3929,11 @@ const delays = DELAYS;
           }
 
           // 2) If the Read Aloud sub-item is already exposed in an open menu, click it directly.
-          const exposedReadAloudPath = document.querySelector(
-            `${openMenuSel} div[role="menuitem"] svg path[d^="${SUB_ITEM_BTN_PATH}"]`,
+          const readAloudSelector = withPrefix(
+            svgSelectorForTokens(SUB_ITEM_BTN_PATH),
+            `${openMenuSel} div[role="menuitem"]`,
           );
+          const exposedReadAloudPath = document.querySelector(readAloudSelector);
           if (exposedReadAloudPath) {
             const item = exposedReadAloudPath.closest('div[role="menuitem"]');
             if (item) {
@@ -3644,46 +3947,43 @@ const delays = DELAYS;
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, EXCLUDE_ANCESTOR);
         },
         [shortcuts.shortcutKeyMoreDotsBranchInNewChat]: () => {
-          const FIRST_BTN_PATH = 'M15.498 8.50159C16.3254'; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = 'M3.32996 10H8.01173C8.7455'; // sub-item icon path (prefix)
+          const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2']; // menu button icon path (prefix)
+          const SUB_ITEM_BTN_PATH = ['M3.32996 10H8.01173C8.7455', '#03583c']; // sub-item icon path (prefix)
           clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
         },
         [shortcuts.shortcutKeyThinkingExtended]: () => {
-          window.toggleModelSelector();
-          delayCall(window.pressModelMenuItemByText, 200, 'longer');
-          const FIRST_BTN_PATH = 'M16.585 10C16.585';
-          const SUB_ITEM_BTN_PATH = 'M10.0007 2.08496C14.3717';
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#143e56';
           delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
 
         [shortcuts.shortcutKeyThinkingStandard]: () => {
-          window.toggleModelSelector();
-          delayCall(window.pressModelMenuItemByText, 200, 'longer');
-          const FIRST_BTN_PATH = 'M16.585 10C16.585';
-          const SUB_ITEM_BTN_PATH = 'M10 2.08496C14.3713';
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#fec800';
           delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
         },
         [shortcuts.shortcutKeyTemporaryChat]: () => {
-          const sel =
-            '#conversation-header-actions button:has(svg path[d*="4.521"][d*="15.166"]),\
-     #conversation-header-actions button:has(svg path[d*="15.799"][d*="14.536"])';
-          const el = document.querySelector(sel);
-          safeClick(el);
+          const root = document.querySelector('#conversation-header-actions') || document;
+          const el =
+            root.querySelector('button svg use[href*="#28a8a0"]')?.closest('button') || // Turn on
+            root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button'); // Turn off
+          if (!el) return;
+          smartClick(el);
         },
         [shortcuts.shortcutKeyStudy]: async () => {
-          const ICON_PATH_PREFIX = 'M16.3965 5.01128C16.3963'; // book icon prefix
+          const ICON_PATH_PREFIX = ['M16.3965 5.01128C16.3963', '#1fa93b']; // book icon prefix
           await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyCreateImage]: async () => {
-          const ICON_PATH_PREFIX = 'M9.38759 8.53403C10.0712'; // image icon prefix
+          const ICON_PATH_PREFIX = ['M9.38759 8.53403C10.0712', '#266724']; // image icon prefix
           await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyToggleCanvas]: async () => {
-          const ICON_PATH_PREFIX = 'M12.0303 4.11328C13.4406'; // canvas icon prefix
+          const ICON_PATH_PREFIX = ['M12.0303 4.11328C13.4406', '#cf3864']; // canvas icon prefix
           await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
-          const ICON_PATH_PREFIX = 'M4.33496 12.5V7.5C4.33496'; // Add Photos & Files icon path prefix
+          const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
           await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyToggleDictate]: () => {
@@ -3693,70 +3993,76 @@ const delays = DELAYS;
             dictateInProgress = false;
           }, 300);
 
-          // Only one button is visible at a time: try "stop/submit" first, then "start".
-          const FALLBACK_ICON_PATH_PREFIX = 'M15.4835 4.14551C15.6794'; // stop/submit
-          const PRIMARY_ICON_PATH_PREFIX = 'M15.7806 10.1963C16.1326'; // start
+          const composerRoot =
+            document.getElementById('thread-bottom-container') ||
+            document.querySelector('form[data-type="unified-composer"]') ||
+            document.getElementById('composer-background') ||
+            document.body;
 
-          if (clickBySvgPath(FALLBACK_ICON_PATH_PREFIX)) return;
-          clickBySvgPath(PRIMARY_ICON_PATH_PREFIX);
+          const findClickableBySpriteId = (spriteId) => {
+            const safe = String(spriteId).replace(/(["\\])/g, '\\$1');
+            const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
+            if (!use) return null;
+            return (
+              use.closest('button, [role="button"], a, [tabindex]') ||
+              use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
+              null
+            );
+          };
+
+          const click = (el) => {
+            if (!el) return false;
+            try {
+              el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+            } catch {}
+            flashBorder(el);
+            smartClick(el);
+            return true;
+          };
+
+          // If dictation is active, prefer submitting (not cancelling).
+          const submitBtn = findClickableBySpriteId('#fa1dbd');
+          if (click(submitBtn)) return;
+
+          // If submit isn't available, stop dictation.
+          const stopBtn = findClickableBySpriteId('#85f94b');
+          if (click(stopBtn)) return;
+
+          // Otherwise start dictation (avoid Voice Mode button).
+          const dictateBtn = findClickableBySpriteId('#29f921');
+          click(dictateBtn);
         },
         [shortcuts.shortcutKeyCancelDictation]: async () => {
           // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.
-          const CANDIDATE_SELECTORS = [
-            'button[style*="--vt-composer-whisper-button"]',
-            '.composer-btn[style*="--vt-composer-whisper-button"]',
-            '[style*="--vt-composer-whisper-button"] button',
-          ];
+          const composerRoot =
+            document.getElementById('thread-bottom-container') ||
+            document.querySelector('form[data-type="unified-composer"]') ||
+            document.getElementById('composer-background') ||
+            document.body;
 
-          const isClickable = (el) =>
-            el &&
-            typeof el.click === 'function' &&
-            (el.tagName === 'BUTTON' ||
-              el.tagName === 'A' ||
-              el.getAttribute('role') === 'button' ||
-              el.tabIndex >= 0);
+          const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
+          const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
+          const btn = use?.closest('button, [role="button"], a, [tabindex]') || null;
 
-          const getClickableAncestor = (node) => {
-            let el = node;
-            for (let i = 0; i < 8 && el; i++) {
-              if (isClickable(el)) return el;
-              el = el.parentElement;
-            }
-            return null;
-          };
+          // Only stop if Stop dictation is currently available; otherwise no-op.
+          if (!btn) return;
 
-          const trySelectorClick = async () => {
-            for (const sel of CANDIDATE_SELECTORS) {
-              const node = document.querySelector(sel);
-              if (!node) continue;
-              const target = getClickableAncestor(node) || node;
-              try {
-                target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-              } catch {}
-              flashBorder(target);
-              await sleep(DELAYS.beforeFinalClick);
-              smartClick(target);
-              return true;
-            }
-            return false;
-          };
-
-          // 1) Try robust, non-localized DOM hooks
-          if (await trySelectorClick()) return;
-
-          // 2) Fallback: icon path prefix (still localization-proof, but less stable if the icon changes)
-          const ICON_PATH_PREFIX = 'M14.2548 4.75488C14.5282';
-          await clickExposedIconButton(ICON_PATH_PREFIX);
+          try {
+            btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+          } catch {}
+          flashBorder(btn);
+          await sleep(DELAYS.beforeFinalClick);
+          smartClick(btn);
         },
         [shortcuts.shortcutKeyShare]: async () => {
           await clickButtonByTestId('share-chat-button');
         },
         [shortcuts.shortcutKeyThinkLonger]: async () => {
-          const ICON_PATH_PREFIX = 'M14.3352 10.0257C14.3352'; // think longer icon prefix
-          await clickExposedIconButton(ICON_PATH_PREFIX);
+          const ICON_PATH_PREFIX = ['M14.3352 10.0257C14.3352', '#e717cc']; // Thinking (sprite id)
+          await runActionByIcon(ICON_PATH_PREFIX);
         },
         [shortcuts.shortcutKeyNewGptConversation]: () => {
-          const SUB_ITEM_BTN_PATH = 'M2.6687 11.333V8.66699C2.6687'; // submenu New Conversation with GPT icon path prefix
+          const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
           window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH);
         },
         // @note [shortcuts.selectThenCopyAllMessages]: (() => {
@@ -5476,7 +5782,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                     #bottomBarContainer button:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
                     #bottomBarContainer a:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
                     #bottomBarContainer a:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
-                    #bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"]) {
+                    #bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"]),
+                    #bottomBarContainer a:has(svg > path[d^="M11.6663 12.6686L11.801"]),
+                    #bottomBarContainer button:has(svg > path[d^="M11.6663 12.6686L11.801"]) {
                     visibility: hidden !important;
                     position: absolute !important;
                     width: 1px !important;
@@ -5502,7 +5810,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
                     /* Nudge the legacy models submenu (left popper) up by 50px when bottomBarContainer is present */
 
-
+                    .mb-4 {
+                    margin-bottom: 4px;
+                    }
 
                 `;
             document.head.appendChild(style);
@@ -5824,12 +6134,18 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   else start();
 })();
 
-// ===============================
-// @note Alt+1,2,3 (main), Alt+4 (submenu), Alt+5+ (submenu items); supports legacy submenu, always with gsap feedback & delay
-// ===============================
+/**
+ * Enables customizable keyboard shortcuts for selecting models in a dropdown menu
+ * by synchronizing key codes from Chrome storage, labeling menu items with the
+ * correct modifier+key combination, and handling real-time key and storage events
+ * to trigger the appropriate menu actions, submenu opening, UI feedback, and persistent
+ * model name mapping for an extension popup. All logic is encapsulated in an IIFE
+ * to maintain private shared state and support robust, dynamic updates.
+ */
 (() => {
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
+  const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
 
   // ----- Timing constants (IIFE scope so all closures share them) -----
   // Keydown flow
@@ -6000,7 +6316,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       };
 
       // Back-compat alias where existing code expects a single menu (the first/leftmost)
-      const getOpenMenu = () => getOpenModelMenus()[0] || null;
 
       // Style for shortcut labels
       (() => {
@@ -6045,7 +6360,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
       // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
       function __cspCollectModelNamesN() {
-        const CAP = window.ModelLabels.MAX_SLOTS;
+        const CAP = MAX_SLOTS;
         const menus =
           typeof getOpenModelMenus === 'function'
             ? getOpenModelMenus().filter(Boolean)
@@ -6077,7 +6392,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         const mapSubmenuLabel = window.ModelLabels.mapSubmenuLabel;
 
         function __cspCanonicalLabelsFromDOM() {
-          const CAP = window.ModelLabels.MAX_SLOTS;
+          const CAP = MAX_SLOTS;
           const names = Array(CAP).fill('');
 
           const menus =
@@ -6140,7 +6455,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         function __cspMergeAndPersist(candidates) {
           const now = Date.now();
           try {
-            const CAP = window.ModelLabels.MAX_SLOTS;
+            const CAP = MAX_SLOTS;
             chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
               const prevArr = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
               while (prevArr.length < CAP) prevArr.push('');
@@ -6159,7 +6474,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         }
 
         return (arrN) => {
-          const CAP = window.ModelLabels.MAX_SLOTS;
+          const CAP = MAX_SLOTS;
           const domNames = __cspCanonicalLabelsFromDOM();
           const fallback = Array.isArray(arrN) ? arrN.slice(0, CAP) : Array(CAP).fill('');
           while (fallback.length < CAP) fallback.push('');
@@ -6191,11 +6506,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
         });
       } catch (_) {}
 
-      // Get all menu items (main menu + open submenu) in order, capped at 10
-      // Collect items from the *first* open menu (level 1) and, if present, the *second* open menu (level 2).
-      // Cap at 10 items total so the existing key mapping remains stable.
+      // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS
+      // Collect items from the *first* open menu (level 1) and, if present, any additional open submenus.
       function getOrderedMenuItems() {
-        const cap = window.ModelLabels?.MAX_SLOTS || 15;
+        const cap = MAX_SLOTS;
         const menus =
           typeof getOpenModelMenus === 'function'
             ? getOpenModelMenus()
@@ -6375,9 +6689,6 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
           setTimeout(
             () => {
-              const mainMenu = getOpenMenu();
-              if (!mainMenu) return;
-
               openBothMenus(() => {
                 const items = getOrderedMenuItems();
                 applyHints();
@@ -6619,9 +6930,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
     const val = changes.modelPickerKeyCodes.newValue;
     if (!Array.isArray(val)) return;
 
-    const cap = window.ModelLabels.MAX_SLOTS;
-    const next = val.slice(0, cap);
-    while (next.length < cap) next.push('');
+    const next = val.slice(0, MAX_SLOTS);
+    while (next.length < MAX_SLOTS) next.push('');
 
     // Mutate the const array so references stay valid
     KEY_CODES.splice(0, KEY_CODES.length, ...next);
@@ -7218,7 +7528,7 @@ setTimeout(() => {
 (() => {
   // ---- 1) Static CSS: Insert your full popup.css below ----
   const FULL_POPUP_CSS = `
-:host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+11){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:108%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
+:host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+16){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:108%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
   `;
 
   // ---- 2) Utils ----
@@ -7324,7 +7634,7 @@ setTimeout(() => {
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
   function buildModelSwitcherGrid(cfg) {
-    const VISIBLE = 10;
+    const MAX = window.ModelLabels?.MAX_SLOTS || 15;
 
     const isLegacyArrow = (s) => {
       const t = (s ?? '').toString().trim();
@@ -7334,14 +7644,21 @@ setTimeout(() => {
       return /legacy/i.test(t) && t.includes('→');
     };
 
+    // Prefer hydrated actionable names (window.MODEL_NAMES from hydrateModelData),
+    // fall back to canonical defaults from ModelLabels (which include the arrow).
     const rawNames =
       Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length
         ? window.MODEL_NAMES.slice()
         : window.ModelLabels?.defaultNames?.() || [];
-    const arrowIdx = rawNames.findIndex(isLegacyArrow);
-    const names = rawNames.filter((n) => !isLegacyArrow(n)).slice(0, VISIBLE);
 
-    const buildDefaultCodes = (n = VISIBLE) => {
+    // Actionable = non-arrow, non-empty, in canonical order, capped at MAX.
+    const names = rawNames
+      .filter((n) => !isLegacyArrow(n))
+      .map((v) => (v == null ? '' : String(v).trim()))
+      .filter(Boolean)
+      .slice(0, MAX);
+
+    const buildDefaultCodes = (n = names.length || 0) => {
       const base = [
         'Digit1',
         'Digit2',
@@ -7363,8 +7680,7 @@ setTimeout(() => {
         ? window.__modelPickerKeyCodes.slice()
         : buildDefaultCodes(names.length);
 
-    // Align codes to filtered names: drop the arrow slot if codes still include it
-    if (arrowIdx >= 0 && codes.length > names.length) codes.splice(arrowIdx, 1);
+    // Ensure codes list is aligned 1:1 with actionable names
     codes = codes.slice(0, names.length);
     while (codes.length < names.length) codes.push('');
 
@@ -7387,8 +7703,8 @@ setTimeout(() => {
     const rows = [];
     for (let i = 0; i < names.length; i++) {
       const rawCode = codes[i];
-      if (!isAssigned(rawCode)) continue;
-      const label = names[i] ? esc(names[i]) : `Slot ${i + 1}`;
+      if (!isAssigned(rawCode)) continue; // overlay: only show assigned shortcuts
+      const label = names[i] ? esc(names[i]) : '';
       const val = displayFromCode(rawCode);
       rows.push(`
       <div class="shortcut-item">
@@ -7694,7 +8010,7 @@ setTimeout(() => {
     new Promise((resolve) => {
       if (!isExtensionAlive()) return resolve();
 
-      const VISIBLE = 10;
+      const MAX = window.ModelLabels?.MAX_SLOTS || 15;
       const isLegacyArrow = (s) => {
         const t = (s ?? '').toString().trim();
         if (!t) return false;
@@ -7703,7 +8019,7 @@ setTimeout(() => {
         return /legacy/i.test(t) && t.includes('→');
       };
       const defaultNames = () => window.ModelLabels?.defaultNames?.() || [];
-      const buildDefaultCodes = (n = VISIBLE) => {
+      const buildDefaultCodes = (n = MAX) => {
         const base = [
           'Digit1',
           'Digit2',
@@ -7728,22 +8044,31 @@ setTimeout(() => {
             return resolve();
           }
           try {
+            // Canonical names saved by content.js (may contain arrow “→”)
             const rawNames = Array.isArray(res.modelNames)
-              ? res.modelNames.slice()
+              ? res.modelNames.slice(0, MAX)
               : defaultNames();
-            const arrowIdx = rawNames.findIndex(isLegacyArrow);
-            const names = rawNames.filter((n) => !isLegacyArrow(n)).slice(0, VISIBLE);
-            while (names.length < VISIBLE) names.push('');
 
+            // Actionable display names: drop arrow + empties, keep canonical order.
+            const names = rawNames
+              .filter((n) => !isLegacyArrow(n))
+              .map((v) => (v == null ? '' : String(v).trim()))
+              .filter(Boolean)
+              .slice(0, MAX);
+
+            // Codes saved by the popup are already aligned to actionable names (no arrow slot).
             let codes = Array.isArray(res.modelPickerKeyCodes)
-              ? res.modelPickerKeyCodes.slice()
-              : buildDefaultCodes(names.length);
+              ? res.modelPickerKeyCodes.slice(0, MAX)
+              : buildDefaultCodes(names.length || MAX);
 
-            // If storage codes still include the legacy slot, drop it to align with filtered names
-            if (arrowIdx >= 0 && codes.length > names.length) codes.splice(arrowIdx, 1);
+            while (codes.length < MAX) codes.push('');
+
+            // Now trim/pad to actionable names length
             codes = codes.slice(0, names.length);
             while (codes.length < names.length) codes.push('');
 
+            // These are the same structures used by popup.js: names are actionable only,
+            // codes aligned 1:1 with those names.
             window.MODEL_NAMES = names;
             window.__modelPickerKeyCodes = codes;
           } catch (err) {
@@ -7790,4 +8115,84 @@ setTimeout(() => {
   };
 
   document.addEventListener('keydown', onKeyDown, { capture: true });
+})();
+
+// ==================================================
+// @note Click-to-copy inline code (gated by settings)
+// ==================================================
+
+(() => {
+  const STYLE_ID = 'csp-inline-code-copy-style';
+  let styleEl = null;
+  let listening = false;
+
+  const ensureStyle = () => {
+    if (styleEl) return;
+    styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = 'pre code{cursor:auto} code{cursor:pointer}';
+    document.head.appendChild(styleEl);
+  };
+
+  const removeStyle = () => {
+    styleEl?.remove();
+    styleEl = null;
+  };
+
+  const onClick = (e) => {
+    const el = e.target.closest('code');
+    if (!el || el.closest('pre')) return;
+
+    const txt = el.textContent.trim();
+    if (!txt) return;
+
+    const fallback = () => {
+      const ta = Object.assign(document.createElement('textarea'), { value: txt });
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    };
+
+    (navigator.clipboard?.writeText(txt) || Promise.reject()).catch(fallback);
+    el.animate([{ opacity: 1 }, { opacity: 0.6 }, { opacity: 1 }], { duration: 200 });
+  };
+
+  const detach = () => {
+    if (!listening) return;
+    document.removeEventListener('click', onClick, true);
+    listening = false;
+    removeStyle();
+  };
+
+  const applySetting = (enabled) => {
+    const isOn = Boolean(enabled);
+    window._clickToCopyInlineCodeEnabled = isOn;
+    window.clickToCopyInlineCodeEnabled = isOn;
+
+    if (!isOn) {
+      detach();
+      return;
+    }
+
+    ensureStyle();
+    if (!listening) {
+      document.addEventListener('click', onClick, { capture: true });
+      listening = true;
+    }
+  };
+
+  chrome.storage.sync.get(
+    { clickToCopyInlineCodeEnabled: false },
+    ({ clickToCopyInlineCodeEnabled }) => {
+      applySetting(clickToCopyInlineCodeEnabled);
+    },
+  );
+
+  chrome.storage.onChanged.addListener((chg, area) => {
+    if (area !== 'sync' || !('clickToCopyInlineCodeEnabled' in chg)) return;
+    applySetting(chg.clickToCopyInlineCodeEnabled.newValue);
+  });
 })();

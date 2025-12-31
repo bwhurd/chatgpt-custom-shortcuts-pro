@@ -5,9 +5,14 @@
   const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
   const OPTION_KEYS = new Set(Object.keys(globalThis.OPTIONS_DEFAULTS || {}));
+  // Keep modelNames local-only; exclude from Drive payloads/restores.
+  const OPTION_KEYS_EXCLUDE = new Set(['modelNames']);
   const pickOptions = (obj = {}) => {
     const out = {};
-    for (const k of OPTION_KEYS) if (k in obj) out[k] = obj[k];
+    for (const k of OPTION_KEYS) {
+      if (OPTION_KEYS_EXCLUDE.has(k)) continue;
+      if (k in obj) out[k] = obj[k];
+    }
     return out;
   };
   const hasOptionsStorage = () =>

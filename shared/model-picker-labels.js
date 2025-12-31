@@ -5,14 +5,19 @@
 (() => {
   const MAX_SLOTS = 15;
 
-  // Canonical mapping based on current 555 HTML
+  // Canonical mapping based on current HTML
   const TESTID_CANON = Object.freeze({
-    // Main (GPT-5.1 group)
-    'model-switcher-gpt-5-1': 'GPT-5.1 Auto',
+    // Main (GPT-5.2 group)
+    'model-switcher-gpt-5-2': 'Auto',
+    'model-switcher-gpt-5-2-instant': 'Instant',
+    'model-switcher-gpt-5-2-thinking': 'Thinking',
+
+    // Back-compat main GPT-5.1 auto (if present in some builds)
+    'model-switcher-gpt-5-1': 'Auto',
+
+    // Submenu (GPT-5.1 + legacy GPT-5.x variants)
     'model-switcher-gpt-5-1-instant': 'GPT-5.1 Instant',
     'model-switcher-gpt-5-1-thinking': 'GPT-5.1 Thinking',
-
-    // Submenu
     'model-switcher-gpt-5-instant': 'GPT-5 Instant',
     'model-switcher-gpt-5-t-mini': 'GPT-5 mini', // “GPT-5 Thinking mini” → “GPT-5 mini”
     'model-switcher-gpt-5-thinking': 'GPT-5 Thinking',
@@ -22,8 +27,8 @@
     'model-switcher-o4-mini': 'o4-mini',
   });
 
-  // Main fallback order if testids vanish but order remains
-  const MAIN_CANON_BY_INDEX = ['GPT-5.1 Auto', 'GPT-5.1 Instant', 'GPT-5.1 Thinking'];
+// Main fallback order if testids vanish but order remains
+  const MAIN_CANON_BY_INDEX = ['Auto', 'Instant', 'Thinking'];
 
   const normTid = (tid) => (tid || '').toLowerCase().trim();
 
@@ -75,10 +80,12 @@
   // Best-guess defaults for initial UI (before scrape). Arrow is canonical “→”.
   const defaultNames = () => {
     const arr = [
-      'GPT-5.1 Auto',
+      'Auto',
+      'Instant',
+      'Thinking',
+      '→', // submenu trigger (not a model)
       'GPT-5.1 Instant',
       'GPT-5.1 Thinking',
-      '→', // submenu trigger (not a model)
       'GPT-5 Instant',
       'GPT-5 mini',
       'GPT-5 Thinking',

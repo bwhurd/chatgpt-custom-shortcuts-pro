@@ -1,3 +1,5 @@
+const MODEL_PICKER_MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+
 document.addEventListener('DOMContentLoaded', () => {
   // Localize the title dynamically
   const titleElement = document.querySelector('title');
@@ -27,19 +29,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return typeof str === 'string' ? str.replace(/\\n/g, '\n') : str;
   }
 
-  // Source of truth for the 10 model-picker slots if storage is empty
-  const DEFAULT_MODEL_PICKER_KEY_CODES = [
-    'Digit1',
-    'Digit2',
-    'Digit3',
-    'Digit4',
-    'Digit5',
-    'Digit6',
-    'Digit7',
-    'Digit8',
-    'Digit9',
-    'Digit0',
-  ];
+  // Source of truth for model-picker slots if storage is empty.
+  // First 10 real tiles get Digit1..Digit0; any extra slots start blank.
+  const DEFAULT_MODEL_PICKER_KEY_CODES = (() => {
+    const base = [
+      'Digit1',
+      'Digit2',
+      'Digit3',
+      'Digit4',
+      'Digit5',
+      'Digit6',
+      'Digit7',
+      'Digit8',
+      'Digit9',
+      'Digit0',
+    ];
+    const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
+    for (let i = 0; i < base.length && i < out.length; i++) {
+      out[i] = base[i];
+    }
+    return out;
+  })();
 
   // Preference: auto-overwrite on duplicate?
   const prefs = { autoOverwrite: false };
@@ -393,11 +403,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.saveShortcutValue = saveShortcutValue;
 
-  // ---------- Dynamic model names for tooltips and picker UI (shared-first, skip Legacy/→, 10 slots) ----------
+  // ---------- Dynamic model names for tooltips and picker UI (shared-first, MAX_SLOTS, skip Legacy/→ in UI) ----------
   (() => {
-    // Canonical 10-name order (main 3, then submenu) — matches your shared mapping
-    const CANON_ORDER_10 = [
-      'GPT-5.1 Auto',
+    const MAX = MODEL_PICKER_MAX_SLOTS;
+
+    // Desired initial display order for actionable models (no arrow), before extraction:
+    // Auto, Instant, Thinking, GPT-5.1 Instant, GPT-5.1 Thinking, GPT-5 Instant,
+    // GPT-5 mini, GPT-5 Thinking, 4o, 4.1, o3, o4-mini.
+    const CANON_ORDER_12 = [
+      'Auto',
+      'Instant',
+      'Thinking',
       'GPT-5.1 Instant',
       'GPT-5.1 Thinking',
       'GPT-5 Instant',
@@ -418,39 +434,82 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     };
 
-    // Seed names from shared defaults if available; otherwise from CANON_ORDER_10
-    function seedFromSharedOrCanon10() {
-      const shared = window.ModelLabels?.defaultNames?.() || [];
-      const filtered = (Array.isArray(shared) ? shared : []).filter((v) => !isLegacyArrow(v));
+    // Seed names from shared defaults if available; otherwise from CANON_ORDER_12.
+    // Always returns a dense list of actionable model names (no arrow), in the desired order.
+    function seedFromSharedOrCanon12() {
+      const shared =
+        window.ModelLabels && typeof window.ModelLabels.defaultNames === 'function'
+          ? window.ModelLabels.defaultNames() || []
+          : [];
+
+      const base = Array.isArray(shared) && shared.length ? shared : CANON_ORDER_12;
+
+      // Trim + drop arrow from shared
+      const trimmed = base
+        .slice(0, MAX)
+        .map((v) => (v == null ? '' : String(v).trim()))
+        .filter(Boolean)
+        .filter((v) => !isLegacyArrow(v));
+
       const out = [];
-      for (const n of filtered) {
-        if (!n) continue;
-        if (out.length < 10) out.push(String(n).trim());
+
+      // Primary order from shared (if present)
+      for (const n of trimmed) {
+        if (out.length >= Math.min(MAX, CANON_ORDER_12.length)) break;
+        out.push(n);
       }
-      for (const n of CANON_ORDER_10) {
-        if (out.length >= 10) break;
+
+      // Ensure we always have the 12 expected defaults in the specified order
+      for (const n of CANON_ORDER_12) {
+        if (out.length >= Math.min(MAX, CANON_ORDER_12.length)) break;
         if (!out.includes(n)) out.push(n);
       }
-      return out.slice(0, 10);
+
+      return out.slice(0, Math.min(MAX, CANON_ORDER_12.length));
     }
 
+    // Merge stored canonical names from content.js (with arrow) with our defaults.
+    // Stored names are canonical (may contain "→"); we drop the arrow and keep order.
     function mergeWithFallback(incoming) {
-      const in10 = (Array.isArray(incoming) ? incoming : []).filter((v) => !isLegacyArrow(v));
-      const fb10 = seedFromSharedOrCanon10();
-      return Array(10)
-        .fill('')
-        .map((_, i) => (in10[i] && String(in10[i]).trim()) || fb10[i] || '');
+      const inArr = Array.isArray(incoming) ? incoming.slice(0, MAX) : [];
+      const filtered = inArr
+        .map((v) => (v == null ? '' : String(v).trim()))
+        .filter(Boolean)
+        .filter((v) => !isLegacyArrow(v));
+
+      const fb = seedFromSharedOrCanon12();
+
+      const cap = Math.min(MAX, Math.max(filtered.length, fb.length, CANON_ORDER_12.length));
+      const out = [];
+      for (let i = 0; i < cap; i++) {
+        out.push(filtered[i] || fb[i] || CANON_ORDER_12[i] || '');
+      }
+      return out;
     }
 
-    function setAndRender(a10, source = 'bootstrap') {
-      window.MODEL_NAMES = a10.slice(0, 10);
+    function setAndRender(list, source = 'bootstrap') {
+      // Normalize to actionable display names:
+      // - trim
+      // - drop empties
+      // - drop the Legacy submenu trigger (→ / localized variants)
+      const names = Array.isArray(list)
+        ? list
+            .slice(0, MAX)
+            .map((v) => (v == null ? '' : String(v).trim()))
+            .filter((v) => v && !isLegacyArrow(v))
+        : [];
+
+      window.MODEL_NAMES = names;
+
       if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+      if (typeof window.modelPickerInputsRender === 'function') window.modelPickerInputsRender();
+
       window.dispatchEvent(new CustomEvent('model-names-updated', { detail: { source } }));
     }
 
-    // Defaults for instant UI (correct, no Legacy/→)
-    window.MODEL_NAMES = seedFromSharedOrCanon10();
-    window.MODEL_NAMES_META = { arrowIndex: -1, rawCount: 0 };
+    // Defaults for instant UI (correct, no Legacy/→ tile, always 12 initial items).
+    window.MODEL_NAMES = seedFromSharedOrCanon12();
+    window.MODEL_NAMES_META = { arrowIndex: -1, rawCount: window.MODEL_NAMES.length };
 
     // Late update when shared/model-picker-labels.js finishes loading
     if (!window.ModelLabels?.defaultNames) {
@@ -458,49 +517,23 @@ document.addEventListener('DOMContentLoaded', () => {
       const t = setInterval(() => {
         if (window.ModelLabels?.defaultNames) {
           clearInterval(t);
-          setAndRender(seedFromSharedOrCanon10(), 'shared-ready');
+          setAndRender(seedFromSharedOrCanon12(), 'shared-ready');
         } else if (++tries > 12) {
           clearInterval(t);
         }
       }, 25);
     }
 
-    // Load latest from storage when popup opens; keep legacy migration
+    // Load latest canonical names from storage when popup opens
     try {
-      chrome.storage.sync.get(
-        ['modelNames', 'modelPickerKeyCodes', 'modelKeysSkipLegacyMigratedV1'],
-        ({ modelNames, modelPickerKeyCodes, modelKeysSkipLegacyMigratedV1 }) => {
-          const raw = Array.isArray(modelNames) ? modelNames.slice(0, 15) : [];
-          const arrowIndex = raw.findIndex(isLegacyArrow);
-          window.MODEL_NAMES_META = { arrowIndex, rawCount: raw.length };
+      chrome.storage.sync.get('modelNames', ({ modelNames }) => {
+        const raw = Array.isArray(modelNames) ? modelNames.slice(0, MAX) : [];
+        const arrowIndex = raw.findIndex(isLegacyArrow);
+        window.MODEL_NAMES_META = { arrowIndex, rawCount: raw.length };
 
-          setAndRender(mergeWithFallback(raw), 'storage');
-
-          if (arrowIndex >= 0 && !modelKeysSkipLegacyMigratedV1) {
-            const rawCodes = Array.isArray(modelPickerKeyCodes) ? modelPickerKeyCodes.slice() : [];
-            // Only migrate if there are EXTRA slots beyond the visible 10.
-            // Never splice a clean 10-slot array (prevents losing Digit4/5 on reload).
-            if (rawCodes.length > 10) {
-              const next = rawCodes.slice();
-              if (arrowIndex < next.length) next.splice(arrowIndex, 1);
-              const ten = next.slice(0, 10);
-              while (ten.length < 10) ten.push('');
-              chrome.storage.sync.set(
-                { modelPickerKeyCodes: ten, modelKeysSkipLegacyMigratedV1: true },
-                () => {
-                  window.__modelPickerKeyCodes = ten.slice();
-                  try {
-                    document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-                  } catch (_) {}
-                },
-              );
-            } else {
-              // Nothing to migrate; just mark done so it never runs again.
-              chrome.storage.sync.set({ modelKeysSkipLegacyMigratedV1: true });
-            }
-          }
-        },
-      );
+        const merged = mergeWithFallback(raw);
+        setAndRender(merged, 'storage');
+      });
     } catch (_) {
       setAndRender(window.MODEL_NAMES, 'fallback');
     }
@@ -508,21 +541,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep popup in sync if content.js updates labels while popup is open
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync' || !changes.modelNames) return;
-      const raw = Array.isArray(changes.modelNames.newValue) ? changes.modelNames.newValue : [];
+      const raw = Array.isArray(changes.modelNames.newValue)
+        ? changes.modelNames.newValue.slice(0, MAX)
+        : [];
       window.MODEL_NAMES_META = { arrowIndex: raw.findIndex(isLegacyArrow), rawCount: raw.length };
-      setAndRender(mergeWithFallback(raw), 'storage:onChanged');
+      const merged = mergeWithFallback(raw);
+      setAndRender(merged, 'storage:onChanged');
     });
   })();
 
   // ---------- Unified registry for model-picker codes ----------
   function getModelPickerCodesCache() {
-    const arr = Array.isArray(window.__modelPickerKeyCodes) ? window.__modelPickerKeyCodes : null;
-    return arr && arr.length === 10 ? arr.slice(0, 10) : DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+    const src = Array.isArray(window.__modelPickerKeyCodes)
+      ? window.__modelPickerKeyCodes.slice(0, MODEL_PICKER_MAX_SLOTS)
+      : null;
+    if (src?.length) {
+      while (src.length < MODEL_PICKER_MAX_SLOTS) src.push('');
+      return src;
+    }
+    return DEFAULT_MODEL_PICKER_KEY_CODES.slice();
   }
 
   function saveModelPickerKeyCodes(codes, cb) {
-    window.__modelPickerKeyCodes = codes.slice(0, 10); // update cache first for snappy UI
-    chrome.storage.sync.set({ modelPickerKeyCodes: window.__modelPickerKeyCodes }, () => {
+    const out = (codes || []).slice(0, MODEL_PICKER_MAX_SLOTS);
+    while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
+    window.__modelPickerKeyCodes = out; // update cache first for snappy UI
+    chrome.storage.sync.set({ modelPickerKeyCodes: out }, () => {
       const err = chrome.runtime?.lastError;
       if (err) {
         console.error('[saveModelPickerKeyCodes] set error:', err);
@@ -537,69 +581,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /** Hydrate cache from storage and notify listeners once */
-  /** Hydrate cache from storage and notify listeners once (normalized, skips Legacy/→) */
+  /** Hydrate cache from storage and notify listeners once (normalized to MODEL_PICKER_MAX_SLOTS) */
   function initModelPickerCodesCache() {
     if (window.__modelPickerHydrating) return window.__modelPickerHydrating;
 
-    const DEFAULT_10 = [
-      'Digit1',
-      'Digit2',
-      'Digit3',
-      'Digit4',
-      'Digit5',
-      'Digit6',
-      'Digit7',
-      'Digit8',
-      'Digit9',
-      'Digit0',
-    ];
-    const isLegacyArrow = (s) => {
-      const t = (s ?? '').toString().trim();
-      if (!t) return false;
-      if (t === '→') return true; // canonical saved by content.js
-      if (/^legacy\s*models?/i.test(t)) return true;
-      if (/legacy/i.test(t) && t.includes('→')) return true;
-      return false;
-    };
-    const normalizeCodes = (codes, names) => {
-      // Respect actual storage; don't splice here. Migration (if any) happens elsewhere.
+    const normalizeCodes = (codes) => {
       const hasArray = Array.isArray(codes);
-      const arr = hasArray ? codes.slice() : [];
-      const out = arr.slice(0, 10);
-      while (out.length < 10) out.push('');
-      // Only fall back to defaults when the key is truly missing (not an array)
-      return hasArray ? out : DEFAULT_10.slice();
+      const out = hasArray ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
+      while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
+      return hasArray ? out : DEFAULT_MODEL_PICKER_KEY_CODES.slice();
     };
 
     window.__modelPickerHydrating = new Promise((resolve) => {
-      chrome.storage.sync.get(
-        ['modelPickerKeyCodes', 'modelNames', 'modelKeysSkipLegacyMigratedV1'],
-        ({ modelPickerKeyCodes, modelNames, modelKeysSkipLegacyMigratedV1 }) => {
-          const normalized = normalizeCodes(modelPickerKeyCodes, modelNames);
-          window.__modelPickerKeyCodes = normalized;
+      chrome.storage.sync.get(['modelPickerKeyCodes'], ({ modelPickerKeyCodes }) => {
+        const normalized = normalizeCodes(modelPickerKeyCodes);
+        window.__modelPickerKeyCodes = normalized;
 
-          // Persist a clean, exactly-10 array once, so future loads are aligned
-          const needsMigration =
-            !modelKeysSkipLegacyMigratedV1 ||
-            !Array.isArray(modelPickerKeyCodes) ||
-            modelPickerKeyCodes.length !== 10;
+        const needsMigration =
+          !Array.isArray(modelPickerKeyCodes) ||
+          modelPickerKeyCodes.length !== MODEL_PICKER_MAX_SLOTS;
 
-          const done = () => {
-            document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-            resolve(window.__modelPickerKeyCodes);
-          };
+        const done = () => {
+          document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+          resolve(window.__modelPickerKeyCodes);
+        };
 
-          if (needsMigration) {
-            chrome.storage.sync.set(
-              { modelPickerKeyCodes: normalized, modelKeysSkipLegacyMigratedV1: true },
-              done,
-            );
-          } else {
-            done();
-          }
-        },
-      );
+        if (needsMigration) {
+          chrome.storage.sync.set({ modelPickerKeyCodes: normalized }, done);
+        } else {
+          done();
+        }
+      });
     });
     return window.__modelPickerHydrating;
   }
@@ -687,10 +699,10 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Clear all conflicting owners immediately in the UI and persist.
    * - Clears popup inputs without re-triggering their input handlers (avoids races)
-   * - Clears model slots and saves the 10-slot array if touched
+   * - Clears model slots and saves the array if touched
    */
   function clearOwners(owners, done) {
-    const codes = getModelPickerCodesCache().slice(0, 10);
+    const codes = getModelPickerCodesCache();
     let modelTouched = false;
 
     owners.forEach((o) => {
@@ -1772,6 +1784,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // UI settings
     showLegacyArrowButtonsCheckbox: false,
     removeMarkdownOnCopyCheckbox: true,
+    clickToCopyInlineCodeEnabled: false,
     moveTopBarToBottomCheckbox: false,
     pageUpDownTakeover: true,
     selectMessagesSentByUserOrChatGptCheckbox: true,
@@ -1794,6 +1807,10 @@ document.addEventListener('DOMContentLoaded', () => {
     enableStopWithControlBackspaceCheckbox: true,
     useAltForModelSwitcherRadio: true,
     useControlForModelSwitcherRadio: false,
+
+    // Helper flags stored in sync (kept in defaults to avoid being pruned)
+    autoOverwrite: false,
+    dontAskDuplicateShortcutModal: false, // default false; intended to be re-enabled per session
 
     // Shortcuts (KeyboardEvent.code values)
     shortcutKeyScrollUpOneMessage: 'KeyA',
@@ -1839,19 +1856,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Other options
 
-    // Model picker keys (number row, 0-9)
-    modelPickerKeyCodes: [
-      'Digit1',
-      'Digit2',
-      'Digit3',
-      'Digit4',
-      'Digit5',
-      'Digit6',
-      'Digit7',
-      'Digit8',
-      'Digit9',
-      'Digit0',
-    ],
+    // Model picker keys (number row, 0-9) — shared layout up to MODEL_PICKER_MAX_SLOTS
+    modelPickerKeyCodes: DEFAULT_MODEL_PICKER_KEY_CODES.slice(),
+
+    // Timestamp for scraped model names
+    modelNamesAt: '',
   };
   // Make available everywhere
   window.DEFAULT_PRESET_DATA = DEFAULT_PRESET_DATA;
@@ -2027,6 +2036,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Apply the handler to each checkbox and radio button
   handleStateChange('showLegacyArrowButtonsCheckbox', 'showLegacyArrowButtonsCheckbox');
   handleStateChange('removeMarkdownOnCopyCheckbox', 'removeMarkdownOnCopyCheckbox');
+  handleStateChange('clickToCopyInlineCodeEnabled', 'clickToCopyInlineCodeEnabled');
   handleStateChange('moveTopBarToBottomCheckbox', 'moveTopBarToBottomCheckbox');
   handleStateChange('pageUpDownTakeover', 'pageUpDownTakeover');
 
@@ -2867,8 +2877,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return s === '\u00A0' ? '' : s;
       }
 
-      // Prefer live UI → then storage → then cache → then defaults; always return exactly 10 strings
-      function readModelPickerCodes10(all) {
+      // Prefer live UI → then storage → then cache → then defaults; always return exactly MODEL_PICKER_MAX_SLOTS strings
+      function readModelPickerCodes(all) {
         const byId = (i) => document.getElementById(`mpKeyInput${i}`);
         const inputs = document.querySelectorAll('#model-picker-grid .mp-input');
         const map = getReverseMap();
@@ -2878,7 +2888,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const fromUI = [];
 
         // Try reading straight from the visible grid
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < MODEL_PICKER_MAX_SLOTS; i++) {
           const el = byId(i) || inputs[i];
           let c = el?.dataset?.keyCode || '';
           if (!c && el) {
@@ -2893,8 +2903,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // If the grid exists and we captured something, use it (even if empties are present)
         const gridPresent = !!document.getElementById('model-picker-grid');
         if (gridPresent) {
-          while (fromUI.length < 10) fromUI.push('');
-          return fromUI.slice(0, 10);
+          while (fromUI.length < MODEL_PICKER_MAX_SLOTS) fromUI.push('');
+          return fromUI.slice(0, MODEL_PICKER_MAX_SLOTS);
         }
 
         // Fallback to storage → cache → defaults
@@ -2903,22 +2913,12 @@ document.addEventListener('DOMContentLoaded', () => {
           (typeof getModelPickerCodesCache === 'function' && getModelPickerCodesCache()) ||
           window.__modelPickerKeyCodes ||
           null;
-        const defaults = [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
+
+        const defaults = DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MODEL_PICKER_MAX_SLOTS);
 
         const source = storageRaw || cacheRaw || defaults;
         const out = [];
-        for (let i = 0; i < 10; i++) out.push(normalizeMpVal(source[i] || ''));
+        for (let i = 0; i < MODEL_PICKER_MAX_SLOTS; i++) out.push(normalizeMpVal(source[i] || ''));
         return out;
       }
 
@@ -2983,26 +2983,11 @@ document.addEventListener('DOMContentLoaded', () => {
           out[k] = effectiveShortcutCode(k, stored);
         });
 
-        // Always export exactly the 10 visible model-picker codes (trim/pad, normalized)
-        out.modelPickerKeyCodes = readModelPickerCodes10(all);
+        // Always export exactly the MODEL_PICKER_MAX_SLOTS model-picker codes (trim/pad, normalized)
+        out.modelPickerKeyCodes = readModelPickerCodes(all);
 
-        // Include modelNames (10 labels). Preserve/normalize arrow for slot 5 if present.
-        {
-          const storageNames = Array.isArray(all.modelNames) ? all.modelNames.slice(0, 10) : null;
-          const windowNames =
-            Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length >= 10
-              ? window.MODEL_NAMES.slice(0, 10)
-              : null;
-
-          const base = storageNames || windowNames || [];
-          const names10 = Array.from({ length: 10 }, (_, i) =>
-            String(base[i] ?? '')
-              .replace(/->/g, '→')
-              .trim(),
-          );
-
-          out.modelNames = names10;
-        }
+        // Intentionally exclude modelNames from exports; keep them local to this profile.
+        delete out.modelNames;
 
         const payload = {
           __meta: {
@@ -3030,6 +3015,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function importSettingsObj(src) {
+      // modelNames stay local; ignore any provided in the file.
+      if (src && typeof src === 'object') delete src.modelNames;
+
       const keySet = getExportKeySet();
       const next = {};
 
@@ -3092,28 +3080,20 @@ document.addEventListener('DOMContentLoaded', () => {
             reflectOption(k, next[k]);
           });
 
-          // If model picker codes provided, refresh local cache/UI
+          // If model picker codes provided, refresh local cache/UI immediately
           if (Array.isArray(next.modelPickerKeyCodes) && next.modelPickerKeyCodes.length) {
             try {
-              const ten = next.modelPickerKeyCodes.slice(0, 10);
-              while (ten.length < 10) ten.push('');
-              window.__modelPickerKeyCodes = ten;
+              const arr = next.modelPickerKeyCodes.slice(0, MODEL_PICKER_MAX_SLOTS);
+              while (arr.length < MODEL_PICKER_MAX_SLOTS) arr.push('');
+              window.__modelPickerKeyCodes = arr;
               document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+              if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+              if (typeof window.modelPickerInputsRender === 'function')
+                window.modelPickerInputsRender();
             } catch (_) {}
           }
 
-          // If model names provided, update global + UI immediately
-          if (Array.isArray(next.modelNames) && next.modelNames.length >= 5) {
-            const nine = next.modelNames.slice(0, 9);
-            if (nine[4] && /legacy/i.test(nine[4])) {
-              nine[4] = `${nine[4].replace(/→/g, '').trim()} →`;
-            }
-            window.MODEL_NAMES = nine.concat('Show Models');
-            if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
-            window.dispatchEvent(
-              new CustomEvent('model-names-updated', { detail: { source: 'import' } }),
-            );
-          }
+          // modelNames are intentionally ignored on import to preserve local names and migrations.
 
           showToast(t('toast_import_complete'));
         });
@@ -3268,36 +3248,19 @@ document.addEventListener('DOMContentLoaded', () => {
   (function shortcutsPresetsInit() {
     // --- constants ---
     const NBSP = '\u00A0';
-    const EMPTY_MODEL_PICKER = Array(10).fill('');
-    const DEFAULT_MODEL_PICKER = [
-      'Digit1',
-      'Digit2',
-      'Digit3',
-      'Digit4',
-      'Digit5',
-      'Digit6',
-      'Digit7',
-      'Digit8',
-      'Digit9',
-      'Digit0',
-    ];
-
-    // Clear all shortcuts (single-key fields → NBSP; model picker → empty strings)
-    const CLEAR_PRESET_DATA = Object.assign(
-      Object.fromEntries(shortcutKeys.map((k) => [k, NBSP])),
-      { modelPickerKeyCodes: EMPTY_MODEL_PICKER.slice() },
-    );
+    const EMPTY_MODEL_PICKER = Array(MODEL_PICKER_MAX_SLOTS).fill('');
+    const DEFAULT_MODEL_PICKER = DEFAULT_MODEL_PICKER_KEY_CODES.slice();
 
     const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
 
     // Persist model picker codes, refresh cache + UI, and optionally toast
     function applyModelPickerCodes(codes, toastMsg) {
-      const ten = codes.slice(0, 10);
-      while (ten.length < 10) ten.push('');
+      const out = (codes || []).slice(0, MODEL_PICKER_MAX_SLOTS);
+      while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
 
       const finish = () => {
         try {
-          window.__modelPickerKeyCodes = ten.slice();
+          window.__modelPickerKeyCodes = out.slice();
           document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
           if (typeof window.modelPickerInputsRender === 'function') {
             window.modelPickerInputsRender();
@@ -3306,22 +3269,17 @@ document.addEventListener('DOMContentLoaded', () => {
         window.toast?.show?.(toastMsg || 'Model picker updated. Reload page to apply changes.');
       };
 
-      // Persist codes AND mark migration done so later reloads never splice them out.
-      chrome.storage.sync.set(
-        { modelPickerKeyCodes: ten, modelKeysSkipLegacyMigratedV1: true },
-        (err) => {
-          if (chrome.runtime?.lastError) {
-            // Fallback through existing helper if needed
-            try {
-              window.saveModelPickerKeyCodes(ten, finish);
-            } catch (_) {
-              finish();
-            }
-          } else {
+      chrome.storage.sync.set({ modelPickerKeyCodes: out }, () => {
+        if (chrome.runtime?.lastError) {
+          try {
+            window.saveModelPickerKeyCodes(out, finish);
+          } catch (_) {
             finish();
           }
-        },
-      );
+        } else {
+          finish();
+        }
+      });
     }
 
     // --- Button event handlers ---
@@ -3343,11 +3301,18 @@ document.addEventListener('DOMContentLoaded', () => {
               console.error('clear all: failed to set shortcuts', e);
             }
 
-            // 2) Persistently clear the 5×2 model picker grid (10 empty strings)
-            const TEN_EMPTY = EMPTY_MODEL_PICKER.slice(0, 10);
-            window.saveModelPickerKeyCodes(TEN_EMPTY, () => {
+            // 1b) Immediately refresh visible shortcut inputs to reflect the cleared state
+            if (typeof window.refreshShortcutInputsFromStorage === 'function') {
+              try {
+                window.refreshShortcutInputsFromStorage();
+              } catch (_) {}
+            }
+
+            // 2) Persistently clear the model picker grid (all slots empty)
+            const EMPTY = EMPTY_MODEL_PICKER.slice(0, MODEL_PICKER_MAX_SLOTS);
+            window.saveModelPickerKeyCodes(EMPTY, () => {
               // 3) Force rehydrate and UI refresh; with Replacement #1 there is no fallback to defaults
-              window.__modelPickerKeyCodes = TEN_EMPTY.slice();
+              window.__modelPickerKeyCodes = EMPTY.slice();
               document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
               if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
               if (typeof window.modelPickerInputsRender === 'function')
@@ -3373,10 +3338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 2) Repopulate the model picker with the original 1..0 defaults
-            // Also set the migration flag so a later reload does NOT splice the 5th slot.
-            chrome.storage.sync.set({ modelKeysSkipLegacyMigratedV1: true }, () => {
-              applyModelPickerCodes(DEFAULT_MODEL_PICKER, 'Model shortcuts restored to defaults.');
-            });
+            applyModelPickerCodes(DEFAULT_MODEL_PICKER, 'Model shortcuts restored to defaults.');
           },
           { proceedText: 'Reset all to defaults?', simple: true, allowHTML: true },
         );
@@ -3501,8 +3463,8 @@ function modelPickerInitSafe() {
       chip.textContent = window.ShortcutUtils.displayFromCode(codes[i] || '');
 
       // Tooltip & accessibility label use model name from JS, never hard-coded HTML
-      const prettyName = NAMES[i] || `Slot ${i + 1}`;
-      const tipText = `Set shortcut for\n${prettyName}`;
+      const prettyName = NAMES[i] || '';
+      const tipText = prettyName ? `Set shortcut for\n${prettyName}` : 'Set model shortcut';
 
       chip.setAttribute('data-tooltip', tipText);
       chip.setAttribute('aria-label', `Set shortcut for ${prettyName}`);
@@ -3846,9 +3808,9 @@ function modelPickerInitSafe() {
       // Always re-read the latest modelPickerKeyCodes from Chrome storage
       chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
         const arr = Array.isArray(data.modelPickerKeyCodes)
-          ? data.modelPickerKeyCodes.slice(0, 15)
+          ? data.modelPickerKeyCodes.slice(0, MODEL_PICKER_MAX_SLOTS)
           : [];
-        while (arr.length < 15) arr.push('');
+        while (arr.length < MODEL_PICKER_MAX_SLOTS) arr.push('');
         window.__modelPickerKeyCodes = arr;
         if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
         if (typeof window.modelPickerInputsRender === 'function') window.modelPickerInputsRender();
@@ -3866,18 +3828,19 @@ if (document.readyState === 'loading') {
 }
 
 chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
-  const arr = Array.isArray(data.modelPickerKeyCodes) ? data.modelPickerKeyCodes.slice(0, 15) : [];
-  while (arr.length < 15) arr.push('');
+  const arr = Array.isArray(data.modelPickerKeyCodes)
+    ? data.modelPickerKeyCodes.slice(0, MODEL_PICKER_MAX_SLOTS)
+    : [];
+  while (arr.length < MODEL_PICKER_MAX_SLOTS) arr.push('');
   window.__modelPickerKeyCodes = arr;
   if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
   if (typeof window.modelPickerInputsRender === 'function') window.modelPickerInputsRender();
 });
 
-// ===== @note Model Picker 5×2 Inputs Grid (unified: build + capture + save + react) =====
+// ===== @note Model Picker Inputs Grid (unified: build + capture + save + react) =====
 (function modelPickerInputsGridInitV2() {
   let tries = 0;
-  // Exactly 10 slots (5×2); removes unused "Slot 11–15"
-  const MAX_SLOTS = 10;
+  const MAX_SLOTS = MODEL_PICKER_MAX_SLOTS;
 
   const onReady = (fn) =>
     document.readyState === 'loading'
@@ -3927,7 +3890,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       const label = document.createElement('div');
       label.className = 'shortcut-label';
       label.style.cssText = 'margin:0 0 14px 0;';
-      label.innerHTML = `<span class="mp-label" style="font-weight:400;" data-idx="${i}">Slot ${i + 1}</span>`;
+      label.innerHTML = `<span class="mp-label" style="font-weight:400;" data-idx="${i}"></span>`;
 
       const keys = document.createElement('div');
       keys.className = 'shortcut-keys';
@@ -3959,10 +3922,20 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   }
 
   const getCodes = () => {
-    const src = Array.isArray(window.__modelPickerKeyCodes)
-      ? window.__modelPickerKeyCodes
-      : window.ShortcutUtils.getModelPickerCodesCache?.() || [];
-    const raw = src.slice(0, MAX_SLOTS);
+    // Prefer in-memory cache when present
+    if (Array.isArray(window.__modelPickerKeyCodes)) {
+      const raw = window.__modelPickerKeyCodes.slice(0, MAX_SLOTS);
+      while (raw.length < MAX_SLOTS) raw.push('');
+      return raw;
+    }
+
+    const fn =
+      window.ShortcutUtils && typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
+        ? window.ShortcutUtils.getModelPickerCodesCache
+        : null;
+
+    const src = fn ? fn() : DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MAX_SLOTS);
+    const raw = (Array.isArray(src) ? src : []).slice(0, MAX_SLOTS);
     while (raw.length < MAX_SLOTS) raw.push('');
     return raw;
   };
@@ -3974,7 +3947,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       cb?.();
     });
   };
-  const displayFrom = (c) => window.ShortcutUtils.displayFromCode?.(c) || c || '';
+  const displayFrom = (c) =>
+    window.ShortcutUtils && typeof window.ShortcutUtils.displayFromCode === 'function'
+      ? window.ShortcutUtils.displayFromCode(c)
+      : c || '';
 
   // Live mode cache ('alt' | 'ctrl'); kept in sync with storage
   let mpModeCache = 'alt';
@@ -3993,7 +3969,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     }
   }
   function modifierLabel() {
-    // Match your global labels (above): Mac → Command, Windows → Control
     const isMac = (() => {
       const ua = navigator.userAgent || '';
       const plat = navigator.platform || '';
@@ -4011,20 +3986,75 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       el.textContent = text;
     });
   }
-
   function syncModelNames() {
     const NAMES = window.MODEL_NAMES || [];
-    document.querySelectorAll('#model-picker-grid .mp-label').forEach((el) => {
-      const idx = Number(el.getAttribute('data-idx') || '0');
-      el.textContent = NAMES[idx] || `Slot ${idx + 1}`;
+    const visibleCount = NAMES.length;
+
+    document.querySelectorAll('#model-picker-grid .shortcut-item').forEach((item) => {
+      const idx = Number(item.getAttribute('data-slot') || '0');
+      const labelEl = item.querySelector('.mp-label');
+      if (!labelEl) return;
+
+      // Any index beyond the number of model names is always hidden
+      if (idx >= visibleCount) {
+        item.style.display = 'none';
+        item.dataset.filterLocked = '1'; // keep search filter from re-showing intentionally hidden tiles
+        labelEl.textContent = '';
+        return;
+      }
+
+      const raw = NAMES[idx] != null ? String(NAMES[idx]) : '';
+      const name = raw.trim();
+
+      if (!name) {
+        item.style.display = 'none';
+        item.dataset.filterLocked = '1';
+        labelEl.textContent = '';
+      } else {
+        item.style.display = '';
+        delete item.dataset.filterLocked;
+        labelEl.textContent = name;
+      }
     });
   }
+
   function renderInputs() {
     const codes = getCodes();
+    const NAMES = window.MODEL_NAMES || [];
+    const visibleCount = NAMES.length;
+
     document.querySelectorAll('#model-picker-grid .mp-input').forEach((inp) => {
       const idx = Number(inp.getAttribute('data-idx') || '0');
+      const item = inp.closest('.shortcut-item');
+
+      // Any index beyond the number of model names is always hidden
+      if (idx >= visibleCount) {
+        if (item) item.style.display = 'none';
+        if (item) item.dataset.filterLocked = '1';
+        inp.dataset.keyCode = '';
+        inp.value = '';
+        inp.removeAttribute('aria-label');
+        inp.removeAttribute('data-tooltip');
+        return;
+      }
+
+      const raw = NAMES[idx] != null ? String(NAMES[idx]) : '';
+      const name = raw.trim();
+
+      if (!name) {
+        if (item) item.style.display = 'none';
+        if (item) item.dataset.filterLocked = '1';
+        inp.dataset.keyCode = '';
+        inp.value = '';
+        inp.removeAttribute('aria-label');
+        inp.removeAttribute('data-tooltip');
+        return;
+      }
+
+      if (item) item.style.display = '';
+      if (item) delete item.dataset.filterLocked;
+
       const code = codes[idx] || '';
-      const name = (window.MODEL_NAMES || [])[idx] || `Slot ${idx + 1}`;
 
       // Never render NBSP for inputs; show empty when cleared
       let display = '';
@@ -4035,11 +4065,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       inp.dataset.keyCode = code || '';
       inp.value = display; // empty string when cleared
       inp.setAttribute('aria-label', `Set shortcut for ${name}`);
-      if (!inp.getAttribute('data-tooltip')) {
-        inp.setAttribute('data-tooltip', `Set shortcut for\n${name}`);
-      }
+      inp.setAttribute('data-tooltip', `Set shortcut for\n${name}`);
     });
   }
+
   function renderAll() {
     syncModelNames();
     syncModifierText();
@@ -4119,7 +4148,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   }
 
   function focusNext(fromIdx) {
-    const next = document.getElementById(`mpKeyInput${Math.min(9, fromIdx + 1)}`);
+    const names = window.MODEL_NAMES || [];
+    const maxIdx = Math.max(0, Math.min(names.length - 1, MAX_SLOTS - 1));
+    const nextIdx = Math.min(maxIdx, fromIdx + 1);
+    const next = document.getElementById(`mpKeyInput${nextIdx}`);
     if (next) next.focus();
   }
 
@@ -4242,10 +4274,11 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       e.preventDefault();
       e.stopPropagation();
       const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1; // Enter => forward
+      const names = window.MODEL_NAMES || [];
+      const maxIdx = Math.max(0, Math.min(names.length - 1, MAX_SLOTS - 1));
       let next = idx + dir;
-      const max = 9;
-      if (next < 0) next = max;
-      if (next > max) next = 0;
+      if (next < 0) next = maxIdx;
+      if (next > maxIdx) next = 0;
       const nextEl = document.getElementById(`mpKeyInput${next}`);
       if (nextEl) nextEl.focus();
       return;
@@ -4285,11 +4318,26 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     assignAt(idx, code);
   }
 
+  function selectInputText(el) {
+    if (!el) return;
+    const run = () => {
+      try {
+        el.select();
+      } catch (_) {}
+    };
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(run);
+    } else {
+      setTimeout(run, 0);
+    }
+  }
+
   function wireInputsAndReset() {
     document.querySelectorAll('#model-picker-grid .mp-input').forEach((inp) => {
       if (inp.dataset.wired) return;
       inp.dataset.wired = '1';
 
+      inp.addEventListener('focus', () => selectInputText(inp));
       inp.addEventListener('keydown', onKeyDown, true);
 
       // Support typed labels/paste like your 111 wiring
@@ -4331,18 +4379,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       const doReset = () => {
         const yes = confirm('Reset all model keys to defaults?');
         if (!yes) return;
-        const defaults = [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
+        const defaults = DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MAX_SLOTS);
         window.saveModelPickerKeyCodes(defaults, () => {
           // Toast on reset
           window.toast.show('Model keys reset to defaults.');
@@ -4388,8 +4425,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       }
     });
   }
-
-  // (removed) duplicate onChanged listener and stray brace — already handled inside wireReactivity()
 
   onReady(() =>
     waitForDeps(() => {
@@ -4526,6 +4561,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     const tokens = tok(q),
       all = tokens.length === 0;
     idx.forEach(({ el, words }) => {
+      if (el.dataset.filterLocked === '1') {
+        el.style.display = 'none';
+        return;
+      }
       const ok = all || tokens.every((t) => match(words, t));
       el.style.display = ok ? '' : 'none';
     });
@@ -4827,13 +4866,21 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
           Object.keys(settings || {}).forEach((k) => {
             if (!/^shortcutKey/.test(k)) reflectOption(k, settings[k]);
           });
-          if (
-            Array.isArray(settings?.modelPickerKeyCodes) &&
-            settings.modelPickerKeyCodes.length === 10
-          ) {
+          const hasModelPickerCodes =
+            Array.isArray(settings?.modelPickerKeyCodes) && settings.modelPickerKeyCodes.length > 0;
+          if (hasModelPickerCodes) {
             try {
-              window.__modelPickerKeyCodes = settings.modelPickerKeyCodes.slice(0, 10);
+              const cap =
+                typeof MODEL_PICKER_MAX_SLOTS === 'number'
+                  ? MODEL_PICKER_MAX_SLOTS
+                  : settings.modelPickerKeyCodes.length;
+              const normalized = settings.modelPickerKeyCodes.slice(0, cap);
+              while (normalized.length < cap) normalized.push('');
+              window.__modelPickerKeyCodes = normalized;
               document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+              if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
+              if (typeof window.modelPickerInputsRender === 'function')
+                window.modelPickerInputsRender();
             } catch (_) {}
           }
           if (Array.isArray(settings?.modelNames) && settings.modelNames.length >= 5) {

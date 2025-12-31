@@ -74,6 +74,7 @@ const OPTIONS_DEFAULTS = {
   popupBottomBarOpacityValue: '0.6', // range -> string
   moveTopBarToBottomCheckbox: false,
   removeMarkdownOnCopyCheckbox: true,
+  clickToCopyInlineCodeEnabled: false,
   rememberSidebarScrollPositionCheckbox: true,
   popupSlimSidebarOpacityValue: '0.0',
   fadeSlimSidebarEnabled: false,
@@ -109,6 +110,10 @@ const OPTIONS_DEFAULTS = {
   useAltForModelSwitcherRadio: true,
   useControlForModelSwitcherRadio: false,
 
+  // Duplicate modal + overwrite helper flags (kept in defaults so migrations don't drop them)
+  autoOverwrite: false,
+  dontAskDuplicateShortcutModal: false, // intentionally defaults to false; popup may re-enable per session
+
   // Legacy booleans still read by content.js
   selectMessagesSentByUserOrChatGptCheckbox: true,
   onlySelectAssistantCheckbox: false,
@@ -116,6 +121,9 @@ const OPTIONS_DEFAULTS = {
 
   // Consolidated key (populated from legacy flags in migration)
   messageSelection: 'user_or_assistant',
+
+  // Timestamp for scraped model names; default empty to preserve across migrations
+  modelNamesAt: '',
 };
 
 //

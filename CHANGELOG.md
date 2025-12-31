@@ -2,6 +2,30 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### [12.31.2025]
+  - Fixed Thinking Standard / Extended shortcuts to select the new sprite-based Thinking time menu items reliably.
+  - Fixed dictation shortcuts to work with sprite-based dictate/stop/submit buttons without triggering Voice Mode.
+  - Fixed Temporary Chat toggle to use sprite-based icons (silently no-ops when the button isn’t available).
+  - Fixed Think Longer shortcut to select the new sprite-based Thinking menu item via the composer “More” submenu.
+
+#### [12.28.2025]
+  - Fixed lowest-visible shortcuts so they ignore buttons hidden under the composer.
+  - Copy-lowest now always strips markdown cleanly, keeping list spacing and removing leftover bold markers.
+  - Rapid Alt+C presses no longer skip strip-markdown; overlapping copy timers are cancelled to keep copies consistent.
+
+#### [12.25.2025]
+  - Treat modelNames as per-profile only: export/import and Google Drive sync no longer read or write modelNames, preventing older snapshots from overwriting local labels and migrations.
+  - Fixed settings hydration so cloud restore, file import, and “clear all shortcuts” immediately refresh shortcut inputs and model picker keys without reopening the popup.
+
+#### [12.20.2025]
+  - Fixed the Send Edit shortcut so it again finds the active edit card’s Send button after ChatGPT’s markup change.
+
+#### [12.19.2025]
+  - Added a toggle to click inline code snippets to copy them (disabled by default) and wired it through settings/popup.
+
+#### [12.14.2025]
+  - Model picker grid inputs now auto-select their contents when focused so clicks or Tab start overwriting immediately instead of leaving the cursor after the label.
+
 #### [10.15.2025]
   - Backup and restore user settings with your google account. Your data is private and not exposed to us or third parties. 
   - Support for switching between all current models (GPT 5.1, 5, 4o, 4.1, 3o)
