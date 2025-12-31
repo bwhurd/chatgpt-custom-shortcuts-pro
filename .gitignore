@@ -42,4 +42,7 @@ Thumbs.db
 
 # Coverage (if you add tests later)
 coverage/
-.nyc_output/
+.nyc_output//css-cleanup/
+/.css-cleanup/
+based-on-this.html
+scrub-this-css.css

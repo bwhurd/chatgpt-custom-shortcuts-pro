@@ -1,8 +1,0 @@
-# One entry per line. Use plain strings or /regex/.
-# Examples (uncomment what you need):
-#/^is-/
-#/^has-/
-#/^js-/
-#show
-#open
-#collapse
