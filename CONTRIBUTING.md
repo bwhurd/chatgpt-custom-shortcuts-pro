@@ -1,12 +1,14 @@
 # Contributing
 
-Bug fixes, improvements, and good suggestions always welcome. Thanks for helping!
+I use this extension daily and keep fixing it as ChatGPT UI changes break things. Help maintaining it is welcome.
 
-**Contributor Workflow:**
-1. Fork this repository.
-2. Create a clearly named branch (`fix-sidebar-toggle`, etc.).
-3. Make your changes, keep them simple and clean.
-4. Submit your pull request; it'll be reviewed quickly.
+Bug fixes are the most useful, especially small, focused fixes that restore broken shortcuts or UI hooks.
 
-- No formalities, CLA, or bureaucracy—just good collaboration.
-- Roadmap/major decisions are managed by [@bwhurd](https://github.com/bwhurd).
+## Workflow
+
+1. Fork the repo  
+2. Create a clearly named branch  
+3. Make the smallest change needed  
+4. Open a pull request with a brief explanation  
+
+No CLA, no process overhead. I handle releases and direction. If you want to help long term, open an issue or reach out.

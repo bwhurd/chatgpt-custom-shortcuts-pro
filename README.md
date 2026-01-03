@@ -16,7 +16,8 @@ I keep this extension updated as ChatGPT evolves, but maintaining it solo is get
 - Switch models and Thinking modes  
 - Dictation and Temporary Chat controls  
 - Sidebar, model picker, and layout tweaks  
-- Import, export, and reset settings  
+- Sync, back up, and restore settings via Google sign-in
+- Import or export settings to .json file
 
 For the full feature list, install the extension and open the settings panel.
 
