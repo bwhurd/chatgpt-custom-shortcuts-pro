@@ -5,8 +5,8 @@ This is the source repo for ChatGPT Custom Shortcuts Pro, a Chrome extension tha
 I keep this extension updated as ChatGPT evolves, but maintaining it solo is getting harder. This repo exists in case others are interested in helping maintain or improve it. Contributions are welcome.
 
 - No ads, tracking, or analytics. Everything runs locally  
-- Chrome Web Store: https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf  
-- Changelog: CHANGELOG.md
+- [Chrome Web Store](https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf)
+- [Changelog](CHANGELOG.md)
 
 ## Features
 
