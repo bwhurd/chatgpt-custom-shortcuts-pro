@@ -540,10 +540,32 @@ const delays = DELAYS;
     });
 
   const MENU_ITEM_ROLES =
-    ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
+    ':is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])';
+  const MENU_CONTENT_SELECTOR =
+    '[role="menu"][data-radix-menu-content][data-state="open"], [data-radix-menu-content][data-state="open"][role="menu"]';
 
   // Down-chevron in the GPT trigger (text-agnostic)
   const CHEVRON_ICON_TOKENS = ['M12.1338 5.94433', '#ba3792'];
+
+  const toTokenArray = (tokenOrTokens) =>
+    Array.isArray(tokenOrTokens) ? tokenOrTokens.filter(Boolean) : [tokenOrTokens].filter(Boolean);
+
+  const safeEsc = (s) => {
+    try {
+      return CSS?.escape ? CSS.escape(String(s)) : String(s);
+    } catch {
+      return String(s);
+    }
+  };
+
+  const svgSelectorForTokensLocal = (tokenOrTokens) =>
+    toTokenArray(tokenOrTokens)
+      .map((token) => {
+        const escapedPath = safeEsc(token);
+        const escapedHref = String(token).replace(/(["\\])/g, '\\$1');
+        return [`svg path[d^="${escapedPath}"]`, `svg use[href*="${escapedHref}"]`].join(', ');
+      })
+      .join(', ');
 
   // Call the same flashBorder you already use (support both local symbol and window export)
   function callFlash(el) {
@@ -565,58 +587,152 @@ const delays = DELAYS;
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth || document.documentElement.clientWidth;
-    return r.top >= 0 && r.left >= 0 && r.bottom <= vh && r.right <= vw && isAboveComposer(r, el);
+    const inViewport = r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw;
+    return inViewport && isAboveComposer(r, el);
   }
 
-  function simulateSpace(el) {
-    for (const type of ['keydown', 'keyup']) {
-      el.dispatchEvent(
-        new KeyboardEvent(type, {
-          key: ' ',
-          code: 'Space',
-          keyCode: 32,
-          charCode: 32,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        }),
-      );
+  function smartClick(el) {
+    if (!el) return false;
+    try {
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dispatch = (type, Ctor) => {
+        try {
+          el.dispatchEvent(
+            new Ctor(type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              clientX: cx,
+              clientY: cy,
+            }),
+          );
+        } catch {
+          /* ignore */
+        }
+      };
+
+      if ('PointerEvent' in window) {
+        dispatch('pointerover', PointerEvent);
+        dispatch('pointerenter', PointerEvent);
+        dispatch('pointerdown', PointerEvent);
+      }
+      dispatch('mouseover', MouseEvent);
+      dispatch('mouseenter', MouseEvent);
+      dispatch('mousedown', MouseEvent);
+      if ('PointerEvent' in window) dispatch('pointerup', PointerEvent);
+      dispatch('mouseup', MouseEvent);
+      el.click();
+      if ('PointerEvent' in window) {
+        dispatch('pointerout', PointerEvent);
+        dispatch('pointerleave', PointerEvent);
+      }
+      return true;
+    } catch {
+      try {
+        el.click();
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 
   function openRadixMenuIfNeeded(triggerEl, delays = DEFAULT_MENU_DELAYS) {
     const expanded = triggerEl.getAttribute('aria-expanded') === 'true';
     if (!expanded) {
-      triggerEl.focus?.();
-      // Same open gesture as your original helper (ensures matching delay/flash feel)
-      simulateSpace(triggerEl);
+      try {
+        triggerEl.focus?.();
+      } catch {}
+
+      // Radix triggers are frequently non-button elements; use a real pointer click.
+      smartClick(triggerEl);
       return delays.MENU_READY_OPEN;
     }
     return delays.MENU_READY_EXPANDED;
   }
 
-  function lowestVisibleFromPaths(selector, ancestorSelector, excludeAncestorSelector) {
-    const paths = Array.from(document.querySelectorAll(selector));
-    const els = paths
-      .map((p) => p.closest(ancestorSelector))
-      .filter(Boolean)
-      .filter(isVisible)
-      .filter((el) => !excludeAncestorSelector || !el.closest(excludeAncestorSelector));
-    return els.length ? els[els.length - 1] : null;
+  function findOpenMenuForTrigger(triggerEl) {
+    if (!triggerEl) return null;
+
+    const triggerId = triggerEl.getAttribute('id');
+    if (triggerId) {
+      const byLabel = document.querySelector(
+        `${MENU_CONTENT_SELECTOR}[aria-labelledby="${safeEsc(triggerId)}"]`,
+      );
+      if (byLabel) return byLabel;
+    }
+
+    const menus = Array.from(document.querySelectorAll(MENU_CONTENT_SELECTOR));
+    if (!menus.length) return null;
+
+    const tr = triggerEl.getBoundingClientRect();
+    const tcx = tr.left + tr.width / 2;
+    const tcy = tr.top + tr.height / 2;
+
+    menus.sort((a, b) => {
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      const acx = ra.left + ra.width / 2;
+      const acy = ra.top + ra.height / 2;
+      const bcx = rb.left + rb.width / 2;
+      const bcy = rb.top + rb.height / 2;
+      const da = (acx - tcx) ** 2 + (acy - tcy) ** 2;
+      const db = (bcx - tcx) ** 2 + (bcy - tcy) ** 2;
+      return da - db;
+    });
+    return menus[0] || null;
   }
 
-  function clickMenuItemByPathPrefix(pathPrefix, delays = DEFAULT_MENU_DELAYS, attempt = 0) {
-    const selector = withPrefix(svgSelectorForTokens(pathPrefix), MENU_ITEM_ROLES);
-    const item = lowestVisibleFromPaths(selector, MENU_ITEM_ROLES);
+  const getMenuItemLabel = (el) =>
+    (el?.textContent || el?.innerText || el?.getAttribute?.('aria-label') || '').trim();
+
+  function clickMenuItemByPathPrefix(
+    triggerEl,
+    pathPrefix,
+    delays = DEFAULT_MENU_DELAYS,
+    attempt = 0,
+    fallbackText,
+  ) {
+    const menu = findOpenMenuForTrigger(triggerEl);
+    const selector = svgSelectorForTokensLocal(pathPrefix);
+    const item = menu
+      ? Array.from(menu.querySelectorAll(selector))
+          .map((p) => p.closest(MENU_ITEM_ROLES))
+          .filter(Boolean)
+          .filter(isVisible)[0] || null
+      : null;
+
     if (item) {
       // Flash the menu item with same logic
       callFlash(item);
       setTimeout(() => item.click(), delays.ITEM_CLICK);
       return true;
     }
+
+    if (menu && fallbackText) {
+      const needle = String(fallbackText).trim().toLowerCase();
+      const fallback = Array.from(menu.querySelectorAll(MENU_ITEM_ROLES))
+        .filter(isVisible)
+        .find((el) => getMenuItemLabel(el).toLowerCase() === needle);
+      if (fallback) {
+        callFlash(fallback);
+        setTimeout(() => fallback.click(), delays.ITEM_CLICK);
+        return true;
+      }
+    }
+
     if (attempt < delays.MAX_RETRY_ATTEMPTS) {
       setTimeout(
-        () => clickMenuItemByPathPrefix(pathPrefix, delays, attempt + 1),
+        () =>
+          clickMenuItemByPathPrefix(
+            triggerEl,
+            pathPrefix,
+            delays,
+            attempt + 1,
+            fallbackText,
+          ),
         delays.RETRY_INTERVAL,
       );
     }
@@ -640,12 +756,11 @@ const delays = DELAYS;
 
       if (!candidates.length) continue;
 
-      // Prefer a candidate containing the expected chevron path
-      const withChevron = candidates.filter((el) =>
-        el.querySelector(svgSelectorForTokens(CHEVRON_ICON_TOKENS)),
-      );
-      const pool = withChevron.length ? withChevron : candidates;
-      return pool[pool.length - 1];
+      const chevronSelector = svgSelectorForTokensLocal(CHEVRON_ICON_TOKENS);
+      const withChevron = candidates.filter((el) => el.querySelector(chevronSelector));
+      if (withChevron.length) return withChevron[withChevron.length - 1];
+
+      return candidates[candidates.length - 1];
     }
     return null;
   }
@@ -666,7 +781,13 @@ const delays = DELAYS;
 
     const waitMs = openRadixMenuIfNeeded(trigger, delays);
     setTimeout(() => {
-      clickMenuItemByPathPrefix(subItemPathPrefix, delays);
+      clickMenuItemByPathPrefix(
+        trigger,
+        subItemPathPrefix,
+        delays,
+        0,
+        typeof options.fallbackText === 'string' ? options.fallbackText : undefined,
+      );
     }, waitMs);
 
     return true;
@@ -2656,6 +2777,30 @@ const delays = DELAYS;
               );
             };
 
+            const getButtonLabel = (btn) =>
+              (
+                btn?.textContent ||
+                btn?.innerText ||
+                btn?.getAttribute?.('aria-label') ||
+                ''
+              ).trim();
+
+            const findEditSendButton = (row) => {
+              if (!row) return null;
+              const buttons = Array.from(row.querySelectorAll('button'));
+              if (!buttons.length) return null;
+
+              const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
+              if (!hasCancel) return null;
+
+              const sendBtn =
+                buttons.find((btn) => /send/i.test(getButtonLabel(btn))) ||
+                buttons[1] ||
+                buttons[0];
+
+              return sendBtn || null;
+            };
+
             // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
             const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
               .map((ta) => {
@@ -2672,51 +2817,27 @@ const delays = DELAYS;
                   editCard.querySelector('div.flex.justify-end');
                 if (!buttonRow) return null;
 
-                const buttons = Array.from(buttonRow.querySelectorAll('button'));
-                if (!buttons.length) return null;
-
-                const hasCancel = buttons.some((btn) =>
-                  /cancel/i.test(
-                    (
-                      btn.textContent ||
-                      btn.innerText ||
-                      btn.getAttribute('aria-label') ||
-                      ''
-                    ).trim(),
-                  ),
-                );
-                if (!hasCancel) return null;
-
-                const sendBtn =
-                  buttons.find((btn) =>
-                    /send/i.test(
-                      (
-                        btn.textContent ||
-                        btn.innerText ||
-                        btn.getAttribute('aria-label') ||
-                        ''
-                      ).trim(),
-                    ),
-                  ) ||
-                  buttons[1] ||
-                  buttons[0];
-
-                return sendBtn || null;
+                return findEditSendButton(buttonRow);
               })
               .filter(Boolean);
 
-            // Fallback: legacy selector in case no textarea-based forms are visible
+            // Fallback: only consider edit rows that contain an editable field + Cancel/Send
             const fallbackButtons = Array.from(
-              document.querySelectorAll('div.flex.justify-end.gap-2'),
+              document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'),
             )
-              .map((container) => {
-                const buttons = container.querySelectorAll('button');
-                return buttons.length >= 2 ? buttons[1] : buttons[buttons.length - 1] || null;
+              .map((row) => {
+                const scope = row.closest(
+                  '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], article[data-testid^="conversation-turn-"]',
+                );
+                if (!scope) return null;
+                if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
+                return findEditSendButton(row);
               })
               .filter(Boolean);
 
-            const candidateButtons =
-              textareaSendButtons.length > 0 ? textareaSendButtons : fallbackButtons;
+            const candidateButtons = Array.from(
+              new Set([...textareaSendButtons, ...fallbackButtons]),
+            );
 
             const visibleSendButtons = candidateButtons.filter(isVisible);
 
@@ -4063,7 +4184,7 @@ const delays = DELAYS;
         },
         [shortcuts.shortcutKeyNewGptConversation]: () => {
           const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
-          window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH);
+          window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH, { fallbackText: 'New chat' });
         },
         // @note [shortcuts.selectThenCopyAllMessages]: (() => {
         [shortcuts.selectThenCopyAllMessages]: (() => {
@@ -5767,6 +5888,22 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                     div[data-id="hide-this-warning"] {
                         opacity:0!important; pointer-events:none!important; position:absolute!important;
                         width:1px!important; height:1px!important; overflow:hidden!important;
+                    }
+                    #bottomBarContainer button[data-testid="open-sidebar-button"] {
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        position: absolute !important;
+                        width: 1px !important;
+                        height: 1px !important;
+                        overflow: hidden !important;
+                    }
+                    #bottomBarContainer #conversation-header-actions a[href="/"][data-discover="true"] {
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        position: absolute !important;
+                        width: 1px !important;
+                        height: 1px !important;
+                        overflow: hidden !important;
                     }
                     div#bottomBarLeft { scale: 0.9; }
                     div#bottomBarCenter { scale: 0.9; }

@@ -2,16 +2,24 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
-#### [12.31.2025]
-  - Fixed Thinking Standard / Extended shortcuts to select the new sprite-based Thinking time menu items reliably.
-  - Fixed dictation shortcuts to work with sprite-based dictate/stop/submit buttons without triggering Voice Mode.
-  - Fixed Temporary Chat toggle to use sprite-based icons (silently no-ops when the button isn’t available).
-  - Fixed Think Longer shortcut to select the new sprite-based Thinking menu item via the composer “More” submenu.
+#### 01.02.2026  
+- Send Edit shortcut works again  
+- New GPT Conversation shortcut works again  
+- Fixed duplicate sidebar and new conversation buttons when MoveTopBarToBottom is active
 
-#### [12.28.2025]
-  - Fixed lowest-visible shortcuts so they ignore buttons hidden under the composer.
-  - Copy-lowest now always strips markdown cleanly, keeping list spacing and removing leftover bold markers.
-  - Rapid Alt+C presses no longer skip strip-markdown; overlapping copy timers are cancelled to keep copies consistent.
+#### 12.31.2025  
+Changes to ChatGPT’s icons broke several of my shortcuts. I have fixed these. Let me know if you notice anything else still broken.
+
+- Thinking Standard and Extended shortcuts work again  
+- Dictation shortcuts (dictate, stop, submit) work again and do not trigger Voice Mode  
+- Temporary Chat toggle shortcut works again and only shows when available  
+- Think Longer shortcut works from the More menu again  
+
+#### 12.28.2025  
+- Shortcuts now ignore buttons hidden under the composer  
+- Copy-lowest now always strips markdown and keeps list formatting  
+- Rapid Alt+C presses no longer break markdown cleanup or cause inconsistent copying  
+
 
 #### [12.25.2025]
   - Treat modelNames as per-profile only: export/import and Google Drive sync no longer read or write modelNames, preventing older snapshots from overwriting local labels and migrations.
