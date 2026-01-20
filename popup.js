@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Prefer codes from dataset; fallback to char->code
     const popupCodes = {};
     shortcutKeys.forEach((id) => {
+      if (getPopupShortcutModifier(id) !== 'alt') return;
       const el = document.getElementById(id);
       let code = el?.dataset?.keyCode || '';
       if (!code) {
@@ -631,6 +632,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return label || id;
   }
 
+  function getPopupShortcutModifier(id) {
+    const ctrlKeys = window.CSP_SETTINGS_SCHEMA?.shortcuts?.ctrlShortcutKeys;
+    if (Array.isArray(ctrlKeys) && ctrlKeys.includes(id)) return 'ctrl';
+    return 'alt';
+  }
+
   /**
    * Determine if a key code represents a collision in the current modifier domain.
    * Only blocks keys if the modifier matches.
@@ -651,6 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelMod =
       typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
     const ownerType = selfOwner?.type ?? null;
+    const selfMod = ownerType === 'shortcut' ? getPopupShortcutModifier(selfOwner?.id) : null;
 
     // 1) Model slots
     modelCodes.forEach((c, i) => {
@@ -659,7 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isSelfModel) return;
 
       if (codeEquals(c, code)) {
-        if (ownerType === 'shortcut' && modelMod !== 'alt') return;
+        if (ownerType === 'shortcut' && selfMod && selfMod !== modelMod) return;
         conflicts.push({
           type: 'model',
           idx: i,
@@ -669,29 +677,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 2) Popup inputs (read actual saved codes from dataset; fallback to char→code)
-    const shouldCheckPopup = ownerType !== 'model' || modelMod === 'alt';
-    if (shouldCheckPopup) {
-      shortcutKeys.forEach((id) => {
-        const el = document.getElementById(id);
-        let c2 = el?.dataset?.keyCode || '';
-        if (!c2) {
-          const ch = (el?.value || '').trim();
-          c2 = (window.ShortcutUtils?.charToCode || charToCode)(ch) || '';
-        }
-        if (!c2) return;
+    const compareMod = ownerType === 'model' ? modelMod : ownerType === 'shortcut' ? selfMod : null;
+    shortcutKeys.forEach((id) => {
+      if (compareMod && getPopupShortcutModifier(id) !== compareMod) return;
 
-        const isSelfShortcut = ownerType === 'shortcut' && selfOwner.id === id;
-        if (isSelfShortcut) return;
+      const el = document.getElementById(id);
+      let c2 = el?.dataset?.keyCode || '';
+      if (!c2) {
+        const ch = (el?.value || '').trim();
+        c2 = (window.ShortcutUtils?.charToCode || charToCode)(ch) || '';
+      }
+      if (!c2) return;
 
-        if (codeEquals(c2, code)) {
-          conflicts.push({
-            type: 'shortcut',
-            id,
-            label: getShortcutLabelById(id),
-          });
-        }
-      });
-    }
+      const isSelfShortcut = ownerType === 'shortcut' && selfOwner.id === id;
+      if (isSelfShortcut) return;
+
+      if (codeEquals(c2, code)) {
+        conflicts.push({
+          type: 'shortcut',
+          id,
+          label: getShortcutLabelById(id),
+        });
+      }
+    });
 
     return conflicts;
   }
@@ -777,7 +785,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Replace shortcut labels for Mac
   const altLabel = isMac ? 'Opt ⌥' : 'Alt +';
   const ctrlLabel = isMac ? 'Command + ' : 'Control + ';
-  document.querySelectorAll('.shortcut span, .key-text.platform-alt-label').forEach((span) => {
+  document
+    .querySelectorAll('.shortcut span, .key-text.platform-alt-label, .key-text.platform-ctrl-label')
+    .forEach((span) => {
     if (span.textContent.includes('Alt +')) {
       span.textContent = altLabel;
     }
@@ -1124,7 +1134,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     const message = chrome.i18n.getMessage(key);
-    if (message) el.textContent = message;
+    if (message) {
+      // Use innerHTML for messages containing <br> tags, textContent otherwise
+      if (message.includes('<br>')) {
+        el.innerHTML = message;
+      } else {
+        el.textContent = message;
+      }
+    }
   });
 
   // --- Initialize tooltips (localize + balanced 1–4 lines) ---
@@ -1780,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // === Robust Settings Initialization ===
   // --- Global source of truth for all default settings ---
   const NBSP = '\u00A0';
-  const DEFAULT_PRESET_DATA = {
+  const EXPLICIT_PRESET_OVERRIDES = {
     // UI settings
     showLegacyArrowButtonsCheckbox: false,
     removeMarkdownOnCopyCheckbox: true,
@@ -1793,8 +1810,8 @@ document.addEventListener('DOMContentLoaded', () => {
     disableCopyAfterSelectCheckbox: false,
     rememberSidebarScrollPositionCheckbox: false,
     fadeSlimSidebarEnabled: false,
-    selectThenCopyAllMessagesBothUserAndChatGpt: false,
-    selectThenCopyAllMessagesOnlyAssistant: true,
+    selectThenCopyAllMessagesBothUserAndChatGpt: true,
+    selectThenCopyAllMessagesOnlyAssistant: false,
     selectThenCopyAllMessagesOnlyUser: false,
     doNotIncludeLabelsCheckbox: false,
 
@@ -1862,6 +1879,67 @@ document.addEventListener('DOMContentLoaded', () => {
     // Timestamp for scraped model names
     modelNamesAt: '',
   };
+  const DEFAULT_PRESET_DATA = (() => {
+    const schema = window.CSP_SETTINGS_SCHEMA || {};
+    const excludedKeys = new Set([
+      // Keep current behavior: popup doesn't seed these by default.
+      'modelNames',
+      'hideArrowButtonsCheckbox',
+      'hideCornerButtonsCheckbox',
+      ...(Array.isArray(schema?.excludeDefaultsKeys) ? schema.excludeDefaultsKeys : []),
+    ]);
+
+    const shortcutSchema = window.CSP_SETTINGS_SCHEMA?.shortcuts || {};
+    const prefix =
+      typeof shortcutSchema.keyPrefix === 'string' && shortcutSchema.keyPrefix
+        ? shortcutSchema.keyPrefix
+        : 'shortcutKey';
+    const extras = Array.isArray(shortcutSchema.extraShortcutKeys)
+      ? shortcutSchema.extraShortcutKeys
+      : ['selectThenCopy', 'selectThenCopyAllMessages'];
+
+    const isShortcutLikeKey = (k) => k.startsWith(prefix) || extras.includes(k);
+
+    const coerceForPopup = (k, v) => {
+      if (k === 'popupBottomBarOpacityValue' || k === 'popupSlimSidebarOpacityValue') {
+        if (typeof v === 'number') return v;
+        const n = Number(v);
+        return Number.isNaN(n) ? 0 : n;
+      }
+
+      if (isShortcutLikeKey(k)) {
+        if (v == null) return NBSP;
+        const s = String(v).trim();
+        if (!s) return NBSP;
+        if (s.length === 1) return (window.ShortcutUtils?.charToCode || charToCode)(s) || NBSP;
+        return s; // already a KeyboardEvent.code (or legacy label handled elsewhere)
+      }
+
+      return v;
+    };
+
+    const out = {};
+    const base = globalThis.OPTIONS_DEFAULTS || {};
+    if (base && typeof base === 'object') {
+      for (const [k, v] of Object.entries(base)) {
+        if (excludedKeys.has(k)) continue;
+        out[k] = coerceForPopup(k, v);
+      }
+    }
+
+    // Preserve existing popup behavior by overriding base defaults explicitly.
+    Object.assign(out, EXPLICIT_PRESET_OVERRIDES);
+
+    // Ensure model picker codes are a fresh array (no shared ref).
+    if (!Array.isArray(out.modelPickerKeyCodes)) {
+      out.modelPickerKeyCodes = DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+    } else {
+      out.modelPickerKeyCodes = out.modelPickerKeyCodes.slice();
+    }
+
+    return out;
+  })();
+
   // Make available everywhere
   window.DEFAULT_PRESET_DATA = DEFAULT_PRESET_DATA;
 
@@ -1869,6 +1947,45 @@ document.addEventListener('DOMContentLoaded', () => {
   (function robustFirstRunDefaultsInit() {
     const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
     const allKeys = Object.keys(DEFAULT_PRESET_DATA);
+
+    // Dev-style guardrail: warn if popup.html references a data-sync key that
+    // doesn't exist in OPTIONS_DEFAULTS nor in DEFAULT_PRESET_DATA.
+    // This helps catch forgotten wiring when adding new features.
+    (function warnOnMissingDataSyncKeys() {
+      const allowed = new Set(allKeys);
+      const base = globalThis.OPTIONS_DEFAULTS || {};
+      if (base && typeof base === 'object') Object.keys(base).forEach((k) => allowed.add(k));
+
+      const missing = new Set();
+      document.querySelectorAll('[data-sync]').forEach((el) => {
+        const k = el.getAttribute('data-sync');
+        if (!k) return;
+        if (!allowed.has(k)) missing.add(k);
+      });
+
+      if (missing.size) {
+        console.warn(
+          '[csp] popup.html has data-sync keys missing from OPTIONS_DEFAULTS/DEFAULT_PRESET_DATA:',
+          Array.from(missing).sort(),
+        );
+      }
+
+      const radioGroups = window.CSP_SETTINGS_SCHEMA?.popup?.radioGroups;
+      if (Array.isArray(radioGroups)) {
+        const bad = new Set();
+        radioGroups.forEach((g) => {
+          (g?.keys || []).forEach((k) => {
+            if (typeof k === 'string' && k && !allowed.has(k)) bad.add(k);
+          });
+        });
+        if (bad.size) {
+          console.warn(
+            '[csp] settings-schema.js popup.radioGroups contains unknown keys:',
+            Array.from(bad).sort(),
+          );
+        }
+      }
+    })();
 
     chrome.storage.sync.get(allKeys, (data) => {
       const patch = {};
@@ -1963,54 +2080,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const isChecked = this.checked === true;
         let obj = {};
 
-        // Group A: Select + Copy One Behavior (radio group)
-        const groupA = [
-          'selectMessagesSentByUserOrChatGptCheckbox',
-          'onlySelectUserCheckbox',
-          'onlySelectAssistantCheckbox',
+        const schemaGroups = window.CSP_SETTINGS_SCHEMA?.popup?.radioGroups;
+        const fallbackGroups = [
+          {
+            name: 'messageSelection',
+            keys: [
+              'selectMessagesSentByUserOrChatGptCheckbox',
+              'onlySelectUserCheckbox',
+              'onlySelectAssistantCheckbox',
+            ],
+          },
+          {
+            name: 'selectThenCopyAllMessages',
+            keys: [
+              'selectAndCopyEntireConversationBothUserAndChatGpt',
+              'selectAndCopyEntireConversationOnlyAssistant',
+              'selectAndCopyEntireConversationOnlyUser',
+              'selectThenCopyAllMessagesBothUserAndChatGpt',
+              'selectThenCopyAllMessagesOnlyAssistant',
+              'selectThenCopyAllMessagesOnlyUser',
+            ],
+          },
+          {
+            name: 'modelSwitcherModifier',
+            keys: ['useAltForModelSwitcherRadio', 'useControlForModelSwitcherRadio'],
+          },
         ];
 
-        // Group B: Select + Copy All Behavior (radio group)
-        // Support both naming variants to avoid breakage:
-        // - "EntireConversation..." (prior JS)
-        // - "AllMessages..." (current HTML)
-        const groupB = [
-          'selectAndCopyEntireConversationBothUserAndChatGpt',
-          'selectAndCopyEntireConversationOnlyAssistant',
-          'selectAndCopyEntireConversationOnlyUser',
-          'selectThenCopyAllMessagesBothUserAndChatGpt',
-          'selectThenCopyAllMessagesOnlyAssistant',
-          'selectThenCopyAllMessagesOnlyUser',
-        ];
+        const radioGroups = Array.isArray(schemaGroups) ? schemaGroups : fallbackGroups;
+        const group = radioGroups.find(
+          (g) => Array.isArray(g?.keys) && g.keys.includes(storageKey),
+        );
 
-        // Group C: Model switcher (radio group)
-        const modelSwitcherKeys = [
-          'useAltForModelSwitcherRadio',
-          'useControlForModelSwitcherRadio',
-        ];
-
-        const isRadioGroupKey =
-          groupA.includes(storageKey) ||
-          groupB.includes(storageKey) ||
-          modelSwitcherKeys.includes(storageKey);
+        const isRadioGroupKey = Boolean(group);
 
         // For radio groups, ignore "unchecked" events to avoid clearing storage
         if (isRadioGroupKey && !isChecked) return;
 
-        if (groupA.includes(storageKey)) {
-          obj = groupA.reduce((acc, key) => {
-            acc[key] = false;
-            return acc;
-          }, {});
-          obj[storageKey] = true;
-        } else if (groupB.includes(storageKey)) {
-          obj = groupB.reduce((acc, key) => {
-            acc[key] = false;
-            return acc;
-          }, {});
-          obj[storageKey] = true;
-        } else if (modelSwitcherKeys.includes(storageKey)) {
-          obj = modelSwitcherKeys.reduce((acc, key) => {
+        if (group) {
+          obj = group.keys.reduce((acc, key) => {
             acc[key] = false;
             return acc;
           }, {});
@@ -2034,58 +2142,40 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Apply the handler to each checkbox and radio button
-  handleStateChange('showLegacyArrowButtonsCheckbox', 'showLegacyArrowButtonsCheckbox');
-  handleStateChange('removeMarkdownOnCopyCheckbox', 'removeMarkdownOnCopyCheckbox');
-  handleStateChange('clickToCopyInlineCodeEnabled', 'clickToCopyInlineCodeEnabled');
-  handleStateChange('moveTopBarToBottomCheckbox', 'moveTopBarToBottomCheckbox');
-  handleStateChange('pageUpDownTakeover', 'pageUpDownTakeover');
+  (() => {
+    // Auto-wire all checkbox/radio options that opt-in via `data-sync`.
+    // Exclude inputs with specialized, non-generic behavior handled elsewhere.
+    const schema = window.CSP_SETTINGS_SCHEMA?.popup || {};
+    const EXCLUDED_STATE_WIRING = new Set(
+      Array.isArray(schema.excludedStateWiringKeys) ? schema.excludedStateWiringKeys : [],
+    );
 
-  // Select + Copy One Behavior (Set 1)
-  handleStateChange(
-    'selectMessagesSentByUserOrChatGptCheckbox',
-    'selectMessagesSentByUserOrChatGptCheckbox',
-  );
-  handleStateChange('onlySelectUserCheckbox', 'onlySelectUserCheckbox');
-  handleStateChange('onlySelectAssistantCheckbox', 'onlySelectAssistantCheckbox');
+    // Defaults (in case schema is missing)
+    if (!EXCLUDED_STATE_WIRING.size) {
+      [
+        'useAltForModelSwitcherRadio',
+        'useControlForModelSwitcherRadio',
+        'fadeSlimSidebarEnabled',
+        'moveTopBarToBottomCheckbox',
+        'colorBoldTextEnabled',
+      ].forEach((k) => EXCLUDED_STATE_WIRING.add(k));
+    }
 
-  // Other checkboxes
-  handleStateChange('disableCopyAfterSelectCheckbox', 'disableCopyAfterSelectCheckbox');
-  handleStateChange('doNotIncludeLabelsCheckbox', 'doNotIncludeLabelsCheckbox');
-  handleStateChange('enableSendWithControlEnterCheckbox', 'enableSendWithControlEnterCheckbox');
-  handleStateChange(
-    'enableStopWithControlBackspaceCheckbox',
-    'enableStopWithControlBackspaceCheckbox',
-  );
-  handleStateChange(
-    'rememberSidebarScrollPositionCheckbox',
-    'rememberSidebarScrollPositionCheckbox',
-  );
+    const selector =
+      typeof schema.stateInputSelector === 'string' && schema.stateInputSelector.trim()
+        ? schema.stateInputSelector
+        : 'input[type="checkbox"][data-sync], input[type="radio"][data-sync]';
 
-  // Select + Copy All Behavior (Set 2)
-  // If your HTML uses the "EntireConversation..." IDs/keys:
-  handleStateChange(
-    'selectAndCopyEntireConversationBothUserAndChatGpt',
-    'selectAndCopyEntireConversationBothUserAndChatGpt',
-  );
-  handleStateChange(
-    'selectAndCopyEntireConversationOnlyAssistant',
-    'selectAndCopyEntireConversationOnlyAssistant',
-  );
-  handleStateChange(
-    'selectAndCopyEntireConversationOnlyUser',
-    'selectAndCopyEntireConversationOnlyUser',
-  );
-
-  // If your HTML uses the "AllMessages..." IDs/keys (as shown in your snippet):
-  handleStateChange(
-    'selectThenCopyAllMessagesBothUserAndChatGpt',
-    'selectThenCopyAllMessagesBothUserAndChatGpt',
-  );
-  handleStateChange(
-    'selectThenCopyAllMessagesOnlyAssistant',
-    'selectThenCopyAllMessagesOnlyAssistant',
-  );
-  handleStateChange('selectThenCopyAllMessagesOnlyUser', 'selectThenCopyAllMessagesOnlyUser');
+    document
+      .querySelectorAll(selector)
+      .forEach((el) => {
+        const elementId = el.id;
+        const storageKey = el.getAttribute('data-sync') || elementId;
+        if (!elementId || !storageKey) return;
+        if (EXCLUDED_STATE_WIRING.has(elementId) || EXCLUDED_STATE_WIRING.has(storageKey)) return;
+        handleStateChange(elementId, storageKey);
+      });
+  })();
 
   // Specialized wiring for the Model Picker mode radios (Alt vs Control)
   // Shows a dupe modal when switching to Alt would collide with popup shortcuts.
@@ -2162,47 +2252,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ctrl.dataset.listenerAttached = 'true';
   })();
 
-  const shortcutKeys = [
-    'shortcutKeyScrollUpOneMessage',
-    'shortcutKeyScrollDownOneMessage',
-    'shortcutKeyScrollUpTwoMessages',
-    'shortcutKeyScrollDownTwoMessages',
-    'shortcutKeyCopyLowest',
-    'shortcutKeyEdit',
-    'shortcutKeySendEdit',
-    'shortcutKeyCopyAllCodeBlocks',
-    'shortcutKeyNewConversation',
-    'shortcutKeySearchConversationHistory',
-    'shortcutKeyClickNativeScrollToBottom',
-    'shortcutKeyToggleSidebar',
-    'shortcutKeyActivateInput',
-    'shortcutKeySearchWeb',
-    'shortcutKeyScrollToTop',
-    'shortcutKeyPreviousThread',
-    'shortcutKeyNextThread',
-    'selectThenCopy',
-    'shortcutKeyToggleModelSelector',
-    'shortcutKeyRegenerateTryAgain',
-    'shortcutKeyRegenerateMoreConcise',
-    'shortcutKeyRegenerateAddDetails',
-    'shortcutKeyRegenerateWithDifferentModel',
-    'shortcutKeyRegenerateAskToChangeResponse',
-    'shortcutKeyMoreDotsReadAloud',
-    'shortcutKeyMoreDotsBranchInNewChat',
-    'shortcutKeyTemporaryChat',
-    'shortcutKeyStudy',
-    'shortcutKeyCreateImage',
-    'shortcutKeyToggleCanvas',
-    'shortcutKeyToggleDictate',
-    'shortcutKeyCancelDictation',
-    'shortcutKeyShare',
-    'shortcutKeyThinkLonger',
-    'shortcutKeyAddPhotosFiles',
-    'selectThenCopyAllMessages',
-    'shortcutKeyThinkingExtended',
-    'shortcutKeyThinkingStandard',
-    'shortcutKeyNewGptConversation',
-  ];
+  const shortcutInputSelector =
+    typeof window.CSP_SETTINGS_SCHEMA?.popup?.shortcutInputSelector === 'string' &&
+    window.CSP_SETTINGS_SCHEMA.popup.shortcutInputSelector.trim()
+      ? window.CSP_SETTINGS_SCHEMA.popup.shortcutInputSelector
+      : 'input.key-input';
+
+  const shortcutKeys = Array.from(document.querySelectorAll(shortcutInputSelector))
+    .map((el) => el.getAttribute('data-sync') || el.id)
+    .filter(Boolean);
   const shortcutKeyValues = {};
 
   // Helper: convert KeyboardEvent.code to display label for popup input (reuses chip helper)
@@ -3243,6 +3301,127 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }, 500);
   });
+
+  // ===================== Highlight Bold Text Color Picker =====================
+
+  const colorBoldTextEnabled = document.getElementById('colorBoldTextEnabled');
+  const colorBoldTextLightColorInput = document.getElementById('colorBoldTextLightColor');
+  const colorBoldTextDarkColorInput = document.getElementById('colorBoldTextDarkColor');
+  const colorBoldTextPickerContainer = document.getElementById('colorBoldText-picker-container');
+  const colorBoldTextResetColors = document.getElementById('colorBoldTextResetColors');
+
+  const COLOR_BOLD_LIGHT_DEFAULT = '#2037e6';
+  const COLOR_BOLD_DARK_DEFAULT = '#4da3ff';
+
+  function setColorBoldTextUI(lightColor, darkColor) {
+    if (colorBoldTextLightColorInput) {
+      colorBoldTextLightColorInput.value = lightColor || COLOR_BOLD_LIGHT_DEFAULT;
+    }
+    if (colorBoldTextDarkColorInput) {
+      colorBoldTextDarkColorInput.value = darkColor || COLOR_BOLD_DARK_DEFAULT;
+    }
+  }
+
+  function toggleColorBoldTextUI(visible) {
+    if (colorBoldTextPickerContainer) {
+      colorBoldTextPickerContainer.style.display = visible ? 'flex' : 'none';
+    }
+  }
+
+  // On load: sync checkbox and color pickers from storage
+  if (colorBoldTextEnabled) {
+    chrome.storage.sync.get(
+      ['colorBoldTextEnabled', 'colorBoldTextLightColor', 'colorBoldTextDarkColor'],
+      (data) => {
+        const isEnabled = !!data.colorBoldTextEnabled;
+        const lightColor = data.colorBoldTextLightColor || COLOR_BOLD_LIGHT_DEFAULT;
+        const darkColor = data.colorBoldTextDarkColor || COLOR_BOLD_DARK_DEFAULT;
+
+        colorBoldTextEnabled.checked = isEnabled;
+        toggleColorBoldTextUI(isEnabled);
+        setColorBoldTextUI(lightColor, darkColor);
+      },
+    );
+  }
+
+  // Checkbox toggles color picker visibility
+  if (colorBoldTextEnabled) {
+    colorBoldTextEnabled.addEventListener('change', () => {
+      const isChecked = colorBoldTextEnabled.checked;
+      toggleColorBoldTextUI(isChecked);
+
+      chrome.storage.sync.set({ colorBoldTextEnabled: isChecked }, () => {
+        showToast('Options saved. Reload page to apply changes.');
+      });
+    });
+  }
+
+  // Color input change handlers with debounce
+  let colorBoldTextLightTimeout;
+  if (colorBoldTextLightColorInput) {
+    colorBoldTextLightColorInput.addEventListener('input', () => {
+      clearTimeout(colorBoldTextLightTimeout);
+      colorBoldTextLightTimeout = setTimeout(() => {
+        const color = colorBoldTextLightColorInput.value;
+        chrome.storage.sync.set({ colorBoldTextLightColor: color }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('Storage set error:', chrome.runtime.lastError);
+          } else {
+            showToast('Light mode color saved. Reload page to apply changes.');
+          }
+        });
+      }, 300);
+    });
+  }
+
+  let colorBoldTextDarkTimeout;
+  if (colorBoldTextDarkColorInput) {
+    colorBoldTextDarkColorInput.addEventListener('input', () => {
+      clearTimeout(colorBoldTextDarkTimeout);
+      colorBoldTextDarkTimeout = setTimeout(() => {
+        const color = colorBoldTextDarkColorInput.value;
+        chrome.storage.sync.set({ colorBoldTextDarkColor: color }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('Storage set error:', chrome.runtime.lastError);
+          } else {
+            showToast('Dark mode color saved. Reload page to apply changes.');
+          }
+        });
+      }, 300);
+    });
+  }
+
+  // Reset colors to defaults
+  if (colorBoldTextResetColors) {
+    const reset = () => {
+      clearTimeout(colorBoldTextLightTimeout);
+      clearTimeout(colorBoldTextDarkTimeout);
+
+      setColorBoldTextUI(COLOR_BOLD_LIGHT_DEFAULT, COLOR_BOLD_DARK_DEFAULT);
+
+      chrome.storage.sync.set(
+        {
+          colorBoldTextLightColor: COLOR_BOLD_LIGHT_DEFAULT,
+          colorBoldTextDarkColor: COLOR_BOLD_DARK_DEFAULT,
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.error('Storage set error:', chrome.runtime.lastError);
+          } else {
+            showToast('Bold text colors reset. Reload page to apply changes.');
+          }
+        },
+      );
+    };
+
+    colorBoldTextResetColors.addEventListener('click', reset);
+    colorBoldTextResetColors.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        reset();
+      }
+    });
+  }
 
   /* === Shortcuts Presets (Clear All / Reset Defaults) Tile === */
   (function shortcutsPresetsInit() {

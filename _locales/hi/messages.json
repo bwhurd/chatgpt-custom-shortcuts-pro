@@ -38,6 +38,21 @@
 	"label_click_inline_code": {
 		"message": "इनलाइन कोड पर क्लिक करके कॉपी करें"
 	},
+	"label_highlight_bold_text": {
+		"message": "बोल्ड टेक्स्ट हाइलाइट करें"
+	},
+	"tt_highlight_bold_text": {
+		"message": "लाइट और डार्क मोड में बोल्ड टेक्स्ट के लिए कस्टम रंग चुनें।"
+	},
+	"tt_reset_bold_text_colors": {
+		"message": "बोल्ड टेक्स्ट के रंग डिफ़ॉल्ट पर रीसेट करें।"
+	},
+	"label_light_mode_short": {
+		"message": "लाइट<br>मोड:"
+	},
+	"label_dark_mode_short": {
+		"message": "डार्क<br>मोड:"
+	},
 	"label_select_copy_behavior": {
 		"message": "‘चयन + कॉपी’ मोड"
 	},

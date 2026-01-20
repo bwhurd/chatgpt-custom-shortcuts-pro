@@ -38,6 +38,21 @@
 	"label_click_inline_code": {
 		"message": "Click Inline Code to Copy"
 	},
+	"label_highlight_bold_text": {
+		"message": "Highlight Bold Text"
+	},
+	"tt_highlight_bold_text": {
+		"message": "Choose custom colors for bold text in light and dark modes."
+	},
+	"tt_reset_bold_text_colors": {
+		"message": "Reset bold text colors to defaults."
+	},
+	"label_light_mode_short": {
+		"message": "Light<br>Mode:"
+	},
+	"label_dark_mode_short": {
+		"message": "Dark<br>Mode:"
+	},
 	"label_select_copy_behavior": {
 		"message": "Select + Copy One Behavior"
 	},

@@ -80,10 +80,9 @@
             data-tooltip="__MSG_tt_showShortcuts_plain__">info</span>
         </div>
         <div class="shortcut-keys">
-          <span class="key-text">Ctrl +</span>
+          <span class="key-text platform-ctrl-label">Ctrl +</span>
           <input class="key-input" id="shortcutKeyShowShortcuts" data-sync="shortcutKeyShowShortcuts" maxlength="12"
-            name="shortcutKeyShowShortcuts" type="text" value="/" aria-readonly="true" readonly
-            style="pointer-events: none; user-select: none; caret-color: transparent;" />
+            name="shortcutKeyShowShortcuts" type="text" value="/" />
         </div>
       </div>
       <!-- ### Switch to Thinking Standard ### -->
@@ -219,6 +218,49 @@
             name="clickToCopyInlineCodeEnabled" type="checkbox" />
           <span></span>
         </label>
+      </div>
+      <!-- ### Highlight Bold Text ### -->
+      <div class="shortcut-item class-1" style="padding-top: 4px !important; padding-bottom: 4px !important">
+        <div class="class-2">
+          <!-- Left: label -->
+          <div class="shortcut-label tooltip class-25" data-tooltip="__MSG_tt_highlight_bold_text__"
+            style="position: relative; top: 2px !important">
+            <span class="i18n force-balance-break" data-i18n="label_highlight_bold_text">Highlight Bold Text</span>
+            <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
+              data-tooltip="__MSG_tt_highlight_bold_text__">info</span>
+          </div>
+          <!-- Centre: color picker row (conditionally visible) -->
+          <div class="color-picker-row class-26" id="colorBoldText-picker-container"
+            style="display: none; margin-top: 2px !important">
+            <div class="color-picker-clipper class-5">
+              <div id="colorBoldText-picker-wrapper" class="class-27" style="flex-direction: row; gap: 20px;">
+                <!-- Light mode color -->
+                <div class="color-swatch-group">
+                  <span class="color-label i18n" data-i18n="label_light_mode_short">Light<br>Mode:</span>
+                  <input type="color" id="colorBoldTextLightColor" data-sync="colorBoldTextLightColor"
+                    name="colorBoldTextLightColor" value="#2037e6" class="color-swatch" />
+                </div>
+	                <!-- Dark mode color -->
+	                <div class="color-swatch-group">
+	                  <span class="color-label i18n" data-i18n="label_dark_mode_short">Dark<br>Mode:</span>
+	                  <input type="color" id="colorBoldTextDarkColor" data-sync="colorBoldTextDarkColor"
+	                    name="colorBoldTextDarkColor" value="#4da3ff" class="color-swatch" />
+	                </div>
+	                <!-- Reset colors -->
+	                <span id="colorBoldTextResetColors"
+	                  class="material-icons-outlined info-icon-tooltip color-reset-icon" tabindex="0" role="button"
+	                  data-tooltip="__MSG_tt_reset_bold_text_colors__">settings_backup_restore</span>
+	              </div>
+	            </div>
+	          </div>
+
+          <!-- Right: toggle switch -->
+          <label class="p-form-switch class-12 tooltip" data-tooltip="__MSG_tt_highlight_bold_text__">
+            <input class="material-checkbox" id="colorBoldTextEnabled" data-sync="colorBoldTextEnabled"
+              name="colorBoldTextEnabled" type="checkbox" />
+            <span></span>
+          </label>
+        </div>
       </div>
 
       <!-- ((( Quick Clicks ))) -->
@@ -1052,6 +1094,9 @@
 
   <!-- Single source of truth for model labels; must load before popup.js -->
   <script src="shared/model-picker-labels.js"></script>
+
+  <!-- Shared settings schema for popup wiring -->
+  <script src="settings-schema.js"></script>
 
   <script src="popup.js"></script>
 

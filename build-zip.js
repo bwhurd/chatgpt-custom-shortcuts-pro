@@ -74,6 +74,7 @@ const includeItems = [
   'popup.html',
   'popup.css',
   'options-storage.js',
+  'settings-schema.js',
   'storage.js',
   'auth.js',
   'icon128.png',

@@ -38,6 +38,21 @@
 	"label_click_inline_code": {
 		"message": "インラインコードをクリックしてコピー"
 	},
+	"label_highlight_bold_text": {
+		"message": "太字をハイライト"
+	},
+	"tt_highlight_bold_text": {
+		"message": "ライトモードとダークモードで太字のカスタムカラーを選択します。"
+	},
+	"tt_reset_bold_text_colors": {
+		"message": "太字の色をデフォルトにリセットします。"
+	},
+	"label_light_mode_short": {
+		"message": "ライト<br>モード:"
+	},
+	"label_dark_mode_short": {
+		"message": "ダーク<br>モード:"
+	},
 	"label_select_copy_behavior": {
 		"message": "「選択＋コピー」の動作"
 	},

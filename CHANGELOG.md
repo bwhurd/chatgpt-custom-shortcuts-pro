@@ -2,6 +2,11 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### 01.19.2026  
+- Ctrl+/ shortcuts overlay now shows only assigned shortcuts (non-model sections) and labels match the popup (localized), including previously missing items like Share / Branch In New Chat / Cancel Dictation / Read Aloud.
+- Added Highlight Bold Text toggle with light/dark color pickers + a quick reset-to-defaults button.
+- Default “Select + Copy All Behavior” now includes both user + ChatGPT.
+
 #### 01.02.2026  
 - Send Edit shortcut works again  
 - New GPT Conversation shortcut works again  

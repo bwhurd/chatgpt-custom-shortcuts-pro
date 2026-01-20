@@ -38,6 +38,21 @@
 	"label_click_inline_code": {
 		"message": "Клік по вбудованому коду для копіювання"
 	},
+	"label_highlight_bold_text": {
+		"message": "Виділити жирний текст"
+	},
+	"tt_highlight_bold_text": {
+		"message": "Оберіть власні кольори для жирного тексту в світлому та темному режимах."
+	},
+	"tt_reset_bold_text_colors": {
+		"message": "Скинути кольори жирного тексту за замовчуванням."
+	},
+	"label_light_mode_short": {
+		"message": "Світлий<br>режим:"
+	},
+	"label_dark_mode_short": {
+		"message": "Темний<br>режим:"
+	},
 	"label_select_copy_behavior": {
 		"message": "Режим «Виділити + Копіювати»"
 	},

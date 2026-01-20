@@ -169,10 +169,13 @@ observeConversationContainer((mutations) => {
 });
 
 // Global helper to toggle visibility and expose setting values
-function applyVisibilitySettings(data) {
-  // Key: global window property
-  // Value: [defaultIfUndefined, defaultIfMissing]
-  const settingsMap = {
+const VISIBILITY_DEFAULTS = (() => {
+  const schemaDefaults = window.CSP_SETTINGS_SCHEMA?.content?.visibilityDefaults;
+  if (schemaDefaults && typeof schemaDefaults === 'object') {
+    return { ...schemaDefaults };
+  }
+
+  return {
     moveTopBarToBottomCheckbox: false,
     pageUpDownTakeover: true,
     showLegacyArrowButtonsCheckbox: false,
@@ -183,19 +186,28 @@ function applyVisibilitySettings(data) {
     disableCopyAfterSelectCheckbox: false,
     enableSendWithControlEnterCheckbox: true,
     enableStopWithControlBackspaceCheckbox: true,
-    useAltForModelSwitcherRadio: true,
-    useControlForModelSwitcherRadio: false,
-    rememberSidebarScrollPositionCheckbox: false,
-    selectThenCopyAllMessagesBothUserAndChatGpt: false,
-    selectThenCopyAllMessagesOnlyAssistant: true,
-    selectThenCopyAllMessagesOnlyUser: false,
-    doNotIncludeLabelsCheckbox: false,
-    clickToCopyInlineCodeEnabled: false,
-  };
+	    useAltForModelSwitcherRadio: true,
+	    useControlForModelSwitcherRadio: false,
+	    rememberSidebarScrollPositionCheckbox: false,
+	    selectThenCopyAllMessagesBothUserAndChatGpt: true,
+	    selectThenCopyAllMessagesOnlyAssistant: false,
+	    selectThenCopyAllMessagesOnlyUser: false,
+	    doNotIncludeLabelsCheckbox: false,
+	    clickToCopyInlineCodeEnabled: false,
+	  };
+})();
 
-  for (const key in settingsMap) {
-    // If present in data, use its boolean value, otherwise fallback to default.
-    window[key] = Object.hasOwn(data, key) ? Boolean(data[key]) : settingsMap[key];
+function applyVisibilitySettings(data) {
+  for (const key in VISIBILITY_DEFAULTS) {
+    if (Object.hasOwn(data, key)) {
+      window[key] = data[key] === undefined ? VISIBILITY_DEFAULTS[key] : Boolean(data[key]);
+      continue;
+    }
+
+    // Only apply defaults when a setting has never been initialized.
+    if (typeof window[key] === 'undefined') {
+      window[key] = VISIBILITY_DEFAULTS[key];
+    }
   }
 }
 
@@ -336,12 +348,27 @@ const normalizeStoredToCode = (stored) => {
   return '';
 };
 
+const coerceNumberFromStorage = (v, fallback) => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isNaN(n) ? fallback : n;
+  }
+  return fallback;
+};
+
 // Expose a single, canonical place for these helpers (used elsewhere in the file)
 window.ShortcutUtils = {
   ...(window.ShortcutUtils || {}),
   codeEquals,
   normalizeStoredToCode,
 };
+
+if (!window.CSP_SETTINGS_SCHEMA) {
+  console.warn(
+    '[csp] settings-schema.js not detected before content.js; falling back to internal defaults.',
+  );
+}
 
 // ======================================================
 // ==== Shared getOpenMenus helper  =========
@@ -454,47 +481,33 @@ const delays = DELAYS;
 // =====================================
 
 (() => {
+  const schemaExtra = window.CSP_SETTINGS_SCHEMA?.content?.visibilityExtraKeys;
+  const visibilityExtraKeys = Array.isArray(schemaExtra)
+    ? schemaExtra
+    : [
+        'hideArrowButtonsCheckbox',
+        'popupBottomBarOpacityValue',
+        'fadeSlimSidebarEnabled',
+        'popupSlimSidebarOpacityValue',
+      ];
+
+  const VISIBILITY_KEYS = [...Object.keys(VISIBILITY_DEFAULTS), ...visibilityExtraKeys];
+
   // Fetch initial values from Chrome storage
-  chrome.storage.sync.get(
-    [
-      'showLegacyArrowButtonsCheckbox',
-      'hideArrowButtonsCheckbox',
-      'moveTopBarToBottomCheckbox',
-      'pageUpDownTakeover',
-      'removeMarkdownOnCopyCheckbox',
-      'selectMessagesSentByUserOrChatGptCheckbox',
-      'onlySelectUserCheckbox',
-      'onlySelectAssistantCheckbox',
-      'disableCopyAfterSelectCheckbox',
-      'enableSendWithControlEnterCheckbox',
-      'enableStopWithControlBackspaceCheckbox',
-      'popupBottomBarOpacityValue',
-      'useAltForModelSwitcherRadio',
-      'useControlForModelSwitcherRadio',
-      'rememberSidebarScrollPositionCheckbox',
-      'fadeSlimSidebarEnabled', // (checkbox state: true/false)
-      'popupSlimSidebarOpacityValue', // (slider value: number)
-      'clickToCopyInlineCodeEnabled', // (checkbox state: true/false)
-      `selectThenCopyAllMessagesBothUserAndChatGpt`,
-      `selectThenCopyAllMessagesOnlyAssistant`,
-      `selectThenCopyAllMessagesOnlyUser`,
-      `doNotIncludeLabelsCheckbox`,
-    ],
-    (data) => {
-      // One-time migration: invert old value into new key, persist, then clean up
-      if (
-        !Object.hasOwn(data, 'showLegacyArrowButtonsCheckbox') &&
-        Object.hasOwn(data, 'hideArrowButtonsCheckbox')
-      ) {
-        data.showLegacyArrowButtonsCheckbox = !data.hideArrowButtonsCheckbox;
-        chrome.storage.sync.set({
-          showLegacyArrowButtonsCheckbox: data.showLegacyArrowButtonsCheckbox,
-        });
-        chrome.storage.sync.remove('hideArrowButtonsCheckbox');
-      }
-      applyVisibilitySettings(data);
-    },
-  );
+  chrome.storage.sync.get(VISIBILITY_KEYS, (data) => {
+    // One-time migration: invert old value into new key, persist, then clean up
+    if (
+      !Object.hasOwn(data, 'showLegacyArrowButtonsCheckbox') &&
+      Object.hasOwn(data, 'hideArrowButtonsCheckbox')
+    ) {
+      data.showLegacyArrowButtonsCheckbox = !data.hideArrowButtonsCheckbox;
+      chrome.storage.sync.set({
+        showLegacyArrowButtonsCheckbox: data.showLegacyArrowButtonsCheckbox,
+      });
+      chrome.storage.sync.remove('hideArrowButtonsCheckbox');
+    }
+    applyVisibilitySettings(data);
+  });
 
   // Listen for changes in Chrome storage and dynamically apply settings
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -725,14 +738,7 @@ const delays = DELAYS;
 
     if (attempt < delays.MAX_RETRY_ATTEMPTS) {
       setTimeout(
-        () =>
-          clickMenuItemByPathPrefix(
-            triggerEl,
-            pathPrefix,
-            delays,
-            attempt + 1,
-            fallbackText,
-          ),
+        () => clickMenuItemByPathPrefix(triggerEl, pathPrefix, delays, attempt + 1, fallbackText),
         delays.RETRY_INTERVAL,
       );
     }
@@ -1797,9 +1803,7 @@ const delays = DELAYS;
 
     const menuRootSelector =
       options.menuRootSelector ||
-      (btn.id
-        ? `[role="menu"][aria-labelledby="${safeEsc(btn.id)}"][data-state="open"]`
-        : null);
+      (btn.id ? `[role="menu"][aria-labelledby="${safeEsc(btn.id)}"][data-state="open"]` : null);
 
     setTimeout(() => {
       clickLowestVisibleMenuItemByPath(subItemPathPrefix, { delays, menuRootSelector });
@@ -2222,1307 +2226,2086 @@ const delays = DELAYS;
   }
 
   // @note Keyboard shortcut defaults
-  chrome.storage.sync.get(
-    [
-      'shortcutKeyScrollUpOneMessage',
-      'shortcutKeyScrollDownOneMessage',
-      'shortcutKeyScrollUpTwoMessages',
-      'shortcutKeyScrollDownTwoMessages',
-      'shortcutKeyCopyLowest',
-      'shortcutKeyEdit',
-      'shortcutKeySendEdit',
-      'shortcutKeyCopyAllCodeBlocks',
-      'shortcutKeyClickNativeScrollToBottom',
-      'shortcutKeyScrollToTop',
-      'shortcutKeyNewConversation',
-      'shortcutKeySearchConversationHistory',
-      'shortcutKeyToggleSidebar',
-      'shortcutKeyActivateInput',
-      'shortcutKeySearchWeb',
-      'shortcutKeyPreviousThread',
-      'shortcutKeyNextThread',
-      'selectThenCopy',
-      'shortcutKeyClickSendButton',
-      'shortcutKeyClickStopButton',
-      'shortcutKeyToggleModelSelector',
-      'shortcutKeyRegenerateTryAgain',
-      'shortcutKeyRegenerateMoreConcise',
-      'shortcutKeyRegenerateAddDetails',
-      'shortcutKeyRegenerateWithDifferentModel',
-      'shortcutKeyRegenerateAskToChangeResponse',
-      'shortcutKeyMoreDotsReadAloud',
-      'shortcutKeyMoreDotsBranchInNewChat',
-      'altPageUp',
-      'altPageDown',
-      'shortcutKeyTemporaryChat',
-      'shortcutKeyStudy',
-      'shortcutKeyCreateImage',
-      'shortcutKeyToggleCanvas',
-      'shortcutKeyToggleDictate',
-      'shortcutKeyCancelDictation',
-      'shortcutKeyShare',
-      'shortcutKeyThinkLonger',
-      'shortcutKeyAddPhotosFiles',
-      'selectThenCopyAllMessages',
-      'shortcutKeyThinkingExtended',
-      'shortcutKeyThinkingStandard',
-      'shortcutKeyNewGptConversation',
-    ],
-    (data) => {
-      const shortcutDefaults = {
-        shortcutKeyScrollUpOneMessage: 'a',
-        shortcutKeyScrollDownOneMessage: 'f',
-        shortcutKeyScrollUpTwoMessages: '↑',
-        shortcutKeyScrollDownTwoMessages: '↓',
-        shortcutKeyCopyLowest: 'c',
-        shortcutKeyEdit: 'e',
-        shortcutKeySendEdit: 'd',
-        shortcutKeyCopyAllCodeBlocks: ']',
-        shortcutKeyClickNativeScrollToBottom: 'z',
-        shortcutKeyScrollToTop: 't',
-        shortcutKeyNewConversation: 'n',
-        shortcutKeySearchConversationHistory: 'k',
-        shortcutKeyToggleSidebar: 's',
-        shortcutKeyActivateInput: 'w',
-        shortcutKeySearchWeb: 'q',
-        shortcutKeyPreviousThread: 'j',
-        shortcutKeyNextThread: ';',
-        selectThenCopy: 'x',
-        shortcutKeyClickSendButton: 'Enter',
-        shortcutKeyClickStopButton: 'Backspace',
-        shortcutKeyToggleModelSelector: '/',
-        shortcutKeyRegenerateTryAgain: 'r',
-        shortcutKeyRegenerateMoreConcise: '',
-        shortcutKeyRegenerateAddDetails: '',
-        shortcutKeyRegenerateWithDifferentModel: '',
-        shortcutKeyRegenerateAskToChangeResponse: '',
-        shortcutKeyMoreDotsReadAloud: '',
-        shortcutKeyMoreDotsBranchInNewChat: '',
-        altPageUp: 'PageUp',
-        altPageDown: 'PageDown',
-        shortcutKeyTemporaryChat: 'p',
-        shortcutKeyStudy: '',
-        shortcutKeyCreateImage: '',
-        shortcutKeyToggleCanvas: '',
-        shortcutKeyToggleDictate: 'y',
-        shortcutKeyCancelDictation: '',
-        shortcutKeyShare: '',
-        shortcutKeyThinkLonger: '',
-        shortcutKeyAddPhotosFiles: '',
-        selectThenCopyAllMessages: '[',
-        shortcutKeyThinkingExtended: '',
-        shortcutKeyThinkingStandard: '',
-        shortcutKeyNewGptConversation: '',
+  const shortcutDefaults = {
+    shortcutKeyScrollUpOneMessage: 'KeyA',
+    shortcutKeyScrollDownOneMessage: 'KeyF',
+    shortcutKeyScrollUpTwoMessages: 'ArrowUp',
+    shortcutKeyScrollDownTwoMessages: 'ArrowDown',
+    shortcutKeyCopyLowest: 'KeyC',
+    shortcutKeyEdit: 'KeyE',
+    shortcutKeySendEdit: 'KeyD',
+    shortcutKeyCopyAllCodeBlocks: 'BracketRight',
+    shortcutKeyClickNativeScrollToBottom: 'KeyZ',
+    shortcutKeyScrollToTop: 'KeyT',
+    shortcutKeyNewConversation: 'KeyN',
+    shortcutKeySearchConversationHistory: 'KeyK',
+    shortcutKeyToggleSidebar: 'KeyS',
+    shortcutKeyActivateInput: 'KeyW',
+    shortcutKeySearchWeb: 'KeyQ',
+    shortcutKeyPreviousThread: 'KeyJ',
+    shortcutKeyNextThread: 'Semicolon',
+    selectThenCopy: 'KeyX',
+    shortcutKeyClickSendButton: 'Enter',
+    shortcutKeyClickStopButton: 'Backspace',
+    shortcutKeyToggleModelSelector: 'Slash',
+    shortcutKeyRegenerateTryAgain: 'KeyR',
+    shortcutKeyRegenerateMoreConcise: '',
+    shortcutKeyRegenerateAddDetails: '',
+    shortcutKeyRegenerateWithDifferentModel: '',
+    shortcutKeyRegenerateAskToChangeResponse: '',
+    shortcutKeyMoreDotsReadAloud: '',
+    shortcutKeyMoreDotsBranchInNewChat: '',
+    altPageUp: 'PageUp',
+    altPageDown: 'PageDown',
+    shortcutKeyTemporaryChat: 'KeyP',
+    shortcutKeyStudy: '',
+    shortcutKeyCreateImage: '',
+    shortcutKeyToggleCanvas: '',
+    shortcutKeyToggleDictate: 'KeyY',
+    shortcutKeyCancelDictation: '',
+    shortcutKeyShare: '',
+    shortcutKeyThinkLonger: '',
+    shortcutKeyAddPhotosFiles: '',
+    selectThenCopyAllMessages: 'BracketLeft',
+    shortcutKeyThinkingExtended: '',
+    shortcutKeyThinkingStandard: '',
+    shortcutKeyNewGptConversation: '',
+  };
+
+  chrome.storage.sync.get(Object.keys(shortcutDefaults), (data) => {
+    const shortcuts = {};
+    for (const key in shortcutDefaults) {
+      if (Object.hasOwn(data, key)) {
+        // Preserve explicit user-provided values, including empty strings
+        shortcuts[key] = data[key];
+      } else {
+        shortcuts[key] = shortcutDefaults[key];
+      }
+    }
+
+    const modelToggleSetting = shortcuts.shortcutKeyToggleModelSelector;
+
+    const isMac = isMacPlatform();
+
+    // Robust fenced-code splitter (character-level).
+    // - Treats any run of 3+ ` or ~ as a fence, even if not isolated on its own line.
+    // - Closing fence must use the same char and have length >= opening run.
+    // - Code regions (including their fences) are emitted verbatim, unmodified.
+    // Robust fenced-code splitter (character-level).
+    // - Treat any run of 3+ ` or ~ as a fence, even mid-line (e.g., "You set:```cmd").
+    // - Closing fence must use the same char and have length >= opening run.
+    // - Code regions (including their fences) are emitted verbatim, unmodified.
+    // Split into regions while preserving fenced code and inline `code` spans.
+    // Emits segments like { text, isCode: boolean, isInline: boolean }
+    function splitByCodeFences(text) {
+      const regions = [];
+      const n = text.length;
+
+      let i = 0;
+      let last = 0;
+
+      // Fenced-code state
+      let inFence = false;
+      let fenceChar = '';
+      let fenceLen = 0;
+      let fenceStart = -1;
+
+      // Inline-code state (backticks only)
+      let inInline = false;
+      let inlineLen = 0; // 1 or 2 backticks
+      let inlineStart = -1;
+
+      const runLenFrom = (pos, ch) => {
+        let k = pos;
+        while (k < n && text[k] === ch) k += 1;
+        return k - pos;
       };
 
-      const shortcuts = {};
-      for (const key in shortcutDefaults) {
-        if (Object.hasOwn(data, key)) {
-          // Preserve explicit user-provided values, including empty strings
-          shortcuts[key] = data[key];
-        } else {
-          shortcuts[key] = shortcutDefaults[key];
-        }
-      }
+      // Optional spec fence check using your top-level FENCE_RE
+      const isSpecFenceAt = (pos, run) => {
+        const re =
+          typeof getFenceRe === 'function'
+            ? getFenceRe()
+            : typeof FENCE_RE !== 'undefined'
+              ? FENCE_RE
+              : null;
+        if (!re) return run >= 3; // generous fallback
+        const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+        let lineEnd = text.indexOf('\n', pos);
+        if (lineEnd === -1) lineEnd = n;
+        return re.test(text.slice(lineStart, lineEnd));
+      };
 
-      const modelToggleKey = shortcuts.shortcutKeyToggleModelSelector.toLowerCase();
+      while (i < n) {
+        const ch = text[i];
 
-      const isMac = isMacPlatform();
+        // Opening fences or inline code (when not already inside one)
+        if (!inFence && !inInline && (ch === '`' || ch === '~')) {
+          const run = runLenFrom(i, ch);
 
-      // Robust fenced-code splitter (character-level).
-      // - Treats any run of 3+ ` or ~ as a fence, even if not isolated on its own line.
-      // - Closing fence must use the same char and have length >= opening run.
-      // - Code regions (including their fences) are emitted verbatim, unmodified.
-      // Robust fenced-code splitter (character-level).
-      // - Treat any run of 3+ ` or ~ as a fence, even mid-line (e.g., "You set:```cmd").
-      // - Closing fence must use the same char and have length >= opening run.
-      // - Code regions (including their fences) are emitted verbatim, unmodified.
-      // Split into regions while preserving fenced code and inline `code` spans.
-      // Emits segments like { text, isCode: boolean, isInline: boolean }
-      function splitByCodeFences(text) {
-        const regions = [];
-        const n = text.length;
-
-        let i = 0;
-        let last = 0;
-
-        // Fenced-code state
-        let inFence = false;
-        let fenceChar = '';
-        let fenceLen = 0;
-        let fenceStart = -1;
-
-        // Inline-code state (backticks only)
-        let inInline = false;
-        let inlineLen = 0; // 1 or 2 backticks
-        let inlineStart = -1;
-
-        const runLenFrom = (pos, ch) => {
-          let k = pos;
-          while (k < n && text[k] === ch) k += 1;
-          return k - pos;
-        };
-
-        // Optional spec fence check using your top-level FENCE_RE
-        const isSpecFenceAt = (pos, run) => {
-          const re =
-            typeof getFenceRe === 'function'
-              ? getFenceRe()
-              : typeof FENCE_RE !== 'undefined'
-                ? FENCE_RE
-                : null;
-          if (!re) return run >= 3; // generous fallback
-          const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-          let lineEnd = text.indexOf('\n', pos);
-          if (lineEnd === -1) lineEnd = n;
-          return re.test(text.slice(lineStart, lineEnd));
-        };
-
-        while (i < n) {
-          const ch = text[i];
-
-          // Opening fences or inline code (when not already inside one)
-          if (!inFence && !inInline && (ch === '`' || ch === '~')) {
-            const run = runLenFrom(i, ch);
-
-            // Fenced code: 3+ backticks or tildes, accepted even mid-line (chat export sometimes inlines fences)
-            if (run >= 3) {
-              if (isSpecFenceAt(i, run) || run >= 3) {
-                if (i > last)
-                  regions.push({ text: text.slice(last, i), isCode: false, isInline: false });
-
-                inFence = true;
-                fenceChar = ch;
-                fenceLen = run;
-                fenceStart = i;
-
-                // Include any trailing info string on the opening line in the fenced region
-                i += run;
-                while (i < n && text[i] !== '\n') i += 1;
-                continue;
-              }
-            }
-
-            // Inline code: 1 or 2 backticks (Markdown allows multi-backtick spans; triple is treated as fence above)
-            if (ch === '`' && (run === 1 || run === 2)) {
+          // Fenced code: 3+ backticks or tildes, accepted even mid-line (chat export sometimes inlines fences)
+          if (run >= 3) {
+            if (isSpecFenceAt(i, run) || run >= 3) {
               if (i > last)
                 regions.push({ text: text.slice(last, i), isCode: false, isInline: false });
-              inInline = true;
-              inlineLen = run;
-              inlineStart = i;
+
+              inFence = true;
+              fenceChar = ch;
+              fenceLen = run;
+              fenceStart = i;
+
+              // Include any trailing info string on the opening line in the fenced region
               i += run;
+              while (i < n && text[i] !== '\n') i += 1;
               continue;
             }
           }
 
-          // Closing inline code
-          if (inInline) {
-            if (text[i] === '`') {
-              const run = runLenFrom(i, '`');
-              if (run === inlineLen) {
-                const end = i + run;
-                regions.push({ text: text.slice(inlineStart, end), isCode: true, isInline: true });
-                i = end;
-                last = end;
-                inInline = false;
-                inlineLen = 0;
-                inlineStart = -1;
-                continue;
-              }
-            }
-            i += 1;
+          // Inline code: 1 or 2 backticks (Markdown allows multi-backtick spans; triple is treated as fence above)
+          if (ch === '`' && (run === 1 || run === 2)) {
+            if (i > last)
+              regions.push({ text: text.slice(last, i), isCode: false, isInline: false });
+            inInline = true;
+            inlineLen = run;
+            inlineStart = i;
+            i += run;
             continue;
           }
+        }
 
-          // Closing fenced code
-          if (inFence) {
-            if (ch === fenceChar) {
-              const run = runLenFrom(i, fenceChar);
-              if (run >= fenceLen) {
-                const end = i + run;
-                regions.push({ text: text.slice(fenceStart, end), isCode: true, isInline: false });
-                i = end;
-                last = end;
-                inFence = false;
-                fenceChar = '';
-                fenceLen = 0;
-                fenceStart = -1;
-                continue;
-              }
+        // Closing inline code
+        if (inInline) {
+          if (text[i] === '`') {
+            const run = runLenFrom(i, '`');
+            if (run === inlineLen) {
+              const end = i + run;
+              regions.push({ text: text.slice(inlineStart, end), isCode: true, isInline: true });
+              i = end;
+              last = end;
+              inInline = false;
+              inlineLen = 0;
+              inlineStart = -1;
+              continue;
             }
-            i += 1;
-            continue;
           }
-
-          // Normal text
           i += 1;
+          continue;
         }
 
-        // Flush tail
-        if (inFence && fenceStart >= 0) {
-          regions.push({ text: text.slice(fenceStart), isCode: true, isInline: false });
-        } else if (inInline && inlineStart >= 0) {
-          // Unmatched inline opener: treat rest as inline code to avoid mangling
-          regions.push({ text: text.slice(inlineStart), isCode: true, isInline: true });
-        } else if (last < n) {
-          regions.push({ text: text.slice(last), isCode: false, isInline: false });
-        }
-
-        return regions;
-      }
-
-      function stripMarkdownOutsideCodeblocks(text) {
-        return splitByCodeFences(text)
-          .map((seg) =>
-            seg.isCode || seg.isInline ? seg.text : removeMarkdown(seg.text, { trimResult: false }),
-          )
-          .join('');
-      }
-
-      function removeMarkdown(text, { trimResult = true } = {}) {
-        const result = text
-          // Images: ![alt](url) → alt
-          .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-          // Links: [text](url) → text
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-          // Bold: **text** or __text__ (only when not inside words)
-          .replace(/(^|[^\w\\])\*\*(.*?)\*\*(?!\w)/g, '$1$2')
-          .replace(/(^|[^\w])__(.*?)__(?!\w)/g, '$1$2')
-          // Italic: *text* or _text_ (only when not inside words)
-          .replace(/(^|[^\w\\])\*(.*?)\*(?!\w)/g, '$1$2')
-          .replace(/(^|[^\w])_(.*?)_(?!\w)/g, '$1$2')
-          // Fallback: strip any remaining bold markers
-          .replace(/\*\*(.*?)\*\*/g, '$1')
-          .replace(/__(.*?)__/g, '$1')
-          // Headings
-          .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-          // Blockquotes
-          .replace(/^\s{0,3}>\s?/gm, '')
-          // Ordered / unordered lists (preserve indentation)
-          .replace(/^([ \t]*)(\d+)\.\s+/gm, '$1$2. ')
-          .replace(/^([ \t]*)[-*+]\s+/gm, '$1- ')
-          // Horizontal rules
-          .replace(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
-          // Collapse extra blank lines
-          .replace(/\n{3,}/g, '\n\n')
-          // Strip any remaining stray bold markers (e.g., split across inline code)
-          .replace(/\*\*/g, '')
-          .replace(/__/g, '')
-          // Unescape common escapes
-          .replace(/\\([_*[\](){}#+\-!.>])/g, '$1');
-
-        return trimResult ? result.trim() : result;
-      }
-
-      // Expose helpers globally so sanitizeCopiedText can find them in MV3 scope
-      if (typeof window !== 'undefined') {
-        if (
-          typeof window.splitByCodeFences !== 'function' &&
-          typeof splitByCodeFences === 'function'
-        ) {
-          window.splitByCodeFences = splitByCodeFences;
-        }
-        if (typeof window.removeMarkdown !== 'function' && typeof removeMarkdown === 'function') {
-          window.removeMarkdown = removeMarkdown;
-        }
-        if (
-          typeof window.stripMarkdownOutsideCodeblocks !== 'function' &&
-          typeof stripMarkdownOutsideCodeblocks === 'function'
-        ) {
-          window.stripMarkdownOutsideCodeblocks = stripMarkdownOutsideCodeblocks;
-        }
-      }
-
-      const keyFunctionMappingCtrl = {
-        Enter: () => {
-          try {
-            document.querySelector('button[data-testid="send-button"]')?.click();
-          } catch (e) {
-            console.error('Enter handler failed:', e);
-          }
-        },
-        Backspace: () => {
-          try {
-            const btn = getVisibleStopButton();
-            btn?.click();
-          } catch (e) {
-            console.error('Backspace handler failed:', e);
-          }
-        },
-      };
-
-      let dictateInProgress = false;
-
-      // @note Alt Key Function Maps
-      const keyFunctionMappingAlt = {
-        [shortcuts.shortcutKeyScrollUpOneMessage]: () => {
-          const upButton = document.getElementById('upButton');
-          if (upButton) {
-            upButton.click();
-            // feedbackAnimation is already called inside the click handler, so this is redundant.
-          } else {
-            goUpOneMessage(); // Call the scroll function directly, no feedback since no button.
-          }
-        },
-        [shortcuts.shortcutKeyScrollDownOneMessage]: () => {
-          const downButton = document.getElementById('downButton');
-          if (downButton) {
-            downButton.click(); // feedback is triggered in the click handler
-          } else {
-            goDownOneMessage(); // function is available even when button is hidden
-          }
-        },
-        [shortcuts.shortcutKeyScrollUpTwoMessages]: () => {
-          const upButton = document.getElementById('upButton');
-          goUpTwoMessages(upButton || null);
-        },
-        [shortcuts.shortcutKeyScrollDownTwoMessages]: () => {
-          const downButton = document.getElementById('downButton');
-          goDownTwoMessages(downButton || null);
-        },
-        [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
-        [shortcuts.shortcutKeyCopyLowest]: () => {
-          const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
-          copyFromLowestButton(copyPath, {
-            delayBeforeClick: 350,
-            delayClipboardRead: 350,
-          });
-        },
-        // @note shortcutKeyEDIT
-        [shortcuts.shortcutKeyEdit]: () => {
-          // Centralized timing constants (all halved from original)
-          const DELAY_SAFE_CLICK = 200; // after scroll, before click
-          const GSAP_SCROLL_DURATION = 0.2; // smooth scroll duration with GSAP
-          const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
-          const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
-
-          // always scroll to center if possible, clamp if not
-          const gsapScrollToCenterAndClick = (button) => {
-            if (!button || !button.isConnected || typeof button.click !== 'function') return;
-
-            let container = window;
-            try {
-              if (typeof getScrollableContainer === 'function') {
-                const candidate = getScrollableContainer();
-                if (candidate && candidate instanceof Element && candidate.isConnected) {
-                  container = candidate;
-                }
-              }
-            } catch {}
-
-            let contTop = 0;
-            let contHeight = window.innerHeight;
-            if (container !== window) {
-              try {
-                const cr = container.getBoundingClientRect();
-                contTop = cr.top;
-                contHeight = container.clientHeight;
-              } catch {}
+        // Closing fenced code
+        if (inFence) {
+          if (ch === fenceChar) {
+            const run = runLenFrom(i, fenceChar);
+            if (run >= fenceLen) {
+              const end = i + run;
+              regions.push({ text: text.slice(fenceStart, end), isCode: true, isInline: false });
+              i = end;
+              last = end;
+              inFence = false;
+              fenceChar = '';
+              fenceLen = 0;
+              fenceStart = -1;
+              continue;
             }
+          }
+          i += 1;
+          continue;
+        }
 
-            const rect = button.getBoundingClientRect();
-            const offsetCenter = (contHeight - rect.height) / 2;
+        // Normal text
+        i += 1;
+      }
 
-            let targetY =
-              container === window
-                ? window.scrollY + rect.top - offsetCenter
-                : container.scrollTop + (rect.top - contTop) - offsetCenter;
+      // Flush tail
+      if (inFence && fenceStart >= 0) {
+        regions.push({ text: text.slice(fenceStart), isCode: true, isInline: false });
+      } else if (inInline && inlineStart >= 0) {
+        // Unmatched inline opener: treat rest as inline code to avoid mangling
+        regions.push({ text: text.slice(inlineStart), isCode: true, isInline: true });
+      } else if (last < n) {
+        regions.push({ text: text.slice(last), isCode: false, isInline: false });
+      }
 
-            const maxScroll =
-              container === window
-                ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
-                : Math.max(0, container.scrollHeight - container.clientHeight);
+      return regions;
+    }
 
-            targetY = Math.max(0, Math.min(targetY, maxScroll));
+    function stripMarkdownOutsideCodeblocks(text) {
+      return splitByCodeFences(text)
+        .map((seg) =>
+          seg.isCode || seg.isInline ? seg.text : removeMarkdown(seg.text, { trimResult: false }),
+        )
+        .join('');
+    }
 
-            const safeClick = () => {
-              const canClick = button?.isConnected && typeof button?.click === 'function';
-              if (!canClick) return;
-              try {
-                button.click();
-              } catch {}
-            };
+    function removeMarkdown(text, { trimResult = true } = {}) {
+      const result = text
+        // Images: ![alt](url) → alt
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        // Links: [text](url) → text
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        // Bold: **text** or __text__ (only when not inside words)
+        .replace(/(^|[^\w\\])\*\*(.*?)\*\*(?!\w)/g, '$1$2')
+        .replace(/(^|[^\w])__(.*?)__(?!\w)/g, '$1$2')
+        // Italic: *text* or _text_ (only when not inside words)
+        .replace(/(^|[^\w\\])\*(.*?)\*(?!\w)/g, '$1$2')
+        .replace(/(^|[^\w])_(.*?)_(?!\w)/g, '$1$2')
+        // Fallback: strip any remaining bold markers
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        // Headings
+        .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+        // Blockquotes
+        .replace(/^\s{0,3}>\s?/gm, '')
+        // Ordered / unordered lists (preserve indentation)
+        .replace(/^([ \t]*)(\d+)\.\s+/gm, '$1$2. ')
+        .replace(/^([ \t]*)[-*+]\s+/gm, '$1- ')
+        // Horizontal rules
+        .replace(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
+        // Collapse extra blank lines
+        .replace(/\n{3,}/g, '\n\n')
+        // Strip any remaining stray bold markers (e.g., split across inline code)
+        .replace(/\*\*/g, '')
+        .replace(/__/g, '')
+        // Unescape common escapes
+        .replace(/\\([_*[\](){}#+\-!.>])/g, '$1');
 
-            const finish = () => {
-              try {
-                if (typeof flashBorder === 'function') flashBorder(button);
-              } catch {}
-              setTimeout(safeClick, DELAY_SAFE_CLICK);
-            };
+      return trimResult ? result.trim() : result;
+    }
 
-            const animateWithGsap = () => {
-              try {
-                if (!window.gsap) return false;
-                const hasScrollTo =
-                  (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
-                  typeof ScrollToPlugin !== 'undefined';
-                if (!hasScrollTo) return false;
+    // Expose helpers globally so sanitizeCopiedText can find them in MV3 scope
+    if (typeof window !== 'undefined') {
+      if (
+        typeof window.splitByCodeFences !== 'function' &&
+        typeof splitByCodeFences === 'function'
+      ) {
+        window.splitByCodeFences = splitByCodeFences;
+      }
+      if (typeof window.removeMarkdown !== 'function' && typeof removeMarkdown === 'function') {
+        window.removeMarkdown = removeMarkdown;
+      }
+      if (
+        typeof window.stripMarkdownOutsideCodeblocks !== 'function' &&
+        typeof stripMarkdownOutsideCodeblocks === 'function'
+      ) {
+        window.stripMarkdownOutsideCodeblocks = stripMarkdownOutsideCodeblocks;
+      }
+    }
 
-                gsap.to(container, {
-                  duration: GSAP_SCROLL_DURATION,
-                  scrollTo: { y: targetY, autoKill: true },
-                  ease: 'power4.out',
-                  onComplete: finish,
-                });
-                return true;
-              } catch {
-                return false;
+    const keyFunctionMappingCtrl = {
+      Enter: () => {
+        try {
+          document.querySelector('button[data-testid="send-button"]')?.click();
+        } catch (e) {
+          console.error('Enter handler failed:', e);
+        }
+      },
+      Backspace: () => {
+        try {
+          const btn = getVisibleStopButton();
+          btn?.click();
+        } catch (e) {
+          console.error('Backspace handler failed:', e);
+        }
+      },
+    };
+
+    let dictateInProgress = false;
+
+    // @note Alt Key Function Maps
+    const keyFunctionMappingAlt = {
+      [shortcuts.shortcutKeyScrollUpOneMessage]: () => {
+        const upButton = document.getElementById('upButton');
+        if (upButton) {
+          upButton.click();
+          // feedbackAnimation is already called inside the click handler, so this is redundant.
+        } else {
+          goUpOneMessage(); // Call the scroll function directly, no feedback since no button.
+        }
+      },
+      [shortcuts.shortcutKeyScrollDownOneMessage]: () => {
+        const downButton = document.getElementById('downButton');
+        if (downButton) {
+          downButton.click(); // feedback is triggered in the click handler
+        } else {
+          goDownOneMessage(); // function is available even when button is hidden
+        }
+      },
+      [shortcuts.shortcutKeyScrollUpTwoMessages]: () => {
+        const upButton = document.getElementById('upButton');
+        goUpTwoMessages(upButton || null);
+      },
+      [shortcuts.shortcutKeyScrollDownTwoMessages]: () => {
+        const downButton = document.getElementById('downButton');
+        goDownTwoMessages(downButton || null);
+      },
+      [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
+      [shortcuts.shortcutKeyCopyLowest]: () => {
+        const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
+        copyFromLowestButton(copyPath, {
+          delayBeforeClick: 350,
+          delayClipboardRead: 350,
+        });
+      },
+      // @note shortcutKeyEDIT
+      [shortcuts.shortcutKeyEdit]: () => {
+        // Centralized timing constants (all halved from original)
+        const DELAY_SAFE_CLICK = 200; // after scroll, before click
+        const GSAP_SCROLL_DURATION = 0.2; // smooth scroll duration with GSAP
+        const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
+        const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
+
+        // always scroll to center if possible, clamp if not
+        const gsapScrollToCenterAndClick = (button) => {
+          if (!button || !button.isConnected || typeof button.click !== 'function') return;
+
+          let container = window;
+          try {
+            if (typeof getScrollableContainer === 'function') {
+              const candidate = getScrollableContainer();
+              if (candidate && candidate instanceof Element && candidate.isConnected) {
+                container = candidate;
               }
-            };
+            }
+          } catch {}
 
-            if (!animateWithGsap()) {
-              try {
-                if (container === window) {
-                  window.scrollTo({ top: targetY, behavior: 'smooth' });
-                } else if (typeof container.scrollTo === 'function') {
-                  container.scrollTo({ top: targetY, behavior: 'smooth' });
-                } else {
-                  container.scrollTop = targetY;
-                }
-              } catch {
-                if (container === window) window.scrollTo(0, targetY);
-                else container.scrollTop = targetY;
-              }
-              setTimeout(finish, DELAY_FALLBACK_FINISH);
+          let contTop = 0;
+          let contHeight = window.innerHeight;
+          if (container !== window) {
+            try {
+              const cr = container.getBoundingClientRect();
+              contTop = cr.top;
+              contHeight = container.clientHeight;
+            } catch {}
+          }
+
+          const rect = button.getBoundingClientRect();
+          const offsetCenter = (contHeight - rect.height) / 2;
+
+          let targetY =
+            container === window
+              ? window.scrollY + rect.top - offsetCenter
+              : container.scrollTop + (rect.top - contTop) - offsetCenter;
+
+          const maxScroll =
+            container === window
+              ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+              : Math.max(0, container.scrollHeight - container.clientHeight);
+
+          targetY = Math.max(0, Math.min(targetY, maxScroll));
+
+          const safeClick = () => {
+            const canClick = button?.isConnected && typeof button?.click === 'function';
+            if (!canClick) return;
+            try {
+              button.click();
+            } catch {}
+          };
+
+          const finish = () => {
+            try {
+              if (typeof flashBorder === 'function') flashBorder(button);
+            } catch {}
+            setTimeout(safeClick, DELAY_SAFE_CLICK);
+          };
+
+          const animateWithGsap = () => {
+            try {
+              if (!window.gsap) return false;
+              const hasScrollTo =
+                (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
+                typeof ScrollToPlugin !== 'undefined';
+              if (!hasScrollTo) return false;
+
+              gsap.to(container, {
+                duration: GSAP_SCROLL_DURATION,
+                scrollTo: { y: targetY, autoKill: true },
+                ease: 'power4.out',
+                onComplete: finish,
+              });
+              return true;
+            } catch {
+              return false;
             }
           };
 
+          if (!animateWithGsap()) {
+            try {
+              if (container === window) {
+                window.scrollTo({ top: targetY, behavior: 'smooth' });
+              } else if (typeof container.scrollTo === 'function') {
+                container.scrollTo({ top: targetY, behavior: 'smooth' });
+              } else {
+                container.scrollTop = targetY;
+              }
+            } catch {
+              if (container === window) window.scrollTo(0, targetY);
+              else container.scrollTop = targetY;
+            }
+            setTimeout(finish, DELAY_FALLBACK_FINISH);
+          }
+        };
+
+        setTimeout(() => {
+          try {
+            const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
+            const editSelectors = [
+              'button[aria-label="Edit message"]',
+              withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
+            ];
+
+            const allButtons = Array.from(
+              new Set(
+                editSelectors
+                  .flatMap((sel) =>
+                    Array.from(document.querySelectorAll(sel)).map(
+                      (node) => node.closest('button') || node,
+                    ),
+                  )
+                  .filter(Boolean),
+              ),
+            );
+
+            const filteredButtonsData = allButtons
+              .filter((btn) => btn !== null)
+              .map((btn) => {
+                const rect = btn.getBoundingClientRect();
+                return { btn, rect };
+              })
+              .filter(({ btn, rect }) => isAboveComposer(rect, btn));
+
+            filteredButtonsData.sort((a, b) => a.rect.top - b.rect.top);
+
+            const inViewport = filteredButtonsData.filter(
+              ({ rect }) =>
+                rect.bottom > 0 &&
+                rect.right > 0 &&
+                rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
+                rect.left < (window.innerWidth || document.documentElement.clientWidth),
+            );
+
+            let targetButton = null;
+            if (inViewport.length > 0) {
+              const target = inViewport.reduce((bottomMost, current) =>
+                current.rect.top > bottomMost.rect.top ? current : bottomMost,
+              );
+              targetButton = target.btn;
+            } else {
+              const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
+              if (aboveViewport.length > 0) {
+                const target = aboveViewport.reduce((closest, current) =>
+                  current.rect.bottom > closest.rect.bottom ? current : closest,
+                );
+                targetButton = target.btn;
+              }
+            }
+
+            if (targetButton) {
+              gsapScrollToCenterAndClick(targetButton);
+            }
+          } catch {}
+        }, DELAY_INITIAL_SCAN);
+      },
+      [shortcuts.shortcutKeySendEdit]: () => {
+        try {
+          // Centralized timing constant
+          const DELAY_BEFORE_CLICK = 250; // was 500ms
+
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+
+          const isVisible = (btn) => {
+            if (!btn || btn.disabled) return false;
+            if (btn.closest('[aria-hidden="true"]')) return false;
+            const style = window.getComputedStyle(btn);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+              return false;
+            const rect = btn.getBoundingClientRect();
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.bottom > 0 &&
+              rect.right > 0 &&
+              rect.top < viewportHeight &&
+              rect.left < viewportWidth &&
+              isAboveComposer(rect, btn)
+            );
+          };
+
+          const getButtonLabel = (btn) =>
+            (btn?.textContent || btn?.innerText || btn?.getAttribute?.('aria-label') || '').trim();
+
+          const findEditSendButton = (row) => {
+            if (!row) return null;
+            const buttons = Array.from(row.querySelectorAll('button'));
+            if (!buttons.length) return null;
+
+            const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
+            if (!hasCancel) return null;
+
+            const sendBtn =
+              buttons.find((btn) => /send/i.test(getButtonLabel(btn))) || buttons[1] || buttons[0];
+
+            return sendBtn || null;
+          };
+
+          // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
+          const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
+            .map((ta) => {
+              // Scope to the edit card around the textarea
+              const editCard =
+                ta.closest('.bg-token-main-surface-tertiary') ||
+                ta.closest('.rounded-3xl') ||
+                ta.closest('[data-message-id]') ||
+                ta.parentElement;
+              if (!editCard) return null;
+
+              const buttonRow =
+                editCard.querySelector('div.flex.justify-end.gap-2') ||
+                editCard.querySelector('div.flex.justify-end');
+              if (!buttonRow) return null;
+
+              return findEditSendButton(buttonRow);
+            })
+            .filter(Boolean);
+
+          // Fallback: only consider edit rows that contain an editable field + Cancel/Send
+          const fallbackButtons = Array.from(
+            document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'),
+          )
+            .map((row) => {
+              const scope = row.closest(
+                '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], article[data-testid^="conversation-turn-"]',
+              );
+              if (!scope) return null;
+              if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
+              return findEditSendButton(row);
+            })
+            .filter(Boolean);
+
+          const candidateButtons = Array.from(
+            new Set([...textareaSendButtons, ...fallbackButtons]),
+          );
+
+          const visibleSendButtons = candidateButtons.filter(isVisible);
+
+          if (!visibleSendButtons.length) return;
+
+          // The lowest visible one (last in DOM order)
+          const btn = visibleSendButtons.reduce((bottomMost, current) => {
+            const bottomRect = bottomMost.getBoundingClientRect();
+            const currentRect = current.getBoundingClientRect();
+            return currentRect.top >= bottomRect.top ? current : bottomMost;
+          });
+
+          if (window.gsap) flashBorder(btn);
+
+          setTimeout(() => {
+            safeClick(btn);
+          }, DELAY_BEFORE_CLICK);
+        } catch {
+          // Fail silently
+        }
+      },
+      [shortcuts.shortcutKeyNewConversation]: function newConversation() {
+        // 1) Fire the native “New Chat” shortcut first (Ctrl/Cmd + Shift + O)
+        const isMac = isMacPlatform();
+        const eventInit = {
+          key: 'o',
+          code: 'KeyO',
+          keyCode: 79,
+          which: 79,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          shiftKey: true,
+          ctrlKey: !isMac,
+          metaKey: isMac,
+        };
+        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+
+        // 2) Fallbacks only if nothing clickable is visible
+
+        // 2a) Try the test-id button
+        const newChatBtn = document.querySelector('button[data-testid="new-chat-button"]');
+        if (safeClick(newChatBtn)) return;
+
+        // 2b) Try known SVG-path variants (very old UIs)
+        const selectors = [
+          'button:has(svg > path[d^="M15.6729 3.91287C16.8918"])',
+          'button:has(svg > path[d^="M15.673 3.913a3.121 3.121 0 1 1 4.414 4.414"])',
+        ];
+        for (const sel of selectors) {
+          const btn = document.querySelector(sel);
+          if (safeClick(btn)) return;
+        }
+      },
+      [shortcuts.shortcutKeySearchConversationHistory]: () => {
+        // 1) Fire the native “Search Conversation History” shortcut first (Ctrl/Cmd + K)
+        const isMac = isMacPlatform();
+        const eventInit = {
+          key: 'k',
+          code: 'KeyK',
+          keyCode: 75,
+          which: 75,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          shiftKey: false,
+          ctrlKey: !isMac,
+          metaKey: isMac,
+          altKey: false,
+        };
+        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+
+        // 2a) Try the test-id button
+        const searchBtn = document.querySelector(
+          'button[data-testid="search-conversation-button"]',
+        );
+        if (safeClick(searchBtn)) return;
+
+        // 2b) Very old SVG-path fallback
+        const path = document.querySelector('button svg path[d^="M10.75 4.25C7.16015"]');
+        const btn = path?.closest('button');
+        if (safeClick(btn)) return;
+      },
+      [shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
+        // native scroll to bottom
+        const el = getScrollableContainer();
+        if (!el) return;
+
+        gsap.to(el, {
+          duration: 0.3,
+          scrollTo: { y: 'max' },
+          ease: 'power4.out',
+        });
+      },
+      [shortcuts.shortcutKeyScrollToTop]: () => {
+        // native scroll to top
+        const el = getScrollableContainer();
+        if (!el) return;
+
+        gsap.to(el, {
+          duration: 0.3,
+          scrollTo: { y: 0 },
+          ease: 'power4.out',
+        });
+      },
+      // @note Toggle Sidebar Function
+      [shortcuts.shortcutKeyToggleSidebar]: function toggleSidebar() {
+        // —— Directional snap logic ——
+        const slimBarEl = document.getElementById('stage-sidebar-tiny-bar');
+        const largeSidebarEl = document.querySelector(
+          'aside#stage-sidebar:not([inert]):not(.pointer-events-none)',
+        );
+        if (window._fadeSlimSidebarEnabled && slimBarEl && !largeSidebarEl) {
+          window.hideSlimSidebarBarInstant();
+        } else if (window._fadeSlimSidebarEnabled && slimBarEl && largeSidebarEl) {
+          window.flashSlimSidebarBar();
+        }
+
+        // —— Existing toggle logic ——
+        const isMac = isMacPlatform();
+        const eventInit = {
+          key: 's',
+          code: 'KeyS',
+          keyCode: 83,
+          which: 83,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          shiftKey: true,
+          ctrlKey: !isMac,
+          metaKey: isMac,
+        };
+
+        // 1) Try native keyboard toggle
+        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+        if (
+          document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !==
+          null
+        ) {
+          setTimeout(() => {}, 30);
+          return;
+        }
+
+        // 2) Fallback: direct open/close button
+        const direct = document.querySelector(
+          'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
+        );
+        if (safeClick(direct)) {
+          setTimeout(() => {}, 30);
+          return;
+        }
+
+        // 3) Final fallback: legacy SVG-path selectors
+        const selectors = [
+          '#bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
+          '#bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"])',
+          '#bottomBarContainer button:has(svg > path[d^="M8.85720 3H15.1428C16.2266"])',
+          '#sidebar-header button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
+          '#conversation-header-actions button:has(svg > path[d^="M8.85719 3H15.1428C16.2266"])',
+          '#sidebar-header button:has(svg > path[d^="M8.85719 3L13.5"])',
+          'div.draggable.h-header-height button[data-testid="open-sidebar-button"]',
+          'div.draggable.h-header-height button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
+          'button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
+          'button[data-testid="close-sidebar-button"]',
+          'button[data-testid="open-sidebar-button"]',
+          'button svg path[d^="M13.0187 7C13.0061"]',
+          'button svg path[d^="M8.85719 3L13.5"]',
+          'button svg path[d^="M3 8C3 7.44772"]',
+          'button svg path[d^="M8.85719 3H15.1428C16.2266"]',
+          'button svg path[d^="M3 6h18M3 12h18M3 18h18"]',
+          'button svg path[d^="M6 6h12M6 12h12M6 18h12"]',
+        ];
+        for (const sel of selectors) {
+          const el = document.querySelector(sel);
+          const btn = el?.closest('button');
+          if (safeClick(btn)) {
+            setTimeout(() => {}, 30);
+            return;
+          }
+        }
+
+        // 4) If still nothing, just exit
+        setTimeout(() => {}, 30);
+      },
+      [shortcuts.shortcutKeyActivateInput]: function activateInput() {
+        const selectors = [
+          '#prompt-textarea[contenteditable="true"]',
+          'div[contenteditable="true"][id="prompt-textarea"]',
+          'div.ProseMirror[contenteditable="true"]',
+        ];
+
+        for (const selector of selectors) {
+          const inputField = document.querySelector(selector);
+          if (inputField) {
+            inputField.focus();
+            return;
+          }
+        }
+
+        // Fallback: trigger the page’s native shortcut (Shift + Escape)
+        const eventInit = {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 27,
+          which: 27,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          shiftKey: true,
+          ctrlKey: false,
+          metaKey: false,
+        };
+        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+      },
+      [shortcuts.shortcutKeySearchWeb]: async () => {
+        // Unique config for this action
+        const ICON_PATH_PREFIX = ['M10 2.125C14.3492', '#6b0d8c']; // globe icon prefix
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
+        const SCROLL_ANCHOR_PCT =
+          typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
+
+        // Centralized timing constants
+        const DELAY_INITIAL = 25; // was 50
+        const DELAY_POST_CLICK = 175; // was 350
+        const SCROLL_DURATION = 0.2; // was 0.6s
+
+        const getScrollableContainer =
+          typeof window.getScrollableContainer === 'function'
+            ? window.getScrollableContainer
+            : () => window;
+
+        const composerRect = () => {
+          const el = document.getElementById('composer-background');
+          return el ? el.getBoundingClientRect() : null;
+        };
+
+        const scrollToAnchor = (container, target, onComplete) => {
+          if (!window.gsap || !target) return onComplete?.();
+
+          const rect = target.getBoundingClientRect();
+          const contRect =
+            container === window
+              ? { top: 0, height: window.innerHeight }
+              : {
+                  top: container.getBoundingClientRect().top,
+                  height: container.clientHeight,
+                };
+
+          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+          const current = container === window ? window.scrollY : container.scrollTop;
+          let targetY =
+            container === window
+              ? current + rect.top - anchorPx
+              : container.scrollTop + (rect.top - contRect.top) - anchorPx;
+
+          const maxScroll =
+            container === window
+              ? (document.scrollingElement || document.documentElement).scrollHeight -
+                window.innerHeight
+              : container.scrollHeight - container.clientHeight;
+          targetY = Math.max(0, Math.min(targetY, maxScroll));
+
+          gsap.to(container, {
+            duration: SCROLL_DURATION,
+            scrollTo: { y: targetY, autoKill: false },
+            ease: 'power4.out',
+            onComplete,
+          });
+        };
+
+        function isButtonCentered(container, btn) {
+          if (!window.gsap || !btn) return false;
+          const rect = btn.getBoundingClientRect();
+          const contRect =
+            container === window
+              ? { top: 0, height: window.innerHeight }
+              : {
+                  top: container.getBoundingClientRect().top,
+                  height: container.clientHeight,
+                };
+
+          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+          const currentScroll = container === window ? window.scrollY : container.scrollTop;
+          const btnTop =
+            container === window
+              ? rect.top + window.scrollY
+              : rect.top - contRect.top + container.scrollTop;
+          const targetY = btnTop - anchorPx;
+          const delta = Math.abs(currentScroll - targetY);
+          return delta < 2; // threshold
+        }
+
+        const getMsgId = (btn) => btn.closest('[data-message-id]')?.getAttribute('data-message-id');
+
+        const relaunchHover = (wrapper) => {
+          if (!wrapper) return;
+          wrapper.classList.add('force-hover');
+          ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
+            wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
+          });
+        };
+
+        const collectCandidates = () => {
+          const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
+            .map((el) => el.previousElementSibling)
+            .filter((el) => el?.tagName === 'BUTTON');
+          const iconSelectors = [
+            'button[aria-label="Previous response"]',
+            withPrefix(svgSelectorForTokens(['M11.5292 3.7793', '#8ee2e9']), 'button'),
+          ];
+          const iconBtns = iconSelectors.flatMap((sel) =>
+            Array.from(document.querySelectorAll(sel)).map(
+              (node) => node.closest('button') || node,
+            ),
+          );
+          return [...divBtns, ...iconBtns].filter(Boolean);
+        };
+
+        const isOverlapComposer = (rect) => {
+          const comp = composerRect();
+          return comp
+            ? !(
+                rect.bottom < comp.top ||
+                rect.top > comp.bottom ||
+                rect.right < comp.left ||
+                rect.left > comp.right
+              )
+            : false;
+        };
+
+        const chooseTarget = (buttons) => {
+          const scrollY = window.scrollY;
+          const viewH = window.innerHeight;
+          const BOTTOM_BUFFER = 85;
+
+          const withMeta = buttons.map((btn) => {
+            const rect = btn.getBoundingClientRect();
+            return {
+              btn,
+              rect,
+              absBottom: rect.bottom + scrollY,
+              fullyVisible:
+                rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
+            };
+          });
+
+          const fully = withMeta.filter((m) => m.fullyVisible);
+          if (fully.length) {
+            return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
+          }
+          const above = withMeta.filter((m) => m.rect.bottom <= 0);
+          if (above.length) {
+            return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
+          }
+          return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
+        };
+
+        const recenter = (msgId) => {
+          if (!msgId) return;
+          const container = getScrollableContainer();
+          const target = document.querySelector(`[data-message-id="${msgId}"] button`);
+          if (!target) return;
+          scrollToAnchor(container, target);
+        };
+
+        setTimeout(() => {
+          try {
+            const all = collectCandidates();
+            if (!all.length) return;
+
+            let target = chooseTarget(all);
+            const container = getScrollableContainer();
+
+            if (opts.previewOnly && target && isButtonCentered(container, target)) {
+              const idx = all.indexOf(target);
+              let found = false;
+              for (let i = idx - 1; i >= 0; --i) {
+                if (!isButtonCentered(container, all[i])) {
+                  target = all[i];
+                  found = true;
+                  break;
+                }
+              }
+              if (!found && all.length > 1) {
+                target = all[all.length - 1];
+              }
+            }
+
+            if (!target) return;
+            const msgId = getMsgId(target);
+
+            scrollToAnchor(container, target, () => {
+              flashBorder(target);
+              relaunchHover(target.closest('[class*="group-hover"]'));
+
+              if (!opts.previewOnly) {
+                setTimeout(() => {
+                  target.click();
+                  setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
+                }, DELAY_POST_CLICK);
+              }
+            });
+          } catch (_) {
+            /* silent */
+          }
+        }, DELAY_INITIAL);
+      },
+
+      /*──────────────────────────────────────────────────────────────────────────────
+       *  NEXT‑THREAD shortcut – tracks ONE specific button through re‑render
+       *────────────────────────────────────────────────────────────────────────────*/
+      /* Thread‑Navigation “next” shortcut – full drop‑in replacement */
+      // Updated "Thread Navigation" shortcut implementation
+      // Fulfils mandatory sequence: select‑scroll‑highlight‑click‑pause‑recenter
+
+      // Export / attach to your shortcuts map
+      [shortcuts.shortcutKeyNextThread]: (opts = {}) => {
+        const SCROLL_ANCHOR_PCT =
+          typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
+
+        // Centralized timing constants (all halved)
+        const DELAY_INITIAL = 25; // was 50
+        const DELAY_POST_CLICK = 200; // was 350
+        const SCROLL_DURATION = 0.2; // was 0.6s
+
+        const getScrollableContainer =
+          typeof window.getScrollableContainer === 'function'
+            ? window.getScrollableContainer
+            : () => window;
+
+        const composerRect = () => {
+          const el = document.getElementById('composer-background');
+          return el ? el.getBoundingClientRect() : null;
+        };
+
+        const scrollToAnchor = (container, target, onComplete) => {
+          if (!window.gsap || !target) return onComplete?.();
+
+          const rect = target.getBoundingClientRect();
+          const contRect =
+            container === window
+              ? { top: 0, height: window.innerHeight }
+              : {
+                  top: container.getBoundingClientRect().top,
+                  height: container.clientHeight,
+                };
+
+          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+          const current = container === window ? window.scrollY : container.scrollTop;
+          let targetY =
+            container === window
+              ? current + rect.top - anchorPx
+              : container.scrollTop + (rect.top - contRect.top) - anchorPx;
+
+          const maxScroll =
+            container === window
+              ? (document.scrollingElement || document.documentElement).scrollHeight -
+                window.innerHeight
+              : container.scrollHeight - container.clientHeight;
+          targetY = Math.max(0, Math.min(targetY, maxScroll));
+
+          gsap.to(container, {
+            duration: SCROLL_DURATION,
+            scrollTo: { y: targetY, autoKill: false },
+            ease: 'power4.out',
+            onComplete,
+          });
+        };
+
+        function isButtonCentered(container, btn) {
+          if (!window.gsap || !btn) return false;
+          const rect = btn.getBoundingClientRect();
+          const contRect =
+            container === window
+              ? { top: 0, height: window.innerHeight }
+              : {
+                  top: container.getBoundingClientRect().top,
+                  height: container.clientHeight,
+                };
+
+          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
+          const currentScroll = container === window ? window.scrollY : container.scrollTop;
+          const btnTop =
+            container === window
+              ? rect.top + window.scrollY
+              : rect.top - contRect.top + container.scrollTop;
+          const targetY = btnTop - anchorPx;
+          const delta = Math.abs(currentScroll - targetY);
+          return delta < 2; // threshold
+        }
+
+        const getMsgId = (btn) => btn.closest('[data-message-id]')?.getAttribute('data-message-id');
+
+        const relaunchHover = (wrapper) => {
+          if (!wrapper) return;
+          wrapper.classList.add('force-hover');
+          ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
+            wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
+          });
+        };
+
+        const collectCandidates = () => {
+          const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
+            .map((el) => el.previousElementSibling)
+            .filter((el) => el?.tagName === 'BUTTON');
+          const iconSelectors = [
+            'button[aria-label="Next response"]',
+            withPrefix(svgSelectorForTokens(['M7.52925 3.7793', '#b140e7']), 'button'),
+          ];
+          const pathBtns = iconSelectors.flatMap((sel) =>
+            Array.from(document.querySelectorAll(sel)).map(
+              (node) => node.closest('button') || node,
+            ),
+          );
+
+          // Exclude "Thought for" buttons
+          const isExcluded = (btn) => {
+            const span = btn.querySelector('span');
+            if (!span) return false;
+            return /^Thought for\b/.test(span.textContent.trim());
+          };
+
+          return [...divBtns, ...pathBtns].filter(Boolean).filter((btn) => !isExcluded(btn));
+        };
+
+        const isOverlapComposer = (rect) => {
+          const comp = composerRect();
+          return comp
+            ? !(
+                rect.bottom < comp.top ||
+                rect.top > comp.bottom ||
+                rect.right < comp.left ||
+                rect.left > comp.right
+              )
+            : false;
+        };
+
+        const chooseTarget = (buttons) => {
+          const scrollY = window.scrollY;
+          const viewH = window.innerHeight;
+          const BOTTOM_BUFFER = 85;
+
+          const withMeta = buttons.map((btn) => {
+            const rect = btn.getBoundingClientRect();
+            return {
+              btn,
+              rect,
+              absBottom: rect.bottom + scrollY,
+              fullyVisible:
+                rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
+            };
+          });
+
+          const fully = withMeta.filter((m) => m.fullyVisible);
+          if (fully.length) {
+            return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
+          }
+          const above = withMeta.filter((m) => m.rect.bottom <= 0);
+          if (above.length) {
+            return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
+          }
+          return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
+        };
+
+        const recenter = (msgId) => {
+          if (!msgId) return;
+          const container = getScrollableContainer();
+          const target = document.querySelector(`[data-message-id="${msgId}"] button`);
+          if (!target) return;
+          scrollToAnchor(container, target);
+        };
+
+        setTimeout(() => {
+          try {
+            const all = collectCandidates();
+            if (!all.length) return;
+
+            let target = chooseTarget(all);
+            const container = getScrollableContainer();
+
+            if (opts.previewOnly && target && isButtonCentered(container, target)) {
+              const idx = all.indexOf(target);
+              for (let i = idx - 1; i >= 0; --i) {
+                if (!isButtonCentered(container, all[i])) {
+                  target = all[i];
+                  break;
+                }
+              }
+            }
+
+            if (!target) return;
+            const msgId = getMsgId(target);
+
+            scrollToAnchor(container, target, () => {
+              flashBorder(target);
+              relaunchHover(target.closest('[class*="group-hover"]'));
+
+              if (!opts.previewOnly) {
+                setTimeout(() => {
+                  target.click();
+                  setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
+                }, DELAY_POST_CLICK);
+              }
+            });
+          } catch (_) {
+            /* silent */
+          }
+        }, DELAY_INITIAL);
+      },
+
+      [shortcuts.selectThenCopy]: (() => {
+        window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
+        const DEBUG = false;
+
+        // Copy HTML + Text (mirror 111s ordering: try async API first, then copy-event fallback)
+        async function writeClipboardHTMLAndText_Single(html, text) {
+          if (navigator.clipboard && window.ClipboardItem) {
+            try {
+              const item = new ClipboardItem({
+                'text/html': new Blob([html], { type: 'text/html' }),
+                'text/plain': new Blob([text], { type: 'text/plain' }),
+              });
+              await navigator.clipboard.write([item]);
+              return;
+            } catch (e) {
+              if (DEBUG) console.debug('Clipboard write fallback (single):', e);
+            }
+          }
+          document.addEventListener(
+            'copy',
+            (e) => {
+              e.clipboardData.setData('text/html', html);
+              e.clipboardData.setData('text/plain', text);
+              e.preventDefault();
+            },
+            { once: true },
+          );
+          document.execCommand('copy');
+        }
+
+        // Convert embedded newlines to <br> for user messages (HTML path)
+        function replaceNewlinesWithBr_UserPreWrap(root) {
+          try {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            const toProcess = [];
+            for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+              if (n.nodeValue?.includes('\n')) toProcess.push(n);
+            }
+            for (const textNode of toProcess) {
+              const parts = textNode.nodeValue.split('\n');
+              const frag = document.createDocumentFragment();
+              parts.forEach((part, i) => {
+                if (part) frag.appendChild(document.createTextNode(part));
+                if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
+              });
+              textNode.parentNode.replaceChild(frag, textNode);
+            }
+          } catch (err) {
+            if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
+          }
+        }
+
+        // Normalize code blocks → <pre><code class="language-...">```lang ...```</code></pre>
+        function normalizeCodeBlocksInClone(root) {
+          const safeLang = (s) => {
+            const v = (s || '').trim();
+            return /^[a-z0-9+.#-]+$/i.test(v) ? v.toLowerCase() : '';
+          };
+          // Remove UI chrome (copy buttons/headers)
+          root
+            .querySelectorAll(
+              '.flex.items-center.text-token-text-secondary,[data-testid="copy-code-button"],button[aria-label*="Copy"],button[title*="Copy"]',
+            )
+            .forEach((el) => {
+              el.remove();
+            });
+
+          const preNodes = Array.from(root.querySelectorAll('pre'));
+          const codeBlocks = Array.from(
+            root.querySelectorAll(
+              'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
+            ),
+          ).filter((c) => !c.closest('pre'));
+          const blocks = [...preNodes, ...codeBlocks];
+
+          for (const node of blocks) {
+            const isPre = node.tagName === 'PRE';
+            const codeEl = isPre ? node.querySelector('code') || node : node;
+            let codeText = (codeEl?.innerText ?? node.innerText ?? '').replace(/\u00A0/g, ' ');
+            codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
+            codeText = codeText.replace(/\r\n?/g, '\n').replace(/[ \t\u00A0\r\n]+$/g, '');
+
+            let lang = '';
+            if (codeEl) {
+              const cls = Array.from(codeEl.classList || []).find((c) =>
+                c.toLowerCase().startsWith('language-'),
+              );
+              if (cls) lang = cls.split('language-')[1];
+              if (!lang && codeEl.dataset?.language) lang = codeEl.dataset.language;
+            }
+            if (!lang && isPre) {
+              const hdr = node.querySelector('.flex.items-center.text-token-text-secondary');
+              const hdrText = hdr?.innerText?.trim();
+              if (hdrText) lang = hdrText;
+            }
+            lang = safeLang(lang);
+
+            const eol = '\r\n';
+            let fenced;
+            if (/^\s*```/.test(codeText)) {
+              fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
+              if (!fenced.endsWith(eol)) fenced += eol;
+            } else {
+              fenced = `\`\`\`${lang || ''}${eol}${codeText}${eol}\`\`\`${eol}`;
+            }
+
+            const preNew = document.createElement('pre');
+            const codeNew = document.createElement('code');
+            if (lang) codeNew.className = `language-${lang}`;
+            codeNew.textContent = fenced;
+            preNew.appendChild(codeNew);
+            node.replaceWith(preNew);
+          }
+        }
+
+        // Strip data-* (prevents weird list detection in Word), keep real elements intact
+        function demotePTagsAndStripDataAttrs(root) {
+          for (const el of Array.from(root.querySelectorAll('*'))) {
+            for (const attr of Array.from(el.attributes)) {
+              if (
+                attr.name === 'data-start' ||
+                attr.name === 'data-end' ||
+                attr.name.startsWith('data-')
+              ) {
+                el.removeAttribute(attr.name);
+              }
+            }
+          }
+        }
+
+        // Split UL/OL so <pre> and following siblings don’t inherit bullets in Word
+        function splitListsAroundCodeBlocks_Word(root) {
+          ['ul', 'ol'].forEach((tag) => {
+            root.querySelectorAll(tag).forEach((list) => {
+              const lis = Array.from(list.children).filter((c) => c.tagName === 'LI');
+              if (!lis.some((li) => li.querySelector('pre'))) return;
+              const frag = document.createDocumentFragment();
+              let acc = document.createElement(tag);
+              const flushAcc = () => {
+                if (acc.children.length) frag.appendChild(acc);
+                acc = document.createElement(tag);
+              };
+              for (const li of lis) {
+                const firstPre = li.querySelector(':scope > pre') || li.querySelector('pre');
+                if (!firstPre) {
+                  acc.appendChild(li.cloneNode(true));
+                  continue;
+                }
+                const newLi = document.createElement('li');
+                for (const child of Array.from(li.childNodes)) {
+                  if (child === firstPre) break;
+                  newLi.appendChild(child.cloneNode(true));
+                }
+                if (newLi.childNodes.length) acc.appendChild(newLi);
+                flushAcc();
+                let started = false;
+                for (const child of Array.from(li.childNodes)) {
+                  if (child === firstPre) started = true;
+                  if (started) frag.appendChild(child.cloneNode(true));
+                }
+              }
+              flushAcc();
+              for (const n of Array.from(list.childNodes)) {
+                if (n.tagName !== 'LI') frag.appendChild(n.cloneNode(true));
+              }
+              list.replaceWith(frag);
+            });
+          });
+        }
+
+        function applyWordSpacingAndFont_Word(root) {
+          const fontStack = `'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif`;
+          const baseRules = [
+            `font-family:${fontStack}`,
+            'line-height:116%',
+            'mso-line-height-alt:116%',
+            'mso-line-height-rule:exactly',
+          ].join(';');
+          const base = root.getAttribute('style') || '';
+          root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+          const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
+          root.querySelectorAll(selector).forEach((el) => {
+            const s = el.getAttribute('style') || '';
+            const rules = [
+              `font-family:${fontStack}`,
+              'margin-top:0pt',
+              'margin-bottom:8pt',
+              'line-height:116%',
+              'mso-margin-top-alt:0pt',
+              'mso-margin-bottom-alt:8pt',
+              'mso-line-height-alt:116%',
+              'mso-line-height-rule:exactly',
+            ].join(';');
+            el.setAttribute('style', s ? `${s};${rules}` : rules);
+          });
+        }
+
+        // Inline guard used by single-message copy: no extra paragraphs, no labels.
+        // Break Word's auto-list at paragraph starts and after <br> by inserting
+        // WORD JOINER (U+2060) between the number and the delimiter, plus NBSP after.
+        function inlineGuardFirstRuns_Word(root) {
+          const WJ = '\u2060'; // WORD JOINER
+          const NBSP = '\u00A0';
+          // Matches: (leading spaces)(1..3 digits or A-Z)(. or ))(at least one space)
+          const LIST_START_RE = /^(\s*)(\d{1,3}|[A-Za-z])([.)])\s+/;
+
+          function firstText(rootEl) {
+            const w = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+              acceptNode(n) {
+                return (n.nodeValue || '').trim().length
+                  ? NodeFilter.FILTER_ACCEPT
+                  : NodeFilter.FILTER_SKIP;
+              },
+            });
+            return w.nextNode();
+          }
+
+          function neutralizeStart(textNode) {
+            const s = textNode.nodeValue || '';
+            if (!s) return;
+            if (LIST_START_RE.test(s)) {
+              textNode.nodeValue = s.replace(
+                LIST_START_RE,
+                (_, lead, num, punct) => `${lead}${num}${WJ}${punct}${NBSP}`,
+              );
+            }
+          }
+
+          // Paragraph-like blocks (but not inside real lists)
+          root.querySelectorAll('p, pre, blockquote, h1, h2, h3, h4, h5, h6, div').forEach((el) => {
+            if (el.closest('li, ol, ul')) return;
+            const t = firstText(el);
+            if (t) neutralizeStart(t);
+          });
+
+          // After each <br>, neutralize the next visual "line"
+          root.querySelectorAll('p, pre, blockquote, div').forEach((el) => {
+            if (el.closest('li, ol, ul')) return;
+            el.querySelectorAll('br').forEach((br) => {
+              let n = br.nextSibling;
+              while (
+                n &&
+                ((n.nodeType === 3 && !(n.nodeValue || '').trim()) ||
+                  (n.nodeType === 1 && n.tagName === 'BR'))
+              ) {
+                n = n.nextSibling;
+              }
+              if (!n) return;
+              if (n.nodeType === 3) {
+                neutralizeStart(n);
+              } else if (n.nodeType === 1) {
+                const t = firstText(n);
+                if (t) neutralizeStart(t);
+              }
+            });
+          });
+        }
+
+        // Plain text builder: convert each <pre> into a fenced block with CRLF line endings (matches 111s)
+        function buildPlainTextWithFences(root) {
+          const clone = root.cloneNode(true);
+          normalizeCodeBlocksInClone(clone);
+          for (const pre of Array.from(clone.querySelectorAll('pre'))) {
+            const codeEl = pre.querySelector('code');
+            let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
+            codeText = codeText
+              .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
+              .replace(/\r\n?/g, '\n')
+              .replace(/[ \t\u00A0\r\n]+$/g, '');
+            let lang = '';
+            if (codeEl) {
+              const cls = Array.from(codeEl.classList || []).find((c) =>
+                c.toLowerCase().startsWith('language-'),
+              );
+              if (cls) lang = cls.split('language-')[1];
+            }
+            const eol = '\r\n';
+            const out = codeText.trim().startsWith('```')
+              ? `\r\n${codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol)}\r\n`
+              : `\r\n\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
+            const container = document.createElement('div');
+            container.textContent = out;
+            pre.replaceWith(container);
+          }
+          // Mirror 111s: do not force-convert all non-code newlines; only code blocks are normalized to CRLF
+          return clone.innerText.replace(/\u00A0/g, ' ').trim();
+        }
+
+        // Build processed HTML + Text from a single content element (mirror 111s behavior)
+        function buildProcessedClipboardPayload_Single(contentEl) {
+          const cloneForHtml = contentEl.cloneNode(true);
+
+          // Preserve user message hard line breaks visually
+          const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
+          if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+
+          // Normalize DOM to Word-friendly HTML
+          normalizeCodeBlocksInClone(cloneForHtml);
+          demotePTagsAndStripDataAttrs(cloneForHtml);
+          splitListsAroundCodeBlocks_Word(cloneForHtml);
+
+          // Wrapper (acts like 111s turn wrapper — but no visible label)
+          const turnWrapper = document.createElement('div');
+          turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
+          // Preserve role tag (purely metadata)
+          const roleContainer = contentEl.closest?.('[data-message-author-role]');
+          turnWrapper.setAttribute(
+            'data-role',
+            roleContainer?.getAttribute?.('data-message-author-role') || 'assistant',
+          );
+
+          // 1) Body container (Word-friendly spacing + code/list normalization)
+          const bodyDiv = document.createElement('div');
+          bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+          applyWordSpacingAndFont_Word(bodyDiv);
+          splitListsAroundCodeBlocks_Word(bodyDiv);
+          inlineGuardFirstRuns_Word(bodyDiv);
+
+          // Assemble like 111s (simple container)
+          turnWrapper.appendChild(bodyDiv);
+          const html =
+            '<div data-export="chatgpt-shortcuts-single-message">' +
+            turnWrapper.outerHTML +
+            '</div>';
+
+          // Plain text variant with fenced code (no labels)
+          const text = buildPlainTextWithFences(contentEl);
+
+          return { html, text };
+        }
+
+        // Copy processed payload built from a content element
+        async function copyProcessedFromElement(el) {
+          const { html, text } = buildProcessedClipboardPayload_Single(el);
+          await writeClipboardHTMLAndText_Single(html, text);
+        }
+
+        // Visual selection (for feedback) + processed copy
+        function doSelectAndCopy(el, shouldCopy = true) {
+          try {
+            const selection = window.getSelection?.();
+            if (selection) selection.removeAllRanges();
+
+            const makeTextWalker = (root) =>
+              document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                  return node.nodeValue?.trim().length
+                    ? NodeFilter.FILTER_ACCEPT
+                    : NodeFilter.FILTER_SKIP;
+                },
+              });
+
+            const startWalker = makeTextWalker(el);
+            const startNode = startWalker.nextNode();
+            let endNode = null;
+            if (startNode) {
+              const endWalker = makeTextWalker(el);
+              for (let n = endWalker.nextNode(); n; n = endWalker.nextNode()) endNode = n;
+            }
+            const range = document.createRange();
+            if (startNode && endNode) {
+              range.setStart(startNode, 0);
+              range.setEnd(endNode, endNode.nodeValue.length);
+            } else {
+              range.selectNodeContents(el);
+            }
+            if (selection) selection.addRange(range);
+
+            if (shouldCopy) void copyProcessedFromElement(el);
+          } catch (err) {
+            if (DEBUG) console.debug('doSelectAndCopy failed:', err);
+          }
+        }
+
+        // Innermost visible text container for a given role container
+        function findContentElForTurn(roleContainer) {
+          const isUser = roleContainer.getAttribute('data-message-author-role') === 'user';
+          if (isUser) {
+            return (
+              roleContainer.querySelector(
+                '[data-message-author-role="user"] .whitespace-pre-wrap',
+              ) ||
+              roleContainer.querySelector(
+                '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
+              ) ||
+              roleContainer.querySelector('[data-message-author-role="user"]')
+            );
+          }
+          return (
+            roleContainer.querySelector(
+              '[data-message-author-role="assistant"] .whitespace-pre-wrap',
+            ) ||
+            roleContainer.querySelector(
+              '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
+            ) ||
+            roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
+            roleContainer.querySelector('[data-message-author-role="assistant"]')
+          );
+        }
+        // click handler uses processed copy
+        if (!window.__selectThenCopyCopyHandlerAttached) {
+          document.addEventListener('click', (e) => {
+            const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
+            if (!btn) return;
+
+            const roleContainer =
+              btn.closest('[data-message-author-role]') ||
+              btn
+                .closest('article[data-turn], article[data-testid^="conversation-turn-"]')
+                ?.querySelector(
+                  '[data-message-author-role="assistant"], [data-message-author-role="user"]',
+                );
+
+            if (!roleContainer) return;
+
+            const contentEl = findContentElForTurn(roleContainer);
+            if (contentEl && (contentEl.innerText || contentEl.textContent || '').trim()) {
+              // Always show selection AND copy processed HTML/Text
+              doSelectAndCopy(contentEl, true);
+            }
+          });
+          window.__selectThenCopyCopyHandlerAttached = true;
+        }
+        return () => {
           setTimeout(() => {
             try {
-              const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
-              const editSelectors = [
-                'button[aria-label="Edit message"]',
-                withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
-              ];
+              const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
+              const onlySelectUser = window.onlySelectUserCheckbox || false;
+              const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
+              const shouldCopy = !disableCopyAfterSelect;
 
-              const allButtons = Array.from(
-                new Set(
-                  editSelectors
-                    .flatMap((sel) =>
-                      Array.from(document.querySelectorAll(sel)).map(
-                        (node) => node.closest('button') || node,
-                      ),
-                    )
-                    .filter(Boolean),
+              const allConversationTurns = Array.from(
+                document.querySelectorAll(
+                  'article[data-turn], article[data-testid^="conversation-turn-"]',
                 ),
               );
 
-              const filteredButtonsData = allButtons
-                .filter((btn) => btn !== null)
-                .map((btn) => {
-                  const rect = btn.getBoundingClientRect();
-                  return { btn, rect };
-                })
-                .filter(({ btn, rect }) => isAboveComposer(rect, btn));
+              const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+              const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
 
-              filteredButtonsData.sort((a, b) => a.rect.top - b.rect.top);
+              const composerRect = (() => {
+                const composer = document.getElementById('composer-background');
+                return composer ? composer.getBoundingClientRect() : null;
+              })();
 
-              const inViewport = filteredButtonsData.filter(
-                ({ rect }) =>
-                  rect.bottom > 0 &&
-                  rect.right > 0 &&
-                  rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
-                  rect.left < (window.innerWidth || document.documentElement.clientWidth),
+              const visibleTurns = allConversationTurns.filter((el) => {
+                const rect = el.getBoundingClientRect();
+                const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
+                const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
+                if (!(horizontallyVisible && verticallyVisible)) return false;
+                if (composerRect && rect.top >= composerRect.top) return false;
+                return true;
+              });
+
+              const filteredVisibleTurns = visibleTurns.filter((el) => {
+                if (
+                  onlySelectAssistant &&
+                  !el.querySelector('[data-message-author-role="assistant"]')
+                )
+                  return false;
+                if (onlySelectUser && !el.querySelector('[data-message-author-role="user"]'))
+                  return false;
+                return true;
+              });
+
+              if (!filteredVisibleTurns.length) return;
+
+              filteredVisibleTurns.sort(
+                (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
               );
 
-              let targetButton = null;
-              if (inViewport.length > 0) {
-                const target = inViewport.reduce((bottomMost, current) =>
-                  current.rect.top > bottomMost.rect.top ? current : bottomMost,
-                );
-                targetButton = target.btn;
-              } else {
-                const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
-                if (aboveViewport.length > 0) {
-                  const target = aboveViewport.reduce((closest, current) =>
-                    current.rect.bottom > closest.rect.bottom ? current : closest,
+              const { lastSelectedIndex } = window.selectThenCopyState;
+              const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
+              const selectedTurn = filteredVisibleTurns[nextIndex];
+              if (!selectedTurn) return;
+
+              selectAndCopyMessage(selectedTurn, shouldCopy);
+              window.selectThenCopyState.lastSelectedIndex = nextIndex;
+
+              function selectAndCopyMessage(turn, shouldCopyParam) {
+                try {
+                  const isUser = !!turn.querySelector('[data-message-author-role="user"]');
+                  const isAssistant = !!turn.querySelector(
+                    '[data-message-author-role="assistant"]',
                   );
-                  targetButton = target.btn;
-                }
-              }
 
-              if (targetButton) {
-                gsapScrollToCenterAndClick(targetButton);
-              }
-            } catch {}
-          }, DELAY_INITIAL_SCAN);
-        },
-        [shortcuts.shortcutKeySendEdit]: () => {
-          try {
-            // Centralized timing constant
-            const DELAY_BEFORE_CLICK = 250; // was 500ms
+                  if (onlySelectUser && !isUser) return;
+                  if (onlySelectAssistant && !isAssistant) return;
 
-            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-            const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-
-            const isVisible = (btn) => {
-              if (!btn || btn.disabled) return false;
-              if (btn.closest('[aria-hidden="true"]')) return false;
-              const style = window.getComputedStyle(btn);
-              if (
-                style.display === 'none' ||
-                style.visibility === 'hidden' ||
-                style.opacity === '0'
-              )
-                return false;
-              const rect = btn.getBoundingClientRect();
-              return (
-                rect.width > 0 &&
-                rect.height > 0 &&
-                rect.bottom > 0 &&
-                rect.right > 0 &&
-                rect.top < viewportHeight &&
-                rect.left < viewportWidth &&
-                isAboveComposer(rect, btn)
-              );
-            };
-
-            const getButtonLabel = (btn) =>
-              (
-                btn?.textContent ||
-                btn?.innerText ||
-                btn?.getAttribute?.('aria-label') ||
-                ''
-              ).trim();
-
-            const findEditSendButton = (row) => {
-              if (!row) return null;
-              const buttons = Array.from(row.querySelectorAll('button'));
-              if (!buttons.length) return null;
-
-              const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
-              if (!hasCancel) return null;
-
-              const sendBtn =
-                buttons.find((btn) => /send/i.test(getButtonLabel(btn))) ||
-                buttons[1] ||
-                buttons[0];
-
-              return sendBtn || null;
-            };
-
-            // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
-            const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
-              .map((ta) => {
-                // Scope to the edit card around the textarea
-                const editCard =
-                  ta.closest('.bg-token-main-surface-tertiary') ||
-                  ta.closest('.rounded-3xl') ||
-                  ta.closest('[data-message-id]') ||
-                  ta.parentElement;
-                if (!editCard) return null;
-
-                const buttonRow =
-                  editCard.querySelector('div.flex.justify-end.gap-2') ||
-                  editCard.querySelector('div.flex.justify-end');
-                if (!buttonRow) return null;
-
-                return findEditSendButton(buttonRow);
-              })
-              .filter(Boolean);
-
-            // Fallback: only consider edit rows that contain an editable field + Cancel/Send
-            const fallbackButtons = Array.from(
-              document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'),
-            )
-              .map((row) => {
-                const scope = row.closest(
-                  '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], article[data-testid^="conversation-turn-"]',
-                );
-                if (!scope) return null;
-                if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
-                return findEditSendButton(row);
-              })
-              .filter(Boolean);
-
-            const candidateButtons = Array.from(
-              new Set([...textareaSendButtons, ...fallbackButtons]),
-            );
-
-            const visibleSendButtons = candidateButtons.filter(isVisible);
-
-            if (!visibleSendButtons.length) return;
-
-            // The lowest visible one (last in DOM order)
-            const btn = visibleSendButtons.reduce((bottomMost, current) => {
-              const bottomRect = bottomMost.getBoundingClientRect();
-              const currentRect = current.getBoundingClientRect();
-              return currentRect.top >= bottomRect.top ? current : bottomMost;
-            });
-
-            if (window.gsap) flashBorder(btn);
-
-            setTimeout(() => {
-              safeClick(btn);
-            }, DELAY_BEFORE_CLICK);
-          } catch {
-            // Fail silently
-          }
-        },
-        [shortcuts.shortcutKeyNewConversation]: function newConversation() {
-          // 1) Fire the native “New Chat” shortcut first (Ctrl/Cmd + Shift + O)
-          const isMac = isMacPlatform();
-          const eventInit = {
-            key: 'o',
-            code: 'KeyO',
-            keyCode: 79,
-            which: 79,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            shiftKey: true,
-            ctrlKey: !isMac,
-            metaKey: isMac,
-          };
-          document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-          document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-
-          // 2) Fallbacks only if nothing clickable is visible
-
-          // 2a) Try the test-id button
-          const newChatBtn = document.querySelector('button[data-testid="new-chat-button"]');
-          if (safeClick(newChatBtn)) return;
-
-          // 2b) Try known SVG-path variants (very old UIs)
-          const selectors = [
-            'button:has(svg > path[d^="M15.6729 3.91287C16.8918"])',
-            'button:has(svg > path[d^="M15.673 3.913a3.121 3.121 0 1 1 4.414 4.414"])',
-          ];
-          for (const sel of selectors) {
-            const btn = document.querySelector(sel);
-            if (safeClick(btn)) return;
-          }
-        },
-        [shortcuts.shortcutKeySearchConversationHistory]: () => {
-          // 1) Fire the native “Search Conversation History” shortcut first (Ctrl/Cmd + K)
-          const isMac = isMacPlatform();
-          const eventInit = {
-            key: 'k',
-            code: 'KeyK',
-            keyCode: 75,
-            which: 75,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            shiftKey: false,
-            ctrlKey: !isMac,
-            metaKey: isMac,
-            altKey: false,
-          };
-          document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-          document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-
-          // 2a) Try the test-id button
-          const searchBtn = document.querySelector(
-            'button[data-testid="search-conversation-button"]',
-          );
-          if (safeClick(searchBtn)) return;
-
-          // 2b) Very old SVG-path fallback
-          const path = document.querySelector('button svg path[d^="M10.75 4.25C7.16015"]');
-          const btn = path?.closest('button');
-          if (safeClick(btn)) return;
-        },
-        [shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
-          // native scroll to bottom
-          const el = getScrollableContainer();
-          if (!el) return;
-
-          gsap.to(el, {
-            duration: 0.3,
-            scrollTo: { y: 'max' },
-            ease: 'power4.out',
-          });
-        },
-        [shortcuts.shortcutKeyScrollToTop]: () => {
-          // native scroll to top
-          const el = getScrollableContainer();
-          if (!el) return;
-
-          gsap.to(el, {
-            duration: 0.3,
-            scrollTo: { y: 0 },
-            ease: 'power4.out',
-          });
-        },
-        // @note Toggle Sidebar Function
-        [shortcuts.shortcutKeyToggleSidebar]: function toggleSidebar() {
-          // —— Directional snap logic ——
-          const slimBarEl = document.getElementById('stage-sidebar-tiny-bar');
-          const largeSidebarEl = document.querySelector(
-            'aside#stage-sidebar:not([inert]):not(.pointer-events-none)',
-          );
-          if (window._fadeSlimSidebarEnabled && slimBarEl && !largeSidebarEl) {
-            window.hideSlimSidebarBarInstant();
-          } else if (window._fadeSlimSidebarEnabled && slimBarEl && largeSidebarEl) {
-            window.flashSlimSidebarBar();
-          }
-
-          // —— Existing toggle logic ——
-          const isMac = isMacPlatform();
-          const eventInit = {
-            key: 's',
-            code: 'KeyS',
-            keyCode: 83,
-            which: 83,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            shiftKey: true,
-            ctrlKey: !isMac,
-            metaKey: isMac,
-          };
-
-          // 1) Try native keyboard toggle
-          document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-          document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-          if (
-            document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !==
-            null
-          ) {
-            setTimeout(() => {}, 30);
-            return;
-          }
-
-          // 2) Fallback: direct open/close button
-          const direct = document.querySelector(
-            'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
-          );
-          if (safeClick(direct)) {
-            setTimeout(() => {}, 30);
-            return;
-          }
-
-          // 3) Final fallback: legacy SVG-path selectors
-          const selectors = [
-            '#bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
-            '#bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"])',
-            '#bottomBarContainer button:has(svg > path[d^="M8.85720 3H15.1428C16.2266"])',
-            '#sidebar-header button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
-            '#conversation-header-actions button:has(svg > path[d^="M8.85719 3H15.1428C16.2266"])',
-            '#sidebar-header button:has(svg > path[d^="M8.85719 3L13.5"])',
-            'div.draggable.h-header-height button[data-testid="open-sidebar-button"]',
-            'div.draggable.h-header-height button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
-            'button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
-            'button[data-testid="close-sidebar-button"]',
-            'button[data-testid="open-sidebar-button"]',
-            'button svg path[d^="M13.0187 7C13.0061"]',
-            'button svg path[d^="M8.85719 3L13.5"]',
-            'button svg path[d^="M3 8C3 7.44772"]',
-            'button svg path[d^="M8.85719 3H15.1428C16.2266"]',
-            'button svg path[d^="M3 6h18M3 12h18M3 18h18"]',
-            'button svg path[d^="M6 6h12M6 12h12M6 18h12"]',
-          ];
-          for (const sel of selectors) {
-            const el = document.querySelector(sel);
-            const btn = el?.closest('button');
-            if (safeClick(btn)) {
-              setTimeout(() => {}, 30);
-              return;
-            }
-          }
-
-          // 4) If still nothing, just exit
-          setTimeout(() => {}, 30);
-        },
-        [shortcuts.shortcutKeyActivateInput]: function activateInput() {
-          const selectors = [
-            '#prompt-textarea[contenteditable="true"]',
-            'div[contenteditable="true"][id="prompt-textarea"]',
-            'div.ProseMirror[contenteditable="true"]',
-          ];
-
-          for (const selector of selectors) {
-            const inputField = document.querySelector(selector);
-            if (inputField) {
-              inputField.focus();
-              return;
-            }
-          }
-
-          // Fallback: trigger the page’s native shortcut (Shift + Escape)
-          const eventInit = {
-            key: 'Escape',
-            code: 'Escape',
-            keyCode: 27,
-            which: 27,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            shiftKey: true,
-            ctrlKey: false,
-            metaKey: false,
-          };
-          document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-          document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-        },
-        [shortcuts.shortcutKeySearchWeb]: async () => {
-          // Unique config for this action
-          const ICON_PATH_PREFIX = ['M10 2.125C14.3492', '#6b0d8c']; // globe icon prefix
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
-          const SCROLL_ANCHOR_PCT =
-            typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-
-          // Centralized timing constants
-          const DELAY_INITIAL = 25; // was 50
-          const DELAY_POST_CLICK = 175; // was 350
-          const SCROLL_DURATION = 0.2; // was 0.6s
-
-          const getScrollableContainer =
-            typeof window.getScrollableContainer === 'function'
-              ? window.getScrollableContainer
-              : () => window;
-
-          const composerRect = () => {
-            const el = document.getElementById('composer-background');
-            return el ? el.getBoundingClientRect() : null;
-          };
-
-          const scrollToAnchor = (container, target, onComplete) => {
-            if (!window.gsap || !target) return onComplete?.();
-
-            const rect = target.getBoundingClientRect();
-            const contRect =
-              container === window
-                ? { top: 0, height: window.innerHeight }
-                : {
-                    top: container.getBoundingClientRect().top,
-                    height: container.clientHeight,
-                  };
-
-            const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-            const current = container === window ? window.scrollY : container.scrollTop;
-            let targetY =
-              container === window
-                ? current + rect.top - anchorPx
-                : container.scrollTop + (rect.top - contRect.top) - anchorPx;
-
-            const maxScroll =
-              container === window
-                ? (document.scrollingElement || document.documentElement).scrollHeight -
-                  window.innerHeight
-                : container.scrollHeight - container.clientHeight;
-            targetY = Math.max(0, Math.min(targetY, maxScroll));
-
-            gsap.to(container, {
-              duration: SCROLL_DURATION,
-              scrollTo: { y: targetY, autoKill: false },
-              ease: 'power4.out',
-              onComplete,
-            });
-          };
-
-          function isButtonCentered(container, btn) {
-            if (!window.gsap || !btn) return false;
-            const rect = btn.getBoundingClientRect();
-            const contRect =
-              container === window
-                ? { top: 0, height: window.innerHeight }
-                : {
-                    top: container.getBoundingClientRect().top,
-                    height: container.clientHeight,
-                  };
-
-            const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-            const currentScroll = container === window ? window.scrollY : container.scrollTop;
-            const btnTop =
-              container === window
-                ? rect.top + window.scrollY
-                : rect.top - contRect.top + container.scrollTop;
-            const targetY = btnTop - anchorPx;
-            const delta = Math.abs(currentScroll - targetY);
-            return delta < 2; // threshold
-          }
-
-          const getMsgId = (btn) =>
-            btn.closest('[data-message-id]')?.getAttribute('data-message-id');
-
-          const relaunchHover = (wrapper) => {
-            if (!wrapper) return;
-            wrapper.classList.add('force-hover');
-            ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
-              wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
-            });
-          };
-
-          const collectCandidates = () => {
-            const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
-              .map((el) => el.previousElementSibling)
-              .filter((el) => el?.tagName === 'BUTTON');
-            const iconSelectors = [
-              'button[aria-label="Previous response"]',
-              withPrefix(svgSelectorForTokens(['M11.5292 3.7793', '#8ee2e9']), 'button'),
-            ];
-            const iconBtns = iconSelectors.flatMap((sel) =>
-              Array.from(document.querySelectorAll(sel)).map(
-                (node) => node.closest('button') || node,
-              ),
-            );
-            return [...divBtns, ...iconBtns].filter(Boolean);
-          };
-
-          const isOverlapComposer = (rect) => {
-            const comp = composerRect();
-            return comp
-              ? !(
-                  rect.bottom < comp.top ||
-                  rect.top > comp.bottom ||
-                  rect.right < comp.left ||
-                  rect.left > comp.right
-                )
-              : false;
-          };
-
-          const chooseTarget = (buttons) => {
-            const scrollY = window.scrollY;
-            const viewH = window.innerHeight;
-            const BOTTOM_BUFFER = 85;
-
-            const withMeta = buttons.map((btn) => {
-              const rect = btn.getBoundingClientRect();
-              return {
-                btn,
-                rect,
-                absBottom: rect.bottom + scrollY,
-                fullyVisible:
-                  rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
-              };
-            });
-
-            const fully = withMeta.filter((m) => m.fullyVisible);
-            if (fully.length) {
-              return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-            }
-            const above = withMeta.filter((m) => m.rect.bottom <= 0);
-            if (above.length) {
-              return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-            }
-            return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
-          };
-
-          const recenter = (msgId) => {
-            if (!msgId) return;
-            const container = getScrollableContainer();
-            const target = document.querySelector(`[data-message-id="${msgId}"] button`);
-            if (!target) return;
-            scrollToAnchor(container, target);
-          };
-
-          setTimeout(() => {
-            try {
-              const all = collectCandidates();
-              if (!all.length) return;
-
-              let target = chooseTarget(all);
-              const container = getScrollableContainer();
-
-              if (opts.previewOnly && target && isButtonCentered(container, target)) {
-                const idx = all.indexOf(target);
-                let found = false;
-                for (let i = idx - 1; i >= 0; --i) {
-                  if (!isButtonCentered(container, all[i])) {
-                    target = all[i];
-                    found = true;
-                    break;
+                  let contentEl = null;
+                  if (isUser) {
+                    contentEl =
+                      turn.querySelector(
+                        '[data-message-author-role="user"] .whitespace-pre-wrap',
+                      ) ||
+                      turn.querySelector(
+                        '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
+                      ) ||
+                      turn.querySelector('[data-message-author-role="user"]');
+                  } else {
+                    contentEl =
+                      turn.querySelector(
+                        '[data-message-author-role="assistant"] .whitespace-pre-wrap',
+                      ) ||
+                      turn.querySelector(
+                        '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
+                      ) ||
+                      turn.querySelector('.prose, .markdown, .markdown-new-styling') ||
+                      turn.querySelector('[data-message-author-role="assistant"]');
                   }
+
+                  if (!contentEl || !contentEl.innerText.trim()) return;
+
+                  doSelectAndCopy(contentEl, !!shouldCopyParam);
+                } catch (err) {
+                  if (DEBUG) console.debug('selectAndCopyMessage failed:', err);
                 }
-                if (!found && all.length > 1) {
-                  target = all[all.length - 1];
-                }
-              }
-
-              if (!target) return;
-              const msgId = getMsgId(target);
-
-              scrollToAnchor(container, target, () => {
-                flashBorder(target);
-                relaunchHover(target.closest('[class*="group-hover"]'));
-
-                if (!opts.previewOnly) {
-                  setTimeout(() => {
-                    target.click();
-                    setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
-                  }, DELAY_POST_CLICK);
-                }
-              });
-            } catch (_) {
-              /* silent */
-            }
-          }, DELAY_INITIAL);
-        },
-
-        /*──────────────────────────────────────────────────────────────────────────────
-         *  NEXT‑THREAD shortcut – tracks ONE specific button through re‑render
-         *────────────────────────────────────────────────────────────────────────────*/
-        /* Thread‑Navigation “next” shortcut – full drop‑in replacement */
-        // Updated "Thread Navigation" shortcut implementation
-        // Fulfils mandatory sequence: select‑scroll‑highlight‑click‑pause‑recenter
-
-        // Export / attach to your shortcuts map
-        [shortcuts.shortcutKeyNextThread]: (opts = {}) => {
-          const SCROLL_ANCHOR_PCT =
-            typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-
-          // Centralized timing constants (all halved)
-          const DELAY_INITIAL = 25; // was 50
-          const DELAY_POST_CLICK = 200; // was 350
-          const SCROLL_DURATION = 0.2; // was 0.6s
-
-          const getScrollableContainer =
-            typeof window.getScrollableContainer === 'function'
-              ? window.getScrollableContainer
-              : () => window;
-
-          const composerRect = () => {
-            const el = document.getElementById('composer-background');
-            return el ? el.getBoundingClientRect() : null;
-          };
-
-          const scrollToAnchor = (container, target, onComplete) => {
-            if (!window.gsap || !target) return onComplete?.();
-
-            const rect = target.getBoundingClientRect();
-            const contRect =
-              container === window
-                ? { top: 0, height: window.innerHeight }
-                : {
-                    top: container.getBoundingClientRect().top,
-                    height: container.clientHeight,
-                  };
-
-            const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-            const current = container === window ? window.scrollY : container.scrollTop;
-            let targetY =
-              container === window
-                ? current + rect.top - anchorPx
-                : container.scrollTop + (rect.top - contRect.top) - anchorPx;
-
-            const maxScroll =
-              container === window
-                ? (document.scrollingElement || document.documentElement).scrollHeight -
-                  window.innerHeight
-                : container.scrollHeight - container.clientHeight;
-            targetY = Math.max(0, Math.min(targetY, maxScroll));
-
-            gsap.to(container, {
-              duration: SCROLL_DURATION,
-              scrollTo: { y: targetY, autoKill: false },
-              ease: 'power4.out',
-              onComplete,
-            });
-          };
-
-          function isButtonCentered(container, btn) {
-            if (!window.gsap || !btn) return false;
-            const rect = btn.getBoundingClientRect();
-            const contRect =
-              container === window
-                ? { top: 0, height: window.innerHeight }
-                : {
-                    top: container.getBoundingClientRect().top,
-                    height: container.clientHeight,
-                  };
-
-            const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-            const currentScroll = container === window ? window.scrollY : container.scrollTop;
-            const btnTop =
-              container === window
-                ? rect.top + window.scrollY
-                : rect.top - contRect.top + container.scrollTop;
-            const targetY = btnTop - anchorPx;
-            const delta = Math.abs(currentScroll - targetY);
-            return delta < 2; // threshold
-          }
-
-          const getMsgId = (btn) =>
-            btn.closest('[data-message-id]')?.getAttribute('data-message-id');
-
-          const relaunchHover = (wrapper) => {
-            if (!wrapper) return;
-            wrapper.classList.add('force-hover');
-            ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
-              wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
-            });
-          };
-
-          const collectCandidates = () => {
-            const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
-              .map((el) => el.previousElementSibling)
-              .filter((el) => el?.tagName === 'BUTTON');
-            const iconSelectors = [
-              'button[aria-label="Next response"]',
-              withPrefix(svgSelectorForTokens(['M7.52925 3.7793', '#b140e7']), 'button'),
-            ];
-            const pathBtns = iconSelectors.flatMap((sel) =>
-              Array.from(document.querySelectorAll(sel)).map(
-                (node) => node.closest('button') || node,
-              ),
-            );
-
-            // Exclude "Thought for" buttons
-            const isExcluded = (btn) => {
-              const span = btn.querySelector('span');
-              if (!span) return false;
-              return /^Thought for\b/.test(span.textContent.trim());
-            };
-
-            return [...divBtns, ...pathBtns].filter(Boolean).filter((btn) => !isExcluded(btn));
-          };
-
-          const isOverlapComposer = (rect) => {
-            const comp = composerRect();
-            return comp
-              ? !(
-                  rect.bottom < comp.top ||
-                  rect.top > comp.bottom ||
-                  rect.right < comp.left ||
-                  rect.left > comp.right
-                )
-              : false;
-          };
-
-          const chooseTarget = (buttons) => {
-            const scrollY = window.scrollY;
-            const viewH = window.innerHeight;
-            const BOTTOM_BUFFER = 85;
-
-            const withMeta = buttons.map((btn) => {
-              const rect = btn.getBoundingClientRect();
-              return {
-                btn,
-                rect,
-                absBottom: rect.bottom + scrollY,
-                fullyVisible:
-                  rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
-              };
-            });
-
-            const fully = withMeta.filter((m) => m.fullyVisible);
-            if (fully.length) {
-              return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-            }
-            const above = withMeta.filter((m) => m.rect.bottom <= 0);
-            if (above.length) {
-              return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-            }
-            return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
-          };
-
-          const recenter = (msgId) => {
-            if (!msgId) return;
-            const container = getScrollableContainer();
-            const target = document.querySelector(`[data-message-id="${msgId}"] button`);
-            if (!target) return;
-            scrollToAnchor(container, target);
-          };
-
-          setTimeout(() => {
-            try {
-              const all = collectCandidates();
-              if (!all.length) return;
-
-              let target = chooseTarget(all);
-              const container = getScrollableContainer();
-
-              if (opts.previewOnly && target && isButtonCentered(container, target)) {
-                const idx = all.indexOf(target);
-                for (let i = idx - 1; i >= 0; --i) {
-                  if (!isButtonCentered(container, all[i])) {
-                    target = all[i];
-                    break;
-                  }
-                }
-              }
-
-              if (!target) return;
-              const msgId = getMsgId(target);
-
-              scrollToAnchor(container, target, () => {
-                flashBorder(target);
-                relaunchHover(target.closest('[class*="group-hover"]'));
-
-                if (!opts.previewOnly) {
-                  setTimeout(() => {
-                    target.click();
-                    setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
-                  }, DELAY_POST_CLICK);
-                }
-              });
-            } catch (_) {
-              /* silent */
-            }
-          }, DELAY_INITIAL);
-        },
-
-        [shortcuts.selectThenCopy]: (() => {
-          window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
-          const DEBUG = false;
-
-          // Copy HTML + Text (mirror 111s ordering: try async API first, then copy-event fallback)
-          async function writeClipboardHTMLAndText_Single(html, text) {
-            if (navigator.clipboard && window.ClipboardItem) {
-              try {
-                const item = new ClipboardItem({
-                  'text/html': new Blob([html], { type: 'text/html' }),
-                  'text/plain': new Blob([text], { type: 'text/plain' }),
-                });
-                await navigator.clipboard.write([item]);
-                return;
-              } catch (e) {
-                if (DEBUG) console.debug('Clipboard write fallback (single):', e);
-              }
-            }
-            document.addEventListener(
-              'copy',
-              (e) => {
-                e.clipboardData.setData('text/html', html);
-                e.clipboardData.setData('text/plain', text);
-                e.preventDefault();
-              },
-              { once: true },
-            );
-            document.execCommand('copy');
-          }
-
-          // Convert embedded newlines to <br> for user messages (HTML path)
-          function replaceNewlinesWithBr_UserPreWrap(root) {
-            try {
-              const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-              const toProcess = [];
-              for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-                if (n.nodeValue?.includes('\n')) toProcess.push(n);
-              }
-              for (const textNode of toProcess) {
-                const parts = textNode.nodeValue.split('\n');
-                const frag = document.createDocumentFragment();
-                parts.forEach((part, i) => {
-                  if (part) frag.appendChild(document.createTextNode(part));
-                  if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
-                });
-                textNode.parentNode.replaceChild(frag, textNode);
               }
             } catch (err) {
-              if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
+              if (DEBUG) console.debug('outer selectThenCopy failure:', err);
+            }
+          }, 50);
+        };
+      })(),
+      [shortcuts.shortcutKeyToggleModelSelector]: () => {
+        window.toggleModelSelector();
+      },
+      // Regenerate: open the kebab/overflow menu, then click the "Regenerate" sub-item.
+      // Note: these two path prefixes can be the same (as in this case) or different for other actions.
+      [shortcuts.shortcutKeyRegenerateTryAgain]: () => {
+        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // sub-item icon path (prefix)
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+      [shortcuts.shortcutKeyRegenerateMoreConcise]: () => {
+        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['M10.2002 7.91699L16.8669', '#155a34']; // sub-item icon path (prefix)
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+      [shortcuts.shortcutKeyRegenerateAddDetails]: () => {
+        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['M14.3013 12.6816C14.6039', '#71a046']; // sub-item icon path (prefix)
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+      [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
+        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['M15.4707 17.137C15.211', '#77bc5f']; // sub-item icon path (prefix)
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+      [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
+        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu/overflow button icon path (prefix)
+        runRadixMenuActionFocusInputByName(FIRST_BTN_PATH, 'contextual-retry-dropdown-input', {
+          caret: 'end', // 'start' | 'end'
+          selectAll: false, // true to select existing text
+        });
+      },
+      [shortcuts.shortcutKeyMoreDotsReadAloud]: () => {
+        const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2'];
+        const SUB_ITEM_BTN_PATH = ['M9.75122 4.09203C9.75122', '#54f145'];
+        const EXCLUDE_ANCESTOR = '#bottomBarContainer';
+
+        const openMenuSel = 'div[role="menu"][data-state="open"]';
+
+        function activate(el) {
+          try {
+            el.focus();
+          } catch {}
+          try {
+            el.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
+            );
+            el.dispatchEvent(
+              new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }),
+            );
+          } catch {}
+          try {
+            el.click();
+          } catch {}
+        }
+
+        // 1) If a Stop item is visible in an open menu, click it (stop playback).
+        const stopInOpenMenu = document.querySelector(
+          `${openMenuSel} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
+        );
+        if (stopInOpenMenu) {
+          if (window.gsap && typeof flashBorder === 'function') flashBorder(stopInOpenMenu);
+          activate(stopInOpenMenu);
+          return;
+        }
+
+        // 2) If the Read Aloud sub-item is already exposed in an open menu, click it directly.
+        const readAloudSelector = withPrefix(
+          svgSelectorForTokens(SUB_ITEM_BTN_PATH),
+          `${openMenuSel} div[role="menuitem"]`,
+        );
+        const exposedReadAloudPath = document.querySelector(readAloudSelector);
+        if (exposedReadAloudPath) {
+          const item = exposedReadAloudPath.closest('div[role="menuitem"]');
+          if (item) {
+            if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
+            activate(item);
+            return;
+          }
+        }
+
+        // 3) Otherwise, open the menu on the lowest eligible "More dots" button and click Read Aloud.
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, EXCLUDE_ANCESTOR);
+      },
+      [shortcuts.shortcutKeyMoreDotsBranchInNewChat]: () => {
+        const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2']; // menu button icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['M3.32996 10H8.01173C8.7455', '#03583c']; // sub-item icon path (prefix)
+        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
+      },
+      [shortcuts.shortcutKeyThinkingExtended]: () => {
+        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+        const SUB_ITEM_BTN_PATH = '#143e56';
+        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+
+      [shortcuts.shortcutKeyThinkingStandard]: () => {
+        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+        const SUB_ITEM_BTN_PATH = '#fec800';
+        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+      },
+      [shortcuts.shortcutKeyTemporaryChat]: () => {
+        const root = document.querySelector('#conversation-header-actions') || document;
+        const el =
+          root
+            .querySelector('button svg use[href*="#28a8a0"]')
+            ?.closest('button') || // Turn on
+          root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button'); // Turn off
+        if (!el) return;
+        smartClick(el);
+      },
+      [shortcuts.shortcutKeyStudy]: async () => {
+        const ICON_PATH_PREFIX = ['M16.3965 5.01128C16.3963', '#1fa93b']; // book icon prefix
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyCreateImage]: async () => {
+        const ICON_PATH_PREFIX = ['M9.38759 8.53403C10.0712', '#266724']; // image icon prefix
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyToggleCanvas]: async () => {
+        const ICON_PATH_PREFIX = ['M12.0303 4.11328C13.4406', '#cf3864']; // canvas icon prefix
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
+        const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyToggleDictate]: () => {
+        if (dictateInProgress) return;
+        dictateInProgress = true;
+        setTimeout(() => {
+          dictateInProgress = false;
+        }, 300);
+
+        const composerRoot =
+          document.getElementById('thread-bottom-container') ||
+          document.querySelector('form[data-type="unified-composer"]') ||
+          document.getElementById('composer-background') ||
+          document.body;
+
+        const findClickableBySpriteId = (spriteId) => {
+          const safe = String(spriteId).replace(/(["\\])/g, '\\$1');
+          const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
+          if (!use) return null;
+          return (
+            use.closest('button, [role="button"], a, [tabindex]') ||
+            use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
+            null
+          );
+        };
+
+        const click = (el) => {
+          if (!el) return false;
+          try {
+            el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+          } catch {}
+          flashBorder(el);
+          smartClick(el);
+          return true;
+        };
+
+        // If dictation is active, prefer submitting (not cancelling).
+        const submitBtn = findClickableBySpriteId('#fa1dbd');
+        if (click(submitBtn)) return;
+
+        // If submit isn't available, stop dictation.
+        const stopBtn = findClickableBySpriteId('#85f94b');
+        if (click(stopBtn)) return;
+
+        // Otherwise start dictation (avoid Voice Mode button).
+        const dictateBtn = findClickableBySpriteId('#29f921');
+        click(dictateBtn);
+      },
+      [shortcuts.shortcutKeyCancelDictation]: async () => {
+        // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.
+        const composerRoot =
+          document.getElementById('thread-bottom-container') ||
+          document.querySelector('form[data-type="unified-composer"]') ||
+          document.getElementById('composer-background') ||
+          document.body;
+
+        const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
+        const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
+        const btn = use?.closest('button, [role="button"], a, [tabindex]') || null;
+
+        // Only stop if Stop dictation is currently available; otherwise no-op.
+        if (!btn) return;
+
+        try {
+          btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+        } catch {}
+        flashBorder(btn);
+        await sleep(DELAYS.beforeFinalClick);
+        smartClick(btn);
+      },
+      [shortcuts.shortcutKeyShare]: async () => {
+        await clickButtonByTestId('share-chat-button');
+      },
+      [shortcuts.shortcutKeyThinkLonger]: async () => {
+        const ICON_PATH_PREFIX = ['M14.3352 10.0257C14.3352', '#e717cc']; // Thinking (sprite id)
+        await runActionByIcon(ICON_PATH_PREFIX);
+      },
+      [shortcuts.shortcutKeyNewGptConversation]: () => {
+        const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
+        window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH, { fallbackText: 'New chat' });
+      },
+      // @note [shortcuts.selectThenCopyAllMessages]: (() => {
+      [shortcuts.selectThenCopyAllMessages]: (() => {
+        const DEBUG = false;
+
+        // Utility: copy HTML + text to clipboard with fallback
+        async function writeClipboardHTMLAndText_EntireConv(html, text) {
+          if (navigator.clipboard && window.ClipboardItem) {
+            try {
+              const item = new ClipboardItem({
+                'text/html': new Blob([html], { type: 'text/html' }),
+                'text/plain': new Blob([text], { type: 'text/plain' }),
+              });
+              await navigator.clipboard.write([item]);
+              return;
+            } catch (e) {
+              if (DEBUG) console.debug('Clipboard write fallback:', e);
             }
           }
+          document.addEventListener(
+            'copy',
+            (e) => {
+              e.clipboardData.setData('text/html', html);
+              e.clipboardData.setData('text/plain', text);
+              e.preventDefault();
+            },
+            { once: true },
+          );
+          document.execCommand('copy');
+        }
 
-          // Normalize code blocks → <pre><code class="language-...">```lang ...```</code></pre>
-          function normalizeCodeBlocksInClone(root) {
-            const safeLang = (s) => {
-              const v = (s || '').trim();
-              return /^[a-z0-9+.#-]+$/i.test(v) ? v.toLowerCase() : '';
-            };
-            // Remove UI chrome (copy buttons/headers)
-            root
-              .querySelectorAll(
-                '.flex.items-center.text-token-text-secondary,[data-testid="copy-code-button"],button[aria-label*="Copy"],button[title*="Copy"]',
-              )
-              .forEach((el) => {
-                el.remove();
+        // Utility: create a single Range spanning all specified elements (for visual selection feedback)
+        function createSelectionRangeForEls_EntireConv(els) {
+          try {
+            const selection = window.getSelection?.();
+            if (!selection || !els.length) return null;
+            selection.removeAllRanges();
+
+            function makeTextWalker(root) {
+              return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                  return node.nodeValue?.trim().length
+                    ? NodeFilter.FILTER_ACCEPT
+                    : NodeFilter.FILTER_SKIP;
+                },
               });
+            }
 
+            function findFirstTextNode(root) {
+              const w = makeTextWalker(root);
+              return w.nextNode();
+            }
+
+            function findLastTextNode(root) {
+              const w = makeTextWalker(root);
+              let last = null;
+              let n = w.nextNode();
+              while (n) {
+                last = n;
+                n = w.nextNode();
+              }
+              return last;
+            }
+
+            const firstEl = els[0];
+            const lastEl = els[els.length - 1];
+            const startNode = findFirstTextNode(firstEl) || firstEl;
+            const endNode = findLastTextNode(lastEl) || lastEl;
+
+            const range = document.createRange();
+            if (startNode.nodeType === Node.TEXT_NODE) {
+              range.setStart(startNode, 0);
+            } else {
+              range.setStart(startNode, 0);
+            }
+            if (endNode.nodeType === Node.TEXT_NODE) {
+              range.setEnd(endNode, endNode.nodeValue.length);
+            } else {
+              range.setEnd(endNode, endNode.childNodes.length);
+            }
+            return range;
+          } catch (err) {
+            if (DEBUG) console.debug('createSelectionRangeForEls_EntireConv error:', err);
+            return null;
+          }
+        }
+
+        // Convert newline characters to in user messages so paste targets keep line breaks.
+        // We conservatively transform all text nodes under the clone (user messages are plain text in a pre-wrap container).
+        function replaceNewlinesWithBr_UserPreWrap(root) {
+          try {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+            const toProcess = [];
+            let n = walker.nextNode();
+            while (n) {
+              if (n.nodeValue?.includes('\n')) toProcess.push(n);
+              n = walker.nextNode();
+            }
+            for (const textNode of toProcess) {
+              const parts = textNode.nodeValue.split('\n');
+              const frag = document.createDocumentFragment();
+              parts.forEach((part, i) => {
+                if (part) frag.appendChild(document.createTextNode(part));
+                if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
+              });
+              textNode.parentNode.replaceChild(frag, textNode);
+            }
+          } catch (err) {
+            if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
+          }
+        }
+
+        // Identify the content element for a user/assistant turn
+        function findContentElForTurn_EntireConv(container) {
+          const assistantScope = container.matches?.('[data-message-author-role="assistant"]')
+            ? container
+            : container.querySelector?.('[data-message-author-role="assistant"]');
+          const userScope = container.matches?.('[data-message-author-role="user"]')
+            ? container
+            : container.querySelector?.('[data-message-author-role="user"]');
+          if (assistantScope) {
+            return (
+              assistantScope.querySelector('.whitespace-pre-wrap') ||
+              assistantScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
+              assistantScope
+            );
+          }
+          if (userScope) {
+            return (
+              userScope.querySelector('.whitespace-pre-wrap') ||
+              userScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
+              userScope
+            );
+          }
+          return (
+            container.querySelector?.('.whitespace-pre-wrap') ||
+            container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
+            container
+          );
+        }
+
+        // Checkboxes or booleans -> forced boolean
+        function resolveFlag_EntireConv(v) {
+          return !!(v && typeof v === 'object' && 'checked' in v ? v.checked : v);
+        }
+
+        // Build the processed HTML + Text payload from DOM, honoring role filters and label settings
+        function buildProcessedClipboardPayload_EntireConv({
+          includeAssistant,
+          includeUser,
+          includeLabels,
+        }) {
+          // helper: infer language from code/pre UI
+          function inferLangFromPre(pre) {
+            let lang = '';
+            const codeEl = pre.querySelector('code');
+            if (codeEl) {
+              const cls = Array.from(codeEl.classList || []).find((c) =>
+                c.toLowerCase().startsWith('language-'),
+              );
+              if (cls) lang = cls.split('language-')[1];
+            }
+            if (!lang) {
+              // Try header label inside ChatGPT’s code block UI (e.g., "js")
+              const header = pre.querySelector('.flex.items-center.text-token-text-secondary');
+              const headerText = header?.innerText?.trim();
+              // hyphen placed at end to avoid escape (fixes biome noUselessEscapeInRegex)
+              if (headerText && /^[a-z0-9+.#-]+$/i.test(headerText)) {
+                lang = headerText.toLowerCase();
+              }
+            }
+            return lang;
+          }
+
+          // helper: simplify ChatGPT code block UI to <pre><code class="language-...">...</code></pre>
+          function normalizeCodeBlocksInClone(root) {
             const preNodes = Array.from(root.querySelectorAll('pre'));
             const codeBlocks = Array.from(
               root.querySelectorAll(
@@ -3530,48 +4313,53 @@ const delays = DELAYS;
               ),
             ).filter((c) => !c.closest('pre'));
             const blocks = [...preNodes, ...codeBlocks];
-
             for (const node of blocks) {
               const isPre = node.tagName === 'PRE';
               const codeEl = isPre ? node.querySelector('code') || node : node;
               let codeText = (codeEl?.innerText ?? node.innerText ?? '').replace(/\u00A0/g, ' ');
               codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-              codeText = codeText.replace(/\r\n?/g, '\n').replace(/[ \t\u00A0\r\n]+$/g, '');
-
+              codeText = codeText.replace(/\r\n?/g, '\n');
+              codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
               let lang = '';
-              if (codeEl) {
-                const cls = Array.from(codeEl.classList || []).find((c) =>
+              if (isPre) {
+                lang = inferLangFromPre(node);
+                if (!lang && codeEl) {
+                  const cls1 = Array.from(codeEl.classList || []).find((c) =>
+                    c.toLowerCase().startsWith('language-'),
+                  );
+                  if (cls1) lang = cls1.split('language-')[1];
+                }
+              } else if (codeEl) {
+                const cls2 = Array.from(codeEl.classList || []).find((c) =>
                   c.toLowerCase().startsWith('language-'),
                 );
-                if (cls) lang = cls.split('language-')[1];
-                if (!lang && codeEl.dataset?.language) lang = codeEl.dataset.language;
+                if (cls2) lang = cls2.split('language-')[1];
               }
-              if (!lang && isPre) {
-                const hdr = node.querySelector('.flex.items-center.text-token-text-secondary');
-                const hdrText = hdr?.innerText?.trim();
-                if (hdrText) lang = hdrText;
-              }
-              lang = safeLang(lang);
-
-              const eol = '\r\n';
-              let fenced;
-              if (/^\s*```/.test(codeText)) {
-                fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-                if (!fenced.endsWith(eol)) fenced += eol;
-              } else {
-                fenced = `\`\`\`${lang || ''}${eol}${codeText}${eol}\`\`\`${eol}`;
-              }
-
               const preNew = document.createElement('pre');
               const codeNew = document.createElement('code');
               if (lang) codeNew.className = `language-${lang}`;
-              codeNew.textContent = fenced;
+              // Use CRLF so Word keeps the closing fence on its own line (no $ markers)
+              const eol = '\r\n';
+              const fenceOpen = `\`\`\`${lang || ''}`;
+
+              // Emit clean fenced block only
+              let fenced;
+              if (/^\s*```/.test(codeText)) {
+                // Already fenced: normalize line endings and ensure trailing EOL
+                fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
+                if (!fenced.endsWith(eol)) fenced += eol;
+              } else {
+                fenced = `${fenceOpen}${eol}${codeText}${eol}\`\`\`${eol}`;
+              }
+
+              codeNew.textContent = fenced; // literal fenced text inside pre/code
               preNew.appendChild(codeNew);
+
+              // Replace the original node with normalized pre/code
               node.replaceWith(preNew);
             }
           }
-
-          // Strip data-* (prevents weird list detection in Word), keep real elements intact
+          // Strip Word-confusing data-* attributes (preserve <p> semantics for proper paragraph spacing)
           function demotePTagsAndStripDataAttrs(root) {
             for (const el of Array.from(root.querySelectorAll('*'))) {
               for (const attr of Array.from(el.attributes)) {
@@ -3585,8 +4373,13 @@ const delays = DELAYS;
               }
             }
           }
-
-          // Split UL/OL so <pre> and following siblings don’t inherit bullets in Word
+          // Add minimal list guard without altering margins (keeps After: 8pt intact)
+          function addListGuardStyles(el) {
+            const existing = el.getAttribute('style') || '';
+            const guard = 'list-style-type:none;';
+            el.setAttribute('style', existing ? `${existing};${guard}` : guard);
+          }
+          // Split UL/OL so code blocks and follow-up paragraphs don't inherit bullets in Word
           function splitListsAroundCodeBlocks_Word(root) {
             ['ul', 'ol'].forEach((tag) => {
               root.querySelectorAll(tag).forEach((list) => {
@@ -3614,7 +4407,7 @@ const delays = DELAYS;
                   let started = false;
                   for (const child of Array.from(li.childNodes)) {
                     if (child === firstPre) started = true;
-                    if (started) frag.appendChild(child.cloneNode(true));
+                    if (started) frag.appendChild(child.cloneNode(true)); // move <pre> and any siblings after
                   }
                 }
                 flushAcc();
@@ -3625,1331 +4418,476 @@ const delays = DELAYS;
               });
             });
           }
-
-          function applyWordSpacingAndFont_Word(root) {
-            const fontStack = `'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif`;
-            const baseRules = [
-              `font-family:${fontStack}`,
-              'line-height:116%',
-              'mso-line-height-alt:116%',
-              'mso-line-height-rule:exactly',
-            ].join(';');
-            const base = root.getAttribute('style') || '';
-            root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
-            const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
-            root.querySelectorAll(selector).forEach((el) => {
-              const s = el.getAttribute('style') || '';
-              const rules = [
-                `font-family:${fontStack}`,
-                'margin-top:0pt',
-                'margin-bottom:8pt',
-                'line-height:116%',
-                'mso-margin-top-alt:0pt',
-                'mso-margin-bottom-alt:8pt',
-                'mso-line-height-alt:116%',
-                'mso-line-height-rule:exactly',
-              ].join(';');
-              el.setAttribute('style', s ? `${s};${rules}` : rules);
-            });
-          }
-
-          // Inline guard used by single-message copy: no extra paragraphs, no labels.
-          // Break Word's auto-list at paragraph starts and after <br> by inserting
-          // WORD JOINER (U+2060) between the number and the delimiter, plus NBSP after.
-          function inlineGuardFirstRuns_Word(root) {
-            const WJ = '\u2060'; // WORD JOINER
-            const NBSP = '\u00A0';
-            // Matches: (leading spaces)(1..3 digits or A-Z)(. or ))(at least one space)
-            const LIST_START_RE = /^(\s*)(\d{1,3}|[A-Za-z])([.)])\s+/;
-
-            function firstText(rootEl) {
-              const w = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
-                acceptNode(n) {
-                  return (n.nodeValue || '').trim().length
-                    ? NodeFilter.FILTER_ACCEPT
-                    : NodeFilter.FILTER_SKIP;
-                },
-              });
-              return w.nextNode();
-            }
-
-            function neutralizeStart(textNode) {
-              const s = textNode.nodeValue || '';
-              if (!s) return;
-              if (LIST_START_RE.test(s)) {
-                textNode.nodeValue = s.replace(
-                  LIST_START_RE,
-                  (_, lead, num, punct) => `${lead}${num}${WJ}${punct}${NBSP}`,
-                );
-              }
-            }
-
-            // Paragraph-like blocks (but not inside real lists)
-            root
-              .querySelectorAll('p, pre, blockquote, h1, h2, h3, h4, h5, h6, div')
-              .forEach((el) => {
-                if (el.closest('li, ol, ul')) return;
-                const t = firstText(el);
-                if (t) neutralizeStart(t);
-              });
-
-            // After each <br>, neutralize the next visual "line"
-            root.querySelectorAll('p, pre, blockquote, div').forEach((el) => {
-              if (el.closest('li, ol, ul')) return;
-              el.querySelectorAll('br').forEach((br) => {
-                let n = br.nextSibling;
-                while (
-                  n &&
-                  ((n.nodeType === 3 && !(n.nodeValue || '').trim()) ||
-                    (n.nodeType === 1 && n.tagName === 'BR'))
-                ) {
-                  n = n.nextSibling;
-                }
-                if (!n) return;
-                if (n.nodeType === 3) {
-                  neutralizeStart(n);
-                } else if (n.nodeType === 1) {
-                  const t = firstText(n);
-                  if (t) neutralizeStart(t);
-                }
-              });
-            });
-          }
-
-          // Plain text builder: convert each <pre> into a fenced block with CRLF line endings (matches 111s)
+          // helper: build plain text where each <pre><code> becomes a fenced block
           function buildPlainTextWithFences(root) {
             const clone = root.cloneNode(true);
+
+            // Normalize first (HTML path already inserts fences)
             normalizeCodeBlocksInClone(clone);
+
             for (const pre of Array.from(clone.querySelectorAll('pre'))) {
               const codeEl = pre.querySelector('code');
               let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
-              codeText = codeText
-                .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
-                .replace(/\r\n?/g, '\n')
-                .replace(/[ \t\u00A0\r\n]+$/g, '');
-              let lang = '';
-              if (codeEl) {
-                const cls = Array.from(codeEl.classList || []).find((c) =>
-                  c.toLowerCase().startsWith('language-'),
-                );
-                if (cls) lang = cls.split('language-')[1];
-              }
+
+              // Scrub zero-width/BOM and normalize line endings
+              codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
+              codeText = codeText.replace(/\r\n?/g, '\n');
+
+              // Trim only trailing whitespace/newlines so we control spacing around closing fence
+              codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
+
               const eol = '\r\n';
-              const out = codeText.trim().startsWith('```')
-                ? `\r\n${codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol)}\r\n`
-                : `\r\n\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
+              let out;
+
+              // Avoid double-wrapping if already fenced; normalize to CRLF
+              if (codeText.trim().startsWith('```')) {
+                const norm = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
+                out = `${eol}${norm}${eol}`;
+              } else {
+                let lang = '';
+                if (codeEl) {
+                  const cls = Array.from(codeEl.classList || []).find((c) =>
+                    c.toLowerCase().startsWith('language-'),
+                  );
+                  if (cls) lang = cls.split('language-')[1];
+                }
+                out = `${eol}\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
+              }
+
               const container = document.createElement('div');
               container.textContent = out;
               pre.replaceWith(container);
             }
-            // Mirror 111s: do not force-convert all non-code newlines; only code blocks are normalized to CRLF
+
             return clone.innerText.replace(/\u00A0/g, ' ').trim();
           }
 
-          // Build processed HTML + Text from a single content element (mirror 111s behavior)
-          function buildProcessedClipboardPayload_Single(contentEl) {
-            const cloneForHtml = contentEl.cloneNode(true);
+          // Get all conversation turns in DOM order
+          const allTurns = Array.from(
+            document.querySelectorAll(
+              'article[data-turn], article[data-testid^="conversation-turn-"]',
+            ),
+          );
 
-            // Preserve user message hard line breaks visually
-            const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
-            if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+          // Filter by role
+          const filteredTurns = allTurns.filter((turn) => {
+            const isAssistant = !!turn.querySelector('[data-message-author-role="assistant"]');
+            const isUser = !!turn.querySelector('[data-message-author-role="user"]');
+            if (isAssistant && includeAssistant) return true;
+            if (isUser && includeUser) return true;
+            return false;
+          });
 
-            // Normalize DOM to Word-friendly HTML
+          // Map to content elements
+          const contentEls = filteredTurns
+            .map((turn) => ({
+              el: findContentElForTurn_EntireConv(turn),
+              turn,
+            }))
+            .filter(({ el }) => {
+              if (!el) return false;
+              const txt = (el.innerText || el.textContent || '').trim();
+              return !!txt;
+            });
+
+          // Nothing to copy
+          if (!contentEls.length) return { html: '', text: '' };
+
+          // Build HTML + text blocks
+          const blocksHTML = [];
+          const blocksText = [];
+
+          for (const { el, turn } of contentEls) {
+            const roleContainer = el.closest?.('[data-message-author-role]');
+            const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
+
+            // Determine label source
+            let nativeLabel = '';
+            try {
+              nativeLabel = (
+                turn.querySelector?.('h5.sr-only, h6.sr-only')?.textContent || ''
+              ).trim();
+            } catch (_) {
+              /* ignore */
+            }
+            const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
+            const labelText = includeLabels ? nativeLabel || fallbackLabel : '';
+
+            // Clone content for HTML normalization
+            const cloneForHtml = el.cloneNode(true);
+
+            if (role === 'user') {
+              // Preserve user message line breaks visually
+              replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+            }
+
+            // Normalize code blocks, strip list-bait attrs, and split lists around <pre>
             normalizeCodeBlocksInClone(cloneForHtml);
             demotePTagsAndStripDataAttrs(cloneForHtml);
             splitListsAroundCodeBlocks_Word(cloneForHtml);
 
-            // Wrapper (acts like 111s turn wrapper — but no visible label)
+            // HTML block
             const turnWrapper = document.createElement('div');
-            turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
-            // Preserve role tag (purely metadata)
-            const roleContainer = contentEl.closest?.('[data-message-author-role]');
-            turnWrapper.setAttribute(
-              'data-role',
-              roleContainer?.getAttribute?.('data-message-author-role') || 'assistant',
-            );
+            turnWrapper.setAttribute('data-role', role);
 
-            // 1) Body container (Word-friendly spacing + code/list normalization)
-            const bodyDiv = document.createElement('div');
-            bodyDiv.innerHTML = cloneForHtml.innerHTML;
-
-            applyWordSpacingAndFont_Word(bodyDiv);
-            splitListsAroundCodeBlocks_Word(bodyDiv);
-            inlineGuardFirstRuns_Word(bodyDiv);
-
-            // Assemble like 111s (simple container)
-            turnWrapper.appendChild(bodyDiv);
-            const html =
-              '<div data-export="chatgpt-shortcuts-single-message">' +
-              turnWrapper.outerHTML +
-              '</div>';
-
-            // Plain text variant with fenced code (no labels)
-            const text = buildPlainTextWithFences(contentEl);
-
-            return { html, text };
-          }
-
-          // Copy processed payload built from a content element
-          async function copyProcessedFromElement(el) {
-            const { html, text } = buildProcessedClipboardPayload_Single(el);
-            await writeClipboardHTMLAndText_Single(html, text);
-          }
-
-          // Visual selection (for feedback) + processed copy
-          function doSelectAndCopy(el, shouldCopy = true) {
-            try {
-              const selection = window.getSelection?.();
-              if (selection) selection.removeAllRanges();
-
-              const makeTextWalker = (root) =>
-                document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                  acceptNode(node) {
-                    return node.nodeValue?.trim().length
-                      ? NodeFilter.FILTER_ACCEPT
-                      : NodeFilter.FILTER_SKIP;
-                  },
-                });
-
-              const startWalker = makeTextWalker(el);
-              const startNode = startWalker.nextNode();
-              let endNode = null;
-              if (startNode) {
-                const endWalker = makeTextWalker(el);
-                for (let n = endWalker.nextNode(); n; n = endWalker.nextNode()) endNode = n;
-              }
-              const range = document.createRange();
-              if (startNode && endNode) {
-                range.setStart(startNode, 0);
-                range.setEnd(endNode, endNode.nodeValue.length);
-              } else {
-                range.selectNodeContents(el);
-              }
-              if (selection) selection.addRange(range);
-
-              if (shouldCopy) void copyProcessedFromElement(el);
-            } catch (err) {
-              if (DEBUG) console.debug('doSelectAndCopy failed:', err);
-            }
-          }
-
-          // Innermost visible text container for a given role container
-          function findContentElForTurn(roleContainer) {
-            const isUser = roleContainer.getAttribute('data-message-author-role') === 'user';
-            if (isUser) {
-              return (
-                roleContainer.querySelector(
-                  '[data-message-author-role="user"] .whitespace-pre-wrap',
-                ) ||
-                roleContainer.querySelector(
-                  '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
-                ) ||
-                roleContainer.querySelector('[data-message-author-role="user"]')
+            if (labelText) {
+              // Real blank paragraph before label for spacing in Word
+              const spacerP = document.createElement('p');
+              spacerP.setAttribute(
+                'style',
+                'margin-top:0pt;margin-bottom:8pt;line-height:116%;mso-line-height-alt:116%;mso-line-height-rule:exactly;',
               );
-            }
-            return (
-              roleContainer.querySelector(
-                '[data-message-author-role="assistant"] .whitespace-pre-wrap',
-              ) ||
-              roleContainer.querySelector(
-                '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
-              ) ||
-              roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
-              roleContainer.querySelector('[data-message-author-role="assistant"]')
-            );
-          }
-          // click handler uses processed copy
-          if (!window.__selectThenCopyCopyHandlerAttached) {
-            document.addEventListener('click', (e) => {
-              const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
-              if (!btn) return;
-
-              const roleContainer =
-                btn.closest('[data-message-author-role]') ||
-                btn
-                  .closest('article[data-turn], article[data-testid^="conversation-turn-"]')
-                  ?.querySelector(
-                    '[data-message-author-role="assistant"], [data-message-author-role="user"]',
-                  );
-
-              if (!roleContainer) return;
-
-              const contentEl = findContentElForTurn(roleContainer);
-              if (contentEl && (contentEl.innerText || contentEl.textContent || '').trim()) {
-                // Always show selection AND copy processed HTML/Text
-                doSelectAndCopy(contentEl, true);
-              }
-            });
-            window.__selectThenCopyCopyHandlerAttached = true;
-          }
-          return () => {
-            setTimeout(() => {
-              try {
-                const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
-                const onlySelectUser = window.onlySelectUserCheckbox || false;
-                const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
-                const shouldCopy = !disableCopyAfterSelect;
-
-                const allConversationTurns = Array.from(
-                  document.querySelectorAll(
-                    'article[data-turn], article[data-testid^="conversation-turn-"]',
-                  ),
-                );
-
-                const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-                const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-
-                const composerRect = (() => {
-                  const composer = document.getElementById('composer-background');
-                  return composer ? composer.getBoundingClientRect() : null;
-                })();
-
-                const visibleTurns = allConversationTurns.filter((el) => {
-                  const rect = el.getBoundingClientRect();
-                  const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
-                  const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
-                  if (!(horizontallyVisible && verticallyVisible)) return false;
-                  if (composerRect && rect.top >= composerRect.top) return false;
-                  return true;
-                });
-
-                const filteredVisibleTurns = visibleTurns.filter((el) => {
-                  if (
-                    onlySelectAssistant &&
-                    !el.querySelector('[data-message-author-role="assistant"]')
-                  )
-                    return false;
-                  if (onlySelectUser && !el.querySelector('[data-message-author-role="user"]'))
-                    return false;
-                  return true;
-                });
-
-                if (!filteredVisibleTurns.length) return;
-
-                filteredVisibleTurns.sort(
-                  (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
-                );
-
-                const { lastSelectedIndex } = window.selectThenCopyState;
-                const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
-                const selectedTurn = filteredVisibleTurns[nextIndex];
-                if (!selectedTurn) return;
-
-                selectAndCopyMessage(selectedTurn, shouldCopy);
-                window.selectThenCopyState.lastSelectedIndex = nextIndex;
-
-                function selectAndCopyMessage(turn, shouldCopyParam) {
-                  try {
-                    const isUser = !!turn.querySelector('[data-message-author-role="user"]');
-                    const isAssistant = !!turn.querySelector(
-                      '[data-message-author-role="assistant"]',
-                    );
-
-                    if (onlySelectUser && !isUser) return;
-                    if (onlySelectAssistant && !isAssistant) return;
-
-                    let contentEl = null;
-                    if (isUser) {
-                      contentEl =
-                        turn.querySelector(
-                          '[data-message-author-role="user"] .whitespace-pre-wrap',
-                        ) ||
-                        turn.querySelector(
-                          '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
-                        ) ||
-                        turn.querySelector('[data-message-author-role="user"]');
-                    } else {
-                      contentEl =
-                        turn.querySelector(
-                          '[data-message-author-role="assistant"] .whitespace-pre-wrap',
-                        ) ||
-                        turn.querySelector(
-                          '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
-                        ) ||
-                        turn.querySelector('.prose, .markdown, .markdown-new-styling') ||
-                        turn.querySelector('[data-message-author-role="assistant"]');
-                    }
-
-                    if (!contentEl || !contentEl.innerText.trim()) return;
-
-                    doSelectAndCopy(contentEl, !!shouldCopyParam);
-                  } catch (err) {
-                    if (DEBUG) console.debug('selectAndCopyMessage failed:', err);
-                  }
-                }
-              } catch (err) {
-                if (DEBUG) console.debug('outer selectThenCopy failure:', err);
-              }
-            }, 50);
-          };
-        })(),
-        [shortcuts.shortcutKeyToggleModelSelector]: () => {
-          window.toggleModelSelector();
-        },
-        // Regenerate: open the kebab/overflow menu, then click the "Regenerate" sub-item.
-        // Note: these two path prefixes can be the same (as in this case) or different for other actions.
-        [shortcuts.shortcutKeyRegenerateTryAgain]: () => {
-          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // sub-item icon path (prefix)
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-        [shortcuts.shortcutKeyRegenerateMoreConcise]: () => {
-          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = ['M10.2002 7.91699L16.8669', '#155a34']; // sub-item icon path (prefix)
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-        [shortcuts.shortcutKeyRegenerateAddDetails]: () => {
-          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = ['M14.3013 12.6816C14.6039', '#71a046']; // sub-item icon path (prefix)
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-        [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
-          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = ['M15.4707 17.137C15.211', '#77bc5f']; // sub-item icon path (prefix)
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-        [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
-          const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu/overflow button icon path (prefix)
-          runRadixMenuActionFocusInputByName(FIRST_BTN_PATH, 'contextual-retry-dropdown-input', {
-            caret: 'end', // 'start' | 'end'
-            selectAll: false, // true to select existing text
-          });
-        },
-        [shortcuts.shortcutKeyMoreDotsReadAloud]: () => {
-          const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2'];
-          const SUB_ITEM_BTN_PATH = ['M9.75122 4.09203C9.75122', '#54f145'];
-          const EXCLUDE_ANCESTOR = '#bottomBarContainer';
-
-          const openMenuSel = 'div[role="menu"][data-state="open"]';
-
-          function activate(el) {
-            try {
-              el.focus();
-            } catch {}
-            try {
-              el.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
-              );
-              el.dispatchEvent(
-                new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }),
-              );
-            } catch {}
-            try {
-              el.click();
-            } catch {}
-          }
-
-          // 1) If a Stop item is visible in an open menu, click it (stop playback).
-          const stopInOpenMenu = document.querySelector(
-            `${openMenuSel} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
-          );
-          if (stopInOpenMenu) {
-            if (window.gsap && typeof flashBorder === 'function') flashBorder(stopInOpenMenu);
-            activate(stopInOpenMenu);
-            return;
-          }
-
-          // 2) If the Read Aloud sub-item is already exposed in an open menu, click it directly.
-          const readAloudSelector = withPrefix(
-            svgSelectorForTokens(SUB_ITEM_BTN_PATH),
-            `${openMenuSel} div[role="menuitem"]`,
-          );
-          const exposedReadAloudPath = document.querySelector(readAloudSelector);
-          if (exposedReadAloudPath) {
-            const item = exposedReadAloudPath.closest('div[role="menuitem"]');
-            if (item) {
-              if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
-              activate(item);
-              return;
-            }
-          }
-
-          // 3) Otherwise, open the menu on the lowest eligible "More dots" button and click Read Aloud.
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, EXCLUDE_ANCESTOR);
-        },
-        [shortcuts.shortcutKeyMoreDotsBranchInNewChat]: () => {
-          const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2']; // menu button icon path (prefix)
-          const SUB_ITEM_BTN_PATH = ['M3.32996 10H8.01173C8.7455', '#03583c']; // sub-item icon path (prefix)
-          clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
-        },
-        [shortcuts.shortcutKeyThinkingExtended]: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#143e56';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-
-        [shortcuts.shortcutKeyThinkingStandard]: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#fec800';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
-        [shortcuts.shortcutKeyTemporaryChat]: () => {
-          const root = document.querySelector('#conversation-header-actions') || document;
-          const el =
-            root.querySelector('button svg use[href*="#28a8a0"]')?.closest('button') || // Turn on
-            root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button'); // Turn off
-          if (!el) return;
-          smartClick(el);
-        },
-        [shortcuts.shortcutKeyStudy]: async () => {
-          const ICON_PATH_PREFIX = ['M16.3965 5.01128C16.3963', '#1fa93b']; // book icon prefix
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyCreateImage]: async () => {
-          const ICON_PATH_PREFIX = ['M9.38759 8.53403C10.0712', '#266724']; // image icon prefix
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyToggleCanvas]: async () => {
-          const ICON_PATH_PREFIX = ['M12.0303 4.11328C13.4406', '#cf3864']; // canvas icon prefix
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
-          const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyToggleDictate]: () => {
-          if (dictateInProgress) return;
-          dictateInProgress = true;
-          setTimeout(() => {
-            dictateInProgress = false;
-          }, 300);
-
-          const composerRoot =
-            document.getElementById('thread-bottom-container') ||
-            document.querySelector('form[data-type="unified-composer"]') ||
-            document.getElementById('composer-background') ||
-            document.body;
-
-          const findClickableBySpriteId = (spriteId) => {
-            const safe = String(spriteId).replace(/(["\\])/g, '\\$1');
-            const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
-            if (!use) return null;
-            return (
-              use.closest('button, [role="button"], a, [tabindex]') ||
-              use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
-              null
-            );
-          };
-
-          const click = (el) => {
-            if (!el) return false;
-            try {
-              el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-            } catch {}
-            flashBorder(el);
-            smartClick(el);
-            return true;
-          };
-
-          // If dictation is active, prefer submitting (not cancelling).
-          const submitBtn = findClickableBySpriteId('#fa1dbd');
-          if (click(submitBtn)) return;
-
-          // If submit isn't available, stop dictation.
-          const stopBtn = findClickableBySpriteId('#85f94b');
-          if (click(stopBtn)) return;
-
-          // Otherwise start dictation (avoid Voice Mode button).
-          const dictateBtn = findClickableBySpriteId('#29f921');
-          click(dictateBtn);
-        },
-        [shortcuts.shortcutKeyCancelDictation]: async () => {
-          // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.
-          const composerRoot =
-            document.getElementById('thread-bottom-container') ||
-            document.querySelector('form[data-type="unified-composer"]') ||
-            document.getElementById('composer-background') ||
-            document.body;
-
-          const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
-          const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
-          const btn = use?.closest('button, [role="button"], a, [tabindex]') || null;
-
-          // Only stop if Stop dictation is currently available; otherwise no-op.
-          if (!btn) return;
-
-          try {
-            btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-          } catch {}
-          flashBorder(btn);
-          await sleep(DELAYS.beforeFinalClick);
-          smartClick(btn);
-        },
-        [shortcuts.shortcutKeyShare]: async () => {
-          await clickButtonByTestId('share-chat-button');
-        },
-        [shortcuts.shortcutKeyThinkLonger]: async () => {
-          const ICON_PATH_PREFIX = ['M14.3352 10.0257C14.3352', '#e717cc']; // Thinking (sprite id)
-          await runActionByIcon(ICON_PATH_PREFIX);
-        },
-        [shortcuts.shortcutKeyNewGptConversation]: () => {
-          const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
-          window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH, { fallbackText: 'New chat' });
-        },
-        // @note [shortcuts.selectThenCopyAllMessages]: (() => {
-        [shortcuts.selectThenCopyAllMessages]: (() => {
-          const DEBUG = false;
-
-          // Utility: copy HTML + text to clipboard with fallback
-          async function writeClipboardHTMLAndText_EntireConv(html, text) {
-            if (navigator.clipboard && window.ClipboardItem) {
-              try {
-                const item = new ClipboardItem({
-                  'text/html': new Blob([html], { type: 'text/html' }),
-                  'text/plain': new Blob([text], { type: 'text/plain' }),
-                });
-                await navigator.clipboard.write([item]);
-                return;
-              } catch (e) {
-                if (DEBUG) console.debug('Clipboard write fallback:', e);
-              }
-            }
-            document.addEventListener(
-              'copy',
-              (e) => {
-                e.clipboardData.setData('text/html', html);
-                e.clipboardData.setData('text/plain', text);
-                e.preventDefault();
-              },
-              { once: true },
-            );
-            document.execCommand('copy');
-          }
-
-          // Utility: create a single Range spanning all specified elements (for visual selection feedback)
-          function createSelectionRangeForEls_EntireConv(els) {
-            try {
-              const selection = window.getSelection?.();
-              if (!selection || !els.length) return null;
-              selection.removeAllRanges();
-
-              function makeTextWalker(root) {
-                return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                  acceptNode(node) {
-                    return node.nodeValue?.trim().length
-                      ? NodeFilter.FILTER_ACCEPT
-                      : NodeFilter.FILTER_SKIP;
-                  },
-                });
-              }
-
-              function findFirstTextNode(root) {
-                const w = makeTextWalker(root);
-                return w.nextNode();
-              }
-
-              function findLastTextNode(root) {
-                const w = makeTextWalker(root);
-                let last = null;
-                let n = w.nextNode();
-                while (n) {
-                  last = n;
-                  n = w.nextNode();
-                }
-                return last;
-              }
-
-              const firstEl = els[0];
-              const lastEl = els[els.length - 1];
-              const startNode = findFirstTextNode(firstEl) || firstEl;
-              const endNode = findLastTextNode(lastEl) || lastEl;
-
-              const range = document.createRange();
-              if (startNode.nodeType === Node.TEXT_NODE) {
-                range.setStart(startNode, 0);
-              } else {
-                range.setStart(startNode, 0);
-              }
-              if (endNode.nodeType === Node.TEXT_NODE) {
-                range.setEnd(endNode, endNode.nodeValue.length);
-              } else {
-                range.setEnd(endNode, endNode.childNodes.length);
-              }
-              return range;
-            } catch (err) {
-              if (DEBUG) console.debug('createSelectionRangeForEls_EntireConv error:', err);
-              return null;
-            }
-          }
-
-          // Convert newline characters to in user messages so paste targets keep line breaks.
-          // We conservatively transform all text nodes under the clone (user messages are plain text in a pre-wrap container).
-          function replaceNewlinesWithBr_UserPreWrap(root) {
-            try {
-              const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-              const toProcess = [];
-              let n = walker.nextNode();
-              while (n) {
-                if (n.nodeValue?.includes('\n')) toProcess.push(n);
-                n = walker.nextNode();
-              }
-              for (const textNode of toProcess) {
-                const parts = textNode.nodeValue.split('\n');
-                const frag = document.createDocumentFragment();
-                parts.forEach((part, i) => {
-                  if (part) frag.appendChild(document.createTextNode(part));
-                  if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
-                });
-                textNode.parentNode.replaceChild(frag, textNode);
-              }
-            } catch (err) {
-              if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
-            }
-          }
-
-          // Identify the content element for a user/assistant turn
-          function findContentElForTurn_EntireConv(container) {
-            const assistantScope = container.matches?.('[data-message-author-role="assistant"]')
-              ? container
-              : container.querySelector?.('[data-message-author-role="assistant"]');
-            const userScope = container.matches?.('[data-message-author-role="user"]')
-              ? container
-              : container.querySelector?.('[data-message-author-role="user"]');
-            if (assistantScope) {
-              return (
-                assistantScope.querySelector('.whitespace-pre-wrap') ||
-                assistantScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
-                assistantScope
-              );
-            }
-            if (userScope) {
-              return (
-                userScope.querySelector('.whitespace-pre-wrap') ||
-                userScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
-                userScope
-              );
-            }
-            return (
-              container.querySelector?.('.whitespace-pre-wrap') ||
-              container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
-              container
-            );
-          }
-
-          // Checkboxes or booleans -> forced boolean
-          function resolveFlag_EntireConv(v) {
-            return !!(v && typeof v === 'object' && 'checked' in v ? v.checked : v);
-          }
-
-          // Build the processed HTML + Text payload from DOM, honoring role filters and label settings
-          function buildProcessedClipboardPayload_EntireConv({
-            includeAssistant,
-            includeUser,
-            includeLabels,
-          }) {
-            // helper: infer language from code/pre UI
-            function inferLangFromPre(pre) {
-              let lang = '';
-              const codeEl = pre.querySelector('code');
-              if (codeEl) {
-                const cls = Array.from(codeEl.classList || []).find((c) =>
-                  c.toLowerCase().startsWith('language-'),
-                );
-                if (cls) lang = cls.split('language-')[1];
-              }
-              if (!lang) {
-                // Try header label inside ChatGPT’s code block UI (e.g., "js")
-                const header = pre.querySelector('.flex.items-center.text-token-text-secondary');
-                const headerText = header?.innerText?.trim();
-                // hyphen placed at end to avoid escape (fixes biome noUselessEscapeInRegex)
-                if (headerText && /^[a-z0-9+.#-]+$/i.test(headerText)) {
-                  lang = headerText.toLowerCase();
-                }
-              }
-              return lang;
-            }
-
-            // helper: simplify ChatGPT code block UI to <pre><code class="language-...">...</code></pre>
-            function normalizeCodeBlocksInClone(root) {
-              const preNodes = Array.from(root.querySelectorAll('pre'));
-              const codeBlocks = Array.from(
-                root.querySelectorAll(
-                  'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
-                ),
-              ).filter((c) => !c.closest('pre'));
-              const blocks = [...preNodes, ...codeBlocks];
-              for (const node of blocks) {
-                const isPre = node.tagName === 'PRE';
-                const codeEl = isPre ? node.querySelector('code') || node : node;
-                let codeText = (codeEl?.innerText ?? node.innerText ?? '').replace(/\u00A0/g, ' ');
-                codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-                codeText = codeText.replace(/\r\n?/g, '\n');
-                codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
-                let lang = '';
-                if (isPre) {
-                  lang = inferLangFromPre(node);
-                  if (!lang && codeEl) {
-                    const cls1 = Array.from(codeEl.classList || []).find((c) =>
-                      c.toLowerCase().startsWith('language-'),
-                    );
-                    if (cls1) lang = cls1.split('language-')[1];
-                  }
-                } else if (codeEl) {
-                  const cls2 = Array.from(codeEl.classList || []).find((c) =>
-                    c.toLowerCase().startsWith('language-'),
-                  );
-                  if (cls2) lang = cls2.split('language-')[1];
-                }
-                const preNew = document.createElement('pre');
-                const codeNew = document.createElement('code');
-                if (lang) codeNew.className = `language-${lang}`;
-                // Use CRLF so Word keeps the closing fence on its own line (no $ markers)
-                const eol = '\r\n';
-                const fenceOpen = `\`\`\`${lang || ''}`;
-
-                // Emit clean fenced block only
-                let fenced;
-                if (/^\s*```/.test(codeText)) {
-                  // Already fenced: normalize line endings and ensure trailing EOL
-                  fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-                  if (!fenced.endsWith(eol)) fenced += eol;
-                } else {
-                  fenced = `${fenceOpen}${eol}${codeText}${eol}\`\`\`${eol}`;
-                }
-
-                codeNew.textContent = fenced; // literal fenced text inside pre/code
-                preNew.appendChild(codeNew);
-
-                // Replace the original node with normalized pre/code
-                node.replaceWith(preNew);
-              }
-            }
-            // Strip Word-confusing data-* attributes (preserve <p> semantics for proper paragraph spacing)
-            function demotePTagsAndStripDataAttrs(root) {
-              for (const el of Array.from(root.querySelectorAll('*'))) {
-                for (const attr of Array.from(el.attributes)) {
-                  if (
-                    attr.name === 'data-start' ||
-                    attr.name === 'data-end' ||
-                    attr.name.startsWith('data-')
-                  ) {
-                    el.removeAttribute(attr.name);
-                  }
-                }
-              }
-            }
-            // Add minimal list guard without altering margins (keeps After: 8pt intact)
-            function addListGuardStyles(el) {
-              const existing = el.getAttribute('style') || '';
-              const guard = 'list-style-type:none;';
-              el.setAttribute('style', existing ? `${existing};${guard}` : guard);
-            }
-            // Split UL/OL so code blocks and follow-up paragraphs don't inherit bullets in Word
-            function splitListsAroundCodeBlocks_Word(root) {
-              ['ul', 'ol'].forEach((tag) => {
-                root.querySelectorAll(tag).forEach((list) => {
-                  const lis = Array.from(list.children).filter((c) => c.tagName === 'LI');
-                  if (!lis.some((li) => li.querySelector('pre'))) return;
-                  const frag = document.createDocumentFragment();
-                  let acc = document.createElement(tag);
-                  const flushAcc = () => {
-                    if (acc.children.length) frag.appendChild(acc);
-                    acc = document.createElement(tag);
-                  };
-                  for (const li of lis) {
-                    const firstPre = li.querySelector(':scope > pre') || li.querySelector('pre');
-                    if (!firstPre) {
-                      acc.appendChild(li.cloneNode(true));
-                      continue;
-                    }
-                    const newLi = document.createElement('li');
-                    for (const child of Array.from(li.childNodes)) {
-                      if (child === firstPre) break;
-                      newLi.appendChild(child.cloneNode(true));
-                    }
-                    if (newLi.childNodes.length) acc.appendChild(newLi);
-                    flushAcc();
-                    let started = false;
-                    for (const child of Array.from(li.childNodes)) {
-                      if (child === firstPre) started = true;
-                      if (started) frag.appendChild(child.cloneNode(true)); // move <pre> and any siblings after
-                    }
-                  }
-                  flushAcc();
-                  for (const n of Array.from(list.childNodes)) {
-                    if (n.tagName !== 'LI') frag.appendChild(n.cloneNode(true));
-                  }
-                  list.replaceWith(frag);
-                });
-              });
-            }
-            // helper: build plain text where each <pre><code> becomes a fenced block
-            function buildPlainTextWithFences(root) {
-              const clone = root.cloneNode(true);
-
-              // Normalize first (HTML path already inserts fences)
-              normalizeCodeBlocksInClone(clone);
-
-              for (const pre of Array.from(clone.querySelectorAll('pre'))) {
-                const codeEl = pre.querySelector('code');
-                let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
-
-                // Scrub zero-width/BOM and normalize line endings
-                codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-                codeText = codeText.replace(/\r\n?/g, '\n');
-
-                // Trim only trailing whitespace/newlines so we control spacing around closing fence
-                codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
-
-                const eol = '\r\n';
-                let out;
-
-                // Avoid double-wrapping if already fenced; normalize to CRLF
-                if (codeText.trim().startsWith('```')) {
-                  const norm = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-                  out = `${eol}${norm}${eol}`;
-                } else {
-                  let lang = '';
-                  if (codeEl) {
-                    const cls = Array.from(codeEl.classList || []).find((c) =>
-                      c.toLowerCase().startsWith('language-'),
-                    );
-                    if (cls) lang = cls.split('language-')[1];
-                  }
-                  out = `${eol}\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
-                }
-
-                const container = document.createElement('div');
-                container.textContent = out;
-                pre.replaceWith(container);
-              }
-
-              return clone.innerText.replace(/\u00A0/g, ' ').trim();
-            }
-
-            // Get all conversation turns in DOM order
-            const allTurns = Array.from(
-              document.querySelectorAll(
-                'article[data-turn], article[data-testid^="conversation-turn-"]',
-              ),
-            );
-
-            // Filter by role
-            const filteredTurns = allTurns.filter((turn) => {
-              const isAssistant = !!turn.querySelector('[data-message-author-role="assistant"]');
-              const isUser = !!turn.querySelector('[data-message-author-role="user"]');
-              if (isAssistant && includeAssistant) return true;
-              if (isUser && includeUser) return true;
-              return false;
-            });
-
-            // Map to content elements
-            const contentEls = filteredTurns
-              .map((turn) => ({
-                el: findContentElForTurn_EntireConv(turn),
-                turn,
-              }))
-              .filter(({ el }) => {
-                if (!el) return false;
-                const txt = (el.innerText || el.textContent || '').trim();
-                return !!txt;
-              });
-
-            // Nothing to copy
-            if (!contentEls.length) return { html: '', text: '' };
-
-            // Build HTML + text blocks
-            const blocksHTML = [];
-            const blocksText = [];
-
-            for (const { el, turn } of contentEls) {
-              const roleContainer = el.closest?.('[data-message-author-role]');
-              const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
-
-              // Determine label source
-              let nativeLabel = '';
-              try {
-                nativeLabel = (
-                  turn.querySelector?.('h5.sr-only, h6.sr-only')?.textContent || ''
-                ).trim();
-              } catch (_) {
-                /* ignore */
-              }
-              const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
-              const labelText = includeLabels ? nativeLabel || fallbackLabel : '';
-
-              // Clone content for HTML normalization
-              const cloneForHtml = el.cloneNode(true);
-
-              if (role === 'user') {
-                // Preserve user message line breaks visually
-                replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
-              }
-
-              // Normalize code blocks, strip list-bait attrs, and split lists around <pre>
-              normalizeCodeBlocksInClone(cloneForHtml);
-              demotePTagsAndStripDataAttrs(cloneForHtml);
-              splitListsAroundCodeBlocks_Word(cloneForHtml);
-
-              // HTML block
-              const turnWrapper = document.createElement('div');
-              turnWrapper.setAttribute('data-role', role);
-
-              if (labelText) {
-                // Real blank paragraph before label for spacing in Word
-                const spacerP = document.createElement('p');
-                spacerP.setAttribute(
-                  'style',
-                  'margin-top:0pt;margin-bottom:8pt;line-height:116%;mso-line-height-alt:116%;mso-line-height-rule:exactly;',
-                );
-                spacerP.innerHTML = '&nbsp;';
-                turnWrapper.appendChild(spacerP);
-
-                // Label as a semantic Heading 2 so Word maps it to its built-in "Heading 2" style
-                // Keep zero-width space to suppress auto-numbering (no forced color)
-                const labelH = document.createElement('h1');
-                labelH.setAttribute(
-                  'style',
-                  [
-                    "font-family:'Calibri',Arial,sans-serif",
-                    'font-size:18pt',
-                    'font-weight:bold',
-                    'margin-top:0pt',
-                    'margin-bottom:8pt',
-                    'line-height:116%',
-                    'mso-line-height-alt:116%',
-                    'mso-line-height-rule:exactly',
-                  ].join(';'),
-                );
-                labelH.innerHTML = `\u200B${labelText}`;
-                addListGuardStyles(labelH);
-                turnWrapper.appendChild(labelH);
-              }
-
-              // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
-              const bodyDiv = document.createElement('div');
-              bodyDiv.innerHTML = cloneForHtml.innerHTML;
-
-              // Apply Word-friendly spacing to real paragraphs (not divs)
-              (function applyWordSpacingAndFont_Word(root) {
-                if (!root) return;
-                const fontStack =
-                  "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
-                const baseRules = [
-                  `font-family:${fontStack}`,
+              spacerP.innerHTML = '&nbsp;';
+              turnWrapper.appendChild(spacerP);
+
+              // Label as a semantic Heading 2 so Word maps it to its built-in "Heading 2" style
+              // Keep zero-width space to suppress auto-numbering (no forced color)
+              const labelH = document.createElement('h1');
+              labelH.setAttribute(
+                'style',
+                [
+                  "font-family:'Calibri',Arial,sans-serif",
+                  'font-size:18pt',
+                  'font-weight:bold',
+                  'margin-top:0pt',
+                  'margin-bottom:8pt',
                   'line-height:116%',
                   'mso-line-height-alt:116%',
                   'mso-line-height-rule:exactly',
-                ].join(';');
-
-                // Apply to container
-                const base = root.getAttribute('style') || '';
-                root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
-
-                // Apply to paragraph-like tags Word respects
-                const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
-                root.querySelectorAll(selector).forEach((el) => {
-                  const s = el.getAttribute('style') || '';
-                  const rules = [
-                    `font-family:${fontStack}`,
-                    'margin-top:0pt',
-                    'margin-bottom:8pt',
-                    'line-height:116%',
-                    'mso-margin-top-alt:0pt',
-                    'mso-margin-bottom-alt:8pt',
-                    'mso-line-height-alt:116%',
-                    'mso-line-height-rule:exactly',
-                  ].join(';');
-                  el.setAttribute('style', s ? `${s};${rules}` : rules);
-                });
-              })(bodyDiv);
-
-              turnWrapper.appendChild(bodyDiv);
-
-              blocksHTML.push(turnWrapper.outerHTML);
-
-              // Build plain text with fenced code blocks (```lang ... ```)
-              const cloneForText = el.cloneNode(true);
-              if (role === 'user') {
-                // keep user message visual line breaks in text as-is (they are already \n in innerText)
-                // no <br> insertion needed for text variant
-              }
-              const contentText = buildPlainTextWithFences(cloneForText);
-              const textBlock = labelText ? `${labelText}\n${contentText}` : contentText;
-              blocksText.push(textBlock);
+                ].join(';'),
+              );
+              labelH.innerHTML = `\u200B${labelText}`;
+              addListGuardStyles(labelH);
+              turnWrapper.appendChild(labelH);
             }
 
-            const html =
-              '<div data-export="chatgpt-shortcuts-entire-conversation">' +
-              blocksHTML.join('') +
-              '</div>';
-            const text = blocksText.join('\n\n');
+            // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
+            const bodyDiv = document.createElement('div');
+            bodyDiv.innerHTML = cloneForHtml.innerHTML;
 
-            return { html, text, contentEls: contentEls.map(({ el }) => el) };
+            // Apply Word-friendly spacing to real paragraphs (not divs)
+            (function applyWordSpacingAndFont_Word(root) {
+              if (!root) return;
+              const fontStack =
+                "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
+              const baseRules = [
+                `font-family:${fontStack}`,
+                'line-height:116%',
+                'mso-line-height-alt:116%',
+                'mso-line-height-rule:exactly',
+              ].join(';');
+
+              // Apply to container
+              const base = root.getAttribute('style') || '';
+              root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+
+              // Apply to paragraph-like tags Word respects
+              const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
+              root.querySelectorAll(selector).forEach((el) => {
+                const s = el.getAttribute('style') || '';
+                const rules = [
+                  `font-family:${fontStack}`,
+                  'margin-top:0pt',
+                  'margin-bottom:8pt',
+                  'line-height:116%',
+                  'mso-margin-top-alt:0pt',
+                  'mso-margin-bottom-alt:8pt',
+                  'mso-line-height-alt:116%',
+                  'mso-line-height-rule:exactly',
+                ].join(';');
+                el.setAttribute('style', s ? `${s};${rules}` : rules);
+              });
+            })(bodyDiv);
+
+            turnWrapper.appendChild(bodyDiv);
+
+            blocksHTML.push(turnWrapper.outerHTML);
+
+            // Build plain text with fenced code blocks (```lang ... ```)
+            const cloneForText = el.cloneNode(true);
+            if (role === 'user') {
+              // keep user message visual line breaks in text as-is (they are already \n in innerText)
+              // no <br> insertion needed for text variant
+            }
+            const contentText = buildPlainTextWithFences(cloneForText);
+            const textBlock = labelText ? `${labelText}\n${contentText}` : contentText;
+            blocksText.push(textBlock);
           }
 
-          return () => {
-            setTimeout(() => {
-              try {
-                // RADIO LOGIC: prioritize "only" options. If neither is selected, include both.
-                const onlyAssistant = resolveFlag_EntireConv(
-                  window.selectThenCopyAllMessagesOnlyAssistant || false,
-                );
-                const onlyUser = resolveFlag_EntireConv(
-                  window.selectThenCopyAllMessagesOnlyUser || false,
-                );
+          const html =
+            '<div data-export="chatgpt-shortcuts-entire-conversation">' +
+            blocksHTML.join('') +
+            '</div>';
+          const text = blocksText.join('\n\n');
 
-                let includeAssistant = true;
-                let includeUser = true;
-                if (onlyAssistant) {
-                  includeAssistant = true;
-                  includeUser = false;
-                } else if (onlyUser) {
-                  includeAssistant = false;
-                  includeUser = true;
-                } else {
-                  includeAssistant = true;
-                  includeUser = true;
-                }
+          return { html, text, contentEls: contentEls.map(({ el }) => el) };
+        }
 
-                // LABEL LOGIC:
-                // - If includeLabelsAndSeparatorsCheckbox is checked => omit labels
-                // - If doNotIncludeLabelsCheckbox is true => omit labels
-                // - Otherwise => include labels
-                const omitViaSeparators = resolveFlag_EntireConv(
-                  window.includeLabelsAndSeparatorsCheckbox,
-                );
-                const omitViaDoNotInclude = resolveFlag_EntireConv(
-                  window.doNotIncludeLabelsCheckbox,
-                );
-                const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
+        return () => {
+          setTimeout(() => {
+            try {
+              // RADIO LOGIC: prioritize "only" options. If neither is selected, include both.
+              const onlyAssistant = resolveFlag_EntireConv(
+                window.selectThenCopyAllMessagesOnlyAssistant || false,
+              );
+              const onlyUser = resolveFlag_EntireConv(
+                window.selectThenCopyAllMessagesOnlyUser || false,
+              );
 
-                // Build processed clipboard payload directly from DOM (robust), not from selection
-                const { html, text, contentEls } = buildProcessedClipboardPayload_EntireConv({
-                  includeAssistant,
-                  includeUser,
-                  includeLabels,
-                });
-
-                if (!html && !text) return;
-
-                // Create a visual selection spanning first->last message (for user feedback)
-                if (contentEls?.length) {
-                  const range = createSelectionRangeForEls_EntireConv(contentEls);
-                  // Use optional chaining to safely access Selection API
-                  const selection = window.getSelection?.();
-                  if (selection && range) {
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                  }
-                }
-
-                // Programmatically write the processed HTML/Text (this enforces role filtering + label rules)
-                void writeClipboardHTMLAndText_EntireConv(html, text);
-              } catch (err) {
-                if (DEBUG) console.debug('selectThenCopyAllMessages error:', err);
+              let includeAssistant = true;
+              let includeUser = true;
+              if (onlyAssistant) {
+                includeAssistant = true;
+                includeUser = false;
+              } else if (onlyUser) {
+                includeAssistant = false;
+                includeUser = true;
+              } else {
+                includeAssistant = true;
+                includeUser = true;
               }
-            }, 50);
-          };
-        })(),
-      }; // Close keyFunctionMapping object @note Bottom of keyFunctionMapping
 
-      // Assign the functions to the window object for global access
-      window.toggleSidebar = keyFunctionMappingAlt[shortcuts.shortcutKeyToggleSidebar];
-      window.newConversation = keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
-      window.globalScrollToBottom =
-        keyFunctionMappingAlt[shortcuts.shortcutKeyClickNativeScrollToBottom];
+              // LABEL LOGIC:
+              // - If includeLabelsAndSeparatorsCheckbox is checked => omit labels
+              // - If doNotIncludeLabelsCheckbox is true => omit labels
+              // - Otherwise => include labels
+              const omitViaSeparators = resolveFlag_EntireConv(
+                window.includeLabelsAndSeparatorsCheckbox,
+              );
+              const omitViaDoNotInclude = resolveFlag_EntireConv(window.doNotIncludeLabelsCheckbox);
+              const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
 
-      // Robust helper for all shortcut styles, including number keys!
-      function matchesShortcutKey(setting, event) {
-        if (!setting || setting === '\u00A0') return false;
+              // Build processed clipboard payload directly from DOM (robust), not from selection
+              const { html, text, contentEls } = buildProcessedClipboardPayload_EntireConv({
+                includeAssistant,
+                includeUser,
+                includeLabels,
+              });
 
-        // If it's a single digit, match against key and code for both top-row and numpad
-        if (/^\d$/.test(setting)) {
-          return (
-            event.key === setting ||
-            event.code === `Digit${setting}` ||
-            event.code === `Numpad${setting}`
-          );
-        }
+              if (!html && !text) return;
 
-        // If the stored value is KeyboardEvent.code style
-        const isCodeStyle =
-          /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
-            setting,
-          );
-        if (isCodeStyle) {
-          // Special handling for numbers saved as "Digit1", "Numpad1"
-          if (/^Digit(\d)$/.test(setting) || /^Numpad(\d)$/.test(setting)) {
-            const num = setting.match(/\d/)[0];
-            return event.code === setting || event.key === num;
-          }
-          // All other codes
-          return event.code === setting;
-        }
+              // Create a visual selection spanning first->last message (for user feedback)
+              if (contentEls?.length) {
+                const range = createSelectionRangeForEls_EntireConv(contentEls);
+                // Use optional chaining to safely access Selection API
+                const selection = window.getSelection?.();
+                if (selection && range) {
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }
+              }
 
-        // Fallback: check event.key, case-insensitive
-        return event.key && event.key.toLowerCase() === setting.toLowerCase();
+              // Programmatically write the processed HTML/Text (this enforces role filtering + label rules)
+              void writeClipboardHTMLAndText_EntireConv(html, text);
+            } catch (err) {
+              if (DEBUG) console.debug('selectThenCopyAllMessages error:', err);
+            }
+          }, 50);
+        };
+      })(),
+    }; // Close keyFunctionMapping object @note Bottom of keyFunctionMapping
+
+    // Assign the functions to the window object for global access
+    window.toggleSidebar = keyFunctionMappingAlt[shortcuts.shortcutKeyToggleSidebar];
+    window.newConversation = keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
+    window.globalScrollToBottom =
+      keyFunctionMappingAlt[shortcuts.shortcutKeyClickNativeScrollToBottom];
+
+    // Robust helper for all shortcut styles, including number keys!
+    function matchesShortcutKey(setting, event) {
+      if (!setting || setting === '\u00A0') return false;
+
+      // If it's a single digit, match against key and code for both top-row and numpad
+      if (/^\d$/.test(setting)) {
+        return (
+          event.key === setting ||
+          event.code === `Digit${setting}` ||
+          event.code === `Numpad${setting}`
+        );
       }
 
-      document.addEventListener('keydown', (event) => {
-        if (
-          event.isComposing || // IME active (Hindi, Japanese)
-          event.keyCode === 229 || // Generic composition keyCode
-          ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
-          event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
-          ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
-        ) {
+      // If the stored value is KeyboardEvent.code style
+      const isCodeStyle =
+        /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
+          setting,
+        );
+      if (isCodeStyle) {
+        // Special handling for numbers saved as "Digit1", "Numpad1"
+        if (/^Digit(\d)$/.test(setting) || /^Numpad(\d)$/.test(setting)) {
+          const num = setting.match(/\d/)[0];
+          return event.code === setting || event.key === num;
+        }
+        // All other codes
+        return event.code === setting;
+      }
+
+      // Fallback: check event.key, case-insensitive
+      return event.key && event.key.toLowerCase() === setting.toLowerCase();
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (
+        event.isComposing || // IME active (Hindi, Japanese)
+        event.keyCode === 229 || // Generic composition keyCode
+        ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
+        event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
+        ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
+      ) {
+        return;
+      }
+
+      const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
+      const isAltPressed = event.altKey;
+
+      // Canonical key: use layout-aware key for text, keep exact for special keys
+      const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+
+      // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
+      if (isAltPressed) {
+        // Always open menu for Alt+W (or whatever your toggle key is)
+        if (!isCtrlPressed && matchesShortcutKey(modelToggleSetting, event)) {
+          event.preventDefault();
+          window.toggleModelSelector();
           return;
         }
 
-        const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
-        const isAltPressed = event.altKey;
+        // If this is a digit (1-9 or 0), decide whether to intercept for model switching.
+        if (/^\d$/.test(keyIdentifier)) {
+          const digit = keyIdentifier; // '0'..'9'
 
-        // Canonical key: use layout-aware key for text, keep exact for special keys
-        const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+          // Get model codes cache safely (may be provided by ShortcutUtils)
+          const modelCodes =
+            window.ShortcutUtils &&
+            typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
+              ? window.ShortcutUtils.getModelPickerCodesCache()
+              : [];
 
-        // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
-        if (isAltPressed) {
-          // Always open menu for Alt+W (or whatever your toggle key is)
-          if (
-            !isCtrlPressed &&
-            (keyIdentifier === modelToggleKey || event.code === modelToggleKey)
-          ) {
-            event.preventDefault();
-            window.toggleModelSelector();
-            return;
-          }
+          // Find a model slot assigned to that digit (normalizes Digit/Numpad via codeEquals)
+          const modelAssignedIndex =
+            window.ShortcutUtils && typeof window.ShortcutUtils.codeEquals === 'function'
+              ? modelCodes.findIndex((c) => window.ShortcutUtils.codeEquals(c, `Digit${digit}`))
+              : -1;
 
-          // If this is a digit (1-9 or 0), decide whether to intercept for model switching.
-          if (/^\d$/.test(keyIdentifier)) {
-            const digit = keyIdentifier; // '0'..'9'
-
-            // Get model codes cache safely (may be provided by ShortcutUtils)
-            const modelCodes =
-              window.ShortcutUtils &&
-              typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
-                ? window.ShortcutUtils.getModelPickerCodesCache()
-                : [];
-
-            // Find a model slot assigned to that digit (normalizes Digit/Numpad via codeEquals)
-            const modelAssignedIndex =
-              window.ShortcutUtils && typeof window.ShortcutUtils.codeEquals === 'function'
-                ? modelCodes.findIndex((c) => window.ShortcutUtils.codeEquals(c, `Digit${digit}`))
-                : -1;
-
-            if (modelAssignedIndex !== -1) {
-              // There is a model assigned to this digit.
-              // Intercept it only if the model picker is configured to use Alt.
-              if (window.useAltForModelSwitcherRadio === true) {
-                // Intercept only when Alt is the chosen modifier for model switching.
-                event.preventDefault();
-                // Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
-                if (typeof window.switchModelByIndex === 'function') {
-                  window.switchModelByIndex(modelAssignedIndex);
-                } else {
-                  document.dispatchEvent(
-                    new CustomEvent('modelPickerNumber', {
-                      detail: { index: modelAssignedIndex, event },
-                    }),
-                  );
-                }
-                return;
-              }
-              // If model picker uses Control, DO NOT intercept Alt+digit: let Alt mappings handle it.
-            } else {
-              // No model assigned to this digit: do NOT intercept — let Alt+digit fall through to other Alt handlers.
-            }
-          }
-
-          // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyPreviousThread
-          if (
-            isCtrlPressed &&
-            matchesShortcutKey(shortcuts.shortcutKeyPreviousThread, event) &&
-            keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]
-          ) {
-            event.preventDefault();
-            keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]({
-              previewOnly: true,
-              event,
-            });
-            return;
-          }
-
-          // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyNextThread
-          if (
-            isCtrlPressed &&
-            matchesShortcutKey(shortcuts.shortcutKeyNextThread, event) &&
-            keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]
-          ) {
-            event.preventDefault();
-            keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]({
-              previewOnly: true,
-              event,
-            });
-            return;
-          }
-
-          // Normal Alt+Key shortcut: handle mapped Alt shortcuts.
-          // Note: digit keys that *were assigned to models* above were already handled and returned;
-          // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
-          const matchedAltKey = Object.keys(keyFunctionMappingAlt).find((k) =>
-            matchesShortcutKey(k, event),
-          );
-          if (matchedAltKey) {
-            event.preventDefault();
-            keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
-            return;
-          }
-        }
-
-        // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
-        if (isCtrlPressed && !isAltPressed) {
-          // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
-          if (
-            window.useControlForModelSwitcherRadio === true &&
-            (keyIdentifier === modelToggleKey || event.code === modelToggleKey)
-          ) {
-            event.preventDefault();
-            window.toggleModelSelector(); // open / close the menu
-            return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
-          }
-
-          // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.)
-          const ctrlShortcut =
-            keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
-
-          if (ctrlShortcut) {
-            const enabled =
-              isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code);
-
-            if (!enabled) return;
-
-            const isBackspace = keyIdentifier === 'Backspace' || event.code === 'Backspace';
-
-            if (isBackspace) {
-              // Only intercept if a visible Stop button exists; otherwise let native deletion happen.
-              const stopBtn = getVisibleStopButton();
-              if (stopBtn) {
-                event.preventDefault();
-                try {
-                  ctrlShortcut(); // will click the stop button
-                } catch (e) {
-                  console.error('Backspace handler failed:', e);
-                }
-              }
-              // If no visible stop button: do nothing -> native Ctrl+Backspace behavior
-            } else {
-              // Non-Backspace Ctrl shortcuts behave as before
+          if (modelAssignedIndex !== -1) {
+            // There is a model assigned to this digit.
+            // Intercept it only if the model picker is configured to use Alt.
+            if (window.useAltForModelSwitcherRadio === true) {
+              // Intercept only when Alt is the chosen modifier for model switching.
               event.preventDefault();
-              ctrlShortcut();
+              // Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
+              if (typeof window.switchModelByIndex === 'function') {
+                window.switchModelByIndex(modelAssignedIndex);
+              } else {
+                document.dispatchEvent(
+                  new CustomEvent('modelPickerNumber', {
+                    detail: { index: modelAssignedIndex, event },
+                  }),
+                );
+              }
+              return;
             }
+            // If model picker uses Control, DO NOT intercept Alt+digit: let Alt mappings handle it.
+          } else {
+            // No model assigned to this digit: do NOT intercept — let Alt+digit fall through to other Alt handlers.
           }
         }
-      });
 
-      // Function to check if the specific Ctrl/Command + Key shortcut is enabled
-      function isCtrlShortcutEnabled(key) {
-        if (key === shortcuts.shortcutKeyClickSendButton) {
-          return window.enableSendWithControlEnterCheckbox === true;
+        // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyPreviousThread
+        if (
+          isCtrlPressed &&
+          matchesShortcutKey(shortcuts.shortcutKeyPreviousThread, event) &&
+          keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]
+        ) {
+          event.preventDefault();
+          keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]({
+            previewOnly: true,
+            event,
+          });
+          return;
         }
-        if (key === shortcuts.shortcutKeyClickStopButton) {
-          return window.enableStopWithControlBackspaceCheckbox === true;
+
+        // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyNextThread
+        if (
+          isCtrlPressed &&
+          matchesShortcutKey(shortcuts.shortcutKeyNextThread, event) &&
+          keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]
+        ) {
+          event.preventDefault();
+          keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]({
+            previewOnly: true,
+            event,
+          });
+          return;
         }
-        return false;
+
+        // Normal Alt+Key shortcut: handle mapped Alt shortcuts.
+        // Note: digit keys that *were assigned to models* above were already handled and returned;
+        // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
+        const matchedAltKey = Object.keys(keyFunctionMappingAlt).find((k) =>
+          matchesShortcutKey(k, event),
+        );
+        if (matchedAltKey) {
+          event.preventDefault();
+          keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
+          return;
+        }
       }
-    },
-  );
+
+      // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
+      if (isCtrlPressed && !isAltPressed) {
+        // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
+        if (
+          window.useControlForModelSwitcherRadio === true &&
+          matchesShortcutKey(modelToggleSetting, event)
+        ) {
+          event.preventDefault();
+          window.toggleModelSelector(); // open / close the menu
+          return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
+        }
+
+        // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.)
+        const ctrlShortcut =
+          keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
+
+        if (ctrlShortcut) {
+          const enabled = isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code);
+
+          if (!enabled) return;
+
+          const isBackspace = keyIdentifier === 'Backspace' || event.code === 'Backspace';
+
+          if (isBackspace) {
+            // Only intercept if a visible Stop button exists; otherwise let native deletion happen.
+            const stopBtn = getVisibleStopButton();
+            if (stopBtn) {
+              event.preventDefault();
+              try {
+                ctrlShortcut(); // will click the stop button
+              } catch (e) {
+                console.error('Backspace handler failed:', e);
+              }
+            }
+            // If no visible stop button: do nothing -> native Ctrl+Backspace behavior
+          } else {
+            // Non-Backspace Ctrl shortcuts behave as before
+            event.preventDefault();
+            ctrlShortcut();
+          }
+        }
+      }
+    });
+
+    // Function to check if the specific Ctrl/Command + Key shortcut is enabled
+    function isCtrlShortcutEnabled(key) {
+      if (key === shortcuts.shortcutKeyClickSendButton) {
+        return window.enableSendWithControlEnterCheckbox === true;
+      }
+      if (key === shortcuts.shortcutKeyClickStopButton) {
+        return window.enableStopWithControlBackspaceCheckbox === true;
+      }
+      return false;
+    }
+  });
 })();
 
 // ====================================
@@ -5414,10 +5352,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                     // console.error("Error:", chrome.runtime.lastError); // comment out if you want silence
                     window.popupBottomBarOpacityValue = 0.6;
                   } else {
-                    window.popupBottomBarOpacityValue =
-                      typeof res.popupBottomBarOpacityValue === 'number'
-                        ? res.popupBottomBarOpacityValue
-                        : 0.6;
+                    window.popupBottomBarOpacityValue = coerceNumberFromStorage(
+                      res.popupBottomBarOpacityValue,
+                      0.6,
+                    );
                   }
                   resolve(window.popupBottomBarOpacityValue);
                 });
@@ -5549,10 +5487,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
                   /* fade / opacity handlers --------------------------------------- */
                   const idleOpacity = () => {
-                    const value =
-                      typeof window.popupBottomBarOpacityValue === 'number'
-                        ? window.popupBottomBarOpacityValue
-                        : 0.6;
+                    const value = coerceNumberFromStorage(window.popupBottomBarOpacityValue, 0.6);
                     if (bottomBar) bottomBar.style.opacity = String(value);
                   };
 
@@ -6380,10 +6315,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
         // No assignment inside an expression: compute first, then assign.
         const idle = () => {
-          const targetOpacity =
-            typeof window.popupBottomBarOpacityValue === 'number'
-              ? window.popupBottomBarOpacityValue
-              : 0.6;
+          const targetOpacity = coerceNumberFromStorage(window.popupBottomBarOpacityValue, 0.6);
           bb.style.opacity = String(targetOpacity);
         };
 
@@ -7383,16 +7315,16 @@ setTimeout(() => {
       }
 
       function getIdleOpacity() {
-        return window._slimBarIdleOpacity ?? 0.6;
+        return coerceNumberFromStorage(window._slimBarIdleOpacity, 0.0);
       }
       function ensureOpacityLoaded() {
         if (window._slimBarOpacityPromise) return window._slimBarOpacityPromise;
         window._slimBarOpacityPromise = new Promise((res) => {
-          chrome.storage.sync.get({ popupSlimSidebarOpacityValue: 0.6 }, (data) => {
-            window._slimBarIdleOpacity =
-              typeof data.popupSlimSidebarOpacityValue === 'number'
-                ? data.popupSlimSidebarOpacityValue
-                : 0.6;
+          chrome.storage.sync.get({ popupSlimSidebarOpacityValue: 0.0 }, (data) => {
+            window._slimBarIdleOpacity = coerceNumberFromStorage(
+              data.popupSlimSidebarOpacityValue,
+              0.0,
+            );
             res();
           });
         });
@@ -7611,10 +7543,10 @@ setTimeout(() => {
         if (area !== 'sync') return;
 
         if ('popupSlimSidebarOpacityValue' in chg) {
-          window._slimBarIdleOpacity =
-            typeof chg.popupSlimSidebarOpacityValue.newValue === 'number'
-              ? chg.popupSlimSidebarOpacityValue.newValue
-              : 0.6;
+          window._slimBarIdleOpacity = coerceNumberFromStorage(
+            chg.popupSlimSidebarOpacityValue.newValue,
+            0.0,
+          );
           fadeToIdle();
         }
 
@@ -7670,6 +7602,23 @@ setTimeout(() => {
 
   // ---- 2) Utils ----
   const NBSP = '\u00A0';
+
+  const escapeHtml = (s) =>
+    String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+
+  const getMessage = (key, fallback = '') => {
+    if (!key) return fallback;
+    try {
+      const msg = chrome?.i18n?.getMessage?.(key);
+      if (msg) return msg;
+    } catch {
+      // ignore
+    }
+    return fallback;
+  };
 
   const unwrapSettings = (obj) => {
     if (obj?.data && typeof obj.data === 'object') {
@@ -7867,77 +7816,80 @@ setTimeout(() => {
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
   const buildOverlayHtml = (cfg) => {
-    const sections = [
-      {
-        header: 'Model Picker + UI Tweaks',
-        keys: [
-          'shortcutKeyToggleModelSelector',
-          'shortcutKeyThinkingStandard',
-          'shortcutKeyThinkingExtended',
-        ],
-      },
-      {
-        header: 'Quick Clicks',
-        keys: [
-          'shortcutKeyNewConversation',
-          'shortcutKeyActivateInput',
-          'shortcutKeyToggleSidebar',
-          'shortcutKeyPreviousThread',
-          'shortcutKeyNextThread',
-          'shortcutKeySearchConversationHistory',
-        ],
-      },
-      {
-        header: 'Scroll',
-        keys: [
-          'shortcutKeyScrollToTop',
-          'shortcutKeyClickNativeScrollToBottom',
-          'shortcutKeyScrollUpOneMessage',
-          'shortcutKeyScrollDownOneMessage',
-          'shortcutKeyScrollUpTwoMessages',
-          'shortcutKeyScrollDownTwoMessages',
-        ],
-      },
-      {
-        header: 'Clipboard',
-        keys: [
-          'shortcutKeyCopyLowest',
-          'selectThenCopy',
-          'selectThenCopyAllMessages',
-          'shortcutKeyCopyAllCodeBlocks',
-        ],
-      },
-      {
-        header: 'Compose + Send',
-        keys: [
-          'shortcutKeyEdit',
-          'shortcutKeySendEdit',
-          'shortcutKeyTemporaryChat',
-          'shortcutKeyToggleDictate',
-        ],
-      },
-      {
-        header: 'Regenerate Response',
-        keys: [
-          'shortcutKeyRegenerateTryAgain',
-          'shortcutKeyRegenerateMoreConcise',
-          'shortcutKeyRegenerateAddDetails',
-          'shortcutKeyRegenerateWithDifferentModel',
-          'shortcutKeyRegenerateAskToChangeResponse',
-        ],
-      },
-      {
-        header: 'Message Tools',
-        keys: [
-          'shortcutKeySearchWeb',
-          'shortcutKeyStudy',
-          'shortcutKeyCreateImage',
-          'shortcutKeyToggleCanvas',
-          'shortcutKeyAddPhotosFiles',
-          'shortcutKeyThinkLonger',
-        ],
-      },
-    ];
+    const schemaSections = window.CSP_SETTINGS_SCHEMA?.shortcuts?.overlaySections;
+    const sections = Array.isArray(schemaSections)
+      ? schemaSections
+      : [
+          {
+            header: 'Model Picker + UI Tweaks',
+            keys: [
+              'shortcutKeyToggleModelSelector',
+              'shortcutKeyThinkingStandard',
+              'shortcutKeyThinkingExtended',
+            ],
+          },
+          {
+            header: 'Quick Clicks',
+            keys: [
+              'shortcutKeyNewConversation',
+              'shortcutKeyActivateInput',
+              'shortcutKeyToggleSidebar',
+              'shortcutKeyPreviousThread',
+              'shortcutKeyNextThread',
+              'shortcutKeySearchConversationHistory',
+            ],
+          },
+          {
+            header: 'Scroll',
+            keys: [
+              'shortcutKeyScrollToTop',
+              'shortcutKeyClickNativeScrollToBottom',
+              'shortcutKeyScrollUpOneMessage',
+              'shortcutKeyScrollDownOneMessage',
+              'shortcutKeyScrollUpTwoMessages',
+              'shortcutKeyScrollDownTwoMessages',
+            ],
+          },
+          {
+            header: 'Clipboard',
+            keys: [
+              'shortcutKeyCopyLowest',
+              'selectThenCopy',
+              'selectThenCopyAllMessages',
+              'shortcutKeyCopyAllCodeBlocks',
+            ],
+          },
+          {
+            header: 'Compose + Send',
+            keys: [
+              'shortcutKeyEdit',
+              'shortcutKeySendEdit',
+              'shortcutKeyTemporaryChat',
+              'shortcutKeyToggleDictate',
+            ],
+          },
+          {
+            header: 'Regenerate Response',
+            keys: [
+              'shortcutKeyRegenerateTryAgain',
+              'shortcutKeyRegenerateMoreConcise',
+              'shortcutKeyRegenerateAddDetails',
+              'shortcutKeyRegenerateWithDifferentModel',
+              'shortcutKeyRegenerateAskToChangeResponse',
+            ],
+          },
+          {
+            header: 'Message Tools',
+            keys: [
+              'shortcutKeySearchWeb',
+              'shortcutKeyStudy',
+              'shortcutKeyCreateImage',
+              'shortcutKeyToggleCanvas',
+              'shortcutKeyAddPhotosFiles',
+              'shortcutKeyThinkLonger',
+            ],
+          },
+        ];
 
     const out = [];
     out.push(`<div class="shortcut-container">
@@ -7945,14 +7897,23 @@ setTimeout(() => {
     ${buildModelSwitcherGrid(cfg)}
     <div class="shortcut-grid">`);
 
+    const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
+    const renderedKeys = new Set();
+    const labelForKey = (k) => {
+      const i18nKey = labelI18nByKey[k];
+      const msg = getMessage(i18nKey, '');
+      return msg || keyToLabel(k);
+    };
+
     for (const section of sections) {
       const rows = section.keys
         .filter((k) => isAssigned(cfg[k]))
         .map((k) => {
+          renderedKeys.add(k);
           const val = cfg[k];
           return `
           <div class="shortcut-item">
-            <div class="shortcut-label"><span>${keyToLabel(k)}</span></div>
+            <div class="shortcut-label"><span>${escapeHtml(labelForKey(k))}</span></div>
             <div class="shortcut-keys">
               <span class="key-text platform-alt-label"> Alt + </span>
               <input class="key-input" disabled id="${k}" maxlength="12" value="${displayFromCode(val)}" />
@@ -7962,11 +7923,48 @@ setTimeout(() => {
         });
 
       if (rows.length) {
+        const headerText =
+          getMessage(section.headerI18nKey, section.header || '') || section.header || '';
         out.push(
-          `<div class="blank-row section-header" role="heading" aria-level="2">${section.header}</div>`,
+          `<div class="blank-row section-header" role="heading" aria-level="2">${escapeHtml(headerText)}</div>`,
         );
         out.push(rows.join(''));
       }
+    }
+
+    // Catch-all: include any assigned shortcuts not captured by section lists/metadata.
+    const keyPrefix = window.CSP_SETTINGS_SCHEMA?.shortcuts?.keyPrefix || 'shortcutKey';
+    const extraShortcutKeys = window.CSP_SETTINGS_SCHEMA?.shortcuts?.extraShortcutKeys || [
+      'selectThenCopy',
+      'selectThenCopyAllMessages',
+    ];
+
+    const catchAllKeys = Object.keys(cfg)
+      .filter((k) => k !== 'shortcutKeyShowShortcuts')
+      .filter((k) => k.startsWith(keyPrefix) || extraShortcutKeys.includes(k))
+      .filter((k) => isAssigned(cfg[k]))
+      .filter((k) => !renderedKeys.has(k))
+      .sort((a, b) => a.localeCompare(b));
+
+    if (catchAllKeys.length) {
+      out.push(`<div class="blank-row section-header" role="heading" aria-level="2">Other</div>`);
+      out.push(
+        catchAllKeys
+          .map((k) => {
+            renderedKeys.add(k);
+            const val = cfg[k];
+            return `
+            <div class="shortcut-item">
+              <div class="shortcut-label"><span>${escapeHtml(labelForKey(k))}</span></div>
+              <div class="shortcut-keys">
+                <span class="key-text platform-alt-label"> Alt + </span>
+                <input class="key-input" disabled id="${k}" maxlength="12" value="${displayFromCode(val)}" />
+              </div>
+            </div>
+          `;
+          })
+          .join(''),
+      );
     }
 
     out.push(`</div></div>`);
@@ -7976,7 +7974,7 @@ setTimeout(() => {
   // ---- 4) Show/close overlay (injecting CSS, scrolling) ----
   const OVERLAY_ID = 'csp-shortcut-overlay';
 
-  const showShortcutOverlay = (cfg) => {
+  const showShortcutOverlay = async (cfg) => {
     const existing = document.getElementById(OVERLAY_ID);
     if (existing) {
       existing.remove();
@@ -8015,7 +8013,6 @@ setTimeout(() => {
     const CLOSE_BTN_SHIFT_TOP = -12; // negative = up, positive = down, in px
     const CLOSE_BTN_SHIFT_RIGHT = -12; // negative = closer to edge, positive = further left, in px
 
-    // Scroll container should use max-height and overflow-y:auto
     shadow.innerHTML = `
     <style>${FULL_POPUP_CSS}</style>
     <style>
@@ -8112,11 +8109,81 @@ setTimeout(() => {
 
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // ---- 5) Read settings and open overlay on Ctrl+/ ----
+  let overlayContextInvalidated = false;
+  let overlayContextInvalidatedLogged = false;
+
+  const markOverlayContextInvalidated = (err) => {
+    overlayContextInvalidated = true;
+    if (overlayContextInvalidatedLogged) return;
+    overlayContextInvalidatedLogged = true;
+    console.warn(
+      '[CSP] overlay disabled (extension reloaded while tab is open). Reload the page to re-enable.',
+      err,
+    );
+  };
+
   const isExtensionAlive = () =>
     typeof chrome !== 'undefined' &&
+    !overlayContextInvalidated &&
     !!chrome.runtime &&
     !!chrome.runtime.id &&
     !!chrome.storage?.sync;
+
+  // Configurable Ctrl+/ overlay key (Ctrl/Cmd + <key>)
+  let showShortcutsCode = 'Slash';
+
+  const normalizeShowShortcutsSettingToCode = (stored) => {
+    if (stored == null) return '';
+    const s = String(stored).trim();
+    if (!s || s === '\u00A0') return '';
+    if (s.length === 1) return typeof charToCode === 'function' ? charToCode(s) : '';
+    return s;
+  };
+
+  const setShowShortcutsCode = (stored) => {
+    const code = normalizeShowShortcutsSettingToCode(stored);
+    showShortcutsCode = code || 'Slash';
+  };
+
+  const hydrateShowShortcutsCode = () => {
+    if (!isExtensionAlive()) return;
+    try {
+      chrome.storage.sync.get({ shortcutKeyShowShortcuts: 'Slash' }, (res = {}) => {
+        if (!isExtensionAlive()) return;
+        if (chrome.runtime.lastError) {
+          if (
+            /context invalidated/i.test(chrome.runtime.lastError.message || '') ||
+            /Extension context invalidated/i.test(chrome.runtime.lastError.message || '')
+          ) {
+            markOverlayContextInvalidated(chrome.runtime.lastError);
+          }
+          console.warn(
+            '[CSP] storage.get(shortcutKeyShowShortcuts) failed:',
+            chrome.runtime.lastError,
+          );
+          return;
+        }
+        setShowShortcutsCode(res.shortcutKeyShowShortcuts);
+      });
+    } catch (err) {
+      if (
+        /context invalidated/i.test(err?.message || '') ||
+        /Extension context invalidated/i.test(err?.message || '')
+      ) {
+        markOverlayContextInvalidated(err);
+      }
+      console.warn('[CSP] storage.get(shortcutKeyShowShortcuts) threw:', err);
+    }
+  };
+
+  hydrateShowShortcutsCode();
+  try {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'sync') return;
+      if (!changes || !changes.shortcutKeyShowShortcuts) return;
+      setShowShortcutsCode(changes.shortcutKeyShowShortcuts.newValue);
+    });
+  } catch (_) {}
 
   const getAllSettings = () =>
     new Promise((resolve) => {
@@ -8131,6 +8198,12 @@ setTimeout(() => {
             return;
           }
           if (chrome.runtime.lastError) {
+            if (
+              /context invalidated/i.test(chrome.runtime.lastError.message || '') ||
+              /Extension context invalidated/i.test(chrome.runtime.lastError.message || '')
+            ) {
+              markOverlayContextInvalidated(chrome.runtime.lastError);
+            }
             console.warn('[CSP] storage.get(all) failed:', chrome.runtime.lastError);
             resolve({});
             return;
@@ -8138,6 +8211,12 @@ setTimeout(() => {
           resolve(unwrapSettings(raw));
         });
       } catch (err) {
+        if (
+          /context invalidated/i.test(err?.message || '') ||
+          /Extension context invalidated/i.test(err?.message || '')
+        ) {
+          markOverlayContextInvalidated(err);
+        }
         console.warn('[CSP] storage.get(all) threw:', err);
         resolve({});
       }
@@ -8177,6 +8256,12 @@ setTimeout(() => {
         chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes'], (res = {}) => {
           if (!isExtensionAlive()) return resolve();
           if (chrome.runtime.lastError) {
+            if (
+              /context invalidated/i.test(chrome.runtime.lastError.message || '') ||
+              /Extension context invalidated/i.test(chrome.runtime.lastError.message || '')
+            ) {
+              markOverlayContextInvalidated(chrome.runtime.lastError);
+            }
             console.warn('[CSP] storage.get(model*) failed:', chrome.runtime.lastError);
             return resolve();
           }
@@ -8209,11 +8294,23 @@ setTimeout(() => {
             window.MODEL_NAMES = names;
             window.__modelPickerKeyCodes = codes;
           } catch (err) {
+            if (
+              /context invalidated/i.test(err?.message || '') ||
+              /Extension context invalidated/i.test(err?.message || '')
+            ) {
+              markOverlayContextInvalidated(err);
+            }
             console.warn('[CSP] hydrateModelData error:', err);
           }
           resolve();
         });
       } catch (err) {
+        if (
+          /context invalidated/i.test(err?.message || '') ||
+          /Extension context invalidated/i.test(err?.message || '')
+        ) {
+          markOverlayContextInvalidated(err);
+        }
         console.warn('[CSP] storage.get(model*) threw:', err);
         resolve();
       }
@@ -8229,13 +8326,20 @@ setTimeout(() => {
       .trim();
 
   const onKeyDown = (e) => {
-    const ctrlSlash =
-      e.ctrlKey &&
-      !e.altKey &&
-      !e.metaKey &&
-      !e.shiftKey &&
-      (e.code === 'Slash' || e.key === '/' || e.code === 'NumpadDivide');
-    if (!ctrlSlash) return;
+    const ctrlOrCmdOnly =
+      (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && !(e.ctrlKey && e.metaKey);
+    if (!ctrlOrCmdOnly) return;
+
+    const desired = showShortcutsCode;
+    if (!desired) return;
+
+    const isSlashLike = desired === 'Slash' || desired === 'NumpadDivide';
+    const matchesKey = isSlashLike
+      ? e.code === 'Slash' || e.code === 'NumpadDivide' || e.key === '/'
+      : codeEquals(desired, e.code);
+
+    if (!matchesKey) return;
+    if (!isExtensionAlive()) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -8244,7 +8348,9 @@ setTimeout(() => {
         if (!isExtensionAlive()) return;
         // last guard: DOM might be gone if tab navigated between keydown and resolve
         if (!document || !document.body) return;
-        showShortcutOverlay(cfg || {});
+        showShortcutOverlay(cfg || {}).catch((err) => {
+          console.warn('[CSP] overlay render failed:', err);
+        });
       })
       .catch((err) => {
         console.warn('[CSP] overlay open failed:', err);
@@ -8331,5 +8437,84 @@ setTimeout(() => {
   chrome.storage.onChanged.addListener((chg, area) => {
     if (area !== 'sync' || !('clickToCopyInlineCodeEnabled' in chg)) return;
     applySetting(chg.clickToCopyInlineCodeEnabled.newValue);
+  });
+})();
+
+// ===============================================
+// Highlight bold text in custom color (gated via MV3 setting)
+// Content script IIFE for ChatGPT Custom Shortcuts Pro
+// ===============================================
+(() => {
+  'use strict';
+
+  const STYLE_ID = 'csp-color-bold-text-style';
+  const DEFAULT_LIGHT_COLOR = '#2037e6';
+  const DEFAULT_DARK_COLOR = '#4da3ff';
+
+  const host = () => document.head || document.documentElement;
+
+  const buildCSS = (lightColor, darkColor) => `
+    .light b, .light strong { color: ${lightColor} !important; }
+    .dark  b, .dark  strong { color: ${darkColor} !important; }
+  `;
+
+  const enable = (lightColor, darkColor) => {
+    const css = buildCSS(
+      lightColor || DEFAULT_LIGHT_COLOR,
+      darkColor || DEFAULT_DARK_COLOR,
+    );
+    let s = document.getElementById(STYLE_ID);
+    if (s) {
+      s.textContent = css;
+    } else {
+      s = document.createElement('style');
+      s.id = STYLE_ID;
+      s.textContent = css;
+      host().appendChild(s);
+    }
+  };
+
+  const disable = () => {
+    const s = document.getElementById(STYLE_ID);
+    if (s) s.remove();
+  };
+
+  const apply = (on, lightColor, darkColor) => {
+    if (on) {
+      enable(lightColor, darkColor);
+    } else {
+      disable();
+    }
+  };
+
+  // Initial load
+  chrome.storage.sync.get(
+    {
+      colorBoldTextEnabled: false,
+      colorBoldTextLightColor: DEFAULT_LIGHT_COLOR,
+      colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
+    },
+    ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
+      apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
+    },
+  );
+
+  // Listen for changes
+  chrome.storage.onChanged.addListener((chg, area) => {
+    if (area !== 'sync') return;
+
+    const relevantKeys = ['colorBoldTextEnabled', 'colorBoldTextLightColor', 'colorBoldTextDarkColor'];
+    if (!relevantKeys.some((key) => key in chg)) return;
+
+    chrome.storage.sync.get(
+      {
+        colorBoldTextEnabled: false,
+        colorBoldTextLightColor: DEFAULT_LIGHT_COLOR,
+        colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
+      },
+      ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
+        apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
+      },
+    );
   });
 })();

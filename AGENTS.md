@@ -3,10 +3,11 @@
 - ChatGPT Custom Shortcuts Pro is a Chrome extension that adds configurable shortcuts and UI tweaks to chatgpt.com.  
 - This file tells the coding agent how to modify the extension safely and which files it can touch.  
 - IMPORTANT: If required information is missing, stop and ask the user instead of guessing (for example, ask them to copy relevant HTML from the ChatGPT page’s inspector into the prompt).
+- Packaging reminder: if you add new shipped files/folders, update `build-zip.js` `includeItems` so the Chrome Web Store upload zip contains them.
 
 ## Repository search
 
-- files to include: `AGENTS.md, auth.js, background.js, content.js, manifest.json, options-storage.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, lib/*.min.js, tools/*.zip`
+- files to include: `AGENTS.md, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, lib/*.min.js, tools/*.zip`
 - exclude any files and folders not listed above
 - explicitly exclude these folders: `node_modules`, `dist`, `netlify`, `css-cleanup`, `.git`
 
@@ -18,6 +19,7 @@ Only read, edit, and consider the files listed below when working on this projec
 1. Core logic and behavior
    - `content.js`                 : main runtime logic acting on chatgpt.com DOM, shortcuts, scrolling, copy, overlays
    - `options-storage.js`         : central option defaults, migrations, chrome.storage wiring
+   - `settings-schema.js`         : shared settings schema (see `schemaVersion`) for popup/content wiring and key lists (does not touch model picker logic)
    - `storage.js`                 : CloudStorage helper syncing settings to Drive appDataFolder
    - `auth.js`                    : CloudAuth helper for Google OAuth tokens and refresh
    - `shared/model-picker-labels.js` : canonical model labels and test IDs used by content and popup
@@ -50,6 +52,32 @@ Only read, edit, and consider the files listed below when working on this projec
 - Keep chrome.storage sync the single source of truth for settings; propagate changes through `options-storage.js`, `popup` UI, and `content.js`.
 - Treat the popup authoring experience as high-priority: respect i18n keys, tooltip balancing, and duplicate-shortcut safeguards.
 - Use the provided helpers (`ShortcutUtils`, GSAP plugins, CloudAuth/CloudStorage) instead of reimplementing similar logic.
+
+## Adding new settings (wiring map)
+This project intentionally avoids “update the same key in 6 places”. New settings should follow this map.
+
+### New toggle (checkbox)
+- `options-storage.js`: add the default key/value to `OPTIONS_DEFAULTS` (required so popup seeding + validators recognize the key).
+- `popup.html`: add `<input type="checkbox" data-sync="<storageKey>">` (id can match for convenience); omit `checked` when the default is `false`.
+- `_locales/*/messages.json`: add label/tooltip strings if user-facing (use a `data-i18n` key for the label).
+- Content wiring (pick one):
+  - Schema-driven: add the key to `settings-schema.js` → `CSP_SETTINGS_SCHEMA.content.visibilityDefaults`, then read `window.<storageKey>` (populated by `applyVisibilitySettings`) in `content.js`.
+  - Self-contained: read `chrome.storage.sync.get({ <storageKey>: <default> })` and listen to `chrome.storage.onChanged` in `content.js` (no `settings-schema.js` change required).
+- `CHANGELOG.md`: update for user-visible behavior changes.
+
+### New shortcut (Alt+...)
+- `options-storage.js`: add the default key/value to `OPTIONS_DEFAULTS` (legacy single-char defaults are OK; popup coerces to `KeyboardEvent.code`).
+- `popup.html`: add the shortcut input with `class="key-input"` and `data-sync="<storageKey>"`.
+- `content.js`: add the key to `shortcutDefaults` and implement the handler in the appropriate mapping (`keyFunctionMappingAlt`, Ctrl handler, etc.).
+- `settings-schema.js`: add/confirm a `CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey[storageKey]` entry so the Ctrl+/ overlay label matches the popup across locales.
+- `settings-schema.js`: add it to `CSP_SETTINGS_SCHEMA.shortcuts.overlaySections` to control section grouping/order (otherwise it will still surface under the overlay’s catch-all “Other” section when assigned).
+
+### Radio groups (mutually exclusive toggles)
+- `settings-schema.js`: add/update `CSP_SETTINGS_SCHEMA.popup.radioGroups` so the popup knows how to clear the other keys in the group.
+- `popup.html`: ensure each radio/checkbox in the group uses `data-sync` for the same storage keys.
+
+### Guardrails (helps prevent dev mistakes)
+- `popup.js` logs a console warning if `popup.html` contains a `data-sync` key that is missing from both `OPTIONS_DEFAULTS` and popup defaults.
 
 ## Project summary
 This MV3 extension layers a programmable shortcut system over chatgpt.com. Users can:
@@ -92,7 +120,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Remembers sidebar scroll in both rail and overlay modes using sessionStorage keys keyed by pathname + mode.
 - Overlays:
   - `window.toggleModelSelector` ensures both the main menu and legacy submenu open, even if the UI changes.
-  - `Ctrl+/` shortcut overlay copies `popup.css` (stored as `FULL_POPUP_CSS`) to a shadow DOM to display current assignments.
+  - `Ctrl+/` shortcut overlay copies `popup.css` (stored as `FULL_POPUP_CSS`) to a shadow DOM and renders only assigned shortcuts. The model picker grid stays unchanged. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
 - Global exports include `window.toggleSidebar`, `window.newConversation`, `window.globalScrollToBottom`, `window.clickGptHeaderThenSubItemSvg`, `window.toggleModelSelector`, clipboard helpers, and toast utilities.
 
 ### popup.html / popup.js / popup.css
@@ -124,7 +152,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 - Tests (if/when added) belong in `tests/` and should be runnable via `npm test`.
 
 ## Behavior & workflow invariants
-- Settings propagation: `chrome.storage.sync` is the authority. `content.js` calls `chrome.storage.sync.get([...])` once, applies defaults through `applyVisibilitySettings`, and listens to `chrome.storage.onChanged` to update runtime flags. Any new key must be added to (1) the initial `get` list, (2) the `applyVisibilitySettings` map, and (3) `options-storage.js` defaults.
+- Settings propagation: `chrome.storage.sync` is the authority. `content.js` loads visibility keys by deriving them from a single defaults map (`VISIBILITY_DEFAULTS`, sourced from `settings-schema.js` when present) plus a small schema-driven extra-key list, then applies them through `applyVisibilitySettings`. New content-consumed toggles should be added to `settings-schema.js` (`content.visibilityDefaults`) and `options-storage.js` (`OPTIONS_DEFAULTS`).
 - Shortcut handling: `ShortcutUtils` normalizes everything to `KeyboardEvent.code`. Digits treat `DigitX` and `NumpadX` as equivalent. Clearing an input writes NBSP to storage. Duplicate detection distinguishes between model slots and popup shortcuts depending on whether the model picker is set to Alt or Control.
 - Model picker: `window.MODEL_NAMES` must never include the legacy `→` arrow once data is hydrated; storage arrays are filtered to 10 visible slots. `window.toggleModelSelector` opens both main and legacy menu content and relies on selectors from `shared/model-picker-labels.js`. Keeping these helpers synced avoids DOM-fragile selectors throughout the codebase.
 - Copy sanitization: `selectThenCopy` and `selectThenCopyAllMessages` transform DOM content into HTML+plain text pairs that preserve code fences, CRLF endings, and Word-friendly spacing. Don’t bypass these helpers; adjust their utilities (`splitByCodeFences`, `removeMarkdown`, `buildPlainTextWithFences`) if you need new behavior.
@@ -134,11 +162,13 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 - Auto-click helpers: Watch for warning dialogs and “Something went wrong” containers; they must remain resilient and only target relevant nodes to avoid accidental clicks.
 
 ## Adding or adjusting shortcuts/toggles
-1. Defaults & storage: Add the key to `OPTIONS_DEFAULTS` (with migrations if needed), update `popup.html` input/label/tooltip (plus `_locales` entries), and insert the key into the `chrome.storage.sync.get` list inside `content.js`.
-2. Runtime wiring: Update `applyVisibilitySettings` (if it’s a toggle) and add logic inside the relevant shortcut map (Alt/Ctrl sections) in `content.js`. For Alt shortcuts, ensure conflicts are handled via `ShortcutUtils.buildConflictsForCode`.
-3. Popup binding: Add the input ID to the arrays handled by `popup.js` (the script pulls most inputs via selectors, but new IDs must be included wherever `shortcutKeys` or other lists are defined). Use `data-sync="<storageKey>"` so the generic binding logic persists it.
-4. Localization: Create `_locales` entries for labels/tooltips/status messages, then reference them via `data-i18n` or `data-tooltip`.
-5. Documentation: Update `CHANGELOG.md` for user-visible changes.
+1. Defaults & storage: Add the key to `OPTIONS_DEFAULTS` (with migrations if needed).
+2. Popup UI: Add the control to `popup.html` using `data-sync="<storageKey>"`.
+3. Content wiring:
+   - Toggles: add the key to `settings-schema.js` → `content.visibilityDefaults` so it auto-loads into `window.<storageKey>`.
+   - Shortcuts: add the key to `content.js` `shortcutDefaults` and implement the handler in the appropriate map.
+4. Popup wiring: nothing to update in most cases (popup auto-binds `data-sync` inputs and auto-discovers `input.key-input` shortcuts). Only update `settings-schema.js` if you add a new radio group or need exclusions.
+5. Localization & docs: update `_locales/*/messages.json` and `CHANGELOG.md` for user-visible changes.
 
 ## Cloud sync workflow
 - Optional permission `identity` must be granted from a user gesture (popup buttons). The service worker will reject login attempts if that permission is missing.

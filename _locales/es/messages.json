@@ -38,6 +38,21 @@
 	"label_click_inline_code": {
 		"message": "Copiar código en línea al hacer clic"
 	},
+	"label_highlight_bold_text": {
+		"message": "Resaltar texto en negrita"
+	},
+	"tt_highlight_bold_text": {
+		"message": "Elige colores personalizados para el texto en negrita en los modos claro y oscuro."
+	},
+	"tt_reset_bold_text_colors": {
+		"message": "Restablecer los colores del texto en negrita a los valores predeterminados."
+	},
+	"label_light_mode_short": {
+		"message": "Modo<br>Claro:"
+	},
+	"label_dark_mode_short": {
+		"message": "Modo<br>Oscuro:"
+	},
 	"label_select_copy_behavior": {
 		"message": "Modo «Seleccionar + Copiar»"
 	},
