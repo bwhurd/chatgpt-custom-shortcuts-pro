@@ -1,10 +1,10 @@
 # Changelog
 
-Changes typically post to the chrome web store a couple days after date in changelog. 
+Please report any broken features so I can fix them quickly (via GitHub or by emailing TangledTerrain@gmail.com with “bug” in the subject line)! With so many settings, I can’t catch every issue myself. Changes appear on the Chrome Web Store a few days after the changelog date.
 
 #### 01.19.2026  
-- Ctrl+/ shortcuts overlay now shows only assigned shortcuts (non-model sections) and labels match the popup (localized), including previously missing items like Share / Branch In New Chat / Cancel Dictation / Read Aloud.
-- Added Highlight Bold Text toggle with light/dark color pickers + a quick reset-to-defaults button.
+- Ctrl+/ shortcut is now customizable. The overlay now shows all assigned shortcuts and labels match the popup (localized), including previously missing items like Share / Branch In New Chat / Cancel Dictation / Read Aloud.
+- Added new feature under UI Tweaks: Highlight Bold Text toggle with light/dark color pickers + a reset-to-default colors button.
 - Default “Select + Copy All Behavior” now includes both user + ChatGPT.
 
 #### 01.02.2026  
@@ -484,3 +484,4 @@ Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that 
 ##### Added
 - Material Design icons
 - Alt+D shortcut for scroll
+
