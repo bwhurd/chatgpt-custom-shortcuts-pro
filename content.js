@@ -186,15 +186,15 @@ const VISIBILITY_DEFAULTS = (() => {
     disableCopyAfterSelectCheckbox: false,
     enableSendWithControlEnterCheckbox: true,
     enableStopWithControlBackspaceCheckbox: true,
-	    useAltForModelSwitcherRadio: true,
-	    useControlForModelSwitcherRadio: false,
-	    rememberSidebarScrollPositionCheckbox: false,
-	    selectThenCopyAllMessagesBothUserAndChatGpt: true,
-	    selectThenCopyAllMessagesOnlyAssistant: false,
-	    selectThenCopyAllMessagesOnlyUser: false,
-	    doNotIncludeLabelsCheckbox: false,
-	    clickToCopyInlineCodeEnabled: false,
-	  };
+    useAltForModelSwitcherRadio: true,
+    useControlForModelSwitcherRadio: false,
+    rememberSidebarScrollPositionCheckbox: false,
+    selectThenCopyAllMessagesBothUserAndChatGpt: true,
+    selectThenCopyAllMessagesOnlyAssistant: false,
+    selectThenCopyAllMessagesOnlyUser: false,
+    doNotIncludeLabelsCheckbox: false,
+    clickToCopyInlineCodeEnabled: false,
+  };
 })();
 
 function applyVisibilitySettings(data) {
@@ -1522,62 +1522,6 @@ const delays = DELAYS;
 
   // ======================================================
   // ==== Exposed Button Click Shared helpers ============
-  // Click a directly-visible button by SVG icon path prefix (no menus involved)
-  const clickExposedIconButton = async (
-    iconPathPrefix,
-    {
-      timeout = 2000,
-      interval = 50,
-      delays = DELAYS,
-      root = document,
-      pick = (paths) => paths[0], // customize if multiple matches
-    } = {},
-  ) => {
-    const pathSelector = buildIconSelector(iconPathPrefix);
-
-    const getClickableAncestor = (node) => {
-      const isClickable = (el) =>
-        el &&
-        typeof el.click === 'function' &&
-        (el.tagName === 'BUTTON' ||
-          el.tagName === 'A' ||
-          el.getAttribute('role') === 'button' ||
-          el.tabIndex >= 0);
-      let el = node;
-      for (let i = 0; i < 8 && el; i++) {
-        if (isClickable(el)) return el;
-        el = el.parentElement;
-      }
-      return null;
-    };
-
-    const ensureVisible = (el) => {
-      try {
-        el.scrollIntoView({
-          block: 'center',
-          inline: 'center',
-          behavior: 'auto',
-        });
-      } catch {}
-    };
-
-    const target = await waitFor(
-      () => {
-        const paths = Array.from(root.querySelectorAll(pathSelector));
-        if (!paths.length) return null;
-        const chosenPath = pick(paths) || paths[0];
-        return getClickableAncestor(chosenPath);
-      },
-      { timeout, interval },
-    );
-
-    if (!target) return;
-
-    ensureVisible(target);
-    flashBorder(target);
-    await sleep(delays.beforeFinalClick);
-    smartClick(target);
-  };
 
   // Clicks a button by its data-testid attribute, ensuring it's visible and interactable.
   const clickButtonByTestId = async (
@@ -1945,11 +1889,6 @@ const delays = DELAYS;
 
   /* ===== Toggle Dictation Helpers: click a single visible button by SVG path (simplified) ===== */
 
-  const CLICKABLE_SELECTOR =
-    'button, a, [role="button"], [tabindex], input[type="button"], input[type="submit"]';
-
-  const escCss = (s) => CSS?.escape?.(s) ?? s;
-
   if (typeof safeClick !== 'function') {
     // biome-ignore lint/correctness/noUnusedVariables: allow unused function for now
     function safeClick(el) {
@@ -1971,37 +1910,6 @@ const delays = DELAYS;
     }
   }
 
-  function findClickableBySvgPath(pathPrefix, climbMax = 8) {
-    const tokens = toTokenArray(pathPrefix);
-    let node = null;
-
-    for (const token of tokens) {
-      node =
-        document.querySelector(`svg path[d^="${escCss(token)}"]`) ||
-        document.querySelector(`svg use[href*="${token.replace(/(["\\])/g, '\\$1')}"]`);
-      if (node) break;
-    }
-    if (!node) return null;
-
-    // Prefer a direct closest() to a standard clickable
-    const direct = node.closest(CLICKABLE_SELECTOR);
-    if (direct) return direct;
-
-    // Fallback: climb up a few levels to find something clickable
-    let el = node;
-    for (let i = 0; i < climbMax && el; i++) {
-      if (el.matches?.(CLICKABLE_SELECTOR)) return el;
-      el = el.parentElement;
-    }
-    return null;
-  }
-
-  function clickBySvgPath(pathPrefix) {
-    const el = findClickableBySvgPath(pathPrefix);
-    if (!el) return false;
-    if (window.gsap && typeof flashBorder === 'function') flashBorder(el);
-    return safeClick(el);
-  }
   /* ===== End simplified helpers ===== */
 
   // delayCall: calls a function after a delay with arguments
@@ -2014,8 +1922,6 @@ const delays = DELAYS;
   // ========================================================================
   // ==== BEGIN Click Lowest Using SVG (Copy Lowest, etc) Helpers============
   /* ---------- Copy flow helpers (DOM + action orchestration) ---------- */
-
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   // copy-lowest run coordination to avoid overlapping delays
   let copyLowestRunToken = 0;
@@ -3198,7 +3104,6 @@ const delays = DELAYS;
           }
         }, DELAY_INITIAL);
       },
-
       /*──────────────────────────────────────────────────────────────────────────────
        *  NEXT‑THREAD shortcut – tracks ONE specific button through re‑render
        *────────────────────────────────────────────────────────────────────────────*/
@@ -3400,7 +3305,6 @@ const delays = DELAYS;
           }
         }, DELAY_INITIAL);
       },
-
       [shortcuts.selectThenCopy]: (() => {
         window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
         const DEBUG = false;
@@ -6206,6 +6110,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   else start();
 })();
 
+// ====================================
+// ModelSwitcherKeyboardShortcuts with Dynamic Labeling and Persistent Mapping
+// ====================================
 /**
  * Enables customizable keyboard shortcuts for selecting models in a dropdown menu
  * by synchronizing key codes from Chrome storage, labeling menu items with the
@@ -6471,9 +6378,10 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
                   document.querySelectorAll('[data-radix-menu-content][data-state="open"]'),
                 );
 
-          if (!menus.length) return names;
+          if (!menus.length) return { names, observedCount: 0, complete: false };
 
           let idx = 0;
+          let hasSubmenuTrigger = false;
 
           // Main menu first
           const main = menus[0];
@@ -6487,6 +6395,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
               if (__cspIsSubmenuTrigger(item)) {
                 label = '→'; // canonical for submenu trigger (not a model)
+                hasSubmenuTrigger = true;
               } else {
                 const tid = __cspNormTid(item.getAttribute('data-testid'));
                 label = (tid && TESTID_CANON[tid]) || '';
@@ -6516,19 +6425,33 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
             }
           }
 
+          // A scrape is "complete" iff:
+          // - there is no submenu trigger (single-level menu), OR
+          // - a submenu trigger exists and we currently have submenu content open
+          const complete = !hasSubmenuTrigger || menus.length > 1;
+
           while (names.length < CAP) names.push('');
           for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
-          return names;
+          return { names, observedCount: idx, complete };
         }
 
-        function __cspMergeAndPersist(candidates) {
+        function __cspMergeAndPersist(candidates, meta) {
           const now = Date.now();
           try {
             const CAP = MAX_SLOTS;
+            const observedCount = Math.max(
+              0,
+              Math.min(
+                CAP,
+                Number(meta && meta.observedCount != null ? meta.observedCount : 0) || 0,
+              ),
+            );
+            const complete = !!meta?.complete;
             chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
               const prevArr = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
               while (prevArr.length < CAP) prevArr.push('');
               const merged = Array.from({ length: CAP }, (_, i) => {
+                if (complete && i >= observedCount) return '';
                 const nv = (candidates[i] || '').trim();
                 const pv = (prevArr[i] || '').trim();
                 return nv || pv || '';
@@ -6544,7 +6467,8 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
         return (arrN) => {
           const CAP = MAX_SLOTS;
-          const domNames = __cspCanonicalLabelsFromDOM();
+          const dom = __cspCanonicalLabelsFromDOM();
+          const domNames = dom && Array.isArray(dom.names) ? dom.names : Array(CAP).fill('');
           const fallback = Array.isArray(arrN) ? arrN.slice(0, CAP) : Array(CAP).fill('');
           while (fallback.length < CAP) fallback.push('');
 
@@ -6555,7 +6479,7 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
           });
 
           if (!candidates.some(Boolean)) return;
-          __cspMergeAndPersist(candidates);
+          __cspMergeAndPersist(candidates, dom);
         };
       })();
 
@@ -8445,6 +8369,7 @@ setTimeout(() => {
 // Content script IIFE for ChatGPT Custom Shortcuts Pro
 // ===============================================
 (() => {
+  // biome-ignore lint/suspicious/noRedundantUseStrict: IIFE strict mode needed
   'use strict';
 
   const STYLE_ID = 'csp-color-bold-text-style';
@@ -8459,10 +8384,7 @@ setTimeout(() => {
   `;
 
   const enable = (lightColor, darkColor) => {
-    const css = buildCSS(
-      lightColor || DEFAULT_LIGHT_COLOR,
-      darkColor || DEFAULT_DARK_COLOR,
-    );
+    const css = buildCSS(lightColor || DEFAULT_LIGHT_COLOR, darkColor || DEFAULT_DARK_COLOR);
     let s = document.getElementById(STYLE_ID);
     if (s) {
       s.textContent = css;
@@ -8503,7 +8425,11 @@ setTimeout(() => {
   chrome.storage.onChanged.addListener((chg, area) => {
     if (area !== 'sync') return;
 
-    const relevantKeys = ['colorBoldTextEnabled', 'colorBoldTextLightColor', 'colorBoldTextDarkColor'];
+    const relevantKeys = [
+      'colorBoldTextEnabled',
+      'colorBoldTextLightColor',
+      'colorBoldTextDarkColor',
+    ];
     if (!relevantKeys.some((key) => key in chg)) return;
 
     chrome.storage.sync.get(

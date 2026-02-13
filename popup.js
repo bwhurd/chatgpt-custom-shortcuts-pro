@@ -527,27 +527,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load latest canonical names from storage when popup opens
     try {
-      chrome.storage.sync.get('modelNames', ({ modelNames }) => {
-        const raw = Array.isArray(modelNames) ? modelNames.slice(0, MAX) : [];
-        const arrowIndex = raw.findIndex(isLegacyArrow);
-        window.MODEL_NAMES_META = { arrowIndex, rawCount: raw.length };
+      const isScraped = (names, at) =>
+        Array.isArray(names) && names.length >= MAX && Number(at) > 0;
 
-        const merged = mergeWithFallback(raw);
-        setAndRender(merged, 'storage');
-      });
+      const readAndRender = (source = 'storage') => {
+        chrome.storage.sync.get(['modelNames', 'modelNamesAt'], ({ modelNames, modelNamesAt }) => {
+          const raw = Array.isArray(modelNames) ? modelNames.slice(0, MAX) : [];
+          const arrowIndex = raw.findIndex(isLegacyArrow);
+          window.MODEL_NAMES_META = { arrowIndex, rawCount: raw.length };
+
+          if (isScraped(modelNames, modelNamesAt)) {
+            setAndRender(raw, `${source}:scraped`);
+            return;
+          }
+
+          const merged = mergeWithFallback(raw);
+          setAndRender(merged, source);
+        });
+      };
+
+      readAndRender('storage');
     } catch (_) {
       setAndRender(window.MODEL_NAMES, 'fallback');
     }
 
     // Keep popup in sync if content.js updates labels while popup is open
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync' || !changes.modelNames) return;
-      const raw = Array.isArray(changes.modelNames.newValue)
-        ? changes.modelNames.newValue.slice(0, MAX)
-        : [];
-      window.MODEL_NAMES_META = { arrowIndex: raw.findIndex(isLegacyArrow), rawCount: raw.length };
-      const merged = mergeWithFallback(raw);
-      setAndRender(merged, 'storage:onChanged');
+      if (area !== 'sync') return;
+      if (!changes.modelNames && !changes.modelNamesAt) return;
+
+      chrome.storage.sync.get(['modelNames', 'modelNamesAt'], ({ modelNames, modelNamesAt }) => {
+        const raw = Array.isArray(modelNames) ? modelNames.slice(0, MAX) : [];
+        window.MODEL_NAMES_META = { arrowIndex: raw.findIndex(isLegacyArrow), rawCount: raw.length };
+
+        if (Array.isArray(modelNames) && modelNames.length >= MAX && Number(modelNamesAt) > 0) {
+          setAndRender(raw, 'storage:onChanged:scraped');
+          return;
+        }
+
+        const merged = mergeWithFallback(raw);
+        setAndRender(merged, 'storage:onChanged');
+      });
     });
   })();
 

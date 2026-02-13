@@ -2,6 +2,9 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### 02.13.2026  
+- Fixed stale model labels lingering in the Model Picker after ChatGPT removes models (storage now clears removed slots; popup reflects fewer available models).
+
 #### 01.19.2026  
 - Ctrl+/ shortcuts overlay now shows only assigned shortcuts (non-model sections) and labels match the popup (localized), including previously missing items like Share / Branch In New Chat / Cancel Dictation / Read Aloud.
 - Added Highlight Bold Text toggle with light/dark color pickers + a quick reset-to-defaults button.
