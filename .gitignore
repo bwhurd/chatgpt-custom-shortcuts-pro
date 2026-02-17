@@ -48,4 +48,5 @@ based-on-this.html
 scrub-this-css.css
 /dist/**
 !/dist/*.zip
-dist/*.zip
+dist/*
+!dist/*.zip
