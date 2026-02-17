@@ -7862,10 +7862,15 @@ setTimeout(() => {
       'selectThenCopy',
       'selectThenCopyAllMessages',
     ];
+    const schemaDeprecated = window.CSP_SETTINGS_SCHEMA?.shortcuts?.deprecatedShortcutKeys;
+    const deprecatedShortcutKeys = Array.isArray(schemaDeprecated)
+      ? schemaDeprecated
+      : ['shortcutKeyRegenerate', 'shortcutKeyCopyAllResponses'];
 
     const catchAllKeys = Object.keys(cfg)
       .filter((k) => k !== 'shortcutKeyShowShortcuts')
       .filter((k) => k.startsWith(keyPrefix) || extraShortcutKeys.includes(k))
+      .filter((k) => !deprecatedShortcutKeys.includes(k))
       .filter((k) => isAssigned(cfg[k]))
       .filter((k) => !renderedKeys.has(k))
       .sort((a, b) => a.localeCompare(b));

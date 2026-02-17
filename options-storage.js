@@ -21,7 +21,6 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyEdit: 'e',
   shortcutKeySendEdit: 'd',
   shortcutKeySearchConversationHistory: 'k',
-  shortcutKeyRegenerate: 'r',
   shortcutKeyTemporaryChat: 'p',
   shortcutKeyToggleDictate: 'y',
   shortcutKeyCancelDictation: '',
@@ -32,7 +31,6 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyToggleCanvas: '',
   shortcutKeyAddPhotosFiles: '',
   shortcutKeyThinkLonger: '',
-  shortcutKeyCopyAllResponses: '[',
   copyAllUserSeparator: ' \n  \n --- --- --- \n \n',
   shortcutKeyCopyAllCodeBlocks: ']',
   copyCodeUserSeparator: ' \n  \n --- --- --- \n \n',
@@ -40,7 +38,7 @@ const OPTIONS_DEFAULTS = {
   altPageDown: 'PageDown',
 
   // === Additional keys from 222s ===
-  shortcutKeyRegenerateTryAgain: '',
+  shortcutKeyRegenerateTryAgain: 'r',
   shortcutKeyRegenerateMoreConcise: '',
   shortcutKeyRegenerateAddDetails: '',
   shortcutKeyRegenerateWithDifferentModel: '',
@@ -51,7 +49,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyThinkingStandard: '',
   shortcutKeyNewGptConversation: '',
   shortcutKeyShowShortcuts: 'Slash',
-  selectThenCopyAllMessages: '',
+  selectThenCopyAllMessages: '[',
 
   // Legacy naming variants (back-compat; no longer shown in popup.html)
   selectAndCopyEntireConversationBothUserAndChatGpt: false,
@@ -62,16 +60,13 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
   modelNames: [
-    'GPT-5.1 Auto',
+    'Auto',
+    'Instant',
+    'Thinking',
     'GPT-5.1 Instant',
     'GPT-5.1 Thinking',
-    'GPT-5 Instant',
     'GPT-5 mini',
-    'GPT-5 Thinking',
-    '4o',
-    '4.1',
     'o3',
-    'o4-mini',
   ],
   showLegacyArrowButtonsCheckbox: false,
 
@@ -194,7 +189,13 @@ if (typeof OptionsSync === 'undefined') {
         }
       },
 
-      // 5) Remove anything truly unused (keep it last)
+      // 5) Remove deprecated legacy shortcut keys (no longer used/shown)
+      (stored) => {
+        delete stored.shortcutKeyRegenerate;
+        delete stored.shortcutKeyCopyAllResponses;
+      },
+
+      // 6) Remove anything truly unused (keep it last)
       OptionsSync.migrations.removeUnused,
     ],
   });

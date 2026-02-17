@@ -62,6 +62,8 @@
     window.CSP_SETTINGS_SCHEMA.shortcuts = {
         keyPrefix: 'shortcutKey',
         extraShortcutKeys: ['selectThenCopy', 'selectThenCopyAllMessages'],
+        // Keys kept for legacy/back-compat in storage, but never shown in the Ctrl+/ overlay.
+        deprecatedShortcutKeys: ['shortcutKeyRegenerate', 'shortcutKeyCopyAllResponses'],
         // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
         // Used for modifier-aware duplicate detection in popup.js.
         ctrlShortcutKeys: ['shortcutKeyShowShortcuts'],

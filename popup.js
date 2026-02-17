@@ -408,22 +408,16 @@ document.addEventListener('DOMContentLoaded', () => {
   (() => {
     const MAX = MODEL_PICKER_MAX_SLOTS;
 
-    // Desired initial display order for actionable models (no arrow), before extraction:
-    // Auto, Instant, Thinking, GPT-5.1 Instant, GPT-5.1 Thinking, GPT-5 Instant,
-    // GPT-5 mini, GPT-5 Thinking, 4o, 4.1, o3, o4-mini.
-    const CANON_ORDER_12 = [
+    // Desired initial display order for actionable models (no arrow), before extraction.
+    // Keep this list short and current; content.js will later scrape and persist the real menu order.
+    const CANON_ORDER = [
       'Auto',
       'Instant',
       'Thinking',
       'GPT-5.1 Instant',
       'GPT-5.1 Thinking',
-      'GPT-5 Instant',
       'GPT-5 mini',
-      'GPT-5 Thinking',
-      '4o',
-      '4.1',
       'o3',
-      'o4-mini',
     ];
 
     const isLegacyArrow = (s) => {
@@ -435,15 +429,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     };
 
-    // Seed names from shared defaults if available; otherwise from CANON_ORDER_12.
+    // Seed names from shared defaults if available; otherwise from CANON_ORDER.
     // Always returns a dense list of actionable model names (no arrow), in the desired order.
-    function seedFromSharedOrCanon12() {
+    function seedFromSharedOrCanon() {
       const shared =
         window.ModelLabels && typeof window.ModelLabels.defaultNames === 'function'
           ? window.ModelLabels.defaultNames() || []
           : [];
 
-      const base = Array.isArray(shared) && shared.length ? shared : CANON_ORDER_12;
+      const base = Array.isArray(shared) && shared.length ? shared : CANON_ORDER;
 
       // Trim + drop arrow from shared
       const trimmed = base
@@ -456,17 +450,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Primary order from shared (if present)
       for (const n of trimmed) {
-        if (out.length >= Math.min(MAX, CANON_ORDER_12.length)) break;
+        if (out.length >= Math.min(MAX, CANON_ORDER.length)) break;
         out.push(n);
       }
 
-      // Ensure we always have the 12 expected defaults in the specified order
-      for (const n of CANON_ORDER_12) {
-        if (out.length >= Math.min(MAX, CANON_ORDER_12.length)) break;
+      // Ensure we always have the expected defaults in the specified order
+      for (const n of CANON_ORDER) {
+        if (out.length >= Math.min(MAX, CANON_ORDER.length)) break;
         if (!out.includes(n)) out.push(n);
       }
 
-      return out.slice(0, Math.min(MAX, CANON_ORDER_12.length));
+      return out.slice(0, Math.min(MAX, CANON_ORDER.length));
     }
 
     // Merge stored canonical names from content.js (with arrow) with our defaults.
@@ -478,12 +472,12 @@ document.addEventListener('DOMContentLoaded', () => {
         .filter(Boolean)
         .filter((v) => !isLegacyArrow(v));
 
-      const fb = seedFromSharedOrCanon12();
+      const fb = seedFromSharedOrCanon();
 
-      const cap = Math.min(MAX, Math.max(filtered.length, fb.length, CANON_ORDER_12.length));
+      const cap = Math.min(MAX, Math.max(filtered.length, fb.length, CANON_ORDER.length));
       const out = [];
       for (let i = 0; i < cap; i++) {
-        out.push(filtered[i] || fb[i] || CANON_ORDER_12[i] || '');
+        out.push(filtered[i] || fb[i] || CANON_ORDER[i] || '');
       }
       return out;
     }
@@ -508,8 +502,8 @@ document.addEventListener('DOMContentLoaded', () => {
       window.dispatchEvent(new CustomEvent('model-names-updated', { detail: { source } }));
     }
 
-    // Defaults for instant UI (correct, no Legacy/→ tile, always 12 initial items).
-    window.MODEL_NAMES = seedFromSharedOrCanon12();
+    // Defaults for instant UI (correct, no Legacy/→ tile; actionable-only defaults).
+    window.MODEL_NAMES = seedFromSharedOrCanon();
     window.MODEL_NAMES_META = { arrowIndex: -1, rawCount: window.MODEL_NAMES.length };
 
     // Late update when shared/model-picker-labels.js finishes loading
@@ -518,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const t = setInterval(() => {
         if (window.ModelLabels?.defaultNames) {
           clearInterval(t);
-          setAndRender(seedFromSharedOrCanon12(), 'shared-ready');
+          setAndRender(seedFromSharedOrCanon(), 'shared-ready');
         } else if (++tries > 12) {
           clearInterval(t);
         }

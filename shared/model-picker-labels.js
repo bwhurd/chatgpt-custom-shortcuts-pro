@@ -86,13 +86,8 @@
       '→', // submenu trigger (not a model)
       'GPT-5.1 Instant',
       'GPT-5.1 Thinking',
-      'GPT-5 Instant',
       'GPT-5 mini',
-      'GPT-5 Thinking',
-      '4o',
-      '4.1',
       'o3',
-      'o4-mini',
     ];
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
