@@ -5,22 +5,9 @@
 (() => {
   const MAX_SLOTS = 15;
 
-  // Canonical mapping based on current HTML
+  // Canonical mapping based on current HTML (use sparingly; prefer parsing testids)
   const TESTID_CANON = Object.freeze({
-    // Main (GPT-5.2 group)
-    'model-switcher-gpt-5-2': 'Auto',
-    'model-switcher-gpt-5-2-instant': 'Instant',
-    'model-switcher-gpt-5-2-thinking': 'Thinking',
-
-    // Back-compat main GPT-5.1 auto (if present in some builds)
-    'model-switcher-gpt-5-1': 'Auto',
-
-    // Submenu (GPT-5.1 + legacy GPT-5.x variants)
-    'model-switcher-gpt-5-1-instant': 'GPT-5.1 Instant',
-    'model-switcher-gpt-5-1-thinking': 'GPT-5.1 Thinking',
-    'model-switcher-gpt-5-instant': 'GPT-5 Instant',
-    'model-switcher-gpt-5-t-mini': 'GPT-5 mini', // “GPT-5 Thinking mini” → “GPT-5 mini”
-    'model-switcher-gpt-5-thinking': 'GPT-5 Thinking',
+    // Stable non-GPT-5 ids
     'model-switcher-gpt-4o': '4o',
     'model-switcher-gpt-4-1': '4.1',
     'model-switcher-o3': 'o3',
@@ -31,6 +18,36 @@
   const MAIN_CANON_BY_INDEX = ['Auto', 'Instant', 'Thinking'];
 
   const normTid = (tid) => (tid || '').toLowerCase().trim();
+
+  const capitalizeWord = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
+
+  // Canonical labels from data-testid (language/format resilient).
+  // This is intentionally conservative: return '' when unsure so callers can fall back to DOM text.
+  const canonFromTid = (tid) => {
+    const t = normTid(tid);
+    if (!t) return '';
+
+    // 1) Known stable ids first
+    if (TESTID_CANON[t]) return TESTID_CANON[t];
+
+    // 2) GPT-5 Auto slot (e.g., model-switcher-gpt-5-3)
+    // ChatGPT uses the bare GPT-5.x tid for the "Auto" selector that decides how long to think.
+    if (/^model-switcher-gpt-5-\d+$/.test(t)) return 'Auto';
+
+    // 3) GPT-x.y Instant/Thinking (e.g., model-switcher-gpt-5-3-instant)
+    let m = t.match(/^model-switcher-gpt-(\d+)-(\d+)-(instant|thinking)$/);
+    if (m) return `GPT-${m[1]}.${m[2]} ${capitalizeWord(m[3])}`;
+
+    // 4) GPT-x Instant/Thinking (e.g., model-switcher-gpt-5-thinking)
+    m = t.match(/^model-switcher-gpt-(\d+)-(instant|thinking)$/);
+    if (m) return `GPT-${m[1]} ${capitalizeWord(m[2])}`;
+
+    // 5) GPT-x mini variants (legacy tid)
+    m = t.match(/^model-switcher-gpt-(\d+)-t-mini$/);
+    if (m) return `GPT-${m[1]} mini`;
+
+    return '';
+  };
 
   const isSubmenuTrigger = (el) =>
     !!el &&
@@ -108,6 +125,7 @@
     TESTID_CANON,
     MAIN_CANON_BY_INDEX,
     normTid,
+    canonFromTid,
     isSubmenuTrigger,
     textNoHint,
     mapSubmenuLabel,

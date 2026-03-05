@@ -2,6 +2,9 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### 03.04.2026  
+- Model Picker labels extracted from ChatGPT’s menu now include GPT version numbers (for example “GPT-5.3 Instant”), preventing duplicate “Instant/Thinking” entries when the menu changes.
+
 #### 02.13.2026  
 - Fixed stale model labels lingering in the Model Picker after ChatGPT removes models (storage now clears removed slots; popup reflects fewer available models).
 

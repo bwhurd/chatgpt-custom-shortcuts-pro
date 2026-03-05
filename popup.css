@@ -1743,3 +1743,7 @@ span.dup-key {
   outline: 2px solid #39f;
   outline-offset: 1px;
 }
+
+#model-picker-grid .mp-label {
+  font-size: 0.9em; /* or 0.9rem, depending on your scale */
+}
