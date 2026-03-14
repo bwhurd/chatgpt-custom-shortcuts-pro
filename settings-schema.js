@@ -226,6 +226,7 @@
             selectThenCopyAllMessagesOnlyUser: false,
             doNotIncludeLabelsCheckbox: false,
             clickToCopyInlineCodeEnabled: false,
+            fadeMessageButtonsCheckbox: false,
         },
 
         // Extra keys fetched with visibility settings (non-boolean or legacy).

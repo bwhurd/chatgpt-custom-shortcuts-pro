@@ -1816,6 +1816,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showLegacyArrowButtonsCheckbox: false,
     removeMarkdownOnCopyCheckbox: true,
     clickToCopyInlineCodeEnabled: false,
+    fadeMessageButtonsCheckbox: false,
     moveTopBarToBottomCheckbox: false,
     pageUpDownTakeover: true,
     selectMessagesSentByUserOrChatGptCheckbox: true,
@@ -3674,9 +3675,11 @@ function modelPickerInitSafe() {
   (function wireResetButton() {
     let resetEl = document.getElementById('mp-reset-keys');
     if (!resetEl) {
-      resetEl = Array.from(document.querySelectorAll('.mp-icons .material-symbols-outlined')).find(
-        (el) => (el.textContent || '').trim() === 'reset_wrench',
-      );
+      resetEl = Array.from(
+        document.querySelectorAll(
+          '.mp-icons .material-symbols-outlined, .mp-icons .material-icons-outlined, .mp-icons .msr',
+        ),
+      ).find((el) => (el.textContent || '').trim() === 'reset_wrench');
       if (resetEl) {
         resetEl.setAttribute('role', 'button');
         resetEl.setAttribute('tabindex', '0');
@@ -5168,7 +5171,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
 /* Sync Settings Button js IIFE */
 (() => {
-  const getIcon = (btn) => btn.querySelector('.msr, .material-icons-outlined');
+  const getIcon = (btn) =>
+    btn.querySelector('.msr, .material-icons-outlined, .material-symbols-outlined');
 
   const busy = (btn, isBusy) => {
     if (!btn) return;
@@ -5177,6 +5181,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       if (icon) {
         btn.dataset.prevIconText = icon.textContent || '';
         btn.dataset.prevIconClass = icon.className || 'msr';
+        btn.dataset.prevIconAriaHidden = icon.getAttribute('aria-hidden') || '';
+        btn.dataset.prevIconDefault = icon.getAttribute('data-default-icon') || '';
         const sp = document.createElement('span');
         sp.className = 'spinner';
         sp.setAttribute('aria-hidden', 'true');
@@ -5187,11 +5193,17 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     } else {
       const sp = btn.querySelector('.spinner');
       if (sp) {
-        const i = document.createElement('span');
-        i.className = btn.dataset.prevIconClass || 'msr';
-        i.textContent =
-          btn.dataset.prevIconText || btn.getAttribute('data-default-icon') || 'check_circle';
-        sp.replaceWith(i);
+        const restoredIcon = document.createElement('span');
+        restoredIcon.className = btn.dataset.prevIconClass || 'msr';
+        restoredIcon.textContent =
+          btn.dataset.prevIconText || btn.dataset.prevIconDefault || 'check_circle';
+        if (btn.dataset.prevIconAriaHidden) {
+          restoredIcon.setAttribute('aria-hidden', btn.dataset.prevIconAriaHidden);
+        }
+        if (btn.dataset.prevIconDefault) {
+          restoredIcon.setAttribute('data-default-icon', btn.dataset.prevIconDefault);
+        }
+        sp.replaceWith(restoredIcon);
       }
       btn.removeAttribute('aria-busy');
       btn.disabled = false;
@@ -5202,9 +5214,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     const icon = getIcon(btn);
     if (!icon) return;
     const prev = icon.textContent;
+    if (!prev) return;
     icon.textContent = 'check_circle';
     setTimeout(() => {
-      icon.textContent = prev;
+      if (icon.isConnected) icon.textContent = prev;
     }, 1200);
   };
 

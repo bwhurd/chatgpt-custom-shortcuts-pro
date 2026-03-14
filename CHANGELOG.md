@@ -2,6 +2,11 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
+#### 03.13.2026
+- Added a disabled-by-default Fade Message Buttons toggle to gate the message-button fade and hover behavior.
+- Disclaimer text hiding now stays active even when Fade Message Buttons is off.
+- Popup and Ctrl+/ overlay now use local embedded icon fonts, and popup text now uses system fonts by default, so they no longer depend on Google-hosted font/icon files.
+
 #### 03.04.2026  
 - Model Picker labels extracted from ChatGPT’s menu now include GPT version numbers (for example “GPT-5.3 Instant”), preventing duplicate “Instant/Thinking” entries when the menu changes.
 

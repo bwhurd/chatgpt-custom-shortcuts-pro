@@ -194,6 +194,7 @@ const VISIBILITY_DEFAULTS = (() => {
     selectThenCopyAllMessagesOnlyUser: false,
     doNotIncludeLabelsCheckbox: false,
     clickToCopyInlineCodeEnabled: false,
+    fadeMessageButtonsCheckbox: false,
   };
 })();
 
@@ -5009,8 +5010,16 @@ const delays = DELAYS;
 // @note expose edit buttons with simulated mouse hover
 // ==================================================
 (function injectAlwaysVisibleStyle() {
-  const style = document.createElement('style');
-  style.textContent = `
+  const STYLE_ID = 'csp-fade-message-buttons-style';
+  let styleEl = null;
+  let hoverAbort = null;
+  const pendingTimeouts = new Set();
+
+  const ensureStyle = () => {
+    if (styleEl) return;
+    styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = `
 
 /* Ensure parents can receive hover events */
 div.flex.justify-start,
@@ -5039,11 +5048,6 @@ div[class*="group-hover/turn-messages"].force-full-opacity {
 /* Make sure we also override any tailwind transitions that might re-add pointer-events */
 div[class*="group-hover/turn-messages"] * {
     pointer-events: auto !important;
-}
-
-/* Hide warning by ID */
-div[data-id="hide-this-warning"] {
-    color: var(--main-surface-primary);
 }
 
 /* Pointer events and mask for custom group-hover utilities */
@@ -5122,10 +5126,16 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
 
 
 `;
-  document.head.appendChild(style);
+    document.head.appendChild(styleEl);
+  };
+
+  const removeStyle = () => {
+    styleEl?.remove();
+    styleEl = null;
+  };
 
   // Decide how faded the buttons are in light/dark mode
-  function getFadeOpacity() {
+  const getFadeOpacity = () => {
     if (
       document.documentElement.classList.contains('dark') ||
       document.body.classList.contains('dark') ||
@@ -5134,35 +5144,118 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
       return 0.08;
     }
     return 0.2;
-  }
+  };
 
-  // Attach to all .flex.justify-start OR .flex.justify-end
-  document.querySelectorAll('div.flex.justify-start, div.flex.justify-end').forEach((parent) => {
-    // Find the child that contains "group-hover/turn-messages"
-    // (Does not need to be a direct child if you prefer querySelector)
-    const child = parent.querySelector('div[class*="group-hover/turn-messages"]');
-    if (!child) return;
+  const clearPendingTimeouts = () => {
+    pendingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    pendingTimeouts.clear();
+  };
 
-    let fadeTimeout = null;
-
-    // Show the child immediately on hover
-    parent.addEventListener('mouseenter', () => {
-      clearTimeout(fadeTimeout);
-      child.classList.add('force-full-opacity');
-      child.style.opacity = '1';
+  const resetManagedRows = () => {
+    document.querySelectorAll('div[class*="group-hover/turn-messages"]').forEach((child) => {
+      child.classList.remove('force-full-opacity');
+      child.style.removeProperty('opacity');
     });
+  };
 
-    // Fade the child out 2s after mouse leaves
-    parent.addEventListener('mouseleave', () => {
-      fadeTimeout = setTimeout(() => {
-        child.classList.remove('force-full-opacity');
-        child.style.opacity = getFadeOpacity();
-      }, 2000);
+  const detachHoverHandlers = () => {
+    hoverAbort?.abort();
+    hoverAbort = null;
+    clearPendingTimeouts();
+    resetManagedRows();
+  };
+
+  const attachHoverHandlers = () => {
+    detachHoverHandlers();
+    hoverAbort = new AbortController();
+    const { signal } = hoverAbort;
+
+    document.querySelectorAll('div.flex.justify-start, div.flex.justify-end').forEach((parent) => {
+      const child = parent.querySelector('div[class*="group-hover/turn-messages"]');
+      if (!child) return;
+
+      let fadeTimeout = null;
+      const clearFadeTimeout = () => {
+        if (fadeTimeout == null) return;
+        clearTimeout(fadeTimeout);
+        pendingTimeouts.delete(fadeTimeout);
+        fadeTimeout = null;
+      };
+
+      parent.addEventListener(
+        'mouseenter',
+        () => {
+          clearFadeTimeout();
+          child.classList.add('force-full-opacity');
+          child.style.opacity = '1';
+        },
+        { signal },
+      );
+
+      parent.addEventListener(
+        'mouseleave',
+        () => {
+          clearFadeTimeout();
+          fadeTimeout = window.setTimeout(() => {
+            pendingTimeouts.delete(fadeTimeout);
+            fadeTimeout = null;
+            child.classList.remove('force-full-opacity');
+            child.style.opacity = String(getFadeOpacity());
+          }, 2000);
+          pendingTimeouts.add(fadeTimeout);
+        },
+        { signal },
+      );
+
+      signal.addEventListener('abort', clearFadeTimeout, { once: true });
+      child.style.opacity = String(getFadeOpacity());
     });
+  };
 
-    // Set initial opacity according to current mode
-    child.style.opacity = getFadeOpacity();
+  const applySetting = (enabled) => {
+    const isOn = Boolean(enabled);
+    window._fadeMessageButtonsCheckbox = isOn;
+    window.fadeMessageButtonsCheckbox = isOn;
+
+    if (!isOn) {
+      detachHoverHandlers();
+      removeStyle();
+      return;
+    }
+
+    ensureStyle();
+    attachHoverHandlers();
+  };
+
+  chrome.storage.sync.get(
+    { fadeMessageButtonsCheckbox: false },
+    ({ fadeMessageButtonsCheckbox }) => {
+      applySetting(fadeMessageButtonsCheckbox);
+    },
+  );
+
+  chrome.storage.onChanged.addListener((chg, area) => {
+    if (area !== 'sync' || !('fadeMessageButtonsCheckbox' in chg)) return;
+    applySetting(chg.fadeMessageButtonsCheckbox.newValue);
   });
+})();
+
+// ==================================================
+// @note always hide the disclaimer by recoloring the text
+// ==================================================
+(() => {
+  const STYLE_ID = 'csp-hide-disclaimer-style';
+
+  if (document.getElementById(STYLE_ID)) return;
+
+  const styleEl = document.createElement('style');
+  styleEl.id = STYLE_ID;
+  styleEl.textContent = `
+div[data-id="hide-this-warning"] {
+    color: var(--main-surface-primary);
+}
+`;
+  document.head.appendChild(styleEl);
 })();
 
 // ==================================================
@@ -7930,26 +8023,62 @@ setTimeout(() => {
     // Set up a shadow root for CSS encapsulation.
     const shadow = overlay.attachShadow({ mode: 'open' });
 
-    [
-      'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
-      'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;600&display=swap',
-      'https://fonts.googleapis.com/icon?family=Material+Icons',
-      'https://fonts.googleapis.com/icon?family=Material+Icons+Outlined',
-      'https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined',
-    ].forEach((href) => {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = href;
-      shadow.appendChild(link);
-    });
-
     // Variables to shift position slightly here   ↓
     const CLOSE_BTN_SHIFT_TOP = -12; // negative = up, positive = down, in px
     const CLOSE_BTN_SHIFT_RIGHT = -12; // negative = closer to edge, positive = further left, in px
 
     shadow.innerHTML = `
+    <link rel="stylesheet" href="${chrome.runtime.getURL('popup.css')}">
     <style>${FULL_POPUP_CSS}</style>
     <style>
+      .material-symbols-outlined,
+      .material-icons-outlined,
+      .msr {
+        display: inline-block;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        vertical-align: middle;
+        font-style: normal;
+        font-weight: normal;
+        -webkit-font-feature-settings: 'liga';
+        font-feature-settings: 'liga';
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .material-symbols-outlined {
+        font-family: 'CSP Material Symbols Outlined', sans-serif;
+        font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24;
+      }
+
+      .material-icons-outlined,
+      .msr {
+        font-family: 'CSP Material Symbols Rounded', sans-serif;
+      }
+
+      .material-icons-outlined {
+        font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24;
+      }
+
+      .msr {
+        font-variation-settings:
+          'FILL' 0,
+          'wght' 500,
+          'GRAD' 0,
+          'opsz' 24;
+      }
+
       :root {
         --close-btn-color: #0d026fff;
         --close-btn-hover: #610404;

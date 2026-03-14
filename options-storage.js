@@ -76,6 +76,7 @@ const OPTIONS_DEFAULTS = {
   moveTopBarToBottomCheckbox: false,
   removeMarkdownOnCopyCheckbox: true,
   clickToCopyInlineCodeEnabled: false,
+  fadeMessageButtonsCheckbox: false,
   colorBoldTextEnabled: false,
   colorBoldTextLightColor: '#2037e6',
   colorBoldTextDarkColor: '#4da3ff',

@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "Click Inline Code to Copy"
 	},
+	"label_fade_message_buttons": {
+		"message": "Fade Message Buttons"
+	},
 	"label_highlight_bold_text": {
 		"message": "Highlight Bold Text"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "Click inline code to copy."
+	},
+	"tt_fade_message_buttons": {
+		"message": "Keep message action buttons faded until hover."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."

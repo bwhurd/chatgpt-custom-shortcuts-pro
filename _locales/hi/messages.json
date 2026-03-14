@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "इनलाइन कोड पर क्लिक करके कॉपी करें"
 	},
+	"label_fade_message_buttons": {
+		"message": "मैसेज बटन हल्के करें"
+	},
 	"label_highlight_bold_text": {
 		"message": "बोल्ड टेक्स्ट हाइलाइट करें"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "इनलाइन कोड पर क्लिक करें और कॉपी करें।"
+	},
+	"tt_fade_message_buttons": {
+		"message": "होवर होने तक संदेश बटन हल्के दिखते हैं।"
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: सबसे नीचे दिख रहे ‘<’ पिछले थ्रेड बटन पर क्लिक करता है। ———————————————————  Ctrl+Alt+{shortcut}: कई थ्रेड वाली अन्य प्रतिक्रियाएँ ढूँढने हेतु स्क्रोल करता है."

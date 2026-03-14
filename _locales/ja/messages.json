@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "インラインコードをクリックしてコピー"
 	},
+	"label_fade_message_buttons": {
+		"message": "ボタンを薄く表示"
+	},
 	"label_highlight_bold_text": {
 		"message": "太字をハイライト"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "インラインコードをクリックしてコピー。"
+	},
+	"tt_fade_message_buttons": {
+		"message": "ホバーするまでメッセージボタンを薄く表示します。"
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: 画面で一番下に見えている「<」前のスレッドボタンをクリック。 ———————————————————  Ctrl+Alt+{shortcut}: 複数スレッドの他の回答を見つけるためにスクロール。"

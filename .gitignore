@@ -50,3 +50,12 @@ scrub-this-css.css
 !/dist/*.zip
 dist/*
 !dist/*.zip
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+blob-report/
+
+# Local planning notes
+PLANS/

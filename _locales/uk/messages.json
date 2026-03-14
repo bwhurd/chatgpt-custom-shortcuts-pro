@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "Клік по вбудованому коду для копіювання"
 	},
+	"label_fade_message_buttons": {
+		"message": "Приглушити кнопки"
+	},
 	"label_highlight_bold_text": {
 		"message": "Виділити жирний текст"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "Клацніть вбудований код, щоб скопіювати."
+	},
+	"tt_fade_message_buttons": {
+		"message": "Робить кнопки повідомлення тьмянішими до наведення."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: натискає найнижчу видиму кнопку «<» попередньої гілки. ———————————————————  Ctrl+Alt+{shortcut}: прокручує, щоб знайти інші відповіді з кількома гілками."

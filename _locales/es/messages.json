@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "Copiar código en línea al hacer clic"
 	},
+	"label_fade_message_buttons": {
+		"message": "Atenuar botones"
+	},
 	"label_highlight_bold_text": {
 		"message": "Resaltar texto en negrita"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "Haz clic en el código en línea para copiarlo."
+	},
+	"tt_fade_message_buttons": {
+		"message": "Mantiene atenuados los botones del mensaje hasta pasar el cursor."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: hace clic en el botón «<» de hilo anterior visible más abajo. ———————————————————  Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."

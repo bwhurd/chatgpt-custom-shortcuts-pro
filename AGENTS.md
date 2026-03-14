@@ -1,13 +1,23 @@
 # ChatGPT Custom Shortcuts Pro agent
 
-- ChatGPT Custom Shortcuts Pro is a Chrome extension that adds configurable shortcuts and UI tweaks to chatgpt.com.  
-- This file tells the coding agent how to modify the extension safely and which files it can touch.  
+- ChatGPT Custom Shortcuts Pro is a Chrome extension that adds configurable shortcuts and UI tweaks to chatgpt.com.
+- This file tells the coding agent how to modify the extension safely and which files it can touch.
 - IMPORTANT: If required information is missing, stop and ask the user instead of guessing (for example, ask them to copy relevant HTML from the ChatGPT page’s inspector into the prompt).
 - Packaging reminder: if you add new shipped files/folders, update `build-zip.js` `includeItems` so the Chrome Web Store upload zip contains them.
 
+## UI preview workflow
+
+- For popup, overlay, tooltip, layout, animation, and other user-facing UI work, use Playwright instead of relying on static file inspection alone when extension context matters.
+- Run `npm run playwright:install` once per machine to download Chromium for Playwright.
+- Run `npm run preview:popup` to load the unpacked extension in Chromium and inspect the real popup with `chrome.*` APIs available.
+- Run `npm run screenshot:popup` to capture a fresh popup screenshot to `test-results/playwright/popup-preview.png`.
+- Run `npm run test:popup-visual` for a snapshot-based visual regression check of the popup.
+- Run `npm run test:popup-visual:update` only when an intentional popup/UI change should become the new accepted baseline.
+- Treat this as the preferred validation path for popup-facing work before and after edits; `popup.html` by itself is not a faithful preview of the MV3 extension popup.
+
 ## Repository search
 
-- files to include: `AGENTS.md, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, lib/*.min.js, tools/*.zip`
+- files to include: `AGENTS.md, .gitignore, package.json, package-lock.json, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, lib/*.min.js, tools/*.zip, tests/playwright/**`
 - exclude any files and folders not listed above
 - explicitly exclude these folders: `node_modules`, `dist`, `netlify`, `css-cleanup`, `.git`
 
@@ -27,7 +37,7 @@ Only read, edit, and consider the files listed below when working on this projec
 2. UI surfaces (extension settings popup)
    - `popup.html`                 : settings popup markup and i18n attributes
    - `popup.js`                   : settings popup behavior and bindings to chrome.storage and Cloud helpers
-   - `popup.css`                  : settings popup visual styles mirrored in the Ctrl+/ overlay
+   - `popup.css`                  : shared popup/overlay visual styles, including local embedded icon fonts and popup typography
 
 3. Extension shell and wiring
    - `manifest.json`              : MV3 manifest, permissions, content script and background registration
@@ -44,6 +54,12 @@ Only read, edit, and consider the files listed below when working on this projec
    - `vendor/webext-options-sync.js` : options sync shim used by options-storage
    - `lib/*.min.js`               : bundled GSAP and third party scripts, never modify
    - `tools/*.zip`                : backup archives, never modify
+
+7. Tooling and preview helpers
+   - `.gitignore`                 : ignore generated Playwright and local tooling artifacts
+   - `package.json`               : npm scripts and local developer tooling dependencies
+   - `package-lock.json`          : lockfile updates for developer tooling
+   - `tests/playwright/**`        : Playwright popup preview and screenshot helpers for user-facing UI work
 
 
 ## Role
@@ -120,7 +136,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Remembers sidebar scroll in both rail and overlay modes using sessionStorage keys keyed by pathname + mode.
 - Overlays:
   - `window.toggleModelSelector` ensures both the main menu and legacy submenu open, even if the UI changes.
-  - `Ctrl+/` shortcut overlay copies `popup.css` (stored as `FULL_POPUP_CSS`) to a shadow DOM and renders only assigned shortcuts. The model picker grid stays unchanged. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
+  - `Ctrl+/` shortcut overlay links `popup.css` inside its shadow DOM so local icon fonts are available, and also injects the embedded `FULL_POPUP_CSS` copy for layout parity. It renders only assigned shortcuts. The model picker grid stays unchanged. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
 - Global exports include `window.toggleSidebar`, `window.newConversation`, `window.globalScrollToBottom`, `window.clickGptHeaderThenSubItemSvg`, `window.toggleModelSelector`, clipboard helpers, and toast utilities.
 
 ### popup.html / popup.js / popup.css
@@ -133,7 +149,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Cloud Sync UI: login button requests `identity` permission, then triggers `CloudAuth.googleLogin`. Save/Restore buttons call `CloudStorage.saveSyncedSettings/loadSyncedSettings`, showing spinner states via `busy()` and success checkmarks via `successFlash()`. Logout clears CloudAuth tokens/profile.
   - Duplicate modal: Reusable overlay that lists conflicting assignments, supports “Don’t ask again”, and can run in simple HTML mode for general confirmations.
   - Toast queue: `window.toast.show()` uses GSAP when available, falls back to CSS transitions.
-- `popup.css` mirrors the overlay CSS inside `content.js`. When tweaking layout, keep the embedded `FULL_POPUP_CSS` string in sync to avoid drift between popup and the Ctrl+/ overlay.
+- `popup.css` is the primary shared stylesheet for the popup and Ctrl+/ overlay. The overlay shadow root links `popup.css` for local font faces and also injects `FULL_POPUP_CSS` from `content.js`; when tweaking shared layout, keep the embedded `FULL_POPUP_CSS` string and any overlay-specific icon rules in sync to avoid drift.
 
 ### Cloud sync helpers (background.js, auth.js, storage.js)
 - `background.js` is the only component allowed to launch the OAuth flow (`chrome.identity.launchWebAuthFlow`). It requires the popup to request the optional `identity` permission first; the service worker cannot prompt on its own due to the lack of a user gesture.
@@ -185,6 +201,8 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 
 ## Testing & validation
 - Run `npm ci && npm test` before merging any change. This is the canonical pass/fail gate.
+- For popup or other user-facing UI changes, also run `npm run screenshot:popup` or `npm run preview:popup` to validate the extension UI in Chromium with the unpacked extension loaded.
+- For popup visual regressions, use `npm run test:popup-visual`; update the baseline only when the UI change is intentional.
 - Optional scripts: `npm run lint` / `npm run format` (if they exist) can be used to maintain consistency.
 
 ## Style & safety rails

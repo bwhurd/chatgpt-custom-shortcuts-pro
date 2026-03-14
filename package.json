@@ -7,10 +7,15 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1",
     "lint": "biome lint .",
     "format": "biome format . --write",
     "check": "biome check .",
+    "playwright:install": "playwright install chromium",
+    "preview:popup": "node tests/playwright/preview-popup.mjs --headed --keep-open",
+    "screenshot:popup": "node tests/playwright/preview-popup.mjs",
+    "test:popup-visual": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1",
+    "test:popup-visual:update": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1 --update-snapshots",
     "zip": "node build-zip.js",
     "clean": "node clean-css.mjs --css C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\scrub-this-css.css --html C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\based-on-this.html"
   },
@@ -19,8 +24,10 @@
   "license": "ISC",
   "devDependencies": {
     "@biomejs/biome": "^2.3.2",
+    "@playwright/test": "^1.58.2",
     "archiver": "^7.0.1",
     "cssnano": "^7.1.2",
+    "playwright": "^1.58.2",
     "postcss": "^8.5.6",
     "purgecss": "^7.0.2"
   },

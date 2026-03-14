@@ -38,6 +38,9 @@
 	"label_click_inline_code": {
 		"message": "Клик по встроенному коду для копирования"
 	},
+	"label_fade_message_buttons": {
+		"message": "Затемнять кнопки"
+	},
 	"label_highlight_bold_text": {
 		"message": "Выделить жирный текст"
 	},
@@ -325,6 +328,9 @@
 	},
 	"tt_click_inline_code": {
 		"message": "Клик по встроенному коду — и он скопируется."
+	},
+	"tt_fade_message_buttons": {
+		"message": "Делает кнопки сообщения бледнее до наведения."
 	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: нажимает нижнюю видимую кнопку «<» предыдущей ветки. ———————————————————  Ctrl+Alt+{shortcut}: прокручивает, чтобы найти другие ответы с несколькими ветками."
