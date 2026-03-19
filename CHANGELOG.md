@@ -3,8 +3,7 @@
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
 #### 03.19.2026
-- Fixed model-picker label scraping so main-menu rows now prefer the visible ChatGPT label when GPT-5 test IDs are reused, preventing stale labels like `Auto` from overriding rows such as `Instant`.
-- Updated model-picker fallback labels to the current compact menu defaults (`Instant`, `Thinking`, `Configure...`) until live labels are scraped from ChatGPT.
+- Fixed model-picker labels so reused GPT-5 IDs no longer show stale names like `Auto` instead of `Instant`.
 
 #### 03.13.2026
 - Added a disabled-by-default Fade Message Buttons toggle to gate the message-button fade and hover behavior.
