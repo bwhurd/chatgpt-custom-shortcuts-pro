@@ -408,17 +408,8 @@ document.addEventListener('DOMContentLoaded', () => {
   (() => {
     const MAX = MODEL_PICKER_MAX_SLOTS;
 
-    // Desired initial display order for actionable models (no arrow), before extraction.
-    // Keep this list short and current; content.js will later scrape and persist the real menu order.
-    const CANON_ORDER = [
-      'Auto',
-      'Instant',
-      'Thinking',
-      'GPT-5.1 Instant',
-      'GPT-5.1 Thinking',
-      'GPT-5 mini',
-      'o3',
-    ];
+    // Keep this fallback list conservative; content.js will replace it with the live menu order.
+    const CANON_ORDER = ['Instant', 'Thinking', 'Configure...'];
 
     const isLegacyArrow = (s) => {
       const t = (s ?? '').toString().trim();

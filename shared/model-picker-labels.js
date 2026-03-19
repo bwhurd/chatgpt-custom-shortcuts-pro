@@ -14,8 +14,9 @@
     'model-switcher-o4-mini': 'o4-mini',
   });
 
-// Main fallback order if testids vanish but order remains
-  const MAIN_CANON_BY_INDEX = ['Auto', 'Instant', 'Thinking'];
+  // Keep index fallback intentionally empty. Main-menu rows now change labels more often
+  // than their test ids, so guessing by position causes stale labels like "Auto".
+  const MAIN_CANON_BY_INDEX = [];
 
   const normTid = (tid) => (tid || '').toLowerCase().trim();
 
@@ -30,9 +31,10 @@
     // 1) Known stable ids first
     if (TESTID_CANON[t]) return TESTID_CANON[t];
 
-    // 2) GPT-5 Auto slot (e.g., model-switcher-gpt-5-3)
-    // ChatGPT uses the bare GPT-5.x tid for the "Auto" selector that decides how long to think.
-    if (/^model-switcher-gpt-5-\d+$/.test(t)) return 'Auto';
+    // 2) Bare GPT-5.x ids are no longer safe to label from the tid alone.
+    // Current menus may show "Instant" or other copy while reusing the same id.
+    // Return empty so callers can prefer the visible primary label.
+    if (/^model-switcher-gpt-5-\d+$/.test(t)) return '';
 
     // 3) GPT-x.y Instant/Thinking (e.g., model-switcher-gpt-5-3-instant)
     let m = t.match(/^model-switcher-gpt-(\d+)-(\d+)-(instant|thinking)$/);
@@ -96,16 +98,7 @@
 
   // Best-guess defaults for initial UI (before scrape). Arrow is canonical “→”.
   const defaultNames = () => {
-    const arr = [
-      'Auto',
-      'Instant',
-      'Thinking',
-      '→', // submenu trigger (not a model)
-      'GPT-5.1 Instant',
-      'GPT-5.1 Thinking',
-      'GPT-5 mini',
-      'o3',
-    ];
+    const arr = ['Instant', 'Thinking', 'Configure...'];
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
   };

@@ -6465,6 +6465,19 @@ div[data-id="hide-this-warning"] {
             ? window.ModelLabels.canonFromTid
             : (tid) => (tid && TESTID_CANON[tid]) || '';
 
+        function pickMainMenuLabel(item, index) {
+          const tid = __cspNormTid(item.getAttribute('data-testid'));
+          const domLabel = __cspTextNoHint(item);
+          const canonLabel = canonFromTid(tid) || '';
+
+          // Main-menu rows now change their visible labels without keeping tid parity.
+          // Prefer the primary DOM label, then fall back to stable tid-based canon labels.
+          if (domLabel) return domLabel;
+          if (canonLabel) return canonLabel;
+          if (index < MAIN_CANON_BY_INDEX.length) return MAIN_CANON_BY_INDEX[index];
+          return '';
+        }
+
         function __cspCanonicalLabelsFromDOM() {
           const CAP = MAX_SLOTS;
           const names = Array(CAP).fill('');
@@ -6495,10 +6508,7 @@ div[data-id="hide-this-warning"] {
                 label = '→'; // canonical for submenu trigger (not a model)
                 hasSubmenuTrigger = true;
               } else {
-                const tid = __cspNormTid(item.getAttribute('data-testid'));
-                label = canonFromTid(tid) || '';
-                if (!label) label = __cspTextNoHint(item);
-                if (!label && i < MAIN_CANON_BY_INDEX.length) label = MAIN_CANON_BY_INDEX[i];
+                label = pickMainMenuLabel(item, i);
               }
 
               names[idx++] = (label || '').trim();

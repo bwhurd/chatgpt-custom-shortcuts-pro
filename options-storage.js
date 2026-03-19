@@ -59,15 +59,7 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyAssistant: false,
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
-  modelNames: [
-    'Auto',
-    'Instant',
-    'Thinking',
-    'GPT-5.1 Instant',
-    'GPT-5.1 Thinking',
-    'GPT-5 mini',
-    'o3',
-  ],
+  modelNames: ['Instant', 'Thinking', 'Configure...'],
   showLegacyArrowButtonsCheckbox: false,
 
   // === Toggles / sliders ===
