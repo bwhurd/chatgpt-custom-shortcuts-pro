@@ -6219,6 +6219,142 @@ div[data-id="hide-this-warning"] {
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
   const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+  const MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
+  const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const MODEL_MENU_ITEM_SELECTOR = ':scope > [role="menuitem"][data-radix-collection-item]';
+
+  const normModelTid = (tid) =>
+    typeof window.ModelLabels?.normTid === 'function'
+      ? window.ModelLabels.normTid(tid)
+      : String(tid || '')
+          .toLowerCase()
+          .trim();
+
+  const getOpenRadixMenus = () =>
+    typeof getOpenMenus === 'function'
+      ? getOpenMenus()
+      : Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR));
+
+  const getDirectModelMenuItems = (menuEl) =>
+    menuEl instanceof Element ? Array.from(menuEl.querySelectorAll(MODEL_MENU_ITEM_SELECTOR)) : [];
+
+  const isKnownModelMenuItem = (item) => {
+    if (!(item instanceof Element)) return false;
+    const tid = normModelTid(item.getAttribute('data-testid'));
+    return !!tid && (tid.startsWith('model-switcher-') || tid === 'model-configure-modal');
+  };
+
+  const isModelSubmenuTriggerItem = (item) => {
+    if (!(item instanceof Element)) return false;
+    if (
+      typeof window.ModelLabels?.isSubmenuTrigger === 'function' &&
+      window.ModelLabels.isSubmenuTrigger(item)
+    ) {
+      return true;
+    }
+    const tid = normModelTid(item.getAttribute('data-testid'));
+    return !!tid && (tid.endsWith('-submenu') || tid.includes('legacy'));
+  };
+
+  const isPrimaryModelMenuElement = (menuEl) => {
+    if (!(menuEl instanceof Element)) return false;
+
+    const items = getDirectModelMenuItems(menuEl);
+    if (!items.length) return false;
+
+    const labelledby = menuEl.getAttribute('aria-labelledby') || '';
+    const triggerId = document.querySelector(MENU_BTN_SELECTOR)?.id || '';
+    if (triggerId && labelledby === triggerId) return true;
+
+    if (items.some((item) => normModelTid(item.getAttribute('data-testid')) === 'model-configure-modal')) {
+      return true;
+    }
+
+    if (items.some(isModelSubmenuTriggerItem)) return true;
+
+    const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
+    if (/^(latest|gpt[\s.-]*)/i.test(header) && items.some(isKnownModelMenuItem)) return true;
+
+    return false;
+  };
+
+  const isNestedModelMenuElement = (menuEl) => {
+    if (!(menuEl instanceof Element)) return false;
+    if (!getDirectModelMenuItems(menuEl).some(isKnownModelMenuItem)) return false;
+
+    const labelledby = menuEl.getAttribute('aria-labelledby') || '';
+    const triggerEl = labelledby ? document.getElementById(labelledby) : null;
+    const parentMenu = triggerEl?.closest('[data-radix-menu-content]');
+    return !!(parentMenu && isPrimaryModelMenuElement(parentMenu));
+  };
+
+  const sortModelMenus = (menus) =>
+    menus.slice().sort((a, b) => {
+      const aPrimary = isPrimaryModelMenuElement(a);
+      const bPrimary = isPrimaryModelMenuElement(b);
+      if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
+
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      if (Math.abs(aRect.left - bRect.left) > 1) return aRect.left - bRect.left;
+      if (Math.abs(aRect.top - bRect.top) > 1) return aRect.top - bRect.top;
+      return 0;
+    });
+
+  const getOpenModelMenus = () =>
+    sortModelMenus(
+      getOpenRadixMenus().filter(
+        (menuEl) => isPrimaryModelMenuElement(menuEl) || isNestedModelMenuElement(menuEl),
+      ),
+    );
+
+  const findModelSubmenuTrigger = (menuEl) => {
+    if (!(menuEl instanceof Element)) return null;
+
+    const directItems = getDirectModelMenuItems(menuEl);
+    const exact = directItems.find(
+      (item) => normModelTid(item.getAttribute('data-testid')) === 'legacy models-submenu',
+    );
+    if (exact) return exact;
+
+    const candidates = directItems.filter(isModelSubmenuTriggerItem);
+    const byTid = candidates.find((item) =>
+      normModelTid(item.getAttribute('data-testid')).includes('legacy'),
+    );
+    if (byTid) return byTid;
+
+    const byText = candidates.find((item) => /legacy\s*models?/i.test(item.textContent || ''));
+    if (byText) return byText;
+
+    if (candidates.length === 1) return candidates[0];
+    return null;
+  };
+
+  const getVisibleModelMenuState = () => {
+    const menus = getOpenModelMenus();
+    const main = menus.find(isPrimaryModelMenuElement) || menus[0] || null;
+    const orderedMenus = main ? [main, ...menus.filter((menu) => menu !== main)] : menus.slice();
+    const items = [];
+
+    for (let m = 0; m < orderedMenus.length && items.length < MAX_SLOTS; m++) {
+      const directItems = getDirectModelMenuItems(orderedMenus[m]);
+      const filtered =
+        m === 0 ? directItems.filter((item) => !isModelSubmenuTriggerItem(item)) : directItems;
+      filtered.forEach((el, idx) => {
+        if (items.length < MAX_SLOTS) {
+          items.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
+        }
+      });
+    }
+
+    return {
+      menus: orderedMenus,
+      main,
+      submenuTrigger: findModelSubmenuTrigger(main),
+      submenuOpen: orderedMenus.length > 1,
+      items,
+    };
+  };
 
   // ----- Timing constants (IIFE scope so all closures share them) -----
   // Keydown flow
@@ -6274,7 +6410,6 @@ div[data-id="hide-this-warning"] {
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
       const USE_CTRL = !!useControlForModelSwitcherRadio;
       const MOD_KEY_TEXT = USE_CTRL ? (IS_MAC ? 'Command' : 'Ctrl') : IS_MAC ? 'Option' : 'Alt';
-      const MENU_BTN = 'button[data-testid="model-switcher-dropdown-button"]';
 
       // Helper: Alt/Option or Ctrl/Command
       const modPressed = (e) => (USE_CTRL ? (IS_MAC ? e.metaKey : e.ctrlKey) : e.altKey);
@@ -6324,7 +6459,7 @@ div[data-id="hide-this-warning"] {
       };
 
       const ensureMainMenuOpen = () => {
-        const btn = document.querySelector(MENU_BTN);
+        const btn = document.querySelector(MENU_BTN_SELECTOR);
         if (!btn) return false;
         if (btn.getAttribute('aria-expanded') === 'true') return true;
         btn.focus();
@@ -6345,47 +6480,6 @@ div[data-id="hide-this-warning"] {
 
         return false;
       };
-
-      // Only consider "Model switcher" menus (main or its submenu)
-      // Robust detection:
-      // - has [data-testid^="Model-switCher-"] items
-      // - OR header like "GPT-5" (.__menu-label)
-      // - OR aria-labelledby equals the model switcher trigger button id
-      // - OR aria-labelledby points to a trigger inside a primary model menu
-      const isPrimaryModelMenu = (menuEl) => {
-        if (!menuEl || !(menuEl instanceof Element)) return false;
-        if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true;
-        const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
-        if (/^gpt[\s-]*/i.test(header)) return true;
-        const triggerId = document.querySelector(MENU_BTN)?.id;
-        const labelledby = menuEl.getAttribute('aria-labelledby') || '';
-        if (triggerId && labelledby === triggerId) return true;
-        return false;
-      };
-
-      const isModelMenu = (menuEl) => {
-        if (!menuEl || !(menuEl instanceof Element)) return false;
-        // Direct match
-        if (isPrimaryModelMenu(menuEl)) return true;
-
-        // Submenu: its labelledby points to a trigger that lives inside a primary model menu
-        const labelledby = menuEl.getAttribute('aria-labelledby') || '';
-        const triggerEl = labelledby ? document.getElementById(labelledby) : null;
-        const parentMenu = triggerEl?.closest('[data-radix-menu-content]');
-        if (parentMenu && isPrimaryModelMenu(parentMenu)) return true;
-
-        return false;
-      };
-
-      const getOpenModelMenus = () => {
-        const all =
-          typeof getOpenMenus === 'function'
-            ? getOpenMenus()
-            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
-        return all.filter(isModelMenu);
-      };
-
-      // Back-compat alias where existing code expects a single menu (the first/leftmost)
 
       // Style for shortcut labels
       (() => {
@@ -6425,16 +6519,13 @@ div[data-id="hide-this-warning"] {
         return window.ModelLabels.textNoHint(el);
       }
 
-      const __cspIsSubmenuTrigger = (el) => window.ModelLabels.isSubmenuTrigger(el);
+      const __cspIsSubmenuTrigger = (el) => isModelSubmenuTriggerItem(el);
       const __cspNormTid = (tid) => window.ModelLabels.normTid(tid);
 
       // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
       function __cspCollectModelNamesN() {
         const CAP = MAX_SLOTS;
-        const menus =
-          typeof getOpenModelMenus === 'function'
-            ? getOpenModelMenus().filter(Boolean)
-            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
+        const menus = getVisibleModelMenuState().menus.filter(Boolean);
 
         if (!menus.length) return null;
 
@@ -6481,13 +6572,7 @@ div[data-id="hide-this-warning"] {
         function __cspCanonicalLabelsFromDOM() {
           const CAP = MAX_SLOTS;
           const names = Array(CAP).fill('');
-
-          const menus =
-            typeof getOpenModelMenus === 'function'
-              ? getOpenModelMenus().filter(Boolean)
-              : Array.from(
-                  document.querySelectorAll('[data-radix-menu-content][data-state="open"]'),
-                );
+          const menus = getVisibleModelMenuState().menus.filter(Boolean);
 
           if (!menus.length) return { names, observedCount: 0, complete: false };
 
@@ -6610,32 +6695,7 @@ div[data-id="hide-this-warning"] {
       // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS
       // Collect items from the *first* open menu (level 1) and, if present, any additional open submenus.
       function getOrderedMenuItems() {
-        const cap = MAX_SLOTS;
-        const menus =
-          typeof getOpenModelMenus === 'function'
-            ? getOpenModelMenus()
-            : Array.from(document.querySelectorAll('[data-radix-menu-content][data-state="open"]'));
-
-        if (!menus.length) return [];
-        const result = [];
-
-        for (let m = 0; m < menus.length; m++) {
-          const all = Array.from(
-            menus[m].querySelectorAll(':scope > [role="menuitem"][data-radix-collection-item]'),
-          );
-
-          // For the main menu, filter out the submenu trigger (arrow)
-          const filtered = m === 0 ? all.filter((el) => !__cspIsSubmenuTrigger(el)) : all;
-
-          filtered.forEach((el, idx) => {
-            if (result.length < cap) {
-              result.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
-            }
-          });
-
-          if (result.length >= cap) break;
-        }
-        return result;
+        return getVisibleModelMenuState().items.slice(0, MAX_SLOTS);
       }
 
       function displayFromCode(code) {
@@ -6767,32 +6827,52 @@ div[data-id="hide-this-warning"] {
             );
           };
 
-          // Always open both menus using the same robust flow as toggleModelSelector
-          const openBothMenus = (done) => {
-            // Trigger robust flow that opens main + legacy submenu
+          const openMenuForTarget = (targetIndex, done) => {
             if (typeof window.toggleModelSelector === 'function') {
               window.toggleModelSelector();
             } else {
-              // Fallback: try to at least open main
               ensureMainMenuOpen();
             }
 
-            // Wait until two model menus are open, then continue
-            let polls = 0;
-            const tick = () => {
-              const menus = getOpenModelMenus();
-              if (menus.length > 1) return done();
-              if (polls++ > 60) return done(); // ~1.8s max
-              setTimeout(tick, 30);
+            let mainPolls = 0;
+            const waitForReadyState = () => {
+              const state = getVisibleModelMenuState();
+              if (!state.main) {
+                if (mainPolls++ > 50) return done();
+                setTimeout(waitForReadyState, 30);
+                return;
+              }
+
+              const needsSubmenu =
+                !!state.submenuTrigger && targetIndex >= state.items.length && !state.submenuOpen;
+
+              // Single-level menus should continue immediately with no legacy submenu wait.
+              if (!needsSubmenu) return done();
+
+              let submenuPolls = 0;
+              const waitForSubmenu = () => {
+                const nextState = getVisibleModelMenuState();
+                const stillNeedsSubmenu =
+                  !!nextState.submenuTrigger &&
+                  targetIndex >= nextState.items.length &&
+                  !nextState.submenuOpen;
+
+                if (!stillNeedsSubmenu) return done();
+                if (submenuPolls++ > 60) return done();
+                setTimeout(waitForSubmenu, 30);
+              };
+
+              waitForSubmenu();
             };
-            tick();
+
+            waitForReadyState();
           };
 
           setTimeout(
             () => {
-              openBothMenus(() => {
-                const items = getOrderedMenuItems();
+              openMenuForTarget(idx, () => {
                 applyHints();
+                const items = getOrderedMenuItems();
 
                 if (items.length <= idx) return;
                 const target = items[idx];
@@ -6812,7 +6892,7 @@ div[data-id="hide-this-warning"] {
 
       // Keep click-to-open labels, but also observe DOM so labels appear *when* submenu mounts
       document.addEventListener('click', (e) => {
-        if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN))) {
+        if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN_SELECTOR))) {
           setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_MAIN_MS);
         }
         const t = e.target instanceof Element ? e.target : null;
@@ -6842,7 +6922,7 @@ div[data-id="hide-this-warning"] {
         });
       })();
 
-      if (document.querySelector(MENU_BTN)?.getAttribute('aria-expanded') === 'true') {
+      if (document.querySelector(MENU_BTN_SELECTOR)?.getAttribute('aria-expanded') === 'true') {
         scheduleHints();
       }
     },
@@ -6850,11 +6930,8 @@ div[data-id="hide-this-warning"] {
 
   // Alt+/ opens the menu and forces the “Legacy models” submenu to be visible (robust to current DOM)
   window.toggleModelSelector = () => {
-    const MENU_BTN = 'button[data-testid="model-switcher-dropdown-button"]';
-    const btn = document.querySelector(MENU_BTN);
+    const btn = document.querySelector(MENU_BTN_SELECTOR);
     if (!btn) return;
-
-    // Tunables
 
     // Helpers
     const pressSpace = (el) => {
@@ -6884,70 +6961,16 @@ div[data-id="hide-this-warning"] {
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     };
 
-    // Identify menus that belong to the model switcher (matches your 555 HTML)
-    const isModelMenuEl = (menuEl) => {
-      if (!menuEl || !(menuEl instanceof Element)) return false;
-      if (menuEl.querySelector('[data-testid^="model-switcher-"]')) return true; // current
-      if (menuEl.querySelector('[data-testid^="Model-switCher-"]')) return true; // legacy casing
-      if (menuEl.querySelector('[data-testid$="-submenu"]')) return true; // e.g., “Legacy models-submenu”
-      const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
-      return /^gpt[\s.-]*/i.test(header);
-    };
-
-    const getModelMenus = () => {
-      const all =
-        typeof getOpenMenus === 'function'
-          ? getOpenMenus()
-          : Array.from(
-              document.querySelectorAll(
-                '[data-radix-menu-content][data-state="open"][role="menu"]',
-              ),
-            );
-      return all.filter(isModelMenuEl);
-    };
-
-    // Find the specific “Legacy models” trigger inside the main menu
-    const findLegacyTrigger = (menu) => {
-      if (!menu) return null;
-
-      // 1) Exact data-testid match from your HTML (note the space)
-      const el = menu.querySelector(
-        ':scope > [role="menuitem"][data-testid="Legacy models-submenu"]',
-      );
-      if (el) return el;
-
-      // 2) Any submenu-capable item whose data-testid mentions “legacy”
-      const candidates = Array.from(
-        menu.querySelectorAll(
-          ':scope > [role="menuitem"][data-has-submenu], ' +
-            ':scope > [role="menuitem"][aria-haspopup="menu"], ' +
-            ':scope > [role="menuitem"][aria-controls]',
-        ),
-      );
-      const byTid = candidates.find((n) =>
-        (n.getAttribute('data-testid') || '').toLowerCase().includes('legacy'),
-      );
-      if (byTid) return byTid;
-
-      // 3) Text content fallback
-      const byText = candidates.find((n) => /legacy\s*models?/i.test(n.textContent || ''));
-      if (byText) return byText;
-
-      // 4) Last resort: if there’s exactly one submenu trigger, use it
-      if (candidates.length === 1) return candidates[0];
-
-      return null;
-    };
-
     const waitForMainOpen = (cb) => {
-      if (btn.getAttribute('aria-expanded') === 'true') return cb();
+      const currentState = getVisibleModelMenuState();
+      if (btn.getAttribute('aria-expanded') === 'true' && currentState.main) return cb(currentState);
       btn.focus();
       pressSpace(btn);
 
       let tries = 0;
       const poll = () => {
-        const menus = getModelMenus();
-        if (menus.length > 0 || tries++ > 50) return cb(); // up to ~1.5s
+        const state = getVisibleModelMenuState();
+        if (state.main || tries++ > 50) return cb(state);
         setTimeout(poll, 30);
       };
       poll();
@@ -6968,20 +6991,16 @@ div[data-id="hide-this-warning"] {
     };
 
     const forceOpenSubmenu = (done) => {
-      // If already open, we’re done
-      if (getModelMenus().length > 1) return done();
+      const state = getVisibleModelMenuState();
+      if (!state.main || state.submenuOpen) return done();
 
-      const menus = getModelMenus();
-      if (!menus.length) return done();
-
-      const main = menus[0];
-      const trigger = findLegacyTrigger(main);
+      const trigger = state.submenuTrigger;
       if (!trigger) return done();
 
       let polls = 0;
       const tick = () => {
-        const currentMenus = getModelMenus();
-        if (currentMenus.length > 1 || trigger.getAttribute('aria-expanded') === 'true') {
+        const nextState = getVisibleModelMenuState();
+        if (nextState.submenuOpen || trigger.getAttribute('aria-expanded') === 'true') {
           // Let labels render (if needed)
           setTimeout(() => window.__mp_applyHints?.(), 25);
           return done();
@@ -7017,7 +7036,9 @@ div[data-id="hide-this-warning"] {
     };
 
     // Open main menu, then open the Legacy submenu
-    waitForMainOpen(() => {
+    waitForMainOpen((state) => {
+      const readyState = state || getVisibleModelMenuState();
+      if (!readyState.submenuTrigger) return;
       // Let Radix mount main content before searching
       setTimeout(() => forceOpenSubmenu(() => {}), 40);
     });
@@ -7038,7 +7059,7 @@ div[data-id="hide-this-warning"] {
     KEY_CODES.splice(0, KEY_CODES.length, ...next);
 
     // If menu is open, refresh labels to reflect new keys
-    const btn = document.querySelector('button[data-testid="model-switcher-dropdown-button"]');
+    const btn = document.querySelector(MENU_BTN_SELECTOR);
     if (btn?.getAttribute('aria-expanded') === 'true') {
       setTimeout(() => {
         window.__mp_applyHints?.();

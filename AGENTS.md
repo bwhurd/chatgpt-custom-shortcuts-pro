@@ -135,7 +135,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Auto-click convenience flows: “Something went wrong” → Try again, “Open link” warnings, “Read Aloud”/“Stop” menu items, etc.
   - Remembers sidebar scroll in both rail and overlay modes using sessionStorage keys keyed by pathname + mode.
 - Overlays:
-  - `window.toggleModelSelector` ensures both the main menu and legacy submenu open, even if the UI changes.
+  - `window.toggleModelSelector` supports both the current single-level model menu and older legacy-submenu layouts, opening deeper submenu content only when that path actually exists.
   - `Ctrl+/` shortcut overlay links `popup.css` inside its shadow DOM so local icon fonts are available, and also injects the embedded `FULL_POPUP_CSS` copy for layout parity. It renders only assigned shortcuts. The model picker grid stays unchanged. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
 - Global exports include `window.toggleSidebar`, `window.newConversation`, `window.globalScrollToBottom`, `window.clickGptHeaderThenSubItemSvg`, `window.toggleModelSelector`, clipboard helpers, and toast utilities.
 
@@ -170,7 +170,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 ## Behavior & workflow invariants
 - Settings propagation: `chrome.storage.sync` is the authority. `content.js` loads visibility keys by deriving them from a single defaults map (`VISIBILITY_DEFAULTS`, sourced from `settings-schema.js` when present) plus a small schema-driven extra-key list, then applies them through `applyVisibilitySettings`. New content-consumed toggles should be added to `settings-schema.js` (`content.visibilityDefaults`) and `options-storage.js` (`OPTIONS_DEFAULTS`).
 - Shortcut handling: `ShortcutUtils` normalizes everything to `KeyboardEvent.code`. Digits treat `DigitX` and `NumpadX` as equivalent. Clearing an input writes NBSP to storage. Duplicate detection distinguishes between model slots and popup shortcuts depending on whether the model picker is set to Alt or Control.
-- Model picker: `window.MODEL_NAMES` must never include the legacy `→` arrow once data is hydrated; storage arrays are filtered to 10 visible slots. `window.toggleModelSelector` opens both main and legacy menu content and relies on selectors from `shared/model-picker-labels.js`. Keeping these helpers synced avoids DOM-fragile selectors throughout the codebase.
+- Model picker: `window.MODEL_NAMES` must never include the legacy `→` arrow once data is hydrated; storage arrays are filtered to 10 visible slots. `window.toggleModelSelector` and the model-switcher shortcut flow must stay aligned and support both the current single-level menu and any returning legacy submenu path. Keeping these helpers synced avoids DOM-fragile selectors throughout the codebase.
 - Copy sanitization: `selectThenCopy` and `selectThenCopyAllMessages` transform DOM content into HTML+plain text pairs that preserve code fences, CRLF endings, and Word-friendly spacing. Don’t bypass these helpers; adjust their utilities (`splitByCodeFences`, `removeMarkdown`, `buildPlainTextWithFences`) if you need new behavior.
 - Top bar to bottom + slim sidebar: The bottom bar injector is guarded by URL checks and login-state detection. It diff-injects static buttons, segmented model switcher, and opacity sliders, and re-runs on DOM mutations. Slim sidebar fading respects overlay state and full sidebar visibility; both features rely on chrome.storage flags and should remain in sync.
 - PageUp/PageDown takeover: Toggleable via `pageUpDownTakeover`. It installs/removes keydown & wheel/touch listeners dynamically.
@@ -208,6 +208,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 ## Style & safety rails
 - JS: 4-space indentation, single quotes, semicolons. HTML: 4 spaces. CSS: 2 spaces. Keep comments concise and only for non-obvious logic.
 - Localization is mandatory for all user-visible text (popup labels, tooltips, toasts, status lines, Cloud sync messages, overlay copy).
+- Prefer language-agnostic selectors (`data-*`, stable roles/structure, canonical ids). Do not key behavior off localized text when a reliable non-language selector exists.
 - Do not edit or remove third-party bundles in `lib/`, archived builds (`*.zip`), or shipped icons. Add new assets instead.
 - Service worker code must stay event-driven; don’t introduce timers or long-lived loops.
 - Respect existing permissions; do not add new permissions or host matches without explicit approval.
