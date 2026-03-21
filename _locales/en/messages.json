@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "Model Picker"
 	},
+	"label_configureModelsCompact": {
+		"message": "Configure Models"
+	},
 	"label_blank_placeholder": {
 		"message": "Blank placeholder for grid alignment"
 	},

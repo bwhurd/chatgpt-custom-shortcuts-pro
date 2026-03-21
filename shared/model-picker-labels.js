@@ -4,6 +4,90 @@
 */
 (() => {
   const MAX_SLOTS = 15;
+  const PRIMARY_ACTIONS = Object.freeze([
+    Object.freeze({
+      slot: 0,
+      id: 'instant',
+      group: 'primary',
+      label: 'Instant',
+      actionKind: 'main-row',
+      mainIndex: 0,
+    }),
+    Object.freeze({
+      slot: 1,
+      id: 'thinking',
+      group: 'primary',
+      label: 'Thinking',
+      actionKind: 'main-row',
+      mainIndex: 1,
+    }),
+    Object.freeze({
+      slot: 2,
+      id: 'configure',
+      group: 'primary',
+      label: 'Configure...',
+      actionKind: 'configure-open',
+      testId: 'model-configure-modal',
+      mainIndex: 2,
+    }),
+  ]);
+  const CONFIGURE_ACTIONS = Object.freeze([
+    Object.freeze({
+      slot: 3,
+      id: 'configure-latest',
+      group: 'configure',
+      label: 'Latest',
+      actionKind: 'configure-option',
+      optionKind: 'first',
+    }),
+    Object.freeze({
+      slot: 4,
+      id: 'configure-5-2',
+      group: 'configure',
+      label: '5.2',
+      actionKind: 'configure-option',
+      optionKind: 'value',
+      optionValue: '5.2',
+    }),
+    Object.freeze({
+      slot: 5,
+      id: 'configure-5-0-thinking-mini',
+      group: 'configure',
+      label: '5.0 Thinking Mini',
+      actionKind: 'configure-option',
+      optionKind: 'value',
+      optionValue: '5.0',
+    }),
+    Object.freeze({
+      slot: 6,
+      id: 'configure-o3',
+      group: 'configure',
+      label: 'o3',
+      actionKind: 'configure-option',
+      optionKind: 'value',
+      optionValue: 'o3',
+    }),
+  ]);
+  const ACTION_GROUPS = Object.freeze([
+    Object.freeze({
+      id: 'primary',
+      label: '',
+      labelI18nKey: '',
+      compactLabel: false,
+      actions: PRIMARY_ACTIONS,
+    }),
+    Object.freeze({
+      id: 'configure',
+      label: 'Configure Models',
+      labelI18nKey: 'label_configureModelsCompact',
+      compactLabel: true,
+      actions: CONFIGURE_ACTIONS,
+    }),
+  ]);
+  const ACTION_SLOTS = Object.freeze(
+    ACTION_GROUPS.flatMap((group) => group.actions.map((action) => Object.freeze({ ...action }))),
+  );
+  const ACTION_SLOT_COUNT = ACTION_SLOTS.length;
 
   // Canonical mapping based on current HTML (use sparingly; prefer parsing testids)
   const TESTID_CANON = Object.freeze({
@@ -96,9 +180,44 @@
     return '';
   };
 
+  const defaultActionNames = () => ACTION_SLOTS.map((action) => action.label);
+
+  const defaultKeyCodes = () => {
+    const arr = new Array(MAX_SLOTS).fill('');
+    arr[0] = 'Digit1';
+    arr[1] = 'Digit2';
+    arr[2] = 'Digit3';
+    return arr;
+  };
+
+  const normalizeStoredActionName = (slot, value) => {
+    const text = (value ?? '').toString().trim();
+    if (!text) return '';
+    if (slot === 5 && text === '5.0') return '5.0 Thinking Mini';
+    return text;
+  };
+
+  const isLegacyArrow = (s) => {
+    const t = (s ?? '').toString().trim();
+    if (!t) return false;
+    if (t === '→') return true;
+    if (/^legacy\s*models?/i.test(t)) return true;
+    return /legacy/i.test(t) && t.includes('→');
+  };
+
+  const resolveActionableNames = (incoming) => {
+    const out = defaultActionNames();
+    const inArr = Array.isArray(incoming) ? incoming.slice(0, MAX_SLOTS) : [];
+    for (let i = 0; i < ACTION_SLOT_COUNT; i++) {
+      const value = normalizeStoredActionName(i, inArr[i]);
+      if (value && !isLegacyArrow(value)) out[i] = value;
+    }
+    return out.slice(0, ACTION_SLOT_COUNT);
+  };
+
   // Best-guess defaults for initial UI (before scrape). Arrow is canonical “→”.
   const defaultNames = () => {
-    const arr = ['Instant', 'Thinking', 'Configure...'];
+    const arr = defaultActionNames();
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
   };
@@ -113,8 +232,14 @@
     return out;
   };
 
+  const getActionGroups = () => ACTION_GROUPS.map((group) => ({ ...group, actions: group.actions.slice() }));
+  const getActionSlots = () => ACTION_SLOTS.slice();
+  const getActionBySlot = (slot) =>
+    Number.isInteger(slot) && slot >= 0 && slot < ACTION_SLOTS.length ? ACTION_SLOTS[slot] : null;
+
   window.ModelLabels = Object.freeze({
     MAX_SLOTS,
+    ACTION_SLOT_COUNT,
     TESTID_CANON,
     MAIN_CANON_BY_INDEX,
     normTid,
@@ -122,6 +247,12 @@
     isSubmenuTrigger,
     textNoHint,
     mapSubmenuLabel,
+    getActionGroups,
+    getActionSlots,
+    getActionBySlot,
+    defaultKeyCodes,
+    normalizeStoredActionName,
+    resolveActionableNames,
     defaultNames,
     prettifyForPopup,
   });

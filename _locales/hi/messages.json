@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "मॉडल चयन"
 	},
+	"label_configureModelsCompact": {
+		"message": "मॉडल कॉन्फ़िगर करें"
+	},
 	"label_blank_placeholder": {
 		"message": "ग्रिड संरेखण हेतु खाली प्लेसहोल्डर"
 	},

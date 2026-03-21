@@ -6219,9 +6219,78 @@ div[data-id="hide-this-warning"] {
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
   const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+  const ACTION_SLOT_COUNT = window.ModelLabels?.ACTION_SLOT_COUNT || 0;
   const MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
   const MODEL_MENU_ITEM_SELECTOR = ':scope > [role="menuitem"][data-radix-collection-item]';
+  const getModelActionSlots = () =>
+    typeof window.ModelLabels?.getActionSlots === 'function' ? window.ModelLabels.getActionSlots() : [];
+  const getModelActionBySlot = (slot) =>
+    typeof window.ModelLabels?.getActionBySlot === 'function'
+      ? window.ModelLabels.getActionBySlot(slot)
+      : null;
+  const getDefaultModelPickerCodes = () =>
+    typeof window.ModelLabels?.defaultKeyCodes === 'function'
+      ? window.ModelLabels.defaultKeyCodes()
+      : (() => {
+          const out = new Array(MAX_SLOTS).fill('');
+          out[0] = 'Digit1';
+          out[1] = 'Digit2';
+          out[2] = 'Digit3';
+          return out;
+        })();
+  const sleepAsync =
+    typeof sleep === 'function' ? sleep : (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const smartClickSafe =
+    typeof smartClick === 'function'
+      ? smartClick
+      : (el) => {
+          if (!el) return false;
+          try {
+            el.click?.();
+            return true;
+          } catch {
+            return false;
+          }
+        };
+  const waitForAsync =
+    typeof waitFor === 'function'
+      ? waitFor
+      : async (getter, { timeout = 3000, interval = 50 } = {}) => {
+          const start = Date.now();
+          while (Date.now() - start < timeout) {
+            const result = getter();
+            if (result) return result;
+            await sleepAsync(interval);
+          }
+          return null;
+        };
+  const clickButtonByTestIdSafe =
+    typeof clickButtonByTestId === 'function'
+      ? clickButtonByTestId
+      : async (
+          testId,
+          { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
+        ) => {
+          const target = await waitForAsync(() => {
+            const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
+            if (!matches.length) return null;
+            return pick(matches) || matches[0] || null;
+          }, { timeout, interval });
+          if (!target) return;
+          if (typeof flashBorder === 'function') flashBorder(target);
+          await sleepAsync(90);
+          smartClickSafe(target);
+        };
+  const waitForButtonByTestIdSafe = async (
+    testId,
+    { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
+  ) =>
+    waitForAsync(() => {
+      const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
+      if (!matches.length) return null;
+      return pick(matches) || matches[0] || null;
+    }, { timeout, interval });
 
   const normModelTid = (tid) =>
     typeof window.ModelLabels?.normTid === 'function'
@@ -6365,6 +6434,11 @@ div[data-id="hide-this-warning"] {
 
   // Activation delay (post-labeling) in keydown flow
   const DELAY_ACTIVATE_TARGET_MS = 375; // was 750
+  const DELAY_CONFIGURE_STEP_MS = 70;
+  const DELAY_CONFIGURE_CLOSE_MS = 90;
+  const DELAY_CONFIGURE_FINAL_CLICK_MS = DELAY_ACTIVATE_TARGET_MS;
+  const DELAY_CONFIGURE_COMBOBOX_OPEN_MS = 35;
+  const DELAY_CONFIGURE_LISTBOX_QUICK_CHECK_MS = 120;
 
   // Label scheduling in click flows
   const DELAY_APPLY_HINTS_AFTER_MAIN_MS = 30; // was 60
@@ -6379,31 +6453,12 @@ div[data-id="hide-this-warning"] {
   chrome.storage.sync.get(
     ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
     ({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
-      // Capacity and defaults: show as many as needed, up to MAX_SLOTS
-      const MAX_SLOTS = 15;
-      const buildDefaultCodes = (n = MAX_SLOTS) => {
-        const base = [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
-        while (base.length < n) base.push('');
-        return base.slice(0, n);
-      };
-
       // Initialize shared KEY_CODES (mutate the const array to keep references alive)
       const incoming = Array.isArray(modelPickerKeyCodes)
         ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
         : [];
       while (incoming.length < MAX_SLOTS) incoming.push('');
-      const effective = incoming.some(Boolean) ? incoming : buildDefaultCodes(MAX_SLOTS);
+      const effective = incoming.some(Boolean) ? incoming : getDefaultModelPickerCodes();
       KEY_CODES.splice(0, KEY_CODES.length, ...effective);
 
       // Platform + modifier label
@@ -6681,6 +6736,29 @@ div[data-id="hide-this-warning"] {
         if (arr) __cspSaveModelNames(arr);
       }
 
+      const __cspPersistModelNameRange = (startIdx, values, rangeCount) => {
+        const CAP = MAX_SLOTS;
+        const start = Math.max(0, Math.min(CAP - 1, Number(startIdx) || 0));
+        const count = Math.max(0, Math.min(CAP - start, Number(rangeCount) || 0));
+        if (!count) return;
+
+        const incoming = Array.isArray(values) ? values.slice(0, count) : [];
+        const normalizeName =
+          typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+            ? window.ModelLabels.normalizeStoredActionName
+            : (_slot, value) => (value ?? '').toString().trim();
+
+        chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
+          const next = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
+          while (next.length < CAP) next.push('');
+          for (let i = 0; i < count; i++) next[start + i] = '';
+          for (let i = 0; i < incoming.length; i++) {
+            next[start + i] = normalizeName(start + i, incoming[i]) || '';
+          }
+          chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => {});
+        });
+      };
+
       // Respond to popup requests for live names (ensures freshness on popup open)
       try {
         chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -6692,10 +6770,20 @@ div[data-id="hide-this-warning"] {
         });
       } catch (_) {}
 
-      // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS
-      // Collect items from the *first* open menu (level 1) and, if present, any additional open submenus.
+      // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS.
       function getOrderedMenuItems() {
         return getVisibleModelMenuState().items.slice(0, MAX_SLOTS);
+      }
+
+      function getPrimaryMenuItems(state = getVisibleModelMenuState()) {
+        return (state.items || []).filter((item) => item.menu === 'main');
+      }
+
+      function findMainItemByTestId(testId, state = getVisibleModelMenuState()) {
+        const tid = normModelTid(testId);
+        return getPrimaryMenuItems(state).find(
+          (item) => normModelTid(item.el.getAttribute('data-testid')) === tid,
+        );
       }
 
       function displayFromCode(code) {
@@ -6758,16 +6846,268 @@ div[data-id="hide-this-warning"] {
         const utils = window.ShortcutUtils || {};
         const cmp = typeof utils.codeEquals === 'function' ? utils.codeEquals : () => false;
         for (let i = 0; i < KEY_CODES.length; i++) {
+          if (i >= ACTION_SLOT_COUNT) break;
           if (cmp(e.code, KEY_CODES[i])) return i;
         }
         return -1;
       }
 
+      // Robust activator: focus + pointer + mouse + keyboard confirm (covers Radix commit paths).
+      const activateMenuItem = (el) => {
+        if (!el) return;
+
+        el.focus?.();
+
+        el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+
+        el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+        el.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        el.dispatchEvent(
+          new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      };
+
+      const pressElementKey = (el, key, code = key) => {
+        if (!el) return;
+        el.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            code,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        el.dispatchEvent(
+          new KeyboardEvent('keyup', {
+            key,
+            code,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      };
+
+      const activateAfterFlash = async (el, delayMs) => {
+        if (!el) return;
+        if (window.gsap) flashMenuItem(el);
+        if (delayMs > 0) await sleepAsync(delayMs);
+        activateMenuItem(el);
+      };
+
+      const clickAfterFlash = async (el, delayMs) => {
+        if (!el) return;
+        if (window.gsap) flashMenuItem(el);
+        else if (typeof flashBorder === 'function') flashBorder(el);
+        if (delayMs > 0) await sleepAsync(delayMs);
+        smartClickSafe(el);
+      };
+
+      const getTargetMenuItemForAction = (action, state = getVisibleModelMenuState()) => {
+        if (!action) return null;
+        if (action.actionKind === 'main-row') return getPrimaryMenuItems(state)[action.mainIndex] || null;
+        if (action.actionKind === 'configure-open' || action.actionKind === 'configure-option') {
+          return findMainItemByTestId('model-configure-modal', state) || null;
+        }
+        return null;
+      };
+
+      const waitForMainMenuActionTarget = async (action) =>
+        waitForAsync(
+          () => {
+            const state = getVisibleModelMenuState();
+            if (!state.main) return null;
+            const target = getTargetMenuItemForAction(action, state);
+            return target ? { state, target } : null;
+          },
+          { timeout: 2000, interval: 30 },
+        );
+
+      const findConfigureCombobox = () => {
+        const label = document.getElementById('model-selection-label');
+        if (!(label instanceof Element)) return null;
+
+        const roots = [
+          label.closest('[role="dialog"]'),
+          label.closest('[data-state="open"]'),
+          label.parentElement,
+          label.parentElement?.parentElement,
+          label.closest('section'),
+          document,
+        ].filter(Boolean);
+
+        for (const root of roots) {
+          const button = root.querySelector('button[role="combobox"][aria-controls]');
+          if (button) return button;
+        }
+        return null;
+      };
+
+      const waitForConfigureCombobox = async () =>
+        waitForAsync(findConfigureCombobox, { timeout: 2500, interval: 30 });
+
+      const waitForConfigureComboboxQuick = async () =>
+        waitForAsync(findConfigureCombobox, { timeout: 450, interval: 25 });
+
+      const waitForConfigureListbox = async (combobox) =>
+        waitForAsync(
+          () => {
+            const listboxId = combobox?.getAttribute('aria-controls') || '';
+            if (!listboxId) return null;
+            const listbox = document.getElementById(listboxId);
+            return listbox instanceof Element ? listbox : null;
+          },
+          { timeout: 2500, interval: 30 },
+        );
+
+      const waitForConfigureListboxQuick = async (combobox) =>
+        waitForAsync(
+          () => {
+            const listboxId = combobox?.getAttribute('aria-controls') || '';
+            if (!listboxId) return null;
+            const listbox = document.getElementById(listboxId);
+            return listbox instanceof Element ? listbox : null;
+          },
+          { timeout: DELAY_CONFIGURE_LISTBOX_QUICK_CHECK_MS, interval: 25 },
+        );
+
+      const getConfigureOptionLabel = (option) => {
+        if (!(option instanceof Element)) return '';
+        const labelled = option.getAttribute('aria-labelledby') || '';
+        const byId = labelled ? document.getElementById(labelled) : null;
+        const text = (byId?.textContent || option.textContent || '').replace(/\s+/g, ' ').trim();
+        return text;
+      };
+
+      const captureConfigureOptionLabels = (listbox) => {
+        if (!(listbox instanceof Element)) return;
+        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]')).slice(0, 4);
+        if (!options.length) return;
+        const labels = options.map((option) => getConfigureOptionLabel(option));
+        __cspPersistModelNameRange(3, labels, 4);
+      };
+
+      const getConfigureClickTargets = (configureItem) => {
+        if (!(configureItem instanceof Element)) return [];
+        const targets = [
+          configureItem,
+          configureItem.querySelector('.flex.min-w-0.grow.items-center.gap-2\\.5'),
+          configureItem.querySelector('.truncate'),
+          configureItem.firstElementChild,
+        ].filter(Boolean);
+        return Array.from(new Set(targets));
+      };
+
+      const openConfigureDialogFromMenuItem = async (configureItem) => {
+        if (!(configureItem instanceof Element)) return null;
+
+        const attempts = [];
+        const targets = getConfigureClickTargets(configureItem);
+        targets.forEach((target) => {
+          attempts.push(async () => {
+            await clickAfterFlash(target, DELAY_CONFIGURE_STEP_MS);
+          });
+        });
+        attempts.push(async () => {
+          await activateAfterFlash(configureItem, DELAY_CONFIGURE_STEP_MS);
+        });
+        attempts.push(async () => {
+          configureItem.focus?.();
+          pressElementKey(configureItem, 'Enter', 'Enter');
+        });
+        attempts.push(async () => {
+          configureItem.focus?.();
+          pressElementKey(configureItem, ' ', 'Space');
+        });
+        attempts.push(async () => {
+          try {
+            configureItem.click?.();
+          } catch {}
+        });
+
+        for (const attempt of attempts) {
+          const existing = findConfigureCombobox();
+          if (existing) return existing;
+          await attempt();
+          const combobox = await waitForConfigureComboboxQuick();
+          if (combobox) return combobox;
+        }
+
+        return waitForConfigureCombobox();
+      };
+
+      const findConfigureOptionForAction = (action, listbox) => {
+        if (!(listbox instanceof Element) || !action) return null;
+        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+        if (!options.length) return null;
+        if (action.optionKind === 'first') return options[0] || null;
+        if (action.optionKind === 'value') {
+          return (
+            options.find((option) => getConfigureOptionLabel(option) === String(action.optionValue || '')) ||
+            null
+          );
+        }
+        return null;
+      };
+
+      const runConfigureOptionAction = async (action) => {
+        const ready = await waitForMainMenuActionTarget(action);
+        const configureItem = ready?.target?.el;
+        if (!configureItem) return;
+
+        const combobox = await openConfigureDialogFromMenuItem(configureItem);
+        if (!combobox) return;
+
+        let listbox = await waitForConfigureListboxQuick(combobox);
+        if (!listbox) {
+          await clickAfterFlash(combobox, DELAY_CONFIGURE_COMBOBOX_OPEN_MS);
+          listbox = await waitForConfigureListbox(combobox);
+        }
+        if (!listbox) return;
+
+        captureConfigureOptionLabels(listbox);
+        const option = findConfigureOptionForAction(action, listbox);
+        if (!option) return;
+
+        await activateAfterFlash(option, DELAY_ACTIVATE_TARGET_MS);
+        await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
+        const closeButton = await waitForButtonByTestIdSafe('close-button', {
+          timeout: 1500,
+          interval: 30,
+        });
+        if (!closeButton) return;
+        await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
+        flashBottomBar();
+      };
+
       const applyHints = () => {
         removeAllLabels();
-        const items = getOrderedMenuItems();
-        for (let i = 0; i < items.length && i < KEY_CODES.length; ++i) {
-          addLabel(items[i].el, displayFromCode(KEY_CODES[i]));
+        const primaryItems = getPrimaryMenuItems();
+        const primaryActions = getModelActionSlots().filter((action) => action.group === 'primary');
+        for (let i = 0; i < primaryItems.length && i < primaryActions.length; ++i) {
+          const slot = primaryActions[i]?.slot;
+          if (slot == null) continue;
+          addLabel(primaryItems[i].el, displayFromCode(KEY_CODES[slot]));
         }
         // Persist labels -> names once menus are present (submenu must be open for full set)
         __cspMaybePersistModelNames();
@@ -6785,84 +7125,26 @@ div[data-id="hide-this-warning"] {
 
           const idx = indexFromEvent(e);
           if (idx === -1) return;
+          const action = getModelActionBySlot(idx);
+          if (!action) return;
 
           e.preventDefault();
           e.stopPropagation();
 
           const alreadyOpen = ensureMainMenuOpen();
-
-          // Robust activator: focus + pointer + mouse + keyboard confirm (covers Radix commit paths)
-          const activateMenuItem = (el) => {
-            if (!el) return;
-
-            el.focus?.();
-
-            el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
-            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-            el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
-            el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
-
-            el.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-
-            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-
-            el.dispatchEvent(
-              new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                bubbles: true,
-                cancelable: true,
-              }),
-            );
-            el.dispatchEvent(
-              new KeyboardEvent('keyup', {
-                key: 'Enter',
-                code: 'Enter',
-                bubbles: true,
-                cancelable: true,
-              }),
-            );
-          };
-
-          const openMenuForTarget = (targetIndex, done) => {
-            if (typeof window.toggleModelSelector === 'function') {
-              window.toggleModelSelector();
-            } else {
-              ensureMainMenuOpen();
-            }
+          const openMenuForAction = (nextAction, done) => {
+            ensureMainMenuOpen();
 
             let mainPolls = 0;
             const waitForReadyState = () => {
               const state = getVisibleModelMenuState();
-              if (!state.main) {
-                if (mainPolls++ > 50) return done();
+              const target = getTargetMenuItemForAction(nextAction, state);
+              if (!state.main || !target) {
+                if (mainPolls++ > 50) return done(null);
                 setTimeout(waitForReadyState, 30);
                 return;
               }
-
-              const needsSubmenu =
-                !!state.submenuTrigger && targetIndex >= state.items.length && !state.submenuOpen;
-
-              // Single-level menus should continue immediately with no legacy submenu wait.
-              if (!needsSubmenu) return done();
-
-              let submenuPolls = 0;
-              const waitForSubmenu = () => {
-                const nextState = getVisibleModelMenuState();
-                const stillNeedsSubmenu =
-                  !!nextState.submenuTrigger &&
-                  targetIndex >= nextState.items.length &&
-                  !nextState.submenuOpen;
-
-                if (!stillNeedsSubmenu) return done();
-                if (submenuPolls++ > 60) return done();
-                setTimeout(waitForSubmenu, 30);
-              };
-
-              waitForSubmenu();
+              done({ state, target });
             };
 
             waitForReadyState();
@@ -6870,16 +7152,18 @@ div[data-id="hide-this-warning"] {
 
           setTimeout(
             () => {
-              openMenuForTarget(idx, () => {
+              openMenuForAction(action, (ready) => {
+                if (!ready) return;
                 applyHints();
-                const items = getOrderedMenuItems();
-
-                if (items.length <= idx) return;
-                const target = items[idx];
-                if (!target) return;
-                if (window.gsap) flashMenuItem(target.el);
+                if (action.actionKind === 'configure-option') {
+                  void runConfigureOptionAction(action);
+                  return;
+                }
+                const targetEl = ready.target?.el;
+                if (!targetEl) return;
+                if (window.gsap) flashMenuItem(targetEl);
                 setTimeout(() => {
-                  activateMenuItem(target.el);
+                  activateMenuItem(targetEl);
                   flashBottomBar();
                 }, DELAY_ACTIVATE_TARGET_MS);
               });
@@ -7773,55 +8057,21 @@ setTimeout(() => {
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
   function buildModelSwitcherGrid(cfg) {
-    const MAX = window.ModelLabels?.MAX_SLOTS || 15;
-
-    const isLegacyArrow = (s) => {
-      const t = (s ?? '').toString().trim();
-      if (!t) return false;
-      if (t === '→') return true;
-      if (/^legacy\s*models?/i.test(t)) return true;
-      return /legacy/i.test(t) && t.includes('→');
-    };
-
-    // Prefer hydrated actionable names (window.MODEL_NAMES from hydrateModelData),
-    // fall back to canonical defaults from ModelLabels (which include the arrow).
-    const rawNames =
-      Array.isArray(window.MODEL_NAMES) && window.MODEL_NAMES.length
-        ? window.MODEL_NAMES.slice()
-        : window.ModelLabels?.defaultNames?.() || [];
-
-    // Actionable = non-arrow, non-empty, in canonical order, capped at MAX.
-    const names = rawNames
-      .filter((n) => !isLegacyArrow(n))
-      .map((v) => (v == null ? '' : String(v).trim()))
-      .filter(Boolean)
-      .slice(0, MAX);
-
-    const buildDefaultCodes = (n = names.length || 0) => {
-      const base = [
-        'Digit1',
-        'Digit2',
-        'Digit3',
-        'Digit4',
-        'Digit5',
-        'Digit6',
-        'Digit7',
-        'Digit8',
-        'Digit9',
-        'Digit0',
-      ];
-      while (base.length < n) base.push('');
-      return base.slice(0, n);
-    };
-
+    const actionGroups =
+      typeof window.ModelLabels?.getActionGroups === 'function' ? window.ModelLabels.getActionGroups() : [];
+    const actionSlots =
+      typeof window.ModelLabels?.getActionSlots === 'function' ? window.ModelLabels.getActionSlots() : [];
+    const names =
+      typeof window.ModelLabels?.resolveActionableNames === 'function'
+        ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
+        : window.MODEL_NAMES || [];
     let codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
-        ? window.__modelPickerKeyCodes.slice()
-        : buildDefaultCodes(names.length);
-
-    // Ensure codes list is aligned 1:1 with actionable names
-    codes = codes.slice(0, names.length);
-    while (codes.length < names.length) codes.push('');
+        ? window.__modelPickerKeyCodes.slice(0, actionSlots.length)
+        : typeof window.ModelLabels?.defaultKeyCodes === 'function'
+          ? window.ModelLabels.defaultKeyCodes().slice(0, actionSlots.length)
+          : [];
+    while (codes.length < actionSlots.length) codes.push('');
 
     const esc = (s) =>
       String(s).replace(
@@ -7839,13 +8089,20 @@ setTimeout(() => {
     const useCtrl = !!cfg?.useControlForModelSwitcherRadio;
     const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Ctrl + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
 
-    const rows = [];
-    for (let i = 0; i < names.length; i++) {
-      const rawCode = codes[i];
-      if (!isAssigned(rawCode)) continue; // overlay: only show assigned shortcuts
-      const label = names[i] ? esc(names[i]) : '';
-      const val = displayFromCode(rawCode);
-      rows.push(`
+    const resolveGroupLabel = (group) => {
+      const key = group?.labelI18nKey || '';
+      const localized = key ? getMessage(key, '') : '';
+      return localized || group?.label || '';
+    };
+
+    const groupMarkup = actionGroups
+      .map((group) => {
+        const rows = (group.actions || [])
+          .filter((action) => isAssigned(codes[action.slot]))
+          .map((action) => {
+            const label = esc(names[action.slot] || action.label || '');
+            const val = displayFromCode(codes[action.slot]);
+            return `
       <div class="shortcut-item">
         <div class="shortcut-label"><span>${label}</span></div>
         <div class="shortcut-keys">
@@ -7853,18 +8110,33 @@ setTimeout(() => {
           <input class="key-input" disabled maxlength="12" value="${val}" />
         </div>
       </div>
-    `);
-    }
+    `;
+          });
 
-    if (!rows.length) return '';
+        if (!rows.length) return '';
+
+        const heading =
+          group.compactLabel && resolveGroupLabel(group)
+            ? `<div class="mp-subsection-label" role="heading" aria-level="3">${escapeHtml(resolveGroupLabel(group))}</div>`
+            : '';
+
+        return `
+<div class="mp-grid-group" data-group="${escapeHtml(group.id || '')}">
+  ${heading}
+  <div class="model-picker-shortcut-grid">
+    ${rows.join('')}
+  </div>
+</div>`;
+      })
+      .filter(Boolean);
+
+    if (!groupMarkup.length) return '';
 
     return `
 <div class="section-header" role="heading" aria-level="2" style="margin-top:0;padding-left:12px;font-size:12px;font-family:ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol';font-weight:600;line-height:12px;letter-spacing:0.72px;text-transform:uppercase;color:rgba(60,60,67,0.6);">
   Switch Models
 </div>
-<div class="model-picker-shortcut-grid">
-  ${rows.join('')}
-</div>`;
+${groupMarkup.join('')}`;
   }
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
@@ -8321,30 +8593,15 @@ setTimeout(() => {
       if (!isExtensionAlive()) return resolve();
 
       const MAX = window.ModelLabels?.MAX_SLOTS || 15;
-      const isLegacyArrow = (s) => {
-        const t = (s ?? '').toString().trim();
-        if (!t) return false;
-        if (t === '→') return true;
-        if (/^legacy\s*models?/i.test(t)) return true;
-        return /legacy/i.test(t) && t.includes('→');
-      };
-      const defaultNames = () => window.ModelLabels?.defaultNames?.() || [];
-      const buildDefaultCodes = (n = MAX) => {
-        const base = [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
-        while (base.length < n) base.push('');
-        return base.slice(0, n);
-      };
+      const ACTION_COUNT = window.ModelLabels?.ACTION_SLOT_COUNT || 0;
+      const defaultNames = (raw) =>
+        typeof window.ModelLabels?.resolveActionableNames === 'function'
+          ? window.ModelLabels.resolveActionableNames(raw)
+          : ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'];
+      const buildDefaultCodes = () =>
+        typeof window.ModelLabels?.defaultKeyCodes === 'function'
+          ? window.ModelLabels.defaultKeyCodes()
+          : ['Digit1', 'Digit2', 'Digit3'];
 
       try {
         chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes'], (res = {}) => {
@@ -8360,31 +8617,13 @@ setTimeout(() => {
             return resolve();
           }
           try {
-            // Canonical names saved by content.js (may contain arrow “→”)
-            const rawNames = Array.isArray(res.modelNames)
-              ? res.modelNames.slice(0, MAX)
-              : defaultNames();
-
-            // Actionable display names: drop arrow + empties, keep canonical order.
-            const names = rawNames
-              .filter((n) => !isLegacyArrow(n))
-              .map((v) => (v == null ? '' : String(v).trim()))
-              .filter(Boolean)
-              .slice(0, MAX);
-
-            // Codes saved by the popup are already aligned to actionable names (no arrow slot).
+            const rawNames = Array.isArray(res.modelNames) ? res.modelNames.slice(0, MAX) : [];
+            const names = defaultNames(rawNames).slice(0, ACTION_COUNT);
             let codes = Array.isArray(res.modelPickerKeyCodes)
-              ? res.modelPickerKeyCodes.slice(0, MAX)
-              : buildDefaultCodes(names.length || MAX);
+              ? res.modelPickerKeyCodes.slice(0, ACTION_COUNT)
+              : buildDefaultCodes().slice(0, ACTION_COUNT);
 
-            while (codes.length < MAX) codes.push('');
-
-            // Now trim/pad to actionable names length
-            codes = codes.slice(0, names.length);
-            while (codes.length < names.length) codes.push('');
-
-            // These are the same structures used by popup.js: names are actionable only,
-            // codes aligned 1:1 with those names.
+            while (codes.length < ACTION_COUNT) codes.push('');
             window.MODEL_NAMES = names;
             window.__modelPickerKeyCodes = codes;
           } catch (err) {

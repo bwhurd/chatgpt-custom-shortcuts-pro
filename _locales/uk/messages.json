@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "Вибір моделі"
 	},
+	"label_configureModelsCompact": {
+		"message": "Налаштувати моделі"
+	},
 	"label_blank_placeholder": {
 		"message": "Порожній елемент для вирівнювання сітки"
 	},

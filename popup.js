@@ -1,4 +1,72 @@
 const MODEL_PICKER_MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+const FALLBACK_MODEL_ACTION_GROUPS = [
+  {
+    id: 'primary',
+    label: '',
+    labelI18nKey: '',
+    compactLabel: false,
+    actions: [
+      { slot: 0, id: 'instant', group: 'primary', label: 'Instant', actionKind: 'main-row', mainIndex: 0 },
+      { slot: 1, id: 'thinking', group: 'primary', label: 'Thinking', actionKind: 'main-row', mainIndex: 1 },
+      {
+        slot: 2,
+        id: 'configure',
+        group: 'primary',
+        label: 'Configure...',
+        actionKind: 'configure-open',
+        testId: 'model-configure-modal',
+        mainIndex: 2,
+      },
+    ],
+  },
+  {
+    id: 'configure',
+    label: 'Configure Models',
+    labelI18nKey: 'label_configureModelsCompact',
+    compactLabel: true,
+    actions: [
+      { slot: 3, id: 'configure-latest', group: 'configure', label: 'Latest', actionKind: 'configure-option', optionKind: 'first' },
+      { slot: 4, id: 'configure-5-2', group: 'configure', label: '5.2', actionKind: 'configure-option', optionKind: 'value', optionValue: '5.2' },
+      {
+        slot: 5,
+        id: 'configure-5-0-thinking-mini',
+        group: 'configure',
+        label: '5.0 Thinking Mini',
+        actionKind: 'configure-option',
+        optionKind: 'value',
+        optionValue: '5.0',
+      },
+      { slot: 6, id: 'configure-o3', group: 'configure', label: 'o3', actionKind: 'configure-option', optionKind: 'value', optionValue: 'o3' },
+    ],
+  },
+];
+const cloneModelActionGroups = (groups) =>
+  (Array.isArray(groups) ? groups : []).map((group) => ({
+    ...group,
+    actions: Array.isArray(group?.actions) ? group.actions.map((action) => ({ ...action })) : [],
+  }));
+const getModelActionGroups = () =>
+  typeof window.ModelLabels?.getActionGroups === 'function'
+    ? window.ModelLabels.getActionGroups()
+    : cloneModelActionGroups(FALLBACK_MODEL_ACTION_GROUPS);
+const getModelActionSlots = () =>
+  typeof window.ModelLabels?.getActionSlots === 'function'
+    ? window.ModelLabels.getActionSlots()
+    : cloneModelActionGroups(FALLBACK_MODEL_ACTION_GROUPS).flatMap((group) => group.actions);
+const resolveModelActionableNames = (incoming) =>
+  typeof window.ModelLabels?.resolveActionableNames === 'function'
+    ? window.ModelLabels.resolveActionableNames(incoming)
+    : ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'];
+const buildDefaultModelPickerCodes = () =>
+  typeof window.ModelLabels?.defaultKeyCodes === 'function'
+    ? window.ModelLabels.defaultKeyCodes()
+    : (() => {
+        const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
+        out[0] = 'Digit1';
+        out[1] = 'Digit2';
+        out[2] = 'Digit3';
+        return out;
+      })();
 
 document.addEventListener('DOMContentLoaded', () => {
   // Localize the title dynamically
@@ -30,26 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Source of truth for model-picker slots if storage is empty.
-  // First 10 real tiles get Digit1..Digit0; any extra slots start blank.
-  const DEFAULT_MODEL_PICKER_KEY_CODES = (() => {
-    const base = [
-      'Digit1',
-      'Digit2',
-      'Digit3',
-      'Digit4',
-      'Digit5',
-      'Digit6',
-      'Digit7',
-      'Digit8',
-      'Digit9',
-      'Digit0',
-    ];
-    const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
-    for (let i = 0; i < base.length && i < out.length; i++) {
-      out[i] = base[i];
-    }
-    return out;
-  })();
+  const DEFAULT_MODEL_PICKER_KEY_CODES = buildDefaultModelPickerCodes();
 
   // Preference: auto-overwrite on duplicate?
   const prefs = { autoOverwrite: false };
@@ -220,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seen = new Set();
 
     const modelCodes = window.ShortcutUtils.getModelPickerCodesCache(); // 10 codes
+    const visibleModelSlotCount = Math.min(getModelActionSlots().length, modelCodes.length);
 
     // Prefer codes from dataset; fallback to char->code
     const popupCodes = {};
@@ -239,7 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!c2) return;
       // Find which model slot this collides with (Digit/Numpad normalized)
       let collideIdx = -1;
-      for (let i = 0; i < modelCodes.length; i++) {
+      for (let i = 0; i < visibleModelSlotCount; i++) {
         const mc = modelCodes[i];
         if (mc && window.ShortcutUtils.codeEquals(mc, c2)) {
           collideIdx = i;
@@ -408,9 +458,6 @@ document.addEventListener('DOMContentLoaded', () => {
   (() => {
     const MAX = MODEL_PICKER_MAX_SLOTS;
 
-    // Keep this fallback list conservative; content.js will replace it with the live menu order.
-    const CANON_ORDER = ['Instant', 'Thinking', 'Configure...'];
-
     const isLegacyArrow = (s) => {
       const t = (s ?? '').toString().trim();
       if (!t) return false;
@@ -420,70 +467,17 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     };
 
-    // Seed names from shared defaults if available; otherwise from CANON_ORDER.
-    // Always returns a dense list of actionable model names (no arrow), in the desired order.
+    // Always returns a dense list of actionable model names for the current shared action map.
     function seedFromSharedOrCanon() {
-      const shared =
-        window.ModelLabels && typeof window.ModelLabels.defaultNames === 'function'
-          ? window.ModelLabels.defaultNames() || []
-          : [];
-
-      const base = Array.isArray(shared) && shared.length ? shared : CANON_ORDER;
-
-      // Trim + drop arrow from shared
-      const trimmed = base
-        .slice(0, MAX)
-        .map((v) => (v == null ? '' : String(v).trim()))
-        .filter(Boolean)
-        .filter((v) => !isLegacyArrow(v));
-
-      const out = [];
-
-      // Primary order from shared (if present)
-      for (const n of trimmed) {
-        if (out.length >= Math.min(MAX, CANON_ORDER.length)) break;
-        out.push(n);
-      }
-
-      // Ensure we always have the expected defaults in the specified order
-      for (const n of CANON_ORDER) {
-        if (out.length >= Math.min(MAX, CANON_ORDER.length)) break;
-        if (!out.includes(n)) out.push(n);
-      }
-
-      return out.slice(0, Math.min(MAX, CANON_ORDER.length));
+      return resolveModelActionableNames([]).slice(0, MAX);
     }
 
-    // Merge stored canonical names from content.js (with arrow) with our defaults.
-    // Stored names are canonical (may contain "→"); we drop the arrow and keep order.
     function mergeWithFallback(incoming) {
-      const inArr = Array.isArray(incoming) ? incoming.slice(0, MAX) : [];
-      const filtered = inArr
-        .map((v) => (v == null ? '' : String(v).trim()))
-        .filter(Boolean)
-        .filter((v) => !isLegacyArrow(v));
-
-      const fb = seedFromSharedOrCanon();
-
-      const cap = Math.min(MAX, Math.max(filtered.length, fb.length, CANON_ORDER.length));
-      const out = [];
-      for (let i = 0; i < cap; i++) {
-        out.push(filtered[i] || fb[i] || CANON_ORDER[i] || '');
-      }
-      return out;
+      return resolveModelActionableNames(incoming).slice(0, MAX);
     }
 
     function setAndRender(list, source = 'bootstrap') {
-      // Normalize to actionable display names:
-      // - trim
-      // - drop empties
-      // - drop the Legacy submenu trigger (→ / localized variants)
-      const names = Array.isArray(list)
-        ? list
-            .slice(0, MAX)
-            .map((v) => (v == null ? '' : String(v).trim()))
-            .filter((v) => v && !isLegacyArrow(v))
-        : [];
+      const names = mergeWithFallback(list).filter((v) => v && !isLegacyArrow(v));
 
       window.MODEL_NAMES = names;
 
@@ -660,13 +654,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const conflicts = [];
     const modelCodes = getModelPickerCodesCache();
     const MODEL_NAMES_SAFE = window.MODEL_NAMES || [];
+    const visibleModelSlotCount = Math.min(getModelActionSlots().length, modelCodes.length);
     const modelMod =
       typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
     const ownerType = selfOwner?.type ?? null;
     const selfMod = ownerType === 'shortcut' ? getPopupShortcutModifier(selfOwner?.id) : null;
 
     // 1) Model slots
-    modelCodes.forEach((c, i) => {
+    modelCodes.slice(0, visibleModelSlotCount).forEach((c, i) => {
       if (!c) return;
       const isSelfModel = ownerType === 'model' && selfOwner.idx === i;
       if (isSelfModel) return;
@@ -4058,16 +4053,19 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       ? 'margin:0px 0 0px 0;grid-column:1 / -1;width:100%;'
       : 'margin:0px 0 0px 0;';
 
-    const head = document.createElement('div');
-    head.className = 'mp-head';
-    head.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0 0 8px 0;';
-    head.innerHTML = ``;
+    const actionGroups = getModelActionGroups();
+    const actionSlots = getModelActionSlots();
+    const resolveGroupLabel = (group) => {
+      const key = group?.labelI18nKey || '';
+      if (key && chrome?.i18n?.getMessage) {
+        const localized = chrome.i18n.getMessage(key);
+        if (localized) return localized;
+      }
+      return group?.label || '';
+    };
 
-    const grid = document.createElement('div');
-    grid.className = 'shortcut-grid';
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
-
-    for (let i = 0; i < MAX_SLOTS; i++) {
+    const createShortcutItem = (action) => {
+      const i = Number(action?.slot || 0);
       const item = document.createElement('div');
       item.className = 'shortcut-item';
       item.setAttribute('data-slot', String(i));
@@ -4100,10 +4098,37 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
       keys.append(mod, input);
       item.append(label, keys);
-      grid.appendChild(item);
-    }
+      return item;
+    };
 
-    section.append(head, grid);
+    actionGroups.forEach((group) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mp-grid-group';
+      wrapper.setAttribute('data-group', group.id || '');
+
+      const labelText = resolveGroupLabel(group);
+      if (group.compactLabel && labelText) {
+        const heading = document.createElement('div');
+        heading.className = 'mp-subsection-label';
+        heading.setAttribute('role', 'heading');
+        heading.setAttribute('aria-level', '3');
+        heading.textContent = labelText;
+        wrapper.appendChild(heading);
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'shortcut-grid mp-shortcut-grid-row';
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
+
+      (group.actions || []).forEach((action) => {
+        if (!actionSlots.find((slot) => slot.slot === action.slot)) return;
+        grid.appendChild(createShortcutItem(action));
+      });
+
+      wrapper.appendChild(grid);
+      section.appendChild(wrapper);
+    });
+
     anchor.parentNode.insertBefore(section, anchor);
     if (anchor.id === 'mp-grid-anchor') anchor.style.display = 'none';
   }
@@ -4175,7 +4200,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   }
   function syncModelNames() {
     const NAMES = window.MODEL_NAMES || [];
-    const visibleCount = NAMES.length;
+    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
 
     document.querySelectorAll('#model-picker-grid .shortcut-item').forEach((item) => {
       const idx = Number(item.getAttribute('data-slot') || '0');
@@ -4208,7 +4233,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   function renderInputs() {
     const codes = getCodes();
     const NAMES = window.MODEL_NAMES || [];
-    const visibleCount = NAMES.length;
+    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
 
     document.querySelectorAll('#model-picker-grid .mp-input').forEach((inp) => {
       const idx = Number(inp.getAttribute('data-idx') || '0');
@@ -4335,8 +4360,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   }
 
   function focusNext(fromIdx) {
-    const names = window.MODEL_NAMES || [];
-    const maxIdx = Math.max(0, Math.min(names.length - 1, MAX_SLOTS - 1));
+    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
+    const maxIdx = Math.max(0, visibleCount - 1);
     const nextIdx = Math.min(maxIdx, fromIdx + 1);
     const next = document.getElementById(`mpKeyInput${nextIdx}`);
     if (next) next.focus();
@@ -4461,8 +4486,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       e.preventDefault();
       e.stopPropagation();
       const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1; // Enter => forward
-      const names = window.MODEL_NAMES || [];
-      const maxIdx = Math.max(0, Math.min(names.length - 1, MAX_SLOTS - 1));
+      const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
+      const maxIdx = Math.max(0, visibleCount - 1);
       let next = idx + dir;
       if (next < 0) next = maxIdx;
       if (next > maxIdx) next = 0;

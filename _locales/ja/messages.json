@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "モデル選択"
 	},
+	"label_configureModelsCompact": {
+		"message": "モデルを設定"
+	},
 	"label_blank_placeholder": {
 		"message": "グリッド整列用の空白"
 	},

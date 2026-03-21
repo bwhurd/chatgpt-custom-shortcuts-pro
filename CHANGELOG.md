@@ -5,6 +5,8 @@ Changes typically post to the chrome web store a couple days after date in chang
 #### 03.20.2026
 - Fixed model selector detection so labels and model hotkeys work again after both reloads and sidebar conversation switches with ChatGPT's current single-level menu markup.
 - Model-switcher hotkeys no longer wait on the legacy submenu path when no submenu trigger exists, while still preserving the old submenu flow if ChatGPT brings it back.
+- Added a shared grouped model-picker source of truth for the popup and Ctrl+/ overlay, including a compact `Configure Models` row for `Latest`, `5.2`, `5.0 Thinking Mini`, and `o3`.
+- Model-picker shortcuts can now follow the deeper `Configure...` path, choose the requested configured model, and close the configure dialog automatically.
 
 #### 03.19.2026
 - Fixed model-picker labels so reused GPT-5 IDs no longer show stale names like `Auto` instead of `Instant`.

@@ -59,7 +59,15 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyAssistant: false,
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
-  modelNames: ['Instant', 'Thinking', 'Configure...'],
+  modelNames: [
+    'Instant',
+    'Thinking',
+    'Configure...',
+    'Latest',
+    '5.2',
+    '5.0 Thinking Mini',
+    'o3',
+  ],
   showLegacyArrowButtonsCheckbox: false,
 
   // === Toggles / sliders ===
@@ -83,19 +91,19 @@ const OPTIONS_DEFAULTS = {
   // Copy behavior
   disableCopyAfterSelectCheckbox: false,
 
-  // Model picker — up to 15 slots (UI shows only as many as needed)
-  // First 10 use 0–9 digits; the remaining 5 start empty and can be assigned by the user.
+  // Model picker — up to 15 slots.
+  // Only the current top-row actions ship with defaults; newly surfaced configure actions start blank.
   modelPickerKeyCodes: [
     'Digit1',
     'Digit2',
     'Digit3',
-    'Digit4',
-    'Digit5',
-    'Digit6',
-    'Digit7',
-    'Digit8',
-    'Digit9',
-    'Digit0',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
     '',
     '',
     '',
@@ -167,7 +175,26 @@ if (typeof OptionsSync === 'undefined') {
         stored.modelPickerKeyCodes = fifteen;
       },
 
-      // 4) Populate new messageSelection from legacy flags
+      // 4) Blank inherited hidden digit defaults for newly visible configure actions.
+      (stored) => {
+        const arr = Array.isArray(stored.modelPickerKeyCodes) ? stored.modelPickerKeyCodes : [];
+        const legacyHiddenDefaults = {
+          3: 'Digit4',
+          4: 'Digit5',
+          5: 'Digit6',
+          6: 'Digit7',
+          7: 'Digit8',
+          8: 'Digit9',
+          9: 'Digit0',
+        };
+        Object.entries(legacyHiddenDefaults).forEach(([idx, legacyCode]) => {
+          const slot = Number(idx);
+          if (arr[slot] === legacyCode) arr[slot] = '';
+        });
+        stored.modelPickerKeyCodes = arr;
+      },
+
+      // 5) Populate new messageSelection from legacy flags
       (stored, defaults) => {
         if (!stored.messageSelection) {
           if (stored.onlySelectAssistantCheckbox) {
@@ -182,13 +209,13 @@ if (typeof OptionsSync === 'undefined') {
         }
       },
 
-      // 5) Remove deprecated legacy shortcut keys (no longer used/shown)
+      // 6) Remove deprecated legacy shortcut keys (no longer used/shown)
       (stored) => {
         delete stored.shortcutKeyRegenerate;
         delete stored.shortcutKeyCopyAllResponses;
       },
 
-      // 6) Remove anything truly unused (keep it last)
+      // 7) Remove anything truly unused (keep it last)
       OptionsSync.migrations.removeUnused,
     ],
   });

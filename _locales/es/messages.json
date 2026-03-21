@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "Elegir modelo"
 	},
+	"label_configureModelsCompact": {
+		"message": "Configurar modelos"
+	},
 	"label_blank_placeholder": {
 		"message": "Espacio en blanco para alinear la cuadrícula"
 	},

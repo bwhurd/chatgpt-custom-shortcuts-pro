@@ -455,6 +455,9 @@
 	"section_model_picker_tweaks": {
 		"message": "Выбор модели"
 	},
+	"label_configureModelsCompact": {
+		"message": "Настроить модели"
+	},
 	"label_blank_placeholder": {
 		"message": "Пустой элемент для выравнивания сетки"
 	},
