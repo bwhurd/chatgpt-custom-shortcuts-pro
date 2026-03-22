@@ -5337,41 +5337,14 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
         const actionId = item.getAttribute('data-action-id') || '';
         if (!actionId) return;
         if (normalizeActiveModelConfigId(actionId) === getVisualActiveModelConfigId()) return;
-        const previousActiveModelConfigId = getVisualActiveModelConfigId();
-        const nextActionId = stagePendingModelConfigTarget(actionId);
-        const runSerial = ++configureActionSerial;
-
-        setActiveModelConfigIdCache(nextActionId, 'popup:configure-pending');
+        const nextActionId = normalizeActiveModelConfigId(actionId);
+        clearPendingVisualSettle();
+        clearPendingModelConfigTarget();
+        setActiveModelConfigIdCache(nextActionId, 'popup:configure-click');
         renderAll({ animatePrimary: true, allowPendingRebuild: true });
-
-        if (configureActionDebounceTimer) {
-          clearTimeout(configureActionDebounceTimer);
-          configureActionDebounceTimer = 0;
-        }
-
-        configureActionDebounceTimer = setTimeout(async () => {
-          if (runSerial !== configureActionSerial) return;
-
-          const result = await sendModelActionToTab(nextActionId);
-          if (runSerial !== configureActionSerial) return;
-
-          if (!result?.ok) {
-            clearPendingModelConfigTarget(nextActionId);
-            setActiveModelConfigIdCache(previousActiveModelConfigId, 'popup:configure-revert');
-            renderAll({ allowPendingRebuild: true });
-            const msg =
-              chrome.i18n?.getMessage?.('toast_modelPickerOpenChatGptTab') ||
-              'Open a ChatGPT tab to switch configure models.';
-            window.toast?.show?.(msg);
-            return;
-          }
-
-          try {
-            chrome.storage.sync.set({ activeModelConfigId: normalizeActiveModelConfigId(nextActionId) });
-          } catch {}
-          setActiveModelConfigIdCache(nextActionId, 'popup:configure-click');
-          schedulePendingModelConfigSettle(nextActionId);
-        }, MODEL_CONFIG_CLICK_DEBOUNCE_MS);
+        try {
+          chrome.storage.sync.set({ activeModelConfigId: nextActionId });
+        } catch {}
       };
 
       item.addEventListener('click', (event) => {

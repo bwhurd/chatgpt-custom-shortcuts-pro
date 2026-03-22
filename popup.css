@@ -1876,11 +1876,12 @@ span.dup-key {
   -webkit-backdrop-filter: none;
   opacity: 0;
   transition: opacity 180ms ease;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 #model-picker-grid .mp-grid-loading-overlay.mp-grid-loading-overlay-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 #model-picker-grid .mp-grid-loading-chip {
@@ -1994,4 +1995,8 @@ span.dup-key {
   right: calc(100% + 1px);
   transform: translateY(-50%) rotate(90deg);
   z-index: 10019;
+}
+
+#model-picker-grid .mp-configure-item {
+  cursor: pointer;
 }

@@ -9,6 +9,9 @@ Changes typically post to the chrome web store a couple days after date in chang
 - Model-picker shortcuts can now follow the deeper `Configure...` path, choose the requested configured model, and close the configure dialog automatically.
 
 #### 03.21.2026
+- Fixed `Select and Copy` and `Select and Copy All` so they work again with ChatGPT's current thread markup, which now renders conversation turns as `section[data-testid^="conversation-turn-"]` and places the copy-action buttons outside the message node itself.
+- Fixed the dictation shortcut so it recognizes ChatGPT's current composer send button (`#composer-submit-button` / `data-testid="send-button"`) and still falls back to the older icon-based path when needed.
+- Fixed the `Add Photos & Files` shortcut so it recognizes ChatGPT's current composer plus button (`#composer-plus-btn` / `data-testid="composer-plus-btn"`) before falling back to the older icon-based path.
 - Model refresh in the popup is now manual and working again from the attached extension popup, with a once-per-day center prompt, a header refresh button, and cleaner refresh-button alignment/tooltip behavior.
 - The popup model picker now keeps the TFEL row and the `Configure Models` row tied to stable canonical actions, including a persistent `Configure...` command and a shared `Use latest model` action.
 - The active backend configure-model selection now persists across reloads so the popup highlight, TFEL-derived actions, and configure-model shortcuts stay synchronized with the selected config state.

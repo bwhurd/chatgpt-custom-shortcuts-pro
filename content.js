@@ -2686,7 +2686,7 @@ const delays = DELAYS;
           )
             .map((row) => {
               const scope = row.closest(
-                '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], article[data-testid^="conversation-turn-"]',
+                '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]',
               );
               if (!scope) return null;
               if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
@@ -3686,29 +3686,32 @@ const delays = DELAYS;
           }
         }
 
+        const TURN_SELECTOR_SELECT_COPY =
+          'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
+
+        function findRoleContainerFromTurn(turn) {
+          return (
+            turn?.querySelector?.('[data-message-author-role="assistant"]') ||
+            turn?.querySelector?.('[data-message-author-role="user"]') ||
+            null
+          );
+        }
+
         // Innermost visible text container for a given role container
         function findContentElForTurn(roleContainer) {
+          if (!roleContainer) return null;
           const isUser = roleContainer.getAttribute('data-message-author-role') === 'user';
           if (isUser) {
             return (
-              roleContainer.querySelector(
-                '[data-message-author-role="user"] .whitespace-pre-wrap',
-              ) ||
-              roleContainer.querySelector(
-                '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
-              ) ||
-              roleContainer.querySelector('[data-message-author-role="user"]')
+              roleContainer.querySelector('.whitespace-pre-wrap') ||
+              roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
+              roleContainer
             );
           }
           return (
-            roleContainer.querySelector(
-              '[data-message-author-role="assistant"] .whitespace-pre-wrap',
-            ) ||
-            roleContainer.querySelector(
-              '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
-            ) ||
+            roleContainer.querySelector('.whitespace-pre-wrap') ||
             roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
-            roleContainer.querySelector('[data-message-author-role="assistant"]')
+            roleContainer
           );
         }
         // click handler uses processed copy
@@ -3719,11 +3722,7 @@ const delays = DELAYS;
 
             const roleContainer =
               btn.closest('[data-message-author-role]') ||
-              btn
-                .closest('article[data-turn], article[data-testid^="conversation-turn-"]')
-                ?.querySelector(
-                  '[data-message-author-role="assistant"], [data-message-author-role="user"]',
-                );
+              findRoleContainerFromTurn(btn.closest(TURN_SELECTOR_SELECT_COPY));
 
             if (!roleContainer) return;
 
@@ -3744,9 +3743,7 @@ const delays = DELAYS;
               const shouldCopy = !disableCopyAfterSelect;
 
               const allConversationTurns = Array.from(
-                document.querySelectorAll(
-                  'article[data-turn], article[data-testid^="conversation-turn-"]',
-                ),
+                document.querySelectorAll(TURN_SELECTOR_SELECT_COPY),
               );
 
               const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -3801,27 +3798,10 @@ const delays = DELAYS;
                   if (onlySelectUser && !isUser) return;
                   if (onlySelectAssistant && !isAssistant) return;
 
-                  let contentEl = null;
-                  if (isUser) {
-                    contentEl =
-                      turn.querySelector(
-                        '[data-message-author-role="user"] .whitespace-pre-wrap',
-                      ) ||
-                      turn.querySelector(
-                        '[data-message-author-role="user"] .prose, [data-message-author-role="user"] .markdown, [data-message-author-role="user"] .markdown-new-styling',
-                      ) ||
-                      turn.querySelector('[data-message-author-role="user"]');
-                  } else {
-                    contentEl =
-                      turn.querySelector(
-                        '[data-message-author-role="assistant"] .whitespace-pre-wrap',
-                      ) ||
-                      turn.querySelector(
-                        '[data-message-author-role="assistant"] .prose, [data-message-author-role="assistant"] .markdown, [data-message-author-role="assistant"] .markdown-new-styling',
-                      ) ||
-                      turn.querySelector('.prose, .markdown, .markdown-new-styling') ||
-                      turn.querySelector('[data-message-author-role="assistant"]');
-                  }
+                  const roleContainer = isUser
+                    ? turn.querySelector('[data-message-author-role="user"]')
+                    : turn.querySelector('[data-message-author-role="assistant"]');
+                  const contentEl = findContentElForTurn(roleContainer);
 
                   if (!contentEl || !contentEl.innerText.trim()) return;
 
@@ -3959,6 +3939,20 @@ const delays = DELAYS;
         await runActionByIcon(ICON_PATH_PREFIX);
       },
       [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
+        const composerRoot =
+          document.getElementById('thread-bottom-container') ||
+          document.querySelector('form[data-type="unified-composer"]') ||
+          document.getElementById('composer-background') ||
+          document.body;
+        const composePlusBtn =
+          composerRoot.querySelector('#composer-plus-btn') ||
+          composerRoot.querySelector('button[data-testid="composer-plus-btn"]') ||
+          composerRoot.querySelector('button[aria-label="Add files and more"]');
+        if (composePlusBtn) {
+          flashBorder(composePlusBtn);
+          smartClick(composePlusBtn);
+          return;
+        }
         const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
         await runActionByIcon(ICON_PATH_PREFIX);
       },
@@ -3996,8 +3990,22 @@ const delays = DELAYS;
           return true;
         };
 
+        const findFirstClickable = (...selectors) => {
+          for (const selector of selectors) {
+            if (!selector) continue;
+            const el = composerRoot.querySelector(selector);
+            if (el) return el;
+          }
+          return null;
+        };
+
         // If dictation is active, prefer submitting (not cancelling).
-        const submitBtn = findClickableBySpriteId('#fa1dbd');
+        const submitBtn =
+          findFirstClickable(
+            '#composer-submit-button',
+            'button[data-testid="send-button"]',
+            'button[aria-label="Send prompt"]',
+          ) || findClickableBySpriteId('#01bab7') || findClickableBySpriteId('#fa1dbd');
         if (click(submitBtn)) return;
 
         // If submit isn't available, stop dictation.
@@ -4005,7 +4013,9 @@ const delays = DELAYS;
         if (click(stopBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn = findClickableBySpriteId('#29f921');
+        const dictateBtn =
+          findFirstClickable('button[aria-label="Dictate button"]') ||
+          findClickableBySpriteId('#29f921');
         click(dictateBtn);
       },
       [shortcuts.shortcutKeyCancelDictation]: async () => {
@@ -4016,9 +4026,13 @@ const delays = DELAYS;
           document.getElementById('composer-background') ||
           document.body;
 
-        const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
-        const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
-        const btn = use?.closest('button, [role="button"], a, [tabindex]') || null;
+        const btn =
+          composerRoot.querySelector('button[aria-label="Stop dictation"]') ||
+          (() => {
+            const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
+            const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
+            return use?.closest('button, [role="button"], a, [tabindex]') || null;
+          })();
 
         // Only stop if Stop dictation is currently available; otherwise no-op.
         if (!btn) return;
@@ -4151,6 +4165,9 @@ const delays = DELAYS;
             if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
           }
         }
+
+        const TURN_SELECTOR_ENTIRE_CONV =
+          'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
 
         // Identify the content element for a user/assistant turn
         function findContentElForTurn_EntireConv(container) {
@@ -4374,9 +4391,7 @@ const delays = DELAYS;
 
           // Get all conversation turns in DOM order
           const allTurns = Array.from(
-            document.querySelectorAll(
-              'article[data-turn], article[data-testid^="conversation-turn-"]',
-            ),
+            document.querySelectorAll(TURN_SELECTOR_ENTIRE_CONV),
           );
 
           // Filter by role
@@ -4415,7 +4430,7 @@ const delays = DELAYS;
             let nativeLabel = '';
             try {
               nativeLabel = (
-                turn.querySelector?.('h5.sr-only, h6.sr-only')?.textContent || ''
+                turn.querySelector?.('h4.sr-only, h5.sr-only, h6.sr-only')?.textContent || ''
               ).trim();
             } catch (_) {
               /* ignore */
