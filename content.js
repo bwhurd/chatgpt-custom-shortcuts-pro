@@ -1256,9 +1256,14 @@ const delays = DELAYS;
   };
 
   // Initial settings load
-  chrome.storage.sync.get(null, (data) => {
-    window.applyVisibilitySettings(data); // Will now auto (re)inject buttons
-  });
+  if (typeof window.showLegacyArrowButtonsCheckbox === 'boolean') {
+    injectOrToggleArrowButtons();
+  } else {
+    chrome.storage.sync.get({ showLegacyArrowButtonsCheckbox: false }, (data) => {
+      window.showLegacyArrowButtonsCheckbox = !!data.showLegacyArrowButtonsCheckbox;
+      injectOrToggleArrowButtons();
+    });
+  }
 
   const PLUS_BTN_SEL = '[data-testid="composer-plus-btn"]';
 
@@ -5282,47 +5287,272 @@ div[data-id="hide-this-warning"] {
       // Matches "*://chatgpt.com/library/*"
       const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
 
-      if (isGpts || isCodex || isG || isSora || isLibrary) return;
+      if (isGpts || isCodex || isG || isSora || isLibrary) {
+        document.documentElement?.classList.remove('csp-bottom-bar-ready');
+        document.body?.classList.remove('csp-bottom-bar-ready');
+        return;
+      }
 
       // --- Early gate ---
       (async function main() {
-        async function gateIfLoginButtonPresent() {
-          function sleep(ms) {
-            return new Promise((r) => setTimeout(r, ms));
-          }
-          let header,
-            flexChildren,
-            tries = 0;
-          while (tries++ < 25) {
-            header = document.querySelector('#page-header');
-            if (header) {
-              flexChildren = header.querySelectorAll(':scope > .flex.items-center');
-              if (flexChildren.length > 0) break;
-            }
-            await sleep(200);
-          }
-          if (!header || !flexChildren || flexChildren.length === 0) return false;
-          for (const seg of [flexChildren[0], flexChildren[flexChildren.length - 1]]) {
-            const loginBtn = seg?.querySelector('button[data-testid="login-button"]');
-            if (loginBtn) return true;
-          }
-          return false;
+        function hasLoginButtonPresent() {
+          return !!document.querySelector('button[data-testid="login-button"]');
         }
-        if (await gateIfLoginButtonPresent()) return; // GATE: do nothing!
+        if (hasLoginButtonPresent()) {
+          document.documentElement?.classList.remove('csp-bottom-bar-ready');
+          document.body?.classList.remove('csp-bottom-bar-ready');
+          return;
+        } // GATE: do nothing!
 
-        setTimeout(function injectBottomBarStyles() {
+        (function startBottomBarFeature() {
+          const BOTTOM_BAR_READY_CLASS = 'csp-bottom-bar-ready';
+
+          const setBottomBarReadyState = (ready) => {
+            const isReady = Boolean(ready);
+            document.documentElement?.classList.toggle(BOTTOM_BAR_READY_CLASS, isReady);
+            document.body?.classList.toggle(BOTTOM_BAR_READY_CLASS, isReady);
+          };
+
           // -------------------- Section 1. Utilities --------------------
-          async function waitForElement(selector, timeout = 12000, poll = 200) {
-            const start = Date.now();
-            let el = null;
+          const BOTTOM_BAR_TARGET_SELECTORS = [
+            '#page-header',
+            "form[data-type='unified-composer']",
+            '#bottomBarContainer',
+          ];
+          const MODEL_SWITCHER_TARGET_SELECTORS = [
+            'button[data-testid="model-switcher-dropdown-button"]',
+            'button[data-testid="Model-switCher-dropdown-button"]',
+            'button[aria-label^="Model selector" i]',
+          ];
 
-            while (Date.now() - start < timeout) {
-              el = document.querySelector(selector);
-              if (el) return el;
-              await new Promise((r) => setTimeout(r, poll));
+          async function waitForElement(selector, timeout = 12000) {
+            const existing = document.querySelector(selector);
+            if (existing) return existing;
+
+            return new Promise((resolve) => {
+              const root = document.body || document.documentElement;
+              if (!root) {
+                resolve(null);
+                return;
+              }
+
+              let done = false;
+              const finish = (el) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                observer.disconnect();
+                resolve(el || null);
+              };
+
+              const timer = setTimeout(() => finish(null), timeout);
+              const observer = new MutationObserver(() => {
+                const el = document.querySelector(selector);
+                if (el) finish(el);
+              });
+
+              observer.observe(root, { childList: true, subtree: true });
+            });
+          }
+
+          const nodeTouchesBottomBarTargets = (node) => {
+            if (!(node instanceof Element)) return false;
+            return BOTTOM_BAR_TARGET_SELECTORS.some(
+              (selector) => node.matches(selector) || !!node.querySelector(selector),
+            );
+          };
+
+          const nodeTouchesModelSwitcherTargets = (node) => {
+            if (!(node instanceof Element)) return false;
+            return MODEL_SWITCHER_TARGET_SELECTORS.some(
+              (selector) => node.matches(selector) || !!node.querySelector(selector),
+            );
+          };
+
+          const nodeMatchesSelector = (node, selector) =>
+            node instanceof Element && (node.matches(selector) || !!node.querySelector(selector));
+
+          const observeMountedSelector = (selector, onAttach, timeout = 12000) => {
+            let currentEl = null;
+            let detachCurrent = null;
+
+            const attach = (el) => {
+              if (!(el instanceof Element) || el === currentEl) return;
+              detachCurrent?.();
+              currentEl = el;
+              const maybeDetach = onAttach(el);
+              detachCurrent = typeof maybeDetach === 'function' ? maybeDetach : null;
+            };
+
+            const refresh = () => {
+              const next = document.querySelector(selector);
+              if (next instanceof Element) {
+                attach(next);
+                return;
+              }
+
+              if (currentEl && !currentEl.isConnected) {
+                detachCurrent?.();
+                detachCurrent = null;
+                currentEl = null;
+              }
+            };
+
+            waitForElement(selector, timeout).then((el) => {
+              if (el) attach(el);
+            });
+
+            const root = document.documentElement;
+            if (!root) return;
+
+            new MutationObserver((mutations) => {
+              if (currentEl && !currentEl.isConnected) {
+                refresh();
+                return;
+              }
+
+              const touchesSelector = mutations.some(
+                (mutation) =>
+                  Array.from(mutation.addedNodes).some((node) =>
+                    nodeMatchesSelector(node, selector),
+                  ) ||
+                  Array.from(mutation.removedNodes).some((node) =>
+                    nodeMatchesSelector(node, selector),
+                  ),
+              );
+
+              if (touchesSelector) refresh();
+            }).observe(root, { childList: true, subtree: true });
+
+            refresh();
+          };
+
+          if (!window.__bbDebounce) {
+            window.__bbDebounce = function (fn, wait = 80) {
+              let t;
+              return (...a) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, a), wait);
+              };
+            };
+          }
+          const debounce = window.__bbDebounce;
+
+          const getHeaderFlexSegments = (header) => {
+            if (!(header instanceof Element)) return [];
+
+            const segments = Array.from(header.children)
+              .map((child) => {
+                if (!(child instanceof Element)) return null;
+                if (child.matches('.flex.items-center')) return child;
+                return child.querySelector('.flex.items-center');
+              })
+              .filter((segment) => segment instanceof Element);
+
+            return segments.filter((segment, index, arr) => arr.indexOf(segment) === index);
+          };
+
+          const getTopBarSegmentsNow = () => {
+            const header = document.querySelector('#page-header');
+            if (!header) return [null, null];
+            const flexChildren = getHeaderFlexSegments(header);
+            if (!flexChildren.length) return [null, null];
+            if (flexChildren.length === 1) return [flexChildren[0], flexChildren[0]];
+            return [flexChildren[0], flexChildren[flexChildren.length - 1]];
+          };
+
+          const getMoveTopBarTargetsNow = () => {
+            const [topBarLeft, topBarRight] = getTopBarSegmentsNow();
+            const composerForm = document.querySelector("form[data-type='unified-composer']");
+            if (!topBarLeft || !topBarRight || !composerForm) return null;
+            return {
+              topBarLeft,
+              topBarRight,
+              composerForm,
+              composerContainer:
+                composerForm.querySelector('.border-token-border-default') || composerForm,
+            };
+          };
+
+          const mutationTouchesMoveTopBarTargets = (mutation) => {
+            const target = mutation.target instanceof Element ? mutation.target : null;
+            if (target?.closest('#page-header') || target?.closest("form[data-type='unified-composer']")) {
+              return true;
             }
 
-            return null; // timed out
+            return (
+              Array.from(mutation.addedNodes).some(nodeTouchesBottomBarTargets) ||
+              Array.from(mutation.removedNodes).some(nodeTouchesBottomBarTargets)
+            );
+          };
+
+          async function waitForMoveTopBarTargets(timeout = 12000) {
+            const existing = getMoveTopBarTargetsNow();
+            if (existing) return existing;
+
+            return new Promise((resolve) => {
+              const root = document.documentElement;
+              if (!root) {
+                resolve(null);
+                return;
+              }
+
+              let done = false;
+              let rafId = 0;
+              const finish = (value) => {
+                if (done) return;
+                done = true;
+                cancelAnimationFrame(rafId);
+                clearTimeout(timer);
+                observer.disconnect();
+                resolve(value || null);
+              };
+
+              const checkNow = () => {
+                if (hasLoginButtonPresent()) {
+                  finish(null);
+                  return true;
+                }
+
+                const next = getMoveTopBarTargetsNow();
+                if (next) {
+                  finish(next);
+                  return true;
+                }
+
+                return false;
+              };
+
+              const queueFrameChecks = (frames = 6) => {
+                if (done || rafId) return;
+
+                let remaining = frames;
+                const tick = () => {
+                  rafId = 0;
+                  if (checkNow() || done) return;
+                  remaining -= 1;
+                  if (remaining > 0) {
+                    rafId = requestAnimationFrame(tick);
+                  }
+                };
+
+                rafId = requestAnimationFrame(tick);
+              };
+
+              const timer = setTimeout(() => finish(null), timeout);
+              const observer = new MutationObserver((mutations) => {
+                if (!mutations.some(mutationTouchesMoveTopBarTargets)) return;
+                queueFrameChecks(8);
+              });
+
+              observer.observe(root, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'style', 'hidden', 'aria-hidden', 'data-testid'],
+              });
+              queueFrameChecks(10);
+            });
           }
 
           // ------------------------------------------------------------------------
@@ -5367,69 +5597,255 @@ div[data-id="hide-this-warning"] {
           }
 
           // -------------------- Section 2. Main Logic & Reinject --------------------
-          setTimeout(() => {
+          requestAnimationFrame(() => {
             (() => {
-              runMoveTopBarLogic();
-              // Stay alive if DOM changes (mutation-observe, auto re-inject)
+              let runMoveTopBarLogicPromise = null;
               let reinjectTimeout;
-              new MutationObserver(() => {
-                clearTimeout(reinjectTimeout);
-                reinjectTimeout = setTimeout(runMoveTopBarLogic, 350);
-              }).observe(document.body, { childList: true, subtree: true });
+              let placeModelSwitcherTimeout;
+              let suppressBottomBarObserverUntil = 0;
+              let lastBottomBarComposerContainer = null;
+              let lastBottomBarLeftRef = null;
+              let lastBottomBarRightRef = null;
+              let didScheduleStartupVerification = false;
+              let bottomBarStartupSettled = false;
+              let startupBottomBarObserver = null;
+              let steadyBottomBarObserver = null;
+              let promoteBottomBarObserverTimeout = null;
+
+              const hasStableBottomBarState = () => {
+                const bottomBar = document.getElementById('bottomBarContainer');
+                if (!bottomBar) return false;
+                if (
+                  lastBottomBarComposerContainer &&
+                  !lastBottomBarComposerContainer.isConnected
+                ) {
+                  return false;
+                }
+                if (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) return false;
+                if (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected) return false;
+                return true;
+              };
+
+              const scheduleStartupVerificationPasses = () => {
+                if (didScheduleStartupVerification) return;
+                didScheduleStartupVerification = true;
+
+                setTimeout(() => {
+                  if (bottomBarStartupSettled || hasStableBottomBarState()) {
+                    bottomBarStartupSettled = true;
+                    return;
+                  }
+                  void runMoveTopBarLogic();
+                }, 320);
+              };
+
+              const disconnectStartupBottomBarObserver = () => {
+                startupBottomBarObserver?.disconnect();
+                startupBottomBarObserver = null;
+              };
+
+              const disconnectSteadyBottomBarObserver = () => {
+                steadyBottomBarObserver?.disconnect();
+                steadyBottomBarObserver = null;
+              };
+
+              const schedulePromoteToSteadyBottomBarObserver = () => {
+                clearTimeout(promoteBottomBarObserverTimeout);
+                promoteBottomBarObserverTimeout = setTimeout(() => {
+                  if (!hasStableBottomBarState()) return;
+                  disconnectStartupBottomBarObserver();
+                  installSteadyBottomBarObserver();
+                }, 700);
+              };
+
+              function placeModelSwitcherInCenter(center, right) {
+                if (!center) return;
+                const findModelBtn = () =>
+                  document.querySelector('#page-header button[aria-label^="Model selector" i]') ||
+                  document.querySelector(
+                    '#page-header button[data-testid="model-switcher-dropdown-button"]',
+                  ) ||
+                  document.querySelector(
+                    '#page-header button[data-testid="Model-switCher-dropdown-button"]',
+                  ) ||
+                  document.querySelector(
+                    '#bottomBarContainer button[aria-label^="Model selector" i]',
+                  ) ||
+                  document.querySelector(
+                    '#bottomBarContainer button[data-testid="model-switcher-dropdown-button"]',
+                  ) ||
+                  document.querySelector(
+                    '#bottomBarContainer button[data-testid="Model-switCher-dropdown-button"]',
+                  ) ||
+                  document.querySelector('button[aria-label^="Model selector" i]') ||
+                  document.querySelector('button[data-testid="model-switcher-dropdown-button"]') ||
+                  document.querySelector('button[data-testid="Model-switCher-dropdown-button"]');
+
+                const btn = findModelBtn();
+                if (!btn) return;
+
+                let group =
+                  btn.closest('#page-header .flex.items-center') ||
+                  btn.closest('#bottomBarContainer .flex.items-center') ||
+                  btn.closest('.flex.items-center') ||
+                  btn;
+
+                if (center.contains(group)) return;
+                if (group === right) group = btn;
+                center.appendChild(group);
+              }
+
+              function schedulePlaceModelSwitcherInCenter() {
+                clearTimeout(placeModelSwitcherTimeout);
+                placeModelSwitcherTimeout = setTimeout(() => {
+                  placeModelSwitcherInCenter(
+                    document.getElementById('bottomBarCenter'),
+                    document.getElementById('bottomBarRight'),
+                  );
+                }, 140);
+              }
 
               async function runMoveTopBarLogic() {
-                await ensureOpacityValueReady(); // Wait for storage fetch
-                // Wait for target UI pieces
-                async function getTopBarSegments() {
-                  const header = await waitForElement('#page-header', 12000, 200);
-                  if (!header) return [null, null];
-                  const flexChildren = Array.from(
-                    header.querySelectorAll(':scope > .flex.items-center'),
-                  );
-                  if (!flexChildren.length) return [null, null];
-                  if (flexChildren.length === 1) return [flexChildren[0], flexChildren[0]];
-                  return [flexChildren[0], flexChildren[flexChildren.length - 1]];
-                }
-
-                const [topBarLeft, topBarRight] = await getTopBarSegments();
-                const composerForm = await waitForElement(
-                  "form[data-type='unified-composer']",
-                  12000,
-                  200,
-                );
-
-                if (!topBarLeft || !topBarRight || !composerForm) return;
-                const composerContainer =
-                  composerForm.querySelector('.border-token-border-default') || composerForm;
-
-                injectBottomBar(topBarLeft, topBarRight, composerContainer);
-
-                // Grayscale Profile Button
-                waitForElement('button[data-testid="profile-button"]').then((profileButton) => {
-                  if (profileButton) {
-                    applyInitialGrayscale(profileButton);
-                    observeProfileButton(profileButton);
+                if (runMoveTopBarLogicPromise) return runMoveTopBarLogicPromise;
+                runMoveTopBarLogicPromise = (async () => {
+                  if (hasLoginButtonPresent()) {
+                    setBottomBarReadyState(false);
+                    return;
                   }
+                  await ensureOpacityValueReady();
+                  const targets = await waitForMoveTopBarTargets(12000);
+                  if (!targets) {
+                    setBottomBarReadyState(!!document.getElementById('bottomBarContainer'));
+                    return;
+                  }
+
+                  injectBottomBar(
+                    targets.topBarLeft,
+                    targets.topBarRight,
+                    targets.composerContainer,
+                  );
+                  const hasBottomBar = !!document.getElementById('bottomBarContainer');
+                  if (!hasBottomBar) setBottomBarReadyState(false);
+                  if (hasBottomBar) scheduleStartupVerificationPasses();
+
+                  waitForElement('button[data-testid="profile-button"]').then((profileButton) => {
+                    if (profileButton) {
+                      applyInitialGrayscale(profileButton);
+                      observeProfileButton(profileButton);
+                    }
+                  });
+                })().finally(() => {
+                  runMoveTopBarLogicPromise = null;
                 });
+                return runMoveTopBarLogicPromise;
               }
+
+              const scheduleRunMoveTopBarLogic = () => {
+                clearTimeout(reinjectTimeout);
+                reinjectTimeout = setTimeout(() => {
+                  void runMoveTopBarLogic();
+                }, 220);
+              };
+
+              function installStartupBottomBarObserver() {
+                if (startupBottomBarObserver) return;
+                const root = document.body || document.documentElement;
+                if (!root) return;
+
+                startupBottomBarObserver = new MutationObserver((mutations) => {
+                  if (Date.now() < suppressBottomBarObserverUntil) return;
+                  const bottomBar = document.getElementById('bottomBarContainer');
+                  const onlyBottomBarInternal = mutations.every(
+                    (mutation) =>
+                      mutation.target instanceof Element &&
+                      bottomBar &&
+                      mutation.target.closest('#bottomBarContainer') === bottomBar,
+                  );
+                  if (onlyBottomBarInternal) return;
+                  const touchesModelSwitcher = mutations.some(
+                    (mutation) =>
+                      Array.from(mutation.addedNodes).some(nodeTouchesModelSwitcherTargets) ||
+                      Array.from(mutation.removedNodes).some(nodeTouchesModelSwitcherTargets),
+                  );
+                  if (touchesModelSwitcher) schedulePlaceModelSwitcherInCenter();
+                  const touchesTarget = mutations.some(
+                    (mutation) =>
+                      Array.from(mutation.addedNodes).some(nodeTouchesBottomBarTargets) ||
+                      Array.from(mutation.removedNodes).some(nodeTouchesBottomBarTargets),
+                  );
+                  const currentTargetsInvalidated =
+                    !bottomBar ||
+                    (lastBottomBarComposerContainer && !lastBottomBarComposerContainer.isConnected) ||
+                    (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) ||
+                    (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected);
+                  if (!touchesTarget && !currentTargetsInvalidated) return;
+                  scheduleRunMoveTopBarLogic();
+                });
+
+                startupBottomBarObserver.observe(root, { childList: true, subtree: true });
+              }
+
+              function installSteadyBottomBarObserver() {
+                if (steadyBottomBarObserver) return;
+                const root = document.body || document.documentElement;
+                if (!root) return;
+
+                steadyBottomBarObserver = new MutationObserver((mutations) => {
+                  if (Date.now() < suppressBottomBarObserverUntil) return;
+                  const bottomBar = document.getElementById('bottomBarContainer');
+                  if (!bottomBar) {
+                    disconnectSteadyBottomBarObserver();
+                    installStartupBottomBarObserver();
+                    scheduleRunMoveTopBarLogic();
+                    return;
+                  }
+
+                  const touchesModelSwitcher = mutations.some(
+                    (mutation) =>
+                      Array.from(mutation.addedNodes).some(nodeTouchesModelSwitcherTargets) ||
+                      Array.from(mutation.removedNodes).some(nodeTouchesModelSwitcherTargets),
+                  );
+                  if (touchesModelSwitcher) schedulePlaceModelSwitcherInCenter();
+
+                  const currentTargetsInvalidated =
+                    (lastBottomBarComposerContainer && !lastBottomBarComposerContainer.isConnected) ||
+                    (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) ||
+                    (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected);
+
+                  const bottomBarTouched = mutations.some(
+                    (mutation) =>
+                      Array.from(mutation.removedNodes).some(
+                        (node) =>
+                          node === bottomBar ||
+                          (node instanceof Element && node.contains(bottomBar)),
+                      ) ||
+                      (mutation.target instanceof Element &&
+                        mutation.target.closest('#bottomBarContainer') === bottomBar &&
+                        mutation.removedNodes.length > 0),
+                  );
+
+                  if (!currentTargetsInvalidated && !bottomBarTouched) return;
+
+                  disconnectSteadyBottomBarObserver();
+                  installStartupBottomBarObserver();
+                  scheduleRunMoveTopBarLogic();
+                });
+
+                steadyBottomBarObserver.observe(root, { childList: true, subtree: true });
+              }
+
+              void runMoveTopBarLogic();
+              installStartupBottomBarObserver();
 
               // ---------- Section 3 • Bottom Bar Creation ----------
-              /* one global debounce helper — defined ONCE in the IIFE ------------------ */
-              if (!window.__bbDebounce) {
-                window.__bbDebounce = function (fn, wait = 80) {
-                  let t;
-                  return (...a) => {
-                    clearTimeout(t);
-                    t = setTimeout(() => fn.apply(this, a), wait);
-                  };
-                };
-              }
-              const debounce = window.__bbDebounce;
-
               /* ----------------------------------------------------------------------- */
               function injectBottomBar(topBarLeft, topBarRight, composerContainer) {
                 /* prevent double‑injection ------------------------------------------ */
                 let bottomBar = document.getElementById('bottomBarContainer');
+                const anchorEl = composerContainer.closest('form') || composerContainer;
+                const markBottomBarMutationWindow = (ms = 500) => {
+                  suppressBottomBarObserverUntil = Date.now() + ms;
+                };
 
                 /* width + scale helpers: always defined so calls never fail ---------- */
                 function setWidth() {
@@ -5459,6 +5875,38 @@ div[data-id="hide-this-warning"] {
                 }
                 const debouncedStable = debounce(scaleUntilStable, 60);
 
+                let left = document.getElementById('bottomBarLeft');
+                let center = document.getElementById('bottomBarCenter');
+                let right = document.getElementById('bottomBarRight');
+
+                const sameTargets =
+                  !!bottomBar &&
+                  composerContainer === lastBottomBarComposerContainer &&
+                  topBarLeft === lastBottomBarLeftRef &&
+                  topBarRight === lastBottomBarRightRef;
+
+                if (sameTargets && left && center && right) {
+                  const anchored = bottomBar.previousElementSibling === anchorEl;
+                  if (!anchored) {
+                    markBottomBarMutationWindow();
+                    anchorEl.insertAdjacentElement('afterend', bottomBar);
+                  }
+                  if (!left.contains(topBarLeft)) {
+                    markBottomBarMutationWindow();
+                    left.appendChild(topBarLeft);
+                  }
+                  if (!right.contains(topBarRight)) {
+                    markBottomBarMutationWindow();
+                    right.appendChild(topBarRight);
+                  }
+                  placeModelSwitcherInCenter(center, right);
+                  requestAnimationFrame(scaleUntilStable);
+                  bottomBarStartupSettled = true;
+                  setBottomBarReadyState(true);
+                  schedulePromoteToSteadyBottomBarObserver();
+                  return;
+                }
+
                 if (!bottomBar) {
                   /* create bar ----------------------------------------------------- */
                   bottomBar = document.createElement('div');
@@ -5476,6 +5924,7 @@ div[data-id="hide-this-warning"] {
                     boxSizing: 'border-box',
                     opacity: '1',
                     transition: 'opacity 0.5s',
+                    visibility: 'hidden',
                   });
 
                   /* observe container resize + window resize (only once) ----------- */
@@ -5506,30 +5955,13 @@ div[data-id="hide-this-warning"] {
                   const sc =
                     typeof getScrollableContainer === 'function' && getScrollableContainer();
                   const prevScrollBot = sc ? sc.scrollHeight - sc.scrollTop : 0;
-                  (composerContainer.closest('form') || composerContainer).insertAdjacentElement(
-                    'afterend',
-                    bottomBar,
-                  );
+                  markBottomBarMutationWindow(900);
+                  anchorEl.insertAdjacentElement('afterend', bottomBar);
                   if (sc) sc.scrollTop += sc.scrollHeight - prevScrollBot;
 
                   /* run first stable scale pass after insertion ------------------- */
                   requestAnimationFrame(scaleUntilStable);
-                  setTimeout(scaleUntilStable, 1500);
-
-                  /* gsap intro ---------------------------------------------------- */
-                  gsap.set(bottomBar, { opacity: 0, y: 10, display: 'flex' });
-                  gsap.to(bottomBar, {
-                    opacity: 1,
-                    y: 0,
-                    duration: 0.2,
-                    ease: 'power2.out',
-                  });
                 }
-
-                /* ----- left / center / right containers ------------------------------------ */
-                let left = document.getElementById('bottomBarLeft');
-                let center = document.getElementById('bottomBarCenter');
-                let right = document.getElementById('bottomBarRight');
 
                 if (!left) {
                   left = document.createElement('div');
@@ -5569,44 +6001,12 @@ div[data-id="hide-this-warning"] {
                   if (!keep.includes(c.dataset.id) && c !== topBarLeft) c.remove();
                 });
 
+                markBottomBarMutationWindow();
+                setBottomBarReadyState(false);
                 if (!left.contains(topBarLeft)) left.appendChild(topBarLeft);
                 if (!right.contains(topBarRight)) right.appendChild(topBarRight);
 
-                // Find and move the model switcher into the center area
-                (function placeModelSwitcherInCenter() {
-                  // robust selector set
-                  const findModelBtn = () =>
-                    document.querySelector('#page-header button[aria-label^="Model selector" i]') ||
-                    document.querySelector(
-                      '#page-header button[data-testid="Model-switCher-dropdown-button"]',
-                    ) ||
-                    document.querySelector(
-                      '#bottomBarContainer button[aria-label^="Model selector" i]',
-                    ) ||
-                    document.querySelector(
-                      'button[data-testid="Model-switCher-dropdown-button"]',
-                    ) ||
-                    document.querySelector('button[aria-label^="Model selector" i]');
-
-                  const btn = findModelBtn();
-                  if (!btn) return;
-
-                  // Prefer moving its flex group wrapper to preserve spacing
-                  let group =
-                    btn.closest('#page-header .flex.items-center') ||
-                    btn.closest('#bottomBarContainer .flex.items-center') ||
-                    btn.closest('.flex.items-center') ||
-                    btn;
-
-                  // If it's already in the center, do nothing
-                  if (center.contains(group)) return;
-
-                  // Avoid accidentally moving the entire right container
-                  if (group === right) group = btn;
-
-                  // Drop the model switcher into the center container
-                  center.appendChild(group);
-                })();
+                placeModelSwitcherInCenter(center, right);
 
                 injectStaticButtons(left);
                 adjustBottomBarTextScaling(bottomBar);
@@ -5614,6 +6014,15 @@ div[data-id="hide-this-warning"] {
                   /* re‑scale once text truncation done */
                   scaleUntilStable();
                 }, 50)();
+                lastBottomBarComposerContainer = composerContainer;
+                lastBottomBarLeftRef = topBarLeft;
+                lastBottomBarRightRef = topBarRight;
+                bottomBarStartupSettled = true;
+                requestAnimationFrame(() => {
+                  if (bottomBar) bottomBar.style.visibility = '';
+                  setBottomBarReadyState(true);
+                  schedulePromoteToSteadyBottomBarObserver();
+                });
 
                 /* hide stale disclaimer ------------------------------------------- */
                 const old = document.querySelector(
@@ -5802,20 +6211,27 @@ div[data-id="hide-this-warning"] {
                 new ResizeObserver(deb).observe(bar); // re‑apply on layout changes
               }
 
-              document.addEventListener('DOMContentLoaded', initAdjustBottomBarTextScaling);
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initAdjustBottomBarTextScaling, {
+                  once: true,
+                });
+              } else {
+                initAdjustBottomBarTextScaling();
+              }
             })();
-          }, 500);
+          });
 
           // -------------------- Section 7. Style Injection ("global") --------------------
 
           (function injectBottomBarStyles() {
             const style = document.createElement('style');
             style.textContent = `
-                    .draggable.sticky.top-0 {
+                    .${BOTTOM_BAR_READY_CLASS} .draggable.sticky.top-0,
+                    .${BOTTOM_BAR_READY_CLASS} #page-header {
                         opacity: 0 !important; pointer-events: none !important;
                         position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important;
                     }
-                    #bottomBarContainer { padding-top:0!important; padding-bottom:0!important; margin-top:2px!important; margin-bottom:2px!important; overflow-anchor:none!important;}
+                    #bottomBarContainer { padding-top:0!important; padding-bottom:0!important; margin-top:2px!important; margin-bottom:calc(2px - 0.5em)!important; overflow-anchor:none!important;}
                     #bottomBarContainer button:hover {filter:brightness(1.1)!important;}
                     div[data-id="hide-this-warning"] {
                         opacity:0!important; pointer-events:none!important; position:absolute!important;
@@ -5914,71 +6330,98 @@ div[data-id="hide-this-warning"] {
               });
             }
 
-            // Setup mutation observer
-            function observeBottomBar() {
-              const container = document.querySelector('#bottomBarContainer');
-              if (!container) {
-                // Try again soon if the container isn't present yet
-                setTimeout(observeBottomBar, 500);
-                return;
-              }
-              // Initial hide
+            observeMountedSelector('#bottomBarContainer', (container) => {
+              const debouncedHide = debounce(() => hideMatchedElements(container), 60);
+
               hideMatchedElements(container);
-              // Create the observer
               const observer = new MutationObserver((mutationsList) => {
-                mutationsList.forEach((mutation) => {
-                  // If children added/removed or subtree changed, re-hide
-                  if (mutation.addedNodes.length > 0 || mutation.type === 'childList') {
-                    hideMatchedElements(container);
-                  }
-                });
+                const hasRelevantMutations = mutationsList.some(
+                  (mutation) =>
+                    mutation.target instanceof Element &&
+                    mutation.target.closest('#bottomBarContainer') === container &&
+                    (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0),
+                );
+                if (hasRelevantMutations) debouncedHide();
               });
               observer.observe(container, {
                 childList: true,
                 subtree: true,
               });
-            }
 
-            // Run
-            observeBottomBar();
+              return () => {
+                observer.disconnect();
+              };
+            });
           })();
 
           // -------------------- Section 8. Hide Disclaimers (live observation) --------------------
-          setTimeout(() => {
-            (() => {
-              // "Important" roots in: English, Spanish, Hindi, Japanese, Ukrainian, Russian
-              const importantRoots = [
-                'important', // English
-                'importante', // Spanish
-                'ज़रूरी', // Hindi (zaruri)
-                '重要', // Japanese
-                'важн', // Russian (catch важную, важное, важно, важная, etc.)
-                'важлив', // Ukrainian (catch важливу, важливо, etc.)
-              ];
+          (() => {
+            // "Important" roots in: English, Spanish, Hindi, Japanese, Ukrainian, Russian
+            const importantRoots = [
+              'important', // English
+              'importante', // Spanish
+              'ज़रूरी', // Hindi (zaruri)
+              '重要', // Japanese
+              'важн', // Russian (catch важную, важное, важно, важная, etc.)
+              'важлив', // Ukrainian (catch важливу, важливо, etc.)
+            ];
 
-              function containsImportantRoot(txt) {
-                return importantRoots.some((root) =>
-                  txt.toLowerCase().includes(root.toLowerCase()),
-                );
+            function containsImportantRoot(txt) {
+              return importantRoots.some((root) => txt.toLowerCase().includes(root.toLowerCase()));
+            }
+
+            function markImportantWarnings(root) {
+              if (!(root instanceof Element) && root !== document) return;
+              root.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
+                const txt = el.textContent.trim().replace(/\s+/g, ' ');
+                if (containsImportantRoot(txt)) {
+                  el.setAttribute('data-id', 'hide-this-warning');
+                }
+              });
+            }
+
+            const markNodeIfRelevant = (node) => {
+              if (!(node instanceof Element)) return;
+
+              if (node.matches('div.text-token-text-secondary')) {
+                const txt = node.textContent.trim().replace(/\s+/g, ' ');
+                if (containsImportantRoot(txt)) {
+                  node.setAttribute('data-id', 'hide-this-warning');
+                }
               }
 
-              const observer = new MutationObserver(() => {
-                const container = document.getElementById('thread-bottom-container');
-                if (!container) return;
-                container.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
-                  const txt = el.textContent.trim().replace(/\s+/g, ' ');
-                  if (containsImportantRoot(txt)) {
-                    el.setAttribute('data-id', 'hide-this-warning');
-                  }
-                });
-              });
+              if (node.querySelector('div.text-token-text-secondary')) {
+                markImportantWarnings(node);
+              }
+            };
 
-              observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-              });
-            })();
-          }, 100);
+            markImportantWarnings(document);
+
+            const root = document.body || document.documentElement;
+            if (!root) return;
+
+            const observer = new MutationObserver((mutations) => {
+              for (const mutation of mutations) {
+                if (mutation.type === 'characterData') {
+                  const parent = mutation.target?.parentElement;
+                  if (parent?.matches('div.text-token-text-secondary')) {
+                    markNodeIfRelevant(parent);
+                  }
+                  continue;
+                }
+
+                for (const node of mutation.addedNodes) {
+                  markNodeIfRelevant(node);
+                }
+              }
+            });
+
+            observer.observe(root, {
+              childList: true,
+              subtree: true,
+              characterData: true,
+            });
+          })();
 
           // -------------------- Section 9. Remove Composer Button Labels (lang-agnostic) --------------------
           (function stripComposerLabels() {
@@ -6000,6 +6443,7 @@ div[data-id="hide-this-warning"] {
               });
             };
             const scan = (root) => {
+              if (!(root instanceof Element) && root !== document) return;
               root.querySelectorAll(ACTION_WRAPPER).forEach((wrp) => {
                 const btn = wrp.querySelector('button');
                 if (btn) stripLabel(btn);
@@ -6009,20 +6453,27 @@ div[data-id="hide-this-warning"] {
               });
             };
 
-            // Initial label removal
-            scan(document);
+            observeMountedSelector("form[data-type='unified-composer']", (composerForm) => {
+              const debouncedScan = debounce(() => scan(composerForm), 60);
 
-            // Watch for new buttons
-            new MutationObserver((mutations) => {
-              for (const { addedNodes } of mutations) {
-                for (const node of addedNodes) {
-                  if (node.nodeType !== 1) continue;
-                  scan(node); // always scan deeply
-                }
-              }
-            }).observe(document.body, { childList: true, subtree: true });
+              scan(composerForm);
+              const observer = new MutationObserver((mutations) => {
+                const hasRelevantMutations = mutations.some(
+                  (mutation) =>
+                    mutation.target instanceof Element &&
+                    mutation.target.closest("form[data-type='unified-composer']") === composerForm &&
+                    (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0),
+                );
+                if (hasRelevantMutations) debouncedScan();
+              });
+              observer.observe(composerForm, { childList: true, subtree: true });
+
+              return () => {
+                observer.disconnect();
+              };
+            });
           })();
-        }); // closes setTimeout(function injectBottomBarStyles() { ... });
+        })(); // runs bottom-bar startup immediately after the gate
       })(); // closes async function main()
     }, // closes chrome.storage.sync.get callback
   ); // closes chrome.storage.sync.get
@@ -6229,6 +6680,25 @@ div[data-id="hide-this-warning"] {
     typeof window.ModelLabels?.getActionBySlot === 'function'
       ? window.ModelLabels.getActionBySlot(slot)
       : null;
+  const getModelActionById = (id) =>
+    typeof window.ModelLabels?.getActionById === 'function' ? window.ModelLabels.getActionById(id) : null;
+  const DEFAULT_ACTIVE_MODEL_CONFIG_ID =
+    typeof window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID === 'string'
+      ? window.ModelLabels.DEFAULT_ACTIVE_CONFIG_ID
+      : 'configure-latest';
+  const normalizeActiveModelConfigId = (value) =>
+    typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
+      ? window.ModelLabels.normalizeActiveConfigId(value)
+      : [
+          'configure-latest',
+          'configure-5-2',
+          'configure-5-0-thinking-mini',
+          'configure-o3',
+        ].includes(String(value || '').trim())
+        ? String(value || '').trim()
+        : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+  let ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+  let LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   const getDefaultModelPickerCodes = () =>
     typeof window.ModelLabels?.defaultKeyCodes === 'function'
       ? window.ModelLabels.defaultKeyCodes()
@@ -6236,7 +6706,11 @@ div[data-id="hide-this-warning"] {
           const out = new Array(MAX_SLOTS).fill('');
           out[0] = 'Digit1';
           out[1] = 'Digit2';
-          out[2] = 'Digit3';
+          out[2] = 'Digit0';
+          out[3] = 'Digit3';
+          out[4] = 'Digit4';
+          out[5] = 'Digit5';
+          out[6] = 'Digit6';
           return out;
         })();
   const sleepAsync =
@@ -6291,6 +6765,142 @@ div[data-id="hide-this-warning"] {
       if (!matches.length) return null;
       return pick(matches) || matches[0] || null;
     }, { timeout, interval });
+  const setCachedActiveModelConfigId = (value) => {
+    const next = normalizeActiveModelConfigId(value);
+    ACTIVE_MODEL_CONFIG_ID = next;
+    window.__activeModelConfigId = next;
+    return next;
+  };
+  const persistActiveModelConfigId = (value) => {
+    const next = setCachedActiveModelConfigId(value);
+    if (next === LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID) return next;
+    LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = next;
+    try {
+      chrome.storage.sync.set({ activeModelConfigId: next }, () => {});
+    } catch {}
+    return next;
+  };
+  const MODEL_CATALOG_STORAGE_KEY = 'modelCatalog';
+  let SCRAPE_HIDE_UI_ACTIVE = false;
+  const SCRAPE_HIDDEN_ELEMENTS = new Set();
+  const PREPARED_SESSION_HIDDEN_ELEMENTS = new Set();
+  let PREPARED_MODEL_CONFIG_SESSION = null;
+  const hideLiveScrapeElement = (el) => {
+    if (!SCRAPE_HIDE_UI_ACTIVE || !(el instanceof Element) || SCRAPE_HIDDEN_ELEMENTS.has(el)) return;
+    SCRAPE_HIDDEN_ELEMENTS.add(el);
+    if (!el.hasAttribute('data-csp-scrape-inline-visibility'))
+      el.setAttribute('data-csp-scrape-inline-visibility', el.style.visibility || '');
+    if (!el.hasAttribute('data-csp-scrape-inline-pointer-events'))
+      el.setAttribute('data-csp-scrape-inline-pointer-events', el.style.pointerEvents || '');
+    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+  };
+  const clearHiddenLiveScrapeElements = () => {
+    SCRAPE_HIDDEN_ELEMENTS.forEach((el) => {
+      if (!(el instanceof Element)) return;
+      const prevVisibility = el.getAttribute('data-csp-scrape-inline-visibility');
+      const prevPointerEvents = el.getAttribute('data-csp-scrape-inline-pointer-events');
+      if (prevVisibility != null) {
+        if (prevVisibility) el.style.visibility = prevVisibility;
+        else el.style.removeProperty('visibility');
+        el.removeAttribute('data-csp-scrape-inline-visibility');
+      }
+      if (prevPointerEvents != null) {
+        if (prevPointerEvents) el.style.pointerEvents = prevPointerEvents;
+        else el.style.removeProperty('pointer-events');
+        el.removeAttribute('data-csp-scrape-inline-pointer-events');
+      }
+    });
+    SCRAPE_HIDDEN_ELEMENTS.clear();
+  };
+  const hidePreparedSessionElement = (el) => {
+    if (!(el instanceof Element) || PREPARED_SESSION_HIDDEN_ELEMENTS.has(el)) return;
+    PREPARED_SESSION_HIDDEN_ELEMENTS.add(el);
+    if (!el.hasAttribute('data-csp-prepared-inline-visibility'))
+      el.setAttribute('data-csp-prepared-inline-visibility', el.style.visibility || '');
+    if (!el.hasAttribute('data-csp-prepared-inline-pointer-events'))
+      el.setAttribute('data-csp-prepared-inline-pointer-events', el.style.pointerEvents || '');
+    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+  };
+  const clearPreparedSessionHiddenElements = () => {
+    PREPARED_SESSION_HIDDEN_ELEMENTS.forEach((el) => {
+      if (!(el instanceof Element)) return;
+      const prevVisibility = el.getAttribute('data-csp-prepared-inline-visibility');
+      const prevPointerEvents = el.getAttribute('data-csp-prepared-inline-pointer-events');
+      if (prevVisibility != null) {
+        if (prevVisibility) el.style.visibility = prevVisibility;
+        else el.style.removeProperty('visibility');
+        el.removeAttribute('data-csp-prepared-inline-visibility');
+      }
+      if (prevPointerEvents != null) {
+        if (prevPointerEvents) el.style.pointerEvents = prevPointerEvents;
+        else el.style.removeProperty('pointer-events');
+        el.removeAttribute('data-csp-prepared-inline-pointer-events');
+      }
+    });
+    PREPARED_SESSION_HIDDEN_ELEMENTS.clear();
+  };
+  const withTemporarilyHiddenModelUi = async (enabled, task) => {
+    const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+    if (enabled) SCRAPE_HIDE_UI_ACTIVE = true;
+    try {
+      return await task();
+    } finally {
+      SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+      if (!SCRAPE_HIDE_UI_ACTIVE) clearHiddenLiveScrapeElements();
+    }
+  };
+  const getPreparedModelConfigSession = () => {
+    const session = PREPARED_MODEL_CONFIG_SESSION;
+    const combobox = session?.combobox;
+    const dialog = combobox?.closest?.('[role="dialog"]');
+    if (!(combobox instanceof Element) || !combobox.isConnected || !(dialog instanceof Element) || !dialog.isConnected) {
+      PREPARED_MODEL_CONFIG_SESSION = null;
+      clearPreparedSessionHiddenElements();
+      return null;
+    }
+    return session;
+  };
+  const setPreparedModelConfigSession = (combobox, activeConfigId) => {
+    if (!(combobox instanceof Element) || !combobox.isConnected) {
+      PREPARED_MODEL_CONFIG_SESSION = null;
+      return null;
+    }
+    const dialog = combobox.closest?.('[role="dialog"]');
+    if (dialog) hidePreparedSessionElement(dialog);
+    PREPARED_MODEL_CONFIG_SESSION = {
+      combobox,
+      activeConfigId: normalizeActiveModelConfigId(activeConfigId),
+      preparedAt: Date.now(),
+    };
+    return PREPARED_MODEL_CONFIG_SESSION;
+  };
+  const releasePreparedModelConfigSession = async () => {
+    const session = getPreparedModelConfigSession();
+    PREPARED_MODEL_CONFIG_SESSION = null;
+    if (!session) {
+      clearHiddenLiveScrapeElements();
+      return false;
+    }
+    const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+    SCRAPE_HIDE_UI_ACTIVE = true;
+    try {
+      const dialog = session.combobox.closest('[role="dialog"]');
+      const closeButton =
+        dialog?.querySelector?.('[data-testid="close-button"]') ||
+        (await waitForButtonByTestIdSafe('close-button', { timeout: 200, interval: 25 }));
+      if (closeButton) smartClickSafe(closeButton);
+      await sleepAsync(40);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+      clearPreparedSessionHiddenElements();
+      if (!SCRAPE_HIDE_UI_ACTIVE) clearHiddenLiveScrapeElements();
+    }
+  };
 
   const normModelTid = (tid) =>
     typeof window.ModelLabels?.normTid === 'function'
@@ -6451,8 +7061,8 @@ div[data-id="hide-this-warning"] {
   const ANIM_FLASH_OUT_S = 0.075; // was 0.15
 
   chrome.storage.sync.get(
-    ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes'],
-    ({ useControlForModelSwitcherRadio, modelPickerKeyCodes }) => {
+    ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes', 'activeModelConfigId'],
+    ({ useControlForModelSwitcherRadio, modelPickerKeyCodes, activeModelConfigId }) => {
       // Initialize shared KEY_CODES (mutate the const array to keep references alive)
       const incoming = Array.isArray(modelPickerKeyCodes)
         ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
@@ -6460,6 +7070,8 @@ div[data-id="hide-this-warning"] {
       while (incoming.length < MAX_SLOTS) incoming.push('');
       const effective = incoming.some(Boolean) ? incoming : getDefaultModelPickerCodes();
       KEY_CODES.splice(0, KEY_CODES.length, ...effective);
+      const initialActiveModelConfigId = setCachedActiveModelConfigId(activeModelConfigId);
+      LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = initialActiveModelConfigId;
 
       // Platform + modifier label
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
@@ -6576,6 +7188,30 @@ div[data-id="hide-this-warning"] {
 
       const __cspIsSubmenuTrigger = (el) => isModelSubmenuTriggerItem(el);
       const __cspNormTid = (tid) => window.ModelLabels.normTid(tid);
+      const inferActiveConfigFromMenuState = (state = getVisibleModelMenuState()) => {
+        const items = getPrimaryMenuItems(state).map((item) => ({
+          testId: item.el.getAttribute('data-testid') || '',
+          text: __cspTextNoHint(item.el),
+        }));
+        const header = state.main?.querySelector('.__menu-label')?.textContent?.trim() || '';
+        return typeof window.ModelLabels?.inferActiveConfigFromMenuState === 'function'
+          ? window.ModelLabels.inferActiveConfigFromMenuState({ header, items })
+          : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+      };
+      const syncActiveConfigFromMenuState = (
+        state = getVisibleModelMenuState(),
+        { persist = false } = {},
+      ) => {
+        const inferred = inferActiveConfigFromMenuState(state);
+        if (persist) return persistActiveModelConfigId(inferred);
+        return setCachedActiveModelConfigId(inferred);
+      };
+      const getPrimaryPresentationActionsForState = (state = getVisibleModelMenuState()) => {
+        const activeModelConfigId = syncActiveConfigFromMenuState(state);
+        return typeof window.ModelLabels?.getPrimaryPresentationActions === 'function'
+          ? window.ModelLabels.getPrimaryPresentationActions(activeModelConfigId, [])
+          : getModelActionSlots().filter((action) => action.group === 'primary');
+      };
 
       // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
       function __cspCollectModelNamesN() {
@@ -6766,6 +7402,34 @@ div[data-id="hide-this-warning"] {
             const arr = __cspCollectModelNamesN();
             if (arr) __cspSaveModelNames(arr);
             sendResponse({ modelNames: Array.isArray(arr) ? arr : null });
+            return;
+          }
+          if (msg && msg.type === 'CSP_SCRAPE_MODEL_CATALOG') {
+            void scrapeModelCatalogOnce({
+              hideUi: msg.hideUi !== false,
+              keepPreparedSession: msg.keepPreparedSession !== false,
+            }).then((result) => {
+              sendResponse(result);
+            });
+            return true;
+          }
+          if (msg && msg.type === 'CSP_RELEASE_MODEL_CONFIG_SESSION') {
+            void releasePreparedModelConfigSession().then(() => {
+              sendResponse({ ok: true });
+            });
+            return true;
+          }
+          if (msg && msg.type === 'CSP_TRIGGER_MODEL_ACTION') {
+            const action = getModelActionById(msg.actionId);
+            if (!action) {
+              sendResponse({ ok: false, error: 'UNKNOWN_ACTION' });
+              return;
+            }
+            executeModelAction(action, {
+              hideUi: msg.hideUi === true,
+              preferPreparedSession: msg.preferPreparedSession === true,
+            });
+            sendResponse({ ok: true });
           }
         });
       } catch (_) {}
@@ -6925,10 +7589,12 @@ div[data-id="hide-this-warning"] {
 
       const getTargetMenuItemForAction = (action, state = getVisibleModelMenuState()) => {
         if (!action) return null;
-        if (action.actionKind === 'main-row') return getPrimaryMenuItems(state)[action.mainIndex] || null;
-        if (action.actionKind === 'configure-open' || action.actionKind === 'configure-option') {
+        const primaryItems = getPrimaryMenuItems(state);
+        const presentationActions = getPrimaryPresentationActionsForState(state);
+        const primaryMatchIndex = presentationActions.findIndex((candidate) => candidate.id === action.id);
+        if (primaryMatchIndex !== -1) return primaryItems[primaryMatchIndex] || null;
+        if (action.actionKind === 'configure-option')
           return findMainItemByTestId('model-configure-modal', state) || null;
-        }
         return null;
       };
 
@@ -6998,6 +7664,22 @@ div[data-id="hide-this-warning"] {
         const text = (byId?.textContent || option.textContent || '').replace(/\s+/g, ' ').trim();
         return text;
       };
+      const inferActiveConfigFromConfigureOption = (option, listbox) => {
+        if (!(option instanceof Element) || !(listbox instanceof Element)) return null;
+        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+        const optionIndex = options.indexOf(option);
+        if (optionIndex === 0) return 'configure-latest';
+        switch (getConfigureOptionLabel(option)) {
+          case '5.2':
+            return 'configure-5-2';
+          case '5.0':
+            return 'configure-5-0-thinking-mini';
+          case 'o3':
+            return 'configure-o3';
+          default:
+            return null;
+        }
+      };
 
       const captureConfigureOptionLabels = (listbox) => {
         if (!(listbox instanceof Element)) return;
@@ -7005,6 +7687,204 @@ div[data-id="hide-this-warning"] {
         if (!options.length) return;
         const labels = options.map((option) => getConfigureOptionLabel(option));
         __cspPersistModelNameRange(3, labels, 4);
+      };
+      const findConfigureDialog = () => {
+        const combobox = findConfigureCombobox();
+        const dialog = combobox?.closest('[role="dialog"]');
+        return dialog instanceof Element ? dialog : null;
+      };
+      const hideOpenModelUiForScrape = (state = getVisibleModelMenuState()) => {
+        const mainWrapper =
+          state.main?.closest('[data-radix-popper-content-wrapper]') || state.main || null;
+        const submenuWrapper =
+          state.submenu?.closest('[data-radix-popper-content-wrapper]') || state.submenu || null;
+        hideLiveScrapeElement(mainWrapper);
+        hideLiveScrapeElement(submenuWrapper);
+      };
+      const hideConfigureDialogUiForScrape = () => {
+        const dialog = findConfigureDialog();
+        if (dialog) hideLiveScrapeElement(dialog);
+        return dialog;
+      };
+      const hideConfigureListboxUiForScrape = (listbox) => {
+        const wrapper =
+          listbox?.closest('[data-radix-popper-content-wrapper]') || listbox || null;
+        hideLiveScrapeElement(wrapper);
+      };
+      const collectConfigureFrontendRows = (dialog, activeConfigId) => {
+        if (!(dialog instanceof Element)) return [];
+        const rowButtons = Array.from(dialog.querySelectorAll('button.__menu-item.hoverable.text-start'));
+        return rowButtons
+          .map((button) => {
+            const label = __cspTextNoHint(button);
+            const actionId =
+              typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
+                ? window.ModelLabels.mapFrontendLabelToActionId(label, activeConfigId)
+                : '';
+            const action =
+              typeof window.ModelLabels?.getActionById === 'function'
+                ? window.ModelLabels.getActionById(actionId)
+                : null;
+            if (!actionId || !action) return null;
+            return {
+              id: actionId,
+              slot: action.slot,
+              label,
+            };
+          })
+          .filter(Boolean);
+      };
+      const deriveFlatModelNamesFromCatalog = (catalog) => {
+        const names =
+          typeof window.ModelLabels?.defaultNames === 'function'
+            ? window.ModelLabels.defaultNames()
+            : Array(MAX_SLOTS).fill('');
+        const configureOptions = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
+        configureOptions.forEach((option) => {
+          const action =
+            typeof window.ModelLabels?.getActionById === 'function'
+              ? window.ModelLabels.getActionById(option?.id)
+              : null;
+          if (!action || !Number.isInteger(action.slot)) return;
+          names[action.slot] =
+            typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+              ? window.ModelLabels.normalizeStoredActionName(action.slot, option.label)
+              : String(option?.label || '').trim();
+        });
+        const frontendByConfig =
+          catalog && typeof catalog.frontendByConfig === 'object' ? catalog.frontendByConfig : {};
+        Object.values(frontendByConfig).forEach((rows) => {
+          (Array.isArray(rows) ? rows : []).forEach((row) => {
+            if (!Number.isInteger(row?.slot)) return;
+            names[row.slot] =
+              typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+                ? window.ModelLabels.normalizeStoredActionName(row.slot, row.label)
+                : String(row?.label || '').trim();
+          });
+        });
+        return names.slice(0, MAX_SLOTS);
+      };
+      const selectConfigureOptionDuringScrape = async (combobox, targetAction) => {
+        if (!(combobox instanceof Element) || !targetAction) return null;
+        let listbox = await waitForConfigureListboxQuick(combobox);
+        if (!listbox) {
+          smartClickSafe(combobox);
+          listbox = await waitForConfigureListbox(combobox);
+        }
+        if (!listbox) return null;
+        hideConfigureListboxUiForScrape(listbox);
+        const option = findConfigureOptionForAction(targetAction, listbox);
+        if (!option) return null;
+        activateMenuItem(option);
+        await sleepAsync(80);
+        return option;
+      };
+      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) => {
+        const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+        SCRAPE_HIDE_UI_ACTIVE = !!hideUi;
+        try {
+          await releasePreparedModelConfigSession();
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 120 : 180);
+          const menuReady = await waitForMainMenuActionTarget(getModelActionById('configure'));
+          const state = menuReady?.state || getVisibleModelMenuState();
+          hideOpenModelUiForScrape(state);
+          const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+          if (!configureItem) return { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
+
+          const combobox = await openConfigureDialogFromMenuItem(configureItem);
+          if (!combobox) return { ok: false, error: 'CONFIGURE_DIALOG_NOT_FOUND' };
+
+          hideConfigureDialogUiForScrape();
+          const frontendByConfig = {};
+          const initialActiveConfigId = inferActiveConfigFromCombobox(combobox);
+
+          let listbox = await waitForConfigureListboxQuick(combobox);
+          if (!listbox) {
+            smartClickSafe(combobox);
+            listbox = await waitForConfigureListbox(combobox);
+          }
+          if (!listbox) return { ok: false, error: 'CONFIGURE_LISTBOX_NOT_FOUND' };
+          hideConfigureListboxUiForScrape(listbox);
+
+          const availableOptions = Array.from(listbox.querySelectorAll(':scope [role="option"]'))
+            .map((option) => {
+              const id = inferActiveConfigFromConfigureOption(option, listbox);
+              const action = id ? getModelActionById(id) : null;
+              if (!id || !action) return null;
+              return {
+                id,
+                slot: action.slot,
+                label: getConfigureOptionLabel(option),
+              };
+            })
+            .filter(Boolean);
+
+          const scrapeOrder = availableOptions
+            .slice()
+            .sort((a, b) => (a.id === 'configure-latest' ? -1 : b.id === 'configure-latest' ? 1 : 0));
+
+          for (const option of scrapeOrder) {
+            await selectConfigureOptionDuringScrape(combobox, getModelActionById(option.id));
+            hideConfigureDialogUiForScrape();
+            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog(), option.id);
+          }
+          if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
+            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(
+              findConfigureDialog(),
+              initialActiveConfigId,
+            );
+          }
+          await ensureConfigureComboboxSelection(combobox, initialActiveConfigId);
+
+          const catalog = {
+            version: 1,
+            scrapedAt: Date.now(),
+            configureOptions: availableOptions.map((option) => ({
+              id: option.id,
+              label:
+                typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+                  ? window.ModelLabels.normalizeStoredActionName(option.slot, option.label)
+                  : option.label,
+            })),
+            frontendByConfig,
+          };
+          const modelNames = deriveFlatModelNamesFromCatalog(catalog);
+          chrome.storage.sync.set(
+            {
+              [MODEL_CATALOG_STORAGE_KEY]: catalog,
+              modelNames,
+              modelNamesAt: catalog.scrapedAt,
+            },
+            () => {},
+          );
+
+          if (keepPreparedSession) {
+            clearHiddenLiveScrapeElements();
+            setPreparedModelConfigSession(combobox, initialActiveConfigId);
+          } else {
+            const closeButton = await waitForButtonByTestIdSafe('close-button', {
+              timeout: 800,
+              interval: 25,
+            });
+            try {
+              smartClickSafe(closeButton);
+            } catch {}
+            PREPARED_MODEL_CONFIG_SESSION = null;
+          }
+
+          return {
+            ok: true,
+            modelCatalog: catalog,
+            modelNames,
+            activeModelConfigId: initialActiveConfigId,
+          };
+        } catch (error) {
+          return { ok: false, error: error?.message || 'SCRAPE_FAILED' };
+        } finally {
+          SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+          clearHiddenLiveScrapeElements();
+        }
       };
 
       const getConfigureClickTargets = (configureItem) => {
@@ -7069,27 +7949,122 @@ div[data-id="hide-this-warning"] {
         }
         return null;
       };
-
-      const runConfigureOptionAction = async (action) => {
-        const ready = await waitForMainMenuActionTarget(action);
-        const configureItem = ready?.target?.el;
-        if (!configureItem) return;
-
-        const combobox = await openConfigureDialogFromMenuItem(configureItem);
-        if (!combobox) return;
-
+      const inferActiveConfigFromCombobox = (combobox) => {
+        const value = combobox?.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        if (!value) return DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        if (value === '5.2') return 'configure-5-2';
+        if (value === '5.0') return 'configure-5-0-thinking-mini';
+        if (value === 'o3') return 'configure-o3';
+        return 'configure-latest';
+      };
+      const ensureConfigureComboboxSelection = async (combobox, targetConfigId) => {
+        if (!(combobox instanceof Element)) return false;
+        const normalizedTargetConfigId = normalizeActiveModelConfigId(targetConfigId);
+        if (inferActiveConfigFromCombobox(combobox) === normalizedTargetConfigId) return true;
+        const action = getModelActionById(normalizedTargetConfigId);
+        if (!action) return false;
         let listbox = await waitForConfigureListboxQuick(combobox);
         if (!listbox) {
           await clickAfterFlash(combobox, DELAY_CONFIGURE_COMBOBOX_OPEN_MS);
           listbox = await waitForConfigureListbox(combobox);
         }
-        if (!listbox) return;
-
-        captureConfigureOptionLabels(listbox);
+        if (!listbox) return false;
         const option = findConfigureOptionForAction(action, listbox);
-        if (!option) return;
-
+        if (!option) return false;
         await activateAfterFlash(option, DELAY_ACTIVATE_TARGET_MS);
+        await sleepAsync(80);
+        return true;
+      };
+      const findConfigureFrontendRowForAction = (action, dialog) => {
+        if (!(dialog instanceof Element) || !action) return null;
+        const expected = String(action.rowLabel || action.label || '').trim().toLowerCase();
+        if (!expected) return null;
+        return (
+          Array.from(dialog.querySelectorAll('button.__menu-item.hoverable.text-start')).find(
+            (button) => __cspTextNoHint(button).trim().toLowerCase() === expected,
+          ) || null
+        );
+      };
+
+      const runConfigureOptionAction = async (
+        action,
+        { hideUi = false, initialState = null, preferPreparedSession = false } = {},
+      ) => {
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const preparedSession = preferPreparedSession ? getPreparedModelConfigSession() : null;
+          if (preparedSession) {
+            const combobox = preparedSession.combobox;
+            hideConfigureDialogUiForScrape();
+
+            let listbox = await waitForConfigureListboxQuick(combobox);
+            if (!listbox) {
+              await clickAfterFlash(combobox, DELAY_CONFIGURE_COMBOBOX_OPEN_MS);
+              listbox = await waitForConfigureListbox(combobox);
+            }
+            if (!listbox) return;
+            hideConfigureListboxUiForScrape(listbox);
+
+            const option = findConfigureOptionForAction(action, listbox);
+            if (!option) return;
+
+            await activateAfterFlash(option, DELAY_ACTIVATE_TARGET_MS);
+            persistActiveModelConfigId(action.id);
+            setPreparedModelConfigSession(combobox, action.id);
+            await sleepAsync(80);
+            hideConfigureDialogUiForScrape();
+            return;
+          }
+
+          const ready = initialState ? { state: initialState } : await waitForMainMenuActionTarget(action);
+          const state = ready?.state || getVisibleModelMenuState();
+          hideOpenModelUiForScrape(state);
+          const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+          if (!configureItem) return;
+
+          const combobox = await openConfigureDialogFromMenuItem(configureItem);
+          if (!combobox) return;
+          hideConfigureDialogUiForScrape();
+
+          let listbox = await waitForConfigureListboxQuick(combobox);
+          if (!listbox) {
+            await clickAfterFlash(combobox, DELAY_CONFIGURE_COMBOBOX_OPEN_MS);
+            listbox = await waitForConfigureListbox(combobox);
+          }
+          if (!listbox) return;
+          hideConfigureListboxUiForScrape(listbox);
+
+          const option = findConfigureOptionForAction(action, listbox);
+          if (!option) return;
+
+          await activateAfterFlash(option, DELAY_ACTIVATE_TARGET_MS);
+          persistActiveModelConfigId(action.id);
+          await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
+          hideConfigureDialogUiForScrape();
+          const closeButton = await waitForButtonByTestIdSafe('close-button', {
+            timeout: 1500,
+            interval: 30,
+          });
+          if (!closeButton) return;
+          await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
+          flashBottomBar();
+        });
+      };
+      const runConfigureFrontendRowAction = async (action) => {
+        const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
+        const state = ready?.state || getVisibleModelMenuState();
+        const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+        if (!configureItem) return;
+
+        const combobox = await openConfigureDialogFromMenuItem(configureItem);
+        if (!combobox) return;
+        if (action.requiredConfigId) {
+          const ensured = await ensureConfigureComboboxSelection(combobox, action.requiredConfigId);
+          if (!ensured) return;
+        }
+        const dialog = findConfigureDialog();
+        const frontendRow = findConfigureFrontendRowForAction(action, dialog);
+        if (!frontendRow) return;
+        await activateAfterFlash(frontendRow, DELAY_ACTIVATE_TARGET_MS);
         await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
         const closeButton = await waitForButtonByTestIdSafe('close-button', {
           timeout: 1500,
@@ -7102,13 +8077,15 @@ div[data-id="hide-this-warning"] {
 
       const applyHints = () => {
         removeAllLabels();
-        const primaryItems = getPrimaryMenuItems();
-        const primaryActions = getModelActionSlots().filter((action) => action.group === 'primary');
+        const state = getVisibleModelMenuState();
+        const primaryItems = getPrimaryMenuItems(state);
+        const primaryActions = getPrimaryPresentationActionsForState(state);
         for (let i = 0; i < primaryItems.length && i < primaryActions.length; ++i) {
           const slot = primaryActions[i]?.slot;
           if (slot == null) continue;
           addLabel(primaryItems[i].el, displayFromCode(KEY_CODES[slot]));
         }
+        syncActiveConfigFromMenuState(state, { persist: true });
         // Persist labels -> names once menus are present (submenu must be open for full set)
         __cspMaybePersistModelNames();
       };
@@ -7117,6 +8094,80 @@ div[data-id="hide-this-warning"] {
       // Expose a minimal hook so outer listeners can refresh labels when keys change
       window.__mp_applyHints = applyHints;
 
+      const openMenuForAction = (nextAction, done) => {
+        ensureMainMenuOpen();
+
+        let mainPolls = 0;
+        const waitForReadyState = () => {
+          const state = getVisibleModelMenuState();
+          const target = getTargetMenuItemForAction(nextAction, state);
+          if (!state.main || !target) {
+            if (mainPolls++ > 50) return done(null);
+            setTimeout(waitForReadyState, 30);
+            return;
+          }
+          done({ state, target });
+        };
+
+        waitForReadyState();
+      };
+
+      const executeModelAction = (action, options = {}) => {
+        if (!action) return false;
+        if (action.actionKind === 'configure-option' && options.preferPreparedSession) {
+          const preparedSession = getPreparedModelConfigSession();
+          if (preparedSession) {
+            void runConfigureOptionAction(action, {
+              hideUi: options.hideUi === true,
+              preferPreparedSession: true,
+            });
+            return true;
+          }
+        }
+        const alreadyOpen = ensureMainMenuOpen();
+        setTimeout(
+          () => {
+            openMenuForAction(action, (ready) => {
+              if (!ready) return;
+              if (action.actionKind === 'configure-option') {
+                if (!options.hideUi) applyHints();
+                void runConfigureOptionAction(action, {
+                  hideUi: options.hideUi === true,
+                  initialState: ready.state,
+                  preferPreparedSession: options.preferPreparedSession === true,
+                });
+                return;
+              }
+              applyHints();
+              if (action.actionKind === 'configure-frontend-row') {
+                void runConfigureFrontendRowAction(action);
+                return;
+              }
+              const targetEl = ready.target?.el;
+              if (!targetEl) return;
+              if (window.gsap) flashMenuItem(targetEl);
+              setTimeout(() => {
+                activateMenuItem(targetEl);
+                flashBottomBar();
+                const stateAfterClick = getVisibleModelMenuState();
+                const targetIndex = getPrimaryMenuItems(stateAfterClick).findIndex(
+                  (item) => item.el === targetEl,
+                );
+                const primaryActions = getPrimaryPresentationActionsForState(ready.state);
+                const clickedAction = targetIndex >= 0 ? primaryActions[targetIndex] : null;
+                if (clickedAction?.id === 'configure') return;
+                if (clickedAction?.actionKind === 'configure-option') {
+                  persistActiveModelConfigId(clickedAction.id);
+                  return;
+                }
+                syncActiveConfigFromMenuState(ready.state, { persist: true });
+              }, DELAY_ACTIVATE_TARGET_MS);
+            });
+          },
+          alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
+        );
+        return true;
+      };
       // --- KEY HANDLING ---
       window.addEventListener(
         'keydown',
@@ -7130,46 +8181,7 @@ div[data-id="hide-this-warning"] {
 
           e.preventDefault();
           e.stopPropagation();
-
-          const alreadyOpen = ensureMainMenuOpen();
-          const openMenuForAction = (nextAction, done) => {
-            ensureMainMenuOpen();
-
-            let mainPolls = 0;
-            const waitForReadyState = () => {
-              const state = getVisibleModelMenuState();
-              const target = getTargetMenuItemForAction(nextAction, state);
-              if (!state.main || !target) {
-                if (mainPolls++ > 50) return done(null);
-                setTimeout(waitForReadyState, 30);
-                return;
-              }
-              done({ state, target });
-            };
-
-            waitForReadyState();
-          };
-
-          setTimeout(
-            () => {
-              openMenuForAction(action, (ready) => {
-                if (!ready) return;
-                applyHints();
-                if (action.actionKind === 'configure-option') {
-                  void runConfigureOptionAction(action);
-                  return;
-                }
-                const targetEl = ready.target?.el;
-                if (!targetEl) return;
-                if (window.gsap) flashMenuItem(targetEl);
-                setTimeout(() => {
-                  activateMenuItem(targetEl);
-                  flashBottomBar();
-                }, DELAY_ACTIVATE_TARGET_MS);
-              });
-            },
-            alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
-          );
+          executeModelAction(action);
         },
         true,
       );
@@ -7180,6 +8192,36 @@ div[data-id="hide-this-warning"] {
           setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_MAIN_MS);
         }
         const t = e.target instanceof Element ? e.target : null;
+        const clickedPrimaryItem = t?.closest(
+          '[data-radix-menu-content][role="menu"] > [role="menuitem"][data-radix-collection-item]',
+        );
+        if (clickedPrimaryItem) {
+          const state = getVisibleModelMenuState();
+          const primaryItems = getPrimaryMenuItems(state);
+          const clickedIndex = primaryItems.findIndex((item) => item.el === clickedPrimaryItem);
+          const primaryActions = getPrimaryPresentationActionsForState(state);
+          const clickedAction = clickedIndex >= 0 ? primaryActions[clickedIndex] : null;
+          if (clickedAction) {
+            setTimeout(() => {
+              if (clickedAction.id === 'configure') return;
+              if (clickedAction.actionKind === 'configure-option') {
+                persistActiveModelConfigId(clickedAction.id);
+                return;
+              }
+              syncActiveConfigFromMenuState(state, { persist: true });
+            }, 60);
+          }
+        }
+        const clickedConfigureOption = t?.closest('[role="option"][data-radix-collection-item]');
+        if (clickedConfigureOption) {
+          const listbox = clickedConfigureOption.closest('[role="listbox"]');
+          const inferredConfigId = inferActiveConfigFromConfigureOption(clickedConfigureOption, listbox);
+          if (inferredConfigId) {
+            setTimeout(() => {
+              persistActiveModelConfigId(inferredConfigId);
+            }, 0);
+          }
+        }
         const submenuTriggerClicked = t?.closest(
           '[role="menuitem"][data-has-submenu], ' +
             '[role="menuitem"][aria-haspopup="menu"], ' +
@@ -7331,23 +8373,29 @@ div[data-id="hide-this-warning"] {
   // Listen for modelPickerKeyCodes changes and update in real-time
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
-    if (!changes.modelPickerKeyCodes) return;
+    if (changes.activeModelConfigId) {
+      const nextActiveModelConfigId = setCachedActiveModelConfigId(
+        changes.activeModelConfigId.newValue,
+      );
+      LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = nextActiveModelConfigId;
+    }
+    if (changes.modelPickerKeyCodes) {
+      const val = changes.modelPickerKeyCodes.newValue;
+      if (!Array.isArray(val)) return;
 
-    const val = changes.modelPickerKeyCodes.newValue;
-    if (!Array.isArray(val)) return;
+      const next = val.slice(0, MAX_SLOTS);
+      while (next.length < MAX_SLOTS) next.push('');
 
-    const next = val.slice(0, MAX_SLOTS);
-    while (next.length < MAX_SLOTS) next.push('');
+      // Mutate the const array so references stay valid
+      KEY_CODES.splice(0, KEY_CODES.length, ...next);
 
-    // Mutate the const array so references stay valid
-    KEY_CODES.splice(0, KEY_CODES.length, ...next);
-
-    // If menu is open, refresh labels to reflect new keys
-    const btn = document.querySelector(MENU_BTN_SELECTOR);
-    if (btn?.getAttribute('aria-expanded') === 'true') {
-      setTimeout(() => {
-        window.__mp_applyHints?.();
-      }, DELAY_APPLY_HINTS_STORAGE_MS);
+      // If menu is open, refresh labels to reflect new keys
+      const btn = document.querySelector(MENU_BTN_SELECTOR);
+      if (btn?.getAttribute('aria-expanded') === 'true') {
+        setTimeout(() => {
+          window.__mp_applyHints?.();
+        }, DELAY_APPLY_HINTS_STORAGE_MS);
+      }
     }
   });
 })();
@@ -8057,14 +9105,28 @@ setTimeout(() => {
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
   function buildModelSwitcherGrid(cfg) {
-    const actionGroups =
-      typeof window.ModelLabels?.getActionGroups === 'function' ? window.ModelLabels.getActionGroups() : [];
+    const activeModelConfigId =
+      typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
+        ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
+        : cfg?.activeModelConfigId || 'configure-latest';
     const actionSlots =
       typeof window.ModelLabels?.getActionSlots === 'function' ? window.ModelLabels.getActionSlots() : [];
     const names =
       typeof window.ModelLabels?.resolveActionableNames === 'function'
         ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
         : window.MODEL_NAMES || [];
+    const actionGroups =
+      typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
+        ? window.ModelLabels.getPopupPresentationGroups(
+            activeModelConfigId,
+            names,
+            cfg?.modelCatalog || null,
+          )
+        : typeof window.ModelLabels?.getPresentationGroups === 'function'
+          ? window.ModelLabels.getPresentationGroups(activeModelConfigId, names)
+        : typeof window.ModelLabels?.getActionGroups === 'function'
+          ? window.ModelLabels.getActionGroups()
+          : [];
     let codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
         ? window.__modelPickerKeyCodes.slice(0, actionSlots.length)
@@ -8100,10 +9162,16 @@ setTimeout(() => {
         const rows = (group.actions || [])
           .filter((action) => isAssigned(codes[action.slot]))
           .map((action) => {
-            const label = esc(names[action.slot] || action.label || '');
+            const label = esc(action.label || names[action.slot] || '');
             const val = displayFromCode(codes[action.slot]);
+            const activeClass =
+              group.id === 'configure' && action.id === activeModelConfigId
+                ? ' mp-configure-item mp-configure-item-active'
+                : group.id === 'configure'
+                  ? ' mp-configure-item'
+                  : '';
             return `
-      <div class="shortcut-item">
+      <div class="shortcut-item${activeClass}">
         <div class="shortcut-label"><span>${label}</span></div>
         <div class="shortcut-keys">
           <span class="key-text platform-alt-label">${modLabel}</span>

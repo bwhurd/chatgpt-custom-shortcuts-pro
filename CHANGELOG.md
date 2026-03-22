@@ -8,6 +8,35 @@ Changes typically post to the chrome web store a couple days after date in chang
 - Added a shared grouped model-picker source of truth for the popup and Ctrl+/ overlay, including a compact `Configure Models` row for `Latest`, `5.2`, `5.0 Thinking Mini`, and `o3`.
 - Model-picker shortcuts can now follow the deeper `Configure...` path, choose the requested configured model, and close the configure dialog automatically.
 
+#### 03.21.2026
+- Model refresh in the popup is now manual and working again from the attached extension popup, with a once-per-day center prompt, a header refresh button, and cleaner refresh-button alignment/tooltip behavior.
+- The popup model picker now keeps the TFEL row and the `Configure Models` row tied to stable canonical actions, including a persistent `Configure...` command and a shared `Use latest model` action.
+- The active backend configure-model selection now persists across reloads so the popup highlight, TFEL-derived actions, and configure-model shortcuts stay synchronized with the selected config state.
+- Opening the popup now triggers one hidden live-UI scrape of the configure dialog to refresh available backend configs and frontend model rows without visibly moving the ChatGPT UI behind the popup, and the popup first row no longer duplicates `Use latest model`.
+- The popup model picker now shows a loading indicator and temporarily blocks model-grid interaction while that initial one-pass scrape runs, so configure-model clicks use the cached popup-session catalog instead of feeling like they are triggering a fresh scrape.
+- Popup-driven `Configure Models` clicks now execute their real backend switch path with the live ChatGPT model UI hidden, so changing configs no longer looks like another visible scrape after the popup-open catalog pass.
+- The popup now waits until the inset loading overlay is visibly mounted before starting the initial model scrape, and the loading card uses a quieter neutral glass treatment to mask transient model-refresh motion without fighting the popup palette.
+- Plain ChatGPT page reloads no longer auto-run stored configure-model actions in the background, so the page stays quiet unless the user explicitly opens the popup or triggers a model shortcut.
+- `Move top bar to bottom` startup now avoids the old stacked half-second delays and broad reinjection churn, so the bottom bar should attach sooner and stop depending on unrelated later DOM activity such as opening the popup.
+- `Move top bar to bottom` now suppresses self-caused reinjection churn and skips no-op reattaches when the same header/composer targets are already wired, so the bar should land once instead of flashing through multiple visible passes.
+- `Move top bar to bottom` now waits for the header/composer DOM to settle before rewiring, keeps late model-switcher placement separate from full bottom-bar rebuilds, and sits about `0.5em` closer to the viewport bottom edge.
+- `Move top bar to bottom` no longer hides the original page header until the bottom bar is actually injected, and its startup path now uses a targeted observer plus short RAF verification passes so slow reloads are less likely to end up with neither bar visible.
+- `Move top bar to bottom` now scopes its duplicate-button, disclaimer, and composer-label observers to the specific bottom-bar/composer containers they need, reducing whole-page observer churn during slow page loads.
+- Model-picker duplicate warnings no longer list the same conflict twice via both the visible model label and the internal `mpKeyInput-*` id.
+- The popup-open model scrape now hard-gates on the loading overlay's own opacity transition before sending the scrape message, so the blur finishes presenting before any live menu automation can start.
+- The popup model-scrape loading mask now uses a plain minimalist `Loading available models...` fade with a minimum 1500ms visible duration, so it stays smooth and avoids flash without the heavier glass treatment.
+- While that popup model scrape is loading, the grid now stays mounted under a fully opaque loader instead of rebuilding underneath it, which avoids translucent flashes and premature text disappearance.
+- The extension popup no longer uses a `100vh` flex-root layout, which should prevent the popup from loading off-center or partly out of view in Chrome fullscreen mode.
+- The extension popup now uses an explicit bounded root width instead of auto-growing page-style width plus body padding, which should keep Chrome’s fullscreen action popup inside the viewport.
+- The extension popup now uses a fixed safe popup box with internal scrolling instead of content-driven height, which should keep it fully on-screen in fullscreen mode instead of loading half out of the viewport.
+- Clicking the extension icon now opens the settings UI in a centered extension popup window instead of Chrome’s browser-anchored action popup, avoiding the fullscreen toolbar-placement bug that could push the old popup partly off-screen.
+- Popup model-list refresh is now manual instead of automatic on popup open: a once-per-day in-grid prompt and a header refresh button trigger the existing scrape path only when the user asks for it.
+- The centered extension popup window now auto-closes when it loses focus and re-focuses the existing popup instead of spawning duplicates after service-worker restarts.
+- Manual model refresh now targets the exact ChatGPT tab that opened the popup window first, with a short retry if the content script is still attaching after reload.
+- The centered popup window now resolves the launching ChatGPT tab before opening and tries that exact tab directly for manual model refresh before falling back to the background relay.
+- Restored the browser-attached extension popup so the manual model-refresh flow can be compared against the previous attached-popup behavior without removing the separate-window code.
+- Nudged the header `Refresh Models` button slightly lower and added a bit more vertical padding so it aligns more cleanly with the `Use Alt / Use Control` toggle.
+
 #### 03.19.2026
 - Fixed model-picker labels so reused GPT-5 IDs no longer show stale names like `Auto` instead of `Instant`.
 

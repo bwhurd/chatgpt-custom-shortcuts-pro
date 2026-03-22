@@ -4,6 +4,7 @@
 */
 (() => {
   const MAX_SLOTS = 15;
+  const DEFAULT_ACTIVE_CONFIG_ID = 'configure-latest';
   const PRIMARY_ACTIONS = Object.freeze([
     Object.freeze({
       slot: 0,
@@ -29,6 +30,17 @@
       actionKind: 'configure-open',
       testId: 'model-configure-modal',
       mainIndex: 2,
+    }),
+  ]);
+  const EXTRA_ACTIONS = Object.freeze([
+    Object.freeze({
+      slot: 7,
+      id: 'pro',
+      group: 'primary-extra',
+      label: 'Pro',
+      actionKind: 'configure-frontend-row',
+      requiredConfigId: 'configure-latest',
+      rowLabel: 'Pro',
     }),
   ]);
   const CONFIGURE_ACTIONS = Object.freeze([
@@ -85,9 +97,42 @@
     }),
   ]);
   const ACTION_SLOTS = Object.freeze(
-    ACTION_GROUPS.flatMap((group) => group.actions.map((action) => Object.freeze({ ...action }))),
+    [...PRIMARY_ACTIONS, ...CONFIGURE_ACTIONS, ...EXTRA_ACTIONS].map((action) => Object.freeze({ ...action })),
   );
   const ACTION_SLOT_COUNT = ACTION_SLOTS.length;
+  const ACTION_BY_ID = Object.freeze(
+    ACTION_SLOTS.reduce((acc, action) => {
+      acc[action.id] = action;
+      return acc;
+    }, {}),
+  );
+  const CONFIGURE_ACTION_IDS = Object.freeze(CONFIGURE_ACTIONS.map((action) => action.id));
+  const PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG = Object.freeze({
+    'configure-latest': Object.freeze(['instant', 'thinking', 'configure']),
+    'configure-5-2': Object.freeze(['instant', 'thinking', 'configure-latest', 'configure']),
+    'configure-5-0-thinking-mini': Object.freeze([
+      'configure-5-0-thinking-mini',
+      'configure-latest',
+      'configure',
+    ]),
+    'configure-o3': Object.freeze(['configure-o3', 'configure-latest', 'configure']),
+  });
+  const PRIMARY_ALIAS_BY_ID = Object.freeze({
+    'configure-latest': Object.freeze({
+      label: 'Use latest model',
+      labelI18nKey: 'label_modelPickerUseLatestModel',
+    }),
+    'configure-5-0-thinking-mini': Object.freeze({
+      label: 'Thinking mini',
+      labelI18nKey: 'label_modelPickerThinkingMini',
+    }),
+  });
+  const POPUP_PRIMARY_FALLBACK_IDS_BY_ACTIVE_CONFIG = Object.freeze({
+    'configure-latest': Object.freeze(['instant', 'thinking', 'configure']),
+    'configure-5-2': Object.freeze(['instant', 'thinking', 'configure']),
+    'configure-5-0-thinking-mini': Object.freeze(['configure-5-0-thinking-mini', 'configure']),
+    'configure-o3': Object.freeze(['configure-o3', 'configure']),
+  });
 
   // Canonical mapping based on current HTML (use sparingly; prefer parsing testids)
   const TESTID_CANON = Object.freeze({
@@ -186,8 +231,253 @@
     const arr = new Array(MAX_SLOTS).fill('');
     arr[0] = 'Digit1';
     arr[1] = 'Digit2';
-    arr[2] = 'Digit3';
+    arr[2] = 'Digit0';
+    arr[3] = 'Digit3';
+    arr[4] = 'Digit4';
+    arr[5] = 'Digit5';
+    arr[6] = 'Digit6';
     return arr;
+  };
+
+  const normalizeActiveConfigId = (value) =>
+    CONFIGURE_ACTION_IDS.includes(String(value || '').trim())
+      ? String(value || '').trim()
+      : DEFAULT_ACTIVE_CONFIG_ID;
+
+  const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
+
+  const getPrimaryActionIdsForActiveConfig = (activeConfigId) =>
+    PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG[normalizeActiveConfigId(activeConfigId)] ||
+    PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG[DEFAULT_ACTIVE_CONFIG_ID];
+  const getPopupPrimaryFallbackIdsForActiveConfig = (activeConfigId) =>
+    POPUP_PRIMARY_FALLBACK_IDS_BY_ACTIVE_CONFIG[normalizeActiveConfigId(activeConfigId)] ||
+    POPUP_PRIMARY_FALLBACK_IDS_BY_ACTIVE_CONFIG[DEFAULT_ACTIVE_CONFIG_ID];
+
+  const normalizeMenuText = (value) =>
+    (value || '')
+      .toString()
+      .normalize('NFKD')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+  const inferActiveConfigFromMenuState = ({ header = '', items = [] } = {}) => {
+    const headerText = normalizeMenuText(header);
+    const rows = (Array.isArray(items) ? items : []).map((item) => ({
+      testId: normTid(item?.testId || item?.dataTestId || item?.tid || ''),
+      text: normalizeMenuText(item?.text || item?.label || item?.name || ''),
+    }));
+
+    if (
+      headerText.includes('5.2') ||
+      rows.some(
+        (row) =>
+          row.testId === 'model-switcher-gpt-5-2-instant' ||
+          row.testId === 'model-switcher-gpt-5-2-thinking',
+      )
+    ) {
+      return 'configure-5-2';
+    }
+
+    if (
+      headerText.includes('5.0') ||
+      rows.some(
+        (row) =>
+          row.testId === 'model-switcher-gpt-5-t-mini' ||
+          row.text === 'thinking mini' ||
+          row.text === 'gpt-5 mini',
+      )
+    ) {
+      return 'configure-5-0-thinking-mini';
+    }
+
+    if (
+      rows.some(
+        (row) =>
+          row.testId === 'model-switcher-o3' ||
+          row.testId === 'model-switcher-gpt-5-o3' ||
+          row.text === 'o3',
+      )
+    ) {
+      return 'configure-o3';
+    }
+
+    return DEFAULT_ACTIVE_CONFIG_ID;
+  };
+
+  const resolvePrimaryDisplayLabel = (action, incomingNames) => {
+    const names = Array.isArray(incomingNames) ? incomingNames : [];
+    const alias = PRIMARY_ALIAS_BY_ID[action?.id] || null;
+    const slot = Number(action?.slot);
+    const fromStorage =
+      Number.isInteger(slot) && slot >= 0 && slot < names.length
+        ? normalizeStoredActionName(slot, names[slot])
+        : '';
+
+    if (alias?.label) return alias.label;
+    if (fromStorage && !isLegacyArrow(fromStorage)) return fromStorage;
+    return action?.label || '';
+  };
+
+  const resolveConfigureDisplayLabel = (action, incomingNames) => {
+    const names = Array.isArray(incomingNames) ? incomingNames : [];
+    const slot = Number(action?.slot);
+    const fromStorage =
+      Number.isInteger(slot) && slot >= 0 && slot < names.length
+        ? normalizeStoredActionName(slot, names[slot])
+        : '';
+    if (fromStorage && !isLegacyArrow(fromStorage)) return fromStorage;
+    return action?.label || '';
+  };
+  const normalizeFrontendCatalogEntry = (entry, activeConfigId, incomingNames) => {
+    const names = Array.isArray(incomingNames) ? incomingNames : [];
+    const base = getActionById(entry?.id);
+    if (!base) return null;
+    const slot = Number(base.slot);
+    const fallbackName =
+      Number.isInteger(slot) && slot >= 0 && slot < names.length
+        ? normalizeStoredActionName(slot, names[slot])
+        : '';
+    const label = (entry?.label || fallbackName || base.label || '').toString().trim();
+    if (!label) return null;
+    return {
+      ...base,
+      label,
+      viewGroup: 'primary',
+      viewKey: `popup-primary:${normalizeActiveConfigId(activeConfigId)}:${base.id}`,
+      labelI18nKey: '',
+    };
+  };
+
+  const getPrimaryPresentationActions = (activeConfigId, incomingNames) =>
+    getPrimaryActionIdsForActiveConfig(activeConfigId)
+      .map((actionId, index) => {
+        const base = getActionById(actionId);
+        if (!base) return null;
+        const alias = PRIMARY_ALIAS_BY_ID[base.id] || null;
+        return {
+          ...base,
+          mainIndex: index,
+          label: resolvePrimaryDisplayLabel(base, incomingNames),
+          labelI18nKey: alias?.labelI18nKey || '',
+          viewGroup: 'primary',
+          viewKey: `primary:${base.id}`,
+        };
+      })
+      .filter(Boolean);
+
+  const getPresentationGroups = (activeConfigId, incomingNames) => {
+    const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
+    const primaryActions = getPrimaryPresentationActions(normalizedActiveConfigId, incomingNames);
+    const configureActions = CONFIGURE_ACTIONS.map((action) => ({
+      ...action,
+      label: resolveConfigureDisplayLabel(action, incomingNames),
+      viewGroup: 'configure',
+      viewKey: `configure:${action.id}`,
+      active: action.id === normalizedActiveConfigId,
+      labelI18nKey: '',
+    }));
+
+    return [
+      {
+        id: 'primary',
+        label: '',
+        labelI18nKey: '',
+        compactLabel: false,
+        actions: primaryActions,
+      },
+      {
+        id: 'configure',
+        label: 'Configure Models',
+        labelI18nKey: 'label_configureModelsCompact',
+        compactLabel: true,
+        actions: configureActions,
+      },
+    ];
+  };
+  const getPopupPrimaryActions = (activeConfigId, incomingNames, catalog) => {
+    const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
+    const frontendByConfig =
+      catalog && typeof catalog === 'object' && catalog.frontendByConfig && typeof catalog.frontendByConfig === 'object'
+        ? catalog.frontendByConfig
+        : null;
+    const catalogEntries = Array.isArray(frontendByConfig?.[normalizedActiveConfigId])
+      ? frontendByConfig[normalizedActiveConfigId]
+      : [];
+
+    const fromCatalog = catalogEntries
+      .map((entry) => normalizeFrontendCatalogEntry(entry, normalizedActiveConfigId, incomingNames))
+      .filter(Boolean);
+    if (fromCatalog.length) {
+      const configureAction = getActionById('configure');
+      if (configureAction) {
+        fromCatalog.push({
+          ...configureAction,
+          label: configureAction.label,
+          viewGroup: 'primary',
+          viewKey: `popup-primary:${normalizedActiveConfigId}:configure`,
+          labelI18nKey: '',
+        });
+      }
+      return fromCatalog;
+    }
+
+    return getPopupPrimaryFallbackIdsForActiveConfig(normalizedActiveConfigId)
+      .map((actionId) => {
+        const base = getActionById(actionId);
+        if (!base) return null;
+        const alias = PRIMARY_ALIAS_BY_ID[base.id] || null;
+        return {
+          ...base,
+          label:
+            base.id === 'configure'
+              ? base.label
+              : resolvePrimaryDisplayLabel(base, incomingNames),
+          labelI18nKey: alias?.labelI18nKey || '',
+          viewGroup: 'primary',
+          viewKey: `popup-primary:${normalizedActiveConfigId}:${base.id}`,
+        };
+      })
+      .filter(Boolean);
+  };
+  const getPopupPresentationGroups = (activeConfigId, incomingNames, catalog) => {
+    const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
+    const primaryActions = getPopupPrimaryActions(normalizedActiveConfigId, incomingNames, catalog);
+    const configureActions = CONFIGURE_ACTIONS.map((action) => ({
+      ...action,
+      label: resolveConfigureDisplayLabel(action, incomingNames),
+      viewGroup: 'configure',
+      viewKey: `configure:${action.id}`,
+      active: action.id === normalizedActiveConfigId,
+      labelI18nKey: '',
+    }));
+
+    return [
+      {
+        id: 'primary',
+        label: '',
+        labelI18nKey: '',
+        compactLabel: false,
+        actions: primaryActions,
+      },
+      {
+        id: 'configure',
+        label: 'Configure Models',
+        labelI18nKey: 'label_configureModelsCompact',
+        compactLabel: true,
+        actions: configureActions,
+      },
+    ];
+  };
+  const mapFrontendLabelToActionId = (label, activeConfigId = DEFAULT_ACTIVE_CONFIG_ID) => {
+    const text = normalizeMenuText(label);
+    if (!text) return '';
+    if (text === 'instant') return 'instant';
+    if (text === 'thinking') return 'thinking';
+    if (text === 'pro') return normalizeActiveConfigId(activeConfigId) === 'configure-latest' ? 'pro' : '';
+    if (text === 'thinking mini' || text === 'gpt-5 mini') return 'configure-5-0-thinking-mini';
+    if (text === 'o3') return 'configure-o3';
+    return '';
   };
 
   const normalizeStoredActionName = (slot, value) => {
@@ -240,6 +530,7 @@
   window.ModelLabels = Object.freeze({
     MAX_SLOTS,
     ACTION_SLOT_COUNT,
+    DEFAULT_ACTIVE_CONFIG_ID,
     TESTID_CANON,
     MAIN_CANON_BY_INDEX,
     normTid,
@@ -247,9 +538,18 @@
     isSubmenuTrigger,
     textNoHint,
     mapSubmenuLabel,
+    normalizeActiveConfigId,
+    inferActiveConfigFromMenuState,
     getActionGroups,
     getActionSlots,
     getActionBySlot,
+    getActionById,
+    getPrimaryActionIdsForActiveConfig,
+    getPrimaryPresentationActions,
+    getPresentationGroups,
+    getPopupPrimaryActions,
+    getPopupPresentationGroups,
+    mapFrontendLabelToActionId,
     defaultKeyCodes,
     normalizeStoredActionName,
     resolveActionableNames,

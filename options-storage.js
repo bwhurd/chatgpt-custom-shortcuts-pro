@@ -68,6 +68,7 @@ const OPTIONS_DEFAULTS = {
     '5.0 Thinking Mini',
     'o3',
   ],
+  activeModelConfigId: 'configure-latest',
   showLegacyArrowButtonsCheckbox: false,
 
   // === Toggles / sliders ===
@@ -92,15 +93,15 @@ const OPTIONS_DEFAULTS = {
   disableCopyAfterSelectCheckbox: false,
 
   // Model picker — up to 15 slots.
-  // Only the current top-row actions ship with defaults; newly surfaced configure actions start blank.
+  // Configure... ships as a stable default on Digit0; configure-model actions keep visible defaults.
   modelPickerKeyCodes: [
     'Digit1',
     'Digit2',
+    'Digit0',
     'Digit3',
-    '',
-    '',
-    '',
-    '',
+    'Digit4',
+    'Digit5',
+    'Digit6',
     '',
     '',
     '',
@@ -129,6 +130,7 @@ const OPTIONS_DEFAULTS = {
 
   // Timestamp for scraped model names; default empty to preserve across migrations
   modelNamesAt: '',
+  modelCatalogRefreshPromptDay: '',
 };
 
 //
@@ -194,7 +196,35 @@ if (typeof OptionsSync === 'undefined') {
         stored.modelPickerKeyCodes = arr;
       },
 
-      // 5) Populate new messageSelection from legacy flags
+      // 5) Move untouched Configure shortcut from Digit3 to Digit0 when safe.
+      (stored) => {
+        const arr = Array.isArray(stored.modelPickerKeyCodes)
+          ? stored.modelPickerKeyCodes.slice(0, 15)
+          : [];
+        while (arr.length < 15) arr.push('');
+
+        const configureLooksUntouched = arr[2] === 'Digit3';
+        if (!configureLooksUntouched) {
+          stored.modelPickerKeyCodes = arr;
+          return;
+        }
+
+        const modelUsesDigit0Elsewhere = arr.some(
+          (value, idx) => idx !== 2 && (value === 'Digit0' || value === 'Numpad0'),
+        );
+        const shortcutUsesDigit0 = Object.entries(stored).some(([key, value]) => {
+          if (key === 'modelPickerKeyCodes') return false;
+          return value === 'Digit0' || value === 'Numpad0';
+        });
+
+        if (!modelUsesDigit0Elsewhere && !shortcutUsesDigit0) {
+          arr[2] = 'Digit0';
+        }
+
+        stored.modelPickerKeyCodes = arr;
+      },
+
+      // 6) Populate new messageSelection from legacy flags
       (stored, defaults) => {
         if (!stored.messageSelection) {
           if (stored.onlySelectAssistantCheckbox) {
@@ -209,13 +239,25 @@ if (typeof OptionsSync === 'undefined') {
         }
       },
 
-      // 6) Remove deprecated legacy shortcut keys (no longer used/shown)
+      // 7) Normalize persisted active backend config.
+      (stored) => {
+        const validIds = new Set([
+          'configure-latest',
+          'configure-5-2',
+          'configure-5-0-thinking-mini',
+          'configure-o3',
+        ]);
+        const value = typeof stored.activeModelConfigId === 'string' ? stored.activeModelConfigId : '';
+        stored.activeModelConfigId = validIds.has(value) ? value : 'configure-latest';
+      },
+
+      // 8) Remove deprecated legacy shortcut keys (no longer used/shown)
       (stored) => {
         delete stored.shortcutKeyRegenerate;
         delete stored.shortcutKeyCopyAllResponses;
       },
 
-      // 7) Remove anything truly unused (keep it last)
+      // 9) Remove anything truly unused (keep it last)
       OptionsSync.migrations.removeUnused,
     ],
   });

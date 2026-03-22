@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "मॉडल कॉन्फ़िगर करें"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "नवीनतम मॉडल का उपयोग करें"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "थिंकिंग मिनी"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "कॉन्फ़िगर किए गए मॉडल बदलने के लिए ChatGPT टैब खोलें."
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "उपलब्ध मॉडल लोड हो रहे हैं..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "मॉडल रीफ़्रेश करें"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "मॉडल सूची अपडेट करने के लिए क्लिक करें.\n\nनोट: वेबपेज पर मॉडल मेनू पृष्ठभूमि में थोड़ी देर के लिए फ्लैश हो सकते हैं. यह सामान्य है."
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "मॉडल सूची अपडेट करने के लिए क्लिक करें.\n\nमॉडल मेनू थोड़ी देर के लिए \nपृष्ठभूमि में फ्लैश होंगे. \nयह सामान्य और अपेक्षित है."
+	},
 	"label_blank_placeholder": {
 		"message": "ग्रिड संरेखण हेतु खाली प्लेसहोल्डर"
 	},

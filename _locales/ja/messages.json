@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "モデルを設定"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "最新モデルを使う"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "Thinking mini"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "設定モデルを切り替えるには ChatGPT のタブを開いてください。"
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "利用可能なモデルを読み込み中..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "モデルを更新"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "クリックしてモデル一覧を更新します。\n\n注意: ページ上のモデルメニューが背景で一瞬点滅する場合があります。これは正常です。"
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "クリックしてモデル一覧を更新します。\n\nモデルメニューが一瞬 \n背景で点滅します。 \nこれは正常で想定内です。"
+	},
 	"label_blank_placeholder": {
 		"message": "グリッド整列用の空白"
 	},

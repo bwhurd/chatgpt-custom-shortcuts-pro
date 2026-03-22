@@ -1,4 +1,4 @@
-const MODEL_PICKER_MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+const MODEL_PICKER_MAX_SLOTS = window.ModelLabels?.MAX_SLOTS || 15;
 const FALLBACK_MODEL_ACTION_GROUPS = [
   {
     id: 'primary',
@@ -57,6 +57,29 @@ const resolveModelActionableNames = (incoming) =>
   typeof window.ModelLabels?.resolveActionableNames === 'function'
     ? window.ModelLabels.resolveActionableNames(incoming)
     : ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'];
+const DEFAULT_ACTIVE_MODEL_CONFIG_ID =
+  typeof window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID === 'string'
+    ? window.ModelLabels.DEFAULT_ACTIVE_CONFIG_ID
+    : 'configure-latest';
+const normalizeActiveModelConfigId = (value) =>
+  typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
+    ? window.ModelLabels.normalizeActiveConfigId(value)
+    : [
+        'configure-latest',
+        'configure-5-2',
+        'configure-5-0-thinking-mini',
+        'configure-o3',
+      ].includes(String(value || '').trim())
+      ? String(value || '').trim()
+      : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+const getModelPresentationGroups = (activeConfigId, incomingNames) =>
+  typeof window.ModelLabels?.getPresentationGroups === 'function'
+    ? window.ModelLabels.getPresentationGroups(activeConfigId, incomingNames)
+    : cloneModelActionGroups(FALLBACK_MODEL_ACTION_GROUPS);
+const getPopupModelPresentationGroups = (activeConfigId, incomingNames, catalog) =>
+  typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
+    ? window.ModelLabels.getPopupPresentationGroups(activeConfigId, incomingNames, catalog)
+    : getModelPresentationGroups(activeConfigId, incomingNames);
 const buildDefaultModelPickerCodes = () =>
   typeof window.ModelLabels?.defaultKeyCodes === 'function'
     ? window.ModelLabels.defaultKeyCodes()
@@ -64,11 +87,238 @@ const buildDefaultModelPickerCodes = () =>
         const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
         out[0] = 'Digit1';
         out[1] = 'Digit2';
-        out[2] = 'Digit3';
+        out[2] = 'Digit0';
+        out[3] = 'Digit3';
+        out[4] = 'Digit4';
+        out[5] = 'Digit5';
+        out[6] = 'Digit6';
         return out;
       })();
+const getActiveModelConfigId = () => normalizeActiveModelConfigId(window.__activeModelConfigId);
+const MODEL_CONFIG_CLICK_DEBOUNCE_MS = 140;
+const MODEL_CONFIG_VISUAL_SETTLE_MS = 1100;
+const MODEL_SCRAPE_OVERLAY_TRANSITION_MS = 180;
+const MODEL_SCRAPE_OVERLAY_TRANSITION_FALLBACK_MS = MODEL_SCRAPE_OVERLAY_TRANSITION_MS + 180;
+const MODEL_SCRAPE_OVERLAY_MIN_VISIBLE_MS = 1500;
+const MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY = 'modelCatalogRefreshPromptDay';
+const POPUP_SOURCE_TAB_ID = Number(new URLSearchParams(window.location.search).get('sourceTabId') || 0) || 0;
+const isExternalActiveConfigSource = (source = '') =>
+  source === 'bootstrap' || source === 'storage:onChanged' || source === 'cloud-restore';
+const getPendingModelConfigTargetId = () => {
+  const raw = String(window.__pendingModelConfigTargetId || '').trim();
+  return raw ? normalizeActiveModelConfigId(raw) : '';
+};
+const getVisualActiveModelConfigId = () =>
+  normalizeActiveModelConfigId(getPendingModelConfigTargetId() || window.__activeModelConfigId);
+const setActiveModelConfigIdCache = (value, source = 'storage') => {
+  const next = normalizeActiveModelConfigId(value);
+  const pending = getPendingModelConfigTargetId();
+  if (pending && isExternalActiveConfigSource(source) && next !== pending) {
+    return getVisualActiveModelConfigId();
+  }
+  if (window.__activeModelConfigId === next) return next;
+  window.__activeModelConfigId = next;
+  document.dispatchEvent(
+    new CustomEvent('modelPickerActiveConfigChanged', { detail: { activeModelConfigId: next, source } }),
+  );
+  return next;
+};
+const getPreferredModelViewLabelsBySlot = () => {
+  const labels = {};
+  document.querySelectorAll('#model-picker-grid .shortcut-item[data-slot]').forEach((item) => {
+    const slot = Number(item.getAttribute('data-slot') || '-1');
+    if (slot < 0) return;
+    const label = item.querySelector('.mp-label')?.textContent?.trim() || '';
+    if (!label) return;
+    const priority = item.getAttribute('data-group') === 'primary' ? 2 : 1;
+    if (!labels[slot] || priority >= labels[slot].priority) {
+      labels[slot] = { label, priority };
+    }
+  });
+  return labels;
+};
+const queryCurrentChatGptTab = () =>
+  new Promise((resolve) => {
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        resolve(Array.isArray(tabs) ? tabs[0] || null : null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+const sendModelMessageToTab = async (message) => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  if (!POPUP_SOURCE_TAB_ID) {
+    const tab = await queryCurrentChatGptTab();
+    if (!tab?.id) return { ok: false, error: 'NO_CHATGPT_TAB' };
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, message);
+      return response && typeof response === 'object' ? response : { ok: false };
+    } catch (error) {
+      if (/Receiving end does not exist/i.test(String(error?.message || ''))) {
+        try {
+          await wait(250);
+          const retry = await chrome.tabs.sendMessage(tab.id, message);
+          return retry && typeof retry === 'object' ? retry : { ok: false };
+        } catch (retryError) {
+          return { ok: false, error: retryError?.message || error?.message || 'SEND_FAILED' };
+        }
+      }
+      return { ok: false, error: error?.message || 'SEND_FAILED' };
+    }
+  }
+  if (POPUP_SOURCE_TAB_ID > 0) {
+    try {
+      const response = await chrome.tabs.sendMessage(POPUP_SOURCE_TAB_ID, message);
+      return response && typeof response === 'object' ? response : { ok: false };
+    } catch (error) {
+      if (/Receiving end does not exist/i.test(String(error?.message || ''))) {
+        try {
+          await wait(250);
+          const retry = await chrome.tabs.sendMessage(POPUP_SOURCE_TAB_ID, message);
+          return retry && typeof retry === 'object' ? retry : { ok: false };
+        } catch {}
+      }
+    }
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'csp.relayToChatGptTab',
+      targetTabId: POPUP_SOURCE_TAB_ID,
+      payload: message,
+    });
+    return response && typeof response === 'object' ? response : { ok: false };
+  } catch (error) {
+    return { ok: false, error: error?.message || 'SEND_FAILED' };
+  }
+};
+const normalizeModelCatalog = (catalog) => {
+  if (!catalog || typeof catalog !== 'object') return null;
+  const frontendByConfig = {};
+  const rawFrontend = catalog.frontendByConfig && typeof catalog.frontendByConfig === 'object'
+    ? catalog.frontendByConfig
+    : {};
+  Object.keys(rawFrontend).forEach((configId) => {
+    const normalizedConfigId = normalizeActiveModelConfigId(configId);
+    const rows = Array.isArray(rawFrontend[configId]) ? rawFrontend[configId] : [];
+    frontendByConfig[normalizedConfigId] = rows
+      .map((row) => {
+        const actionId =
+          typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
+            ? window.ModelLabels.mapFrontendLabelToActionId(
+                row?.label || '',
+                normalizedConfigId,
+              )
+            : '';
+        if (!actionId) return null;
+        const base =
+          typeof window.ModelLabels?.getActionById === 'function'
+            ? window.ModelLabels.getActionById(actionId)
+            : null;
+        if (!base) return null;
+        return {
+          id: actionId,
+          slot: base.slot,
+          label: String(row?.label || base.label || '').trim(),
+        };
+      })
+      .filter(Boolean);
+  });
+
+  return {
+    version: Number(catalog.version) || 1,
+    scrapedAt: Number(catalog.scrapedAt) || 0,
+    configureOptions: Array.isArray(catalog.configureOptions)
+      ? catalog.configureOptions
+          .map((option) => {
+            const id = normalizeActiveModelConfigId(option?.id);
+            return {
+              id,
+              label: String(option?.label || '').trim(),
+              slot:
+                typeof window.ModelLabels?.getActionById === 'function'
+                  ? window.ModelLabels.getActionById(id)?.slot ?? -1
+                  : -1,
+            };
+          })
+          .filter((option) => option.slot >= 0)
+      : [],
+    frontendByConfig,
+  };
+};
+const setModelCatalogCache = (catalog, source = 'storage') => {
+  window.__modelCatalog = normalizeModelCatalog(catalog);
+  window.dispatchEvent(
+    new CustomEvent('model-catalog-updated', { detail: { source, catalog: window.__modelCatalog } }),
+  );
+  return window.__modelCatalog;
+};
+const getModelCatalogScrapeState = () => String(window.__modelCatalogScrapeState || 'idle').trim() || 'idle';
+const isModelCatalogScrapeLoading = () => getModelCatalogScrapeState() === 'loading';
+const isModelCatalogRefreshPromptVisible = () => !!window.__modelCatalogRefreshPromptVisible;
+const setModelCatalogScrapeState = (value, source = 'popup') => {
+  const next = ['loading', 'ready', 'failed'].includes(String(value || '').trim())
+    ? String(value || '').trim()
+    : 'idle';
+  if (window.__modelCatalogScrapeState === next) return next;
+  window.__modelCatalogScrapeState = next;
+  window.dispatchEvent(
+    new CustomEvent('model-catalog-scrape-state-changed', {
+      detail: { source, state: next },
+    }),
+  );
+  return next;
+};
+window.__modelCatalog = null;
+window.__activeModelConfigId = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+window.__pendingModelConfigTargetId = '';
+window.__modelCatalogScrapeState = 'idle';
+window.__modelCatalogRefreshPromptVisible = false;
+
+try {
+  chrome.storage.sync.get(['activeModelConfigId', 'modelCatalog'], ({ activeModelConfigId, modelCatalog }) => {
+    setActiveModelConfigIdCache(activeModelConfigId, 'bootstrap');
+    setModelCatalogCache(modelCatalog, 'bootstrap');
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'sync') return;
+    if (changes.activeModelConfigId) {
+      setActiveModelConfigIdCache(changes.activeModelConfigId.newValue, 'storage:onChanged');
+    }
+    if (changes.modelCatalog) {
+      setModelCatalogCache(changes.modelCatalog.newValue, 'storage:onChanged');
+    }
+  });
+} catch {}
 
 document.addEventListener('DOMContentLoaded', () => {
+  const isActionWindowPopup = new URLSearchParams(window.location.search).get('actionWindow') === '1';
+  if (isActionWindowPopup) {
+    document.documentElement.classList.add('action-window-popup');
+    document.body?.classList.add('action-window-popup');
+    let closeOnBlurTimer = 0;
+    const clearCloseOnBlurTimer = () => {
+      if (!closeOnBlurTimer) return;
+      clearTimeout(closeOnBlurTimer);
+      closeOnBlurTimer = 0;
+    };
+    const queueCloseOnBlur = () => {
+      clearCloseOnBlurTimer();
+      closeOnBlurTimer = setTimeout(() => {
+        if (document.hasFocus()) return;
+        try {
+          window.close();
+        } catch {}
+      }, 120);
+    };
+    window.addEventListener('focus', clearCloseOnBlurTimer);
+    window.addEventListener('blur', queueCloseOnBlur);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') queueCloseOnBlur();
+    });
+  }
+
   // Localize the title dynamically
   const titleElement = document.querySelector('title');
   const localizedTitle = chrome.i18n.getMessage('popup_title');
@@ -486,6 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       window.dispatchEvent(new CustomEvent('model-names-updated', { detail: { source } }));
     }
+    window.__setPopupModelNames = setAndRender;
 
     // Defaults for instant UI (correct, no Legacy/→ tile; actionable-only defaults).
     window.MODEL_NAMES = seedFromSharedOrCanon();
@@ -548,6 +799,147 @@ document.addEventListener('DOMContentLoaded', () => {
         setAndRender(merged, 'storage:onChanged');
       });
     });
+  })();
+
+  // ---------- Manual model catalog scrape ----------
+  (() => {
+    let inFlight = null;
+    let released = false;
+
+    const waitForPopupGridReady = () =>
+      new Promise((resolve) => {
+        const tick = () => {
+          if (document.getElementById('model-picker-grid')) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+
+    const waitForLoadingOverlayReady = () =>
+      new Promise((resolve) => {
+        const tick = () => {
+          const overlay = document.querySelector('#model-picker-grid .mp-grid-loading-overlay');
+          if (overlay) {
+            resolve(overlay);
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+
+    const forceOverlayLayoutFlush = (overlay) => {
+      if (!(overlay instanceof Element)) return;
+      overlay.getBoundingClientRect();
+      overlay.closest('#model-picker-grid')?.getBoundingClientRect();
+    };
+
+    const waitForOverlayTransitionIn = (overlay) =>
+      new Promise((resolve) => {
+        if (!(overlay instanceof Element)) {
+          resolve();
+          return;
+        }
+
+        let timer = 0;
+        const finish = () => {
+          if (timer) clearTimeout(timer);
+          overlay.removeEventListener('transitionend', onEnd);
+          overlay.removeEventListener('transitioncancel', onCancel);
+          overlay.dataset.visualReady = '1';
+          resolve();
+        };
+
+        const onEnd = (event) => {
+          if (event.target !== overlay || event.propertyName !== 'opacity') return;
+          finish();
+        };
+        const onCancel = (event) => {
+          if (event.target !== overlay || event.propertyName !== 'opacity') return;
+          finish();
+        };
+
+        if (
+          overlay.dataset.visualReady === '1' ||
+          (overlay.classList.contains('mp-grid-loading-overlay-visible') &&
+            Number.parseFloat(getComputedStyle(overlay).opacity || '0') >= 0.98)
+        ) {
+          finish();
+          return;
+        }
+
+        overlay.addEventListener('transitionend', onEnd);
+        overlay.addEventListener('transitioncancel', onCancel);
+        overlay.dataset.visualReady = 'arming';
+
+        timer = setTimeout(finish, MODEL_SCRAPE_OVERLAY_TRANSITION_FALLBACK_MS);
+
+        requestAnimationFrame(() => {
+          overlay.classList.add('mp-grid-loading-overlay-visible');
+          forceOverlayLayoutFlush(overlay);
+        });
+      });
+
+    const waitForOverlayPaintGate = async () => {
+      await waitForPopupGridReady();
+      const overlay = await waitForLoadingOverlayReady();
+      forceOverlayLayoutFlush(overlay);
+      await waitForOverlayTransitionIn(overlay);
+    };
+
+    const releasePreparedSession = () => {
+      if (released) return;
+      released = true;
+      void sendModelMessageToTab({ type: 'CSP_RELEASE_MODEL_CONFIG_SESSION' });
+    };
+
+    window.addEventListener('pagehide', releasePreparedSession, { once: true });
+    window.addEventListener('unload', releasePreparedSession, { once: true });
+
+    const runScrape = async () => {
+      if (inFlight) return inFlight;
+      setModelCatalogScrapeState('loading', 'popup:catalog-scrape:start');
+
+      inFlight = (async () => {
+        try {
+          await waitForOverlayPaintGate();
+          const result = await sendModelMessageToTab({
+            type: 'CSP_SCRAPE_MODEL_CATALOG',
+            hideUi: true,
+            keepPreparedSession: true,
+          });
+          if (!result?.ok) {
+            setModelCatalogScrapeState('failed', 'popup:catalog-scrape:failed');
+            return null;
+          }
+
+          if (typeof result.activeModelConfigId === 'string') {
+            setActiveModelConfigIdCache(result.activeModelConfigId, 'popup:catalog-scrape');
+          }
+          if (result.modelCatalog) {
+            setModelCatalogCache(result.modelCatalog, 'popup:catalog-scrape');
+          }
+          if (Array.isArray(result.modelNames) && typeof window.__setPopupModelNames === 'function') {
+            window.__setPopupModelNames(result.modelNames, 'popup:catalog-scrape');
+          }
+          setModelCatalogScrapeState('ready', 'popup:catalog-scrape:ready');
+          return result;
+        } catch {
+          setModelCatalogScrapeState('failed', 'popup:catalog-scrape:error');
+          return null;
+        } finally {
+          inFlight = null;
+          window.__modelCatalogHydrating = null;
+        }
+      })();
+
+      window.__modelCatalogHydrating = inFlight;
+      return inFlight;
+    };
+    window.__startModelCatalogScrape = runScrape;
   })();
 
   // ---------- Unified registry for model-picker codes ----------
@@ -654,6 +1046,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const conflicts = [];
     const modelCodes = getModelPickerCodesCache();
     const MODEL_NAMES_SAFE = window.MODEL_NAMES || [];
+    const viewLabelsBySlot = getPreferredModelViewLabelsBySlot();
     const visibleModelSlotCount = Math.min(getModelActionSlots().length, modelCodes.length);
     const modelMod =
       typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
@@ -671,7 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
         conflicts.push({
           type: 'model',
           idx: i,
-          label: MODEL_NAMES_SAFE[i] || `Model slot ${i + 1}`,
+          label: viewLabelsBySlot[i]?.label || MODEL_NAMES_SAFE[i] || `Model slot ${i + 1}`,
         });
       }
     });
@@ -2260,6 +2653,7 @@ document.addEventListener('DOMContentLoaded', () => {
       : 'input.key-input';
 
   const shortcutKeys = Array.from(document.querySelectorAll(shortcutInputSelector))
+    .filter((el) => !el.classList.contains('mp-input') && !el.closest('#model-picker-grid'))
     .map((el) => el.getAttribute('data-sync') || el.id)
     .filter(Boolean);
   const shortcutKeyValues = {};
@@ -2938,17 +3332,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Prefer live UI → then storage → then cache → then defaults; always return exactly MODEL_PICKER_MAX_SLOTS strings
       function readModelPickerCodes(all) {
-        const byId = (i) => document.getElementById(`mpKeyInput${i}`);
         const inputs = document.querySelectorAll('#model-picker-grid .mp-input');
         const map = getReverseMap();
         const toCode =
           window.ShortcutUtils?.charToCode ??
           (typeof charToCode === 'function' ? charToCode : null);
-        const fromUI = [];
+        const fromUI = Array(MODEL_PICKER_MAX_SLOTS).fill('');
 
-        // Try reading straight from the visible grid
-        for (let i = 0; i < MODEL_PICKER_MAX_SLOTS; i++) {
-          const el = byId(i) || inputs[i];
+        // Try reading straight from the visible grid, keyed by canonical slot.
+        inputs.forEach((el) => {
+          const slot = Number(el?.getAttribute('data-slot') || '-1');
+          if (slot < 0 || slot >= MODEL_PICKER_MAX_SLOTS) return;
           let c = el?.dataset?.keyCode || '';
           if (!c && el) {
             const visible = (el.value || '').trim();
@@ -2956,8 +3350,8 @@ document.addEventListener('DOMContentLoaded', () => {
               c = toCode?.(visible) || map.exact[visible] || map.lower[visible.toLowerCase()] || '';
             }
           }
-          fromUI.push(normalizeMpVal(c));
-        }
+          fromUI[slot] = normalizeMpVal(c);
+        });
 
         // If the grid exists and we captured something, use it (even if empties are present)
         const gridPresent = !!document.getElementById('model-picker-grid');
@@ -4023,6 +4417,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 (function modelPickerInputsGridInitV2() {
   let tries = 0;
   const MAX_SLOTS = MODEL_PICKER_MAX_SLOTS;
+  let lastViewSignature = '';
+  let configureActionDebounceTimer = 0;
+  let pendingVisualSettleTimer = 0;
+  let configureActionSerial = 0;
 
   const onReady = (fn) =>
     document.readyState === 'loading'
@@ -4038,99 +4436,352 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     setTimeout(() => waitForDeps(cb), 16);
   }
 
-  function buildGridSection() {
-    if (document.getElementById('model-picker-grid')) return;
+  const querySection = () => document.getElementById('model-picker-grid');
+  const queryVisibleInputs = () =>
+    Array.from(document.querySelectorAll('#model-picker-grid .mp-input')).filter(
+      (inp) => inp instanceof HTMLElement && inp.offsetParent !== null,
+    );
+  const sanitizeViewKey = (value) => String(value || '').replace(/[^a-z0-9_-]+/gi, '-');
+  const resolveActionLabel = (action) => {
+    const key = action?.labelI18nKey || '';
+    if (key && chrome?.i18n?.getMessage) {
+      const localized = chrome.i18n.getMessage(key);
+      if (localized) return localized;
+    }
+    return action?.label || '';
+  };
+  const getViewGroups = () =>
+    getPopupModelPresentationGroups(
+      getVisualActiveModelConfigId(),
+      window.MODEL_NAMES || [],
+      window.__modelCatalog || null,
+    );
+  const getViewSignature = (groups) =>
+    JSON.stringify({
+      activeModelConfigId: getVisualActiveModelConfigId(),
+      groups: (groups || []).map((group) => ({
+        id: group.id || '',
+        actions: (group.actions || []).map((action) => ({
+          viewKey: action.viewKey || `${group.id || 'group'}:${action.id || action.slot || ''}`,
+          slot: Number(action.slot || 0),
+          label: resolveActionLabel(action),
+          active: !!action.active,
+        })),
+      })),
+    });
+  const getPrimaryGroupElement = () =>
+    querySection()?.querySelector('.mp-grid-group[data-group="primary"]') || null;
+  const getModelCatalogLoadingText = () =>
+    chrome?.i18n?.getMessage?.('label_modelPickerLoadingAvailableModels') || 'Loading available models...';
+  const getModelCatalogRefreshPromptText = () =>
+    chrome?.i18n?.getMessage?.('label_modelPickerManualRefreshPrompt') ||
+    'Click to update the model list.\n\nNote: Model menus on the webpage may briefly flash in the background. This is normal.';
+  const getModelCatalogRefreshTooltipText = () =>
+    chrome?.i18n?.getMessage?.('label_modelPickerManualRefreshTooltip') ||
+    'Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected.';
+  const getModelCatalogRefreshButtonText = () =>
+    chrome?.i18n?.getMessage?.('label_modelPickerRefreshModels') || 'Refresh Models';
+  const getTodayDateKey = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const setModelCatalogRefreshPromptVisible = (value, source = 'popup') => {
+    const next = !!value;
+    if (window.__modelCatalogRefreshPromptVisible === next) return next;
+    window.__modelCatalogRefreshPromptVisible = next;
+    window.dispatchEvent(
+      new CustomEvent('model-catalog-refresh-prompt-changed', {
+        detail: { source, visible: next },
+      }),
+    );
+    return next;
+  };
+  const clearPendingVisualSettle = () => {
+    if (pendingVisualSettleTimer) {
+      clearTimeout(pendingVisualSettleTimer);
+      pendingVisualSettleTimer = 0;
+    }
+  };
+  const clearPendingModelConfigTarget = (expected = '') => {
+    const pending = getPendingModelConfigTargetId();
+    if (!pending) return false;
+    const normalizedExpected = expected ? normalizeActiveModelConfigId(expected) : '';
+    if (normalizedExpected && pending !== normalizedExpected) return false;
+    clearPendingVisualSettle();
+    window.__pendingModelConfigTargetId = '';
+    return true;
+  };
+  const stagePendingModelConfigTarget = (value) => {
+    const next = normalizeActiveModelConfigId(value);
+    clearPendingVisualSettle();
+    window.__pendingModelConfigTargetId = next;
+    return next;
+  };
+  const schedulePendingModelConfigSettle = (expected) => {
+    const normalizedExpected = normalizeActiveModelConfigId(expected);
+    clearPendingVisualSettle();
+    pendingVisualSettleTimer = setTimeout(() => {
+      const cleared = clearPendingModelConfigTarget(normalizedExpected);
+      if (cleared) renderAll({ allowPendingRebuild: true });
+    }, MODEL_CONFIG_VISUAL_SETTLE_MS);
+  };
 
+  const resolveGroupLabel = (group) => {
+    const key = group?.labelI18nKey || '';
+    if (key && chrome?.i18n?.getMessage) {
+      const localized = chrome.i18n.getMessage(key);
+      if (localized) return localized;
+    }
+    return group?.label || '';
+  };
+
+  const createShortcutItem = (action, groupId) => {
+    const slot = Number(action?.slot || 0);
+    const viewKey = action?.viewKey || `${groupId || 'group'}:${action?.id || slot}`;
+    const labelText = resolveActionLabel(action);
+    const item = document.createElement('div');
+    item.className = 'shortcut-item mp-model-shortcut-item';
+    if (groupId === 'configure') item.classList.add('mp-configure-item');
+    if (groupId === 'configure' && action?.active) item.classList.add('mp-configure-item-active');
+    item.setAttribute('data-slot', String(slot));
+    item.setAttribute('data-group', groupId || '');
+    item.setAttribute('data-action-id', action?.id || '');
+    item.setAttribute('data-view-key', viewKey);
+    item.style.cssText =
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;';
+    if (groupId === 'configure') {
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-pressed', action?.active ? 'true' : 'false');
+    }
+
+    const label = document.createElement('div');
+    label.className = 'shortcut-label';
+    label.style.cssText = 'margin:0 0 14px 0;';
+    label.innerHTML = `<span class="mp-label" style="font-weight:400;" data-view-key="${viewKey}"></span>`;
+    label.querySelector('.mp-label').textContent = labelText;
+
+    const keys = document.createElement('div');
+    keys.className = 'shortcut-keys';
+    keys.style.cssText = 'justify-content:center;gap:6px;';
+
+    const mod = document.createElement('span');
+    mod.className = 'key-text mp-modifier-text';
+    mod.textContent = 'Alt + ';
+
+    const input = document.createElement('input');
+    input.className = 'key-input mp-input custom-tooltip';
+    input.id = `mpKeyInput-${sanitizeViewKey(viewKey)}`;
+    input.setAttribute('data-slot', String(slot));
+    input.setAttribute('data-view-key', viewKey);
+    input.setAttribute('maxlength', '12');
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.autocapitalize = 'off';
+    input.spellcheck = false;
+    input.style.cssText = 'width:3rem;text-align:center;';
+
+    keys.append(mod, input);
+    item.append(label, keys);
+    return item;
+  };
+
+  const buildGroupWrapper = (group) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mp-grid-group';
+    wrapper.setAttribute('data-group', group.id || '');
+
+    const labelText = resolveGroupLabel(group);
+    if (group.compactLabel && labelText) {
+      const heading = document.createElement('div');
+      heading.className = 'mp-subsection-label';
+      heading.setAttribute('role', 'heading');
+      heading.setAttribute('aria-level', '3');
+      heading.textContent = labelText;
+      wrapper.appendChild(heading);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'shortcut-grid mp-shortcut-grid-row';
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
+
+    (group.actions || []).forEach((action) => {
+      grid.appendChild(createShortcutItem(action, group.id || ''));
+    });
+
+    wrapper.appendChild(grid);
+    return wrapper;
+  };
+
+  let modelCatalogLoadingVisibleSince = 0;
+  let modelCatalogLoadingHideTimer = 0;
+  let modelCatalogLoadingRemoveTimer = 0;
+
+  const clearCatalogLoadingVisualTimers = () => {
+    if (modelCatalogLoadingHideTimer) {
+      clearTimeout(modelCatalogLoadingHideTimer);
+      modelCatalogLoadingHideTimer = 0;
+    }
+    if (modelCatalogLoadingRemoveTimer) {
+      clearTimeout(modelCatalogLoadingRemoveTimer);
+      modelCatalogLoadingRemoveTimer = 0;
+    }
+  };
+
+  const ensureCatalogLoadingOverlay = (section) => {
+    let overlay = section.querySelector('.mp-grid-loading-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'mp-grid-loading-overlay';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.dataset.visualReady = '0';
+
+      const chip = document.createElement('div');
+      chip.className = 'mp-grid-loading-chip';
+
+      const spinner = document.createElement('span');
+      spinner.className = 'spinner mp-grid-loading-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+
+      const text = document.createElement('span');
+      text.className = 'mp-grid-loading-text';
+
+      const promptButton = document.createElement('button');
+      promptButton.type = 'button';
+      promptButton.className = 'mp-grid-refresh-prompt';
+
+      chip.append(spinner, text);
+      overlay.append(chip, promptButton);
+      section.appendChild(overlay);
+    }
+    const textEl = overlay.querySelector('.mp-grid-loading-text');
+    if (textEl) textEl.textContent = getModelCatalogLoadingText();
+    const promptButton = overlay.querySelector('.mp-grid-refresh-prompt');
+    if (promptButton) promptButton.textContent = getModelCatalogRefreshPromptText();
+    return overlay;
+  };
+
+  const triggerManualCatalogRefresh = async (source = 'manual') => {
+    const startScrape = window.__startModelCatalogScrape;
+    if (typeof startScrape !== 'function' || isModelCatalogScrapeLoading()) return null;
+    setModelCatalogRefreshPromptVisible(false, `${source}:hide-prompt`);
+    renderAll({ allowPendingRebuild: true });
+    const result = await startScrape();
+    if (!result?.ok) {
+      setModelCatalogRefreshPromptVisible(true, `${source}:retry-prompt`);
+      renderAll({ allowPendingRebuild: true });
+      const msg =
+        chrome.i18n?.getMessage?.('toast_modelPickerOpenChatGptTab') ||
+        'Open a ChatGPT tab to switch configure models.';
+      window.toast?.show?.(msg);
+      return null;
+    }
+    return result;
+  };
+
+  const syncCatalogLoadingUi = () => {
+    const section = querySection();
+    if (!section) return;
+    const overlay = ensureCatalogLoadingOverlay(section);
+    const promptButton = overlay.querySelector('.mp-grid-refresh-prompt');
+    if (promptButton && promptButton.dataset.wired !== '1') {
+      promptButton.addEventListener('click', () => {
+        void triggerManualCatalogRefresh('overlay');
+      });
+      promptButton.dataset.wired = '1';
+    }
+
+    const isLoading = isModelCatalogScrapeLoading();
+    const isPromptVisible = isModelCatalogRefreshPromptVisible();
+    const headerButton = document.getElementById('mp-refresh-models-button');
+    headerButton?.classList.toggle('mp-refresh-models-button-hidden', isPromptVisible);
+    overlay.classList.toggle('mp-grid-loading-overlay-prompt', isPromptVisible && !isLoading);
+    overlay.classList.toggle('mp-grid-loading-overlay-loading', isLoading);
+    if (promptButton) {
+      promptButton.textContent = getModelCatalogRefreshPromptText();
+      promptButton.disabled = isLoading;
+    }
+    if (isLoading) {
+      clearCatalogLoadingVisualTimers();
+      section.classList.add('mp-grid-loading-state');
+      section.setAttribute('aria-busy', 'true');
+      if (!modelCatalogLoadingVisibleSince) modelCatalogLoadingVisibleSince = Date.now();
+      if (overlay.dataset.visualReady === '0') {
+        overlay.classList.remove('mp-grid-loading-overlay-visible');
+      }
+      return;
+    }
+    if (isPromptVisible) {
+      clearCatalogLoadingVisualTimers();
+      modelCatalogLoadingVisibleSince = 0;
+      section.classList.add('mp-grid-loading-state');
+      section.removeAttribute('aria-busy');
+      overlay.dataset.visualReady = '1';
+      overlay.classList.add('mp-grid-loading-overlay-visible');
+      return;
+    }
+    if (!overlay) {
+      section.classList.remove('mp-grid-loading-state');
+      section.removeAttribute('aria-busy');
+      modelCatalogLoadingVisibleSince = 0;
+      clearCatalogLoadingVisualTimers();
+      return;
+    }
+
+    if (modelCatalogLoadingHideTimer || modelCatalogLoadingRemoveTimer) return;
+
+    const elapsed = modelCatalogLoadingVisibleSince
+      ? Date.now() - modelCatalogLoadingVisibleSince
+      : MODEL_SCRAPE_OVERLAY_MIN_VISIBLE_MS;
+    const remaining = Math.max(0, MODEL_SCRAPE_OVERLAY_MIN_VISIBLE_MS - elapsed);
+
+    modelCatalogLoadingHideTimer = setTimeout(() => {
+      modelCatalogLoadingHideTimer = 0;
+      overlay.dataset.visualReady = '0';
+      overlay.classList.remove('mp-grid-loading-overlay-visible');
+      modelCatalogLoadingRemoveTimer = setTimeout(() => {
+        modelCatalogLoadingRemoveTimer = 0;
+        if (isModelCatalogScrapeLoading() || isModelCatalogRefreshPromptVisible()) return;
+        overlay.remove();
+        section.classList.remove('mp-grid-loading-state');
+        section.removeAttribute('aria-busy');
+        modelCatalogLoadingVisibleSince = 0;
+      }, MODEL_SCRAPE_OVERLAY_TRANSITION_MS);
+    }, remaining);
+  };
+
+  function buildGridSection() {
     const anchor =
       document.getElementById('mp-grid-anchor') || document.querySelector('.shortcut-grid');
     if (!anchor) return;
     const insideShortcutGrid = anchor.id === 'mp-grid-anchor' && !!anchor.closest('.shortcut-grid');
+    const actionGroups = getViewGroups();
+    const viewSignature = getViewSignature(actionGroups);
+    const existing = querySection();
+
+    if (existing && existing.dataset.viewSignature === viewSignature) return existing;
+    if (existing) existing.remove();
 
     const section = document.createElement('section');
     section.id = 'model-picker-grid';
     section.setAttribute('aria-label', 'Model Shortcuts');
+    section.dataset.viewSignature = viewSignature;
     section.style.cssText = insideShortcutGrid
       ? 'margin:0px 0 0px 0;grid-column:1 / -1;width:100%;'
       : 'margin:0px 0 0px 0;';
 
-    const actionGroups = getModelActionGroups();
-    const actionSlots = getModelActionSlots();
-    const resolveGroupLabel = (group) => {
-      const key = group?.labelI18nKey || '';
-      if (key && chrome?.i18n?.getMessage) {
-        const localized = chrome.i18n.getMessage(key);
-        if (localized) return localized;
-      }
-      return group?.label || '';
-    };
-
-    const createShortcutItem = (action) => {
-      const i = Number(action?.slot || 0);
-      const item = document.createElement('div');
-      item.className = 'shortcut-item';
-      item.setAttribute('data-slot', String(i));
-      item.style.cssText =
-        'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;';
-
-      const label = document.createElement('div');
-      label.className = 'shortcut-label';
-      label.style.cssText = 'margin:0 0 14px 0;';
-      label.innerHTML = `<span class="mp-label" style="font-weight:400;" data-idx="${i}"></span>`;
-
-      const keys = document.createElement('div');
-      keys.className = 'shortcut-keys';
-      keys.style.cssText = 'justify-content:center;gap:6px;';
-
-      const mod = document.createElement('span');
-      mod.className = 'key-text mp-modifier-text';
-      mod.textContent = 'Alt + ';
-
-      const input = document.createElement('input');
-      input.className = 'key-input mp-input custom-tooltip';
-      input.id = `mpKeyInput${i}`;
-      input.setAttribute('data-idx', String(i));
-      input.setAttribute('maxlength', '12');
-      input.type = 'text';
-      input.autocomplete = 'off';
-      input.autocapitalize = 'off';
-      input.spellcheck = false;
-      input.style.cssText = 'width:3rem;text-align:center;';
-
-      keys.append(mod, input);
-      item.append(label, keys);
-      return item;
-    };
-
     actionGroups.forEach((group) => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'mp-grid-group';
-      wrapper.setAttribute('data-group', group.id || '');
-
-      const labelText = resolveGroupLabel(group);
-      if (group.compactLabel && labelText) {
-        const heading = document.createElement('div');
-        heading.className = 'mp-subsection-label';
-        heading.setAttribute('role', 'heading');
-        heading.setAttribute('aria-level', '3');
-        heading.textContent = labelText;
-        wrapper.appendChild(heading);
-      }
-
-      const grid = document.createElement('div');
-      grid.className = 'shortcut-grid mp-shortcut-grid-row';
-      grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
-
-      (group.actions || []).forEach((action) => {
-        if (!actionSlots.find((slot) => slot.slot === action.slot)) return;
-        grid.appendChild(createShortcutItem(action));
-      });
-
-      wrapper.appendChild(grid);
-      section.appendChild(wrapper);
+      section.appendChild(buildGroupWrapper(group));
     });
 
     anchor.parentNode.insertBefore(section, anchor);
     if (anchor.id === 'mp-grid-anchor') anchor.style.display = 'none';
+    syncCatalogLoadingUi();
+    return section;
   }
 
   const getCodes = () => {
@@ -4198,75 +4849,87 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       el.textContent = text;
     });
   }
-  function syncModelNames() {
-    const NAMES = window.MODEL_NAMES || [];
-    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
-
-    document.querySelectorAll('#model-picker-grid .shortcut-item').forEach((item) => {
-      const idx = Number(item.getAttribute('data-slot') || '0');
-      const labelEl = item.querySelector('.mp-label');
-      if (!labelEl) return;
-
-      // Any index beyond the number of model names is always hidden
-      if (idx >= visibleCount) {
-        item.style.display = 'none';
-        item.dataset.filterLocked = '1'; // keep search filter from re-showing intentionally hidden tiles
-        labelEl.textContent = '';
-        return;
-      }
-
-      const raw = NAMES[idx] != null ? String(NAMES[idx]) : '';
-      const name = raw.trim();
-
-      if (!name) {
-        item.style.display = 'none';
-        item.dataset.filterLocked = '1';
-        labelEl.textContent = '';
-      } else {
-        item.style.display = '';
-        delete item.dataset.filterLocked;
-        labelEl.textContent = name;
-      }
+  function syncActiveState() {
+    const activeModelConfigId = getVisualActiveModelConfigId();
+    document.querySelectorAll('#model-picker-grid .mp-configure-item').forEach((item) => {
+      const isActive = item.getAttribute('data-action-id') === activeModelConfigId;
+      item.classList.toggle('mp-configure-item-active', isActive);
+      item.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
   }
 
+  const swapPrimaryGroupWithTween = (groups, signature) => {
+    const section = querySection();
+    const currentPrimary = getPrimaryGroupElement();
+    const nextPrimaryGroup = buildGroupWrapper(
+      (groups || []).find((group) => group.id === 'primary') || {
+        id: 'primary',
+        actions: [],
+      },
+    );
+
+    if (!(section && currentPrimary && nextPrimaryGroup)) {
+      buildGridSection();
+      lastViewSignature = signature;
+      wireInputsAndReset();
+      syncModifierText();
+      syncActiveState();
+      renderInputs();
+      return;
+    }
+
+    syncActiveState();
+
+    const finalize = () => {
+      currentPrimary.replaceWith(nextPrimaryGroup);
+      section.dataset.viewSignature = signature;
+      lastViewSignature = signature;
+      wireInputsAndReset();
+      syncModifierText();
+      renderInputs();
+
+      if (window.gsap?.set) {
+        window.gsap.set(nextPrimaryGroup, { opacity: 0, y: 6 });
+      } else {
+        nextPrimaryGroup.style.opacity = '0';
+      }
+
+      if (window.gsap?.to) {
+        window.gsap.to(nextPrimaryGroup, {
+          opacity: 1,
+          y: 0,
+          duration: 0.22,
+          ease: 'power2.out',
+          clearProps: 'opacity,transform',
+        });
+      } else {
+        nextPrimaryGroup.style.opacity = '1';
+      }
+    };
+
+    if (window.gsap?.killTweensOf) window.gsap.killTweensOf(currentPrimary);
+    if (window.gsap?.to) {
+      window.gsap.to(currentPrimary, {
+        opacity: 0,
+        y: -6,
+        duration: 0.16,
+        ease: 'power2.out',
+        onComplete: finalize,
+      });
+      return;
+    }
+
+    finalize();
+  };
+
   function renderInputs() {
     const codes = getCodes();
-    const NAMES = window.MODEL_NAMES || [];
-    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
 
     document.querySelectorAll('#model-picker-grid .mp-input').forEach((inp) => {
-      const idx = Number(inp.getAttribute('data-idx') || '0');
+      const slot = Number(inp.getAttribute('data-slot') || '0');
       const item = inp.closest('.shortcut-item');
-
-      // Any index beyond the number of model names is always hidden
-      if (idx >= visibleCount) {
-        if (item) item.style.display = 'none';
-        if (item) item.dataset.filterLocked = '1';
-        inp.dataset.keyCode = '';
-        inp.value = '';
-        inp.removeAttribute('aria-label');
-        inp.removeAttribute('data-tooltip');
-        return;
-      }
-
-      const raw = NAMES[idx] != null ? String(NAMES[idx]) : '';
-      const name = raw.trim();
-
-      if (!name) {
-        if (item) item.style.display = 'none';
-        if (item) item.dataset.filterLocked = '1';
-        inp.dataset.keyCode = '';
-        inp.value = '';
-        inp.removeAttribute('aria-label');
-        inp.removeAttribute('data-tooltip');
-        return;
-      }
-
-      if (item) item.style.display = '';
-      if (item) delete item.dataset.filterLocked;
-
-      const code = codes[idx] || '';
+      const label = item?.querySelector('.mp-label')?.textContent?.trim() || '';
+      const code = codes[slot] || '';
 
       // Never render NBSP for inputs; show empty when cleared
       let display = '';
@@ -4276,37 +4939,76 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
       inp.dataset.keyCode = code || '';
       inp.value = display; // empty string when cleared
-      inp.setAttribute('aria-label', `Set shortcut for ${name}`);
-      inp.setAttribute('data-tooltip', `Set shortcut for\n${name}`);
+      if (label) {
+        inp.setAttribute('aria-label', `Set shortcut for ${label}`);
+        inp.setAttribute('data-tooltip', `Set shortcut for\n${label}`);
+      } else {
+        inp.removeAttribute('aria-label');
+        inp.removeAttribute('data-tooltip');
+      }
     });
   }
 
-  function renderAll() {
-    syncModelNames();
+  function renderAll({ animatePrimary = false, allowPendingRebuild = false } = {}) {
+    const groups = getViewGroups();
+    const signature = getViewSignature(groups);
+    const pendingTarget = getPendingModelConfigTargetId();
+    const needsRebuild = signature !== lastViewSignature || !querySection();
+    const isLoading = isModelCatalogScrapeLoading();
+
+    if (needsRebuild) {
+      if (isLoading && querySection()) {
+        syncModifierText();
+        syncActiveState();
+        renderInputs();
+        syncCatalogLoadingUi();
+        return;
+      }
+
+      if (pendingTarget && !allowPendingRebuild) {
+        syncModifierText();
+        syncActiveState();
+        renderInputs();
+        syncCatalogLoadingUi();
+        return;
+      }
+
+      if (animatePrimary && querySection()) {
+        swapPrimaryGroupWithTween(groups, signature);
+        wireConfigureGridActions();
+        return;
+      }
+
+      buildGridSection();
+      lastViewSignature = signature;
+      wireInputsAndReset();
+      wireConfigureGridActions();
+    }
     syncModifierText();
+    syncActiveState();
     renderInputs();
+    syncCatalogLoadingUi();
   }
 
-  function assignAt(idx, code) {
-    const selfOwner = { type: 'model', idx, modifier: mpModeCache }; // 'alt' | 'ctrl'
+  function assignAt(slot, code, targetLabel, viewKey) {
+    const selfOwner = { type: 'model', idx: slot, modifier: mpModeCache }; // 'alt' | 'ctrl'
     const conflicts = window.ShortcutUtils.buildConflictsForCode?.(code, selfOwner) || [];
 
     const proceed = () =>
       window.ShortcutUtils.clearOwners?.(conflicts, () => {
         const codes = getCodes();
-        codes[idx] = code;
+        codes[slot] = code;
         setCodes(codes, () => {
           // Toast on save
           window.toast.show('Options saved. Reload page to apply changes.');
-          focusNext(idx);
+          focusNext(viewKey);
         });
       });
 
     if (!conflicts.length || window.prefs?.autoOverwrite) return proceed();
 
     const keyLabel = displayFrom(code);
-    const MODEL_NAMES = window.MODEL_NAMES || [];
-    const toLabel = MODEL_NAMES[idx] || `Model slot ${idx + 1}`;
+    const toLabel = targetLabel || `Model slot ${slot + 1}`;
 
     if (typeof window.showDuplicateModal === 'function') {
       if (conflicts.length === 1) {
@@ -4359,17 +5061,17 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     }
   }
 
-  function focusNext(fromIdx) {
-    const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
-    const maxIdx = Math.max(0, visibleCount - 1);
-    const nextIdx = Math.min(maxIdx, fromIdx + 1);
-    const next = document.getElementById(`mpKeyInput${nextIdx}`);
-    if (next) next.focus();
+  function focusNext(fromViewKey) {
+    const inputs = queryVisibleInputs();
+    if (!inputs.length) return;
+    const idx = inputs.findIndex((input) => input.getAttribute('data-view-key') === fromViewKey);
+    const nextIdx = idx === -1 ? 0 : Math.min(inputs.length - 1, idx + 1);
+    inputs[nextIdx]?.focus();
   }
 
-  function clearAt(idx) {
+  function clearAt(slot) {
     const codes = getCodes();
-    codes[idx] = '';
+    codes[slot] = '';
     setCodes(codes, () => {
       // Toast on clear
       window.toast.show('Shortcut cleared. Reload page to apply changes.');
@@ -4479,19 +5181,22 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
   function onKeyDown(e) {
     const inp = e.currentTarget;
-    const idx = Number(inp.getAttribute('data-idx') || '0');
+    const slot = Number(inp.getAttribute('data-slot') || '0');
+    const viewKey = inp.getAttribute('data-view-key') || '';
+    const targetLabel = inp.closest('.shortcut-item')?.querySelector('.mp-label')?.textContent?.trim() || '';
 
     // Treat Tab/Enter as navigation only – never assign them as shortcuts
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
       const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1; // Enter => forward
-      const visibleCount = Math.min(getModelActionSlots().length, MAX_SLOTS);
-      const maxIdx = Math.max(0, visibleCount - 1);
-      let next = idx + dir;
+      const inputs = queryVisibleInputs();
+      const currentIdx = inputs.findIndex((input) => input === inp);
+      const maxIdx = Math.max(0, inputs.length - 1);
+      let next = currentIdx + dir;
       if (next < 0) next = maxIdx;
       if (next > maxIdx) next = 0;
-      const nextEl = document.getElementById(`mpKeyInput${next}`);
+      const nextEl = inputs[next];
       if (nextEl) nextEl.focus();
       return;
     }
@@ -4524,10 +5229,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       return;
     }
     if (code === 'Backspace' || code === 'Delete') {
-      return clearAt(idx);
+      return clearAt(slot);
     }
 
-    assignAt(idx, code);
+    assignAt(slot, code, targetLabel, viewKey);
   }
 
   function selectInputText(el) {
@@ -4555,7 +5260,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       // Support typed labels/paste like your 111 wiring
       inp.addEventListener('input', (e) => {
         const el = e.currentTarget;
-        const idx = Number(el.getAttribute('data-idx') || '0');
+        const slot = Number(el.getAttribute('data-slot') || '0');
+        const viewKey = el.getAttribute('data-view-key') || '';
+        const targetLabel =
+          el.closest('.shortcut-item')?.querySelector('.mp-label')?.textContent?.trim() || '';
 
         // If keydown just handled it, restore current pretty text and ignore
         if (el.dataset.justHandled === '1') {
@@ -4565,7 +5273,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
           return;
         }
         const raw = (el.value || '').trim();
-        if (!raw) return clearAt(idx);
+        if (!raw) return clearAt(slot);
 
         const code = parseInputToCode(raw);
         if (!code) {
@@ -4575,7 +5283,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
           window.toast.show('Unsupported key. Press a key or enter a valid shortcut label.');
           return;
         }
-        assignAt(idx, code);
+        assignAt(slot, code, targetLabel, viewKey);
       });
 
       // Let paste fall into input handler
@@ -4610,9 +5318,83 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     }
   }
 
+  const sendModelActionToTab = async (actionId) => {
+    return sendModelMessageToTab({
+      type: 'CSP_TRIGGER_MODEL_ACTION',
+      actionId,
+      hideUi: true,
+      preferPreparedSession: true,
+    });
+  };
+
+  function wireConfigureGridActions() {
+    document.querySelectorAll('#model-picker-grid .mp-configure-item').forEach((item) => {
+      if (item.dataset.actionWired === '1') return;
+      item.dataset.actionWired = '1';
+
+      const trigger = async () => {
+        if (isModelCatalogScrapeLoading()) return;
+        const actionId = item.getAttribute('data-action-id') || '';
+        if (!actionId) return;
+        if (normalizeActiveModelConfigId(actionId) === getVisualActiveModelConfigId()) return;
+        const previousActiveModelConfigId = getVisualActiveModelConfigId();
+        const nextActionId = stagePendingModelConfigTarget(actionId);
+        const runSerial = ++configureActionSerial;
+
+        setActiveModelConfigIdCache(nextActionId, 'popup:configure-pending');
+        renderAll({ animatePrimary: true, allowPendingRebuild: true });
+
+        if (configureActionDebounceTimer) {
+          clearTimeout(configureActionDebounceTimer);
+          configureActionDebounceTimer = 0;
+        }
+
+        configureActionDebounceTimer = setTimeout(async () => {
+          if (runSerial !== configureActionSerial) return;
+
+          const result = await sendModelActionToTab(nextActionId);
+          if (runSerial !== configureActionSerial) return;
+
+          if (!result?.ok) {
+            clearPendingModelConfigTarget(nextActionId);
+            setActiveModelConfigIdCache(previousActiveModelConfigId, 'popup:configure-revert');
+            renderAll({ allowPendingRebuild: true });
+            const msg =
+              chrome.i18n?.getMessage?.('toast_modelPickerOpenChatGptTab') ||
+              'Open a ChatGPT tab to switch configure models.';
+            window.toast?.show?.(msg);
+            return;
+          }
+
+          try {
+            chrome.storage.sync.set({ activeModelConfigId: normalizeActiveModelConfigId(nextActionId) });
+          } catch {}
+          setActiveModelConfigIdCache(nextActionId, 'popup:configure-click');
+          schedulePendingModelConfigSettle(nextActionId);
+        }, MODEL_CONFIG_CLICK_DEBOUNCE_MS);
+      };
+
+      item.addEventListener('click', (event) => {
+        if (event.target instanceof Element && event.target.closest('.mp-input')) return;
+        void trigger();
+      });
+      item.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target instanceof Element && event.target.closest('.mp-input')) return;
+        event.preventDefault();
+        void trigger();
+      });
+    });
+  }
+
   function wireReactivity() {
     // Rehydrate model codes from storage
     document.addEventListener('modelPickerHydrated', renderAll);
+    document.addEventListener('modelPickerActiveConfigChanged', renderAll);
+    window.addEventListener('model-names-updated', renderAll);
+    window.addEventListener('model-catalog-updated', renderAll);
+    window.addEventListener('model-catalog-scrape-state-changed', renderAll);
+    window.addEventListener('model-catalog-refresh-prompt-changed', renderAll);
 
     // Radios (listen by ID so HTML name changes don't matter)
     const altRadio = document.getElementById('useAltForModelSwitcherRadio');
@@ -4631,6 +5413,13 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     chrome?.storage?.onChanged?.addListener((changes, area) => {
       if (area !== 'sync') return;
       if (changes.modelPickerKeyCodes) renderInputs();
+      if (changes.activeModelConfigId) {
+        const changedValue = normalizeActiveModelConfigId(changes.activeModelConfigId.newValue);
+        if (getPendingModelConfigTargetId() && changedValue === getPendingModelConfigTargetId()) {
+          schedulePendingModelConfigSettle(changedValue);
+        }
+        renderAll();
+      }
       if (changes.useControlForModelSwitcherRadio || changes.useAltForModelSwitcherRadio) {
         mpModeCache = changes.useControlForModelSwitcherRadio?.newValue ? 'ctrl' : 'alt';
         syncModifierText();
@@ -4638,17 +5427,53 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     });
   }
 
+  const wireManualRefreshButton = () => {
+    const button = document.getElementById('mp-refresh-models-button');
+    if (!button || button.dataset.wired === '1') return;
+    button.dataset.wired = '1';
+    button.setAttribute('data-tooltip', getModelCatalogRefreshTooltipText());
+    const label = button.querySelector('.i18n') || button;
+    label.textContent = getModelCatalogRefreshButtonText();
+    button.addEventListener('click', () => {
+      void triggerManualCatalogRefresh('header-button');
+    });
+  };
+
+  const primeManualCatalogRefreshPrompt = () => {
+    try {
+      chrome.storage.sync.get([MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY], (stored) => {
+        const today = getTodayDateKey();
+        const seenDay = String(stored?.[MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY] || '').trim();
+        const shouldPrompt = seenDay !== today;
+        setModelCatalogRefreshPromptVisible(shouldPrompt, 'popup:daily-check');
+        if (shouldPrompt) {
+          chrome.storage.sync.set({ [MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY]: today });
+        }
+        renderAll({ allowPendingRebuild: true });
+      });
+    } catch {
+      setModelCatalogRefreshPromptVisible(true, 'popup:daily-check:fallback');
+      renderAll({ allowPendingRebuild: true });
+    }
+  };
+
   onReady(() =>
     waitForDeps(() => {
       buildGridSection();
       initModelModeFromStorage(); // ← initialize mode cache from storage
       wireInputsAndReset();
+      wireConfigureGridActions();
       wireReactivity();
+      wireManualRefreshButton();
       // Render after codes hydrate so names/codes are aligned on first paint
       if (window.__modelPickerHydrating?.then) {
-        window.__modelPickerHydrating.then(() => renderAll());
+        window.__modelPickerHydrating.then(() => {
+          renderAll();
+          primeManualCatalogRefreshPrompt();
+        });
       } else {
         renderAll();
+        primeManualCatalogRefreshPrompt();
       }
     }),
   );
@@ -5095,11 +5920,14 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
                 window.modelPickerInputsRender();
             } catch (_) {}
           }
+          if (typeof settings?.activeModelConfigId === 'string') {
+            setActiveModelConfigIdCache(settings.activeModelConfigId, 'cloud-restore');
+          }
           if (Array.isArray(settings?.modelNames) && settings.modelNames.length >= 5) {
-            const nine = settings.modelNames.slice(0, 9);
-            if (nine[4] && /legacy/i.test(nine[4]))
-              nine[4] = `${nine[4].replace(/→/g, '').trim()} →`;
-            window.MODEL_NAMES = nine.concat('Show Models');
+            window.MODEL_NAMES = resolveModelActionableNames(settings.modelNames).slice(
+              0,
+              MODEL_PICKER_MAX_SLOTS,
+            );
             if (typeof window.modelPickerRender === 'function') {
               try {
                 window.modelPickerRender();

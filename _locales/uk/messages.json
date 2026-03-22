@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "Налаштувати моделі"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "Використати найновішу модель"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "Thinking mini"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "Відкрийте вкладку ChatGPT, щоб перемикати налаштовані моделі."
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "Завантаження доступних моделей..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "Оновити моделі"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "Натисніть, щоб оновити список моделей.\n\nПримітка: меню моделей на сторінці можуть коротко блимати у фоні. Це нормально."
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "Натисніть, щоб оновити список моделей.\n\nМеню моделей коротко \nблиматимуть у фоні. \nЦе нормально й очікувано."
+	},
 	"label_blank_placeholder": {
 		"message": "Порожній елемент для вирівнювання сітки"
 	},

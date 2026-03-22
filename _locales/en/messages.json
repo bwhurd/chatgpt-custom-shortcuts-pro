@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "Configure Models"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "Use latest model"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "Thinking mini"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "Open a ChatGPT tab to switch configure models."
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "Loading available models..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "Refresh Models"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "Click to update the model list.\n\nNote: Model menus on the webpage may briefly flash in the background. This is normal."
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected."
+	},
 	"label_blank_placeholder": {
 		"message": "Blank placeholder for grid alignment"
 	},

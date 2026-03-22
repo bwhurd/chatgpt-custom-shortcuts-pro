@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "Configurar modelos"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "Usar el modelo más reciente"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "Thinking mini"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "Abre una pestaña de ChatGPT para cambiar los modelos configurados."
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "Cargando modelos disponibles..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "Actualizar modelos"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "Haz clic para actualizar la lista de modelos.\n\nNota: Los menús de modelos de la página pueden parpadear brevemente en segundo plano. Esto es normal."
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "Haz clic para actualizar la lista de modelos.\n\nLos menús de modelos parpadearán \nbrevemente en segundo plano. \nEsto es normal y esperado."
+	},
 	"label_blank_placeholder": {
 		"message": "Espacio en blanco para alinear la cuadrícula"
 	},

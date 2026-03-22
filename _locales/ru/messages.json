@@ -458,6 +458,27 @@
 	"label_configureModelsCompact": {
 		"message": "Настроить модели"
 	},
+	"label_modelPickerUseLatestModel": {
+		"message": "Использовать последнюю модель"
+	},
+	"label_modelPickerThinkingMini": {
+		"message": "Thinking mini"
+	},
+	"toast_modelPickerOpenChatGptTab": {
+		"message": "Откройте вкладку ChatGPT, чтобы переключать настроенные модели."
+	},
+	"label_modelPickerLoadingAvailableModels": {
+		"message": "Загрузка доступных моделей..."
+	},
+	"label_modelPickerRefreshModels": {
+		"message": "Обновить модели"
+	},
+	"label_modelPickerManualRefreshPrompt": {
+		"message": "Нажмите, чтобы обновить список моделей.\n\nПримечание: меню моделей на странице могут кратко мигать на фоне. Это нормально."
+	},
+	"label_modelPickerManualRefreshTooltip": {
+		"message": "Нажмите, чтобы обновить список моделей.\n\nМеню моделей будут кратко \nмигать на фоне. \nЭто нормально и ожидаемо."
+	},
 	"label_blank_placeholder": {
 		"message": "Пустой элемент для выравнивания сетки"
 	},
