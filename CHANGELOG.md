@@ -2,62 +2,41 @@
 
 Changes typically post to the chrome web store a couple days after date in changelog. 
 
-#### 03.20.2026
-- Fixed model selector detection so labels and model hotkeys work again after both reloads and sidebar conversation switches with ChatGPT's current single-level menu markup.
-- Model-switcher hotkeys no longer wait on the legacy submenu path when no submenu trigger exists, while still preserving the old submenu flow if ChatGPT brings it back.
-- Added a shared grouped model-picker source of truth for the popup and Ctrl+/ overlay, including a compact `Configure Models` row for `Latest`, `5.2`, `5.0 Thinking Mini`, and `o3`.
-- Model-picker shortcuts can now follow the deeper `Configure...` path, choose the requested configured model, and close the configure dialog automatically.
+If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
-#### 03.21.2026
-- Fixed `Select and Copy` and `Select and Copy All` so they work again with ChatGPT's current thread markup, which now renders conversation turns as `section[data-testid^="conversation-turn-"]` and places the copy-action buttons outside the message node itself.
-- Fixed the dictation shortcut so it recognizes ChatGPT's current composer send button (`#composer-submit-button` / `data-testid="send-button"`) and still falls back to the older icon-based path when needed.
-- Fixed the `Add Photos & Files` shortcut so it recognizes ChatGPT's current composer plus button (`#composer-plus-btn` / `data-testid="composer-plus-btn"`) before falling back to the older icon-based path.
-- Model refresh in the popup is now manual and working again from the attached extension popup, with a once-per-day center prompt, a header refresh button, and cleaner refresh-button alignment/tooltip behavior.
-- The popup model picker now keeps the TFEL row and the `Configure Models` row tied to stable canonical actions, including a persistent `Configure...` command and a shared `Use latest model` action.
-- The active backend configure-model selection now persists across reloads so the popup highlight, TFEL-derived actions, and configure-model shortcuts stay synchronized with the selected config state.
-- Opening the popup now triggers one hidden live-UI scrape of the configure dialog to refresh available backend configs and frontend model rows without visibly moving the ChatGPT UI behind the popup, and the popup first row no longer duplicates `Use latest model`.
-- The popup model picker now shows a loading indicator and temporarily blocks model-grid interaction while that initial one-pass scrape runs, so configure-model clicks use the cached popup-session catalog instead of feeling like they are triggering a fresh scrape.
-- Popup-driven `Configure Models` clicks now execute their real backend switch path with the live ChatGPT model UI hidden, so changing configs no longer looks like another visible scrape after the popup-open catalog pass.
-- The popup now waits until the inset loading overlay is visibly mounted before starting the initial model scrape, and the loading card uses a quieter neutral glass treatment to mask transient model-refresh motion without fighting the popup palette.
-- Plain ChatGPT page reloads no longer auto-run stored configure-model actions in the background, so the page stays quiet unless the user explicitly opens the popup or triggers a model shortcut.
-- `Move top bar to bottom` startup now avoids the old stacked half-second delays and broad reinjection churn, so the bottom bar should attach sooner and stop depending on unrelated later DOM activity such as opening the popup.
-- `Move top bar to bottom` now suppresses self-caused reinjection churn and skips no-op reattaches when the same header/composer targets are already wired, so the bar should land once instead of flashing through multiple visible passes.
-- `Move top bar to bottom` now waits for the header/composer DOM to settle before rewiring, keeps late model-switcher placement separate from full bottom-bar rebuilds, and sits about `0.5em` closer to the viewport bottom edge.
-- `Move top bar to bottom` no longer hides the original page header until the bottom bar is actually injected, and its startup path now uses a targeted observer plus short RAF verification passes so slow reloads are less likely to end up with neither bar visible.
-- `Move top bar to bottom` now scopes its duplicate-button, disclaimer, and composer-label observers to the specific bottom-bar/composer containers they need, reducing whole-page observer churn during slow page loads.
-- Model-picker duplicate warnings no longer list the same conflict twice via both the visible model label and the internal `mpKeyInput-*` id.
-- The popup-open model scrape now hard-gates on the loading overlay's own opacity transition before sending the scrape message, so the blur finishes presenting before any live menu automation can start.
-- The popup model-scrape loading mask now uses a plain minimalist `Loading available models...` fade with a minimum 1500ms visible duration, so it stays smooth and avoids flash without the heavier glass treatment.
-- While that popup model scrape is loading, the grid now stays mounted under a fully opaque loader instead of rebuilding underneath it, which avoids translucent flashes and premature text disappearance.
-- The extension popup no longer uses a `100vh` flex-root layout, which should prevent the popup from loading off-center or partly out of view in Chrome fullscreen mode.
-- The extension popup now uses an explicit bounded root width instead of auto-growing page-style width plus body padding, which should keep Chrome’s fullscreen action popup inside the viewport.
-- The extension popup now uses a fixed safe popup box with internal scrolling instead of content-driven height, which should keep it fully on-screen in fullscreen mode instead of loading half out of the viewport.
-- Clicking the extension icon now opens the settings UI in a centered extension popup window instead of Chrome’s browser-anchored action popup, avoiding the fullscreen toolbar-placement bug that could push the old popup partly off-screen.
-- Popup model-list refresh is now manual instead of automatic on popup open: a once-per-day in-grid prompt and a header refresh button trigger the existing scrape path only when the user asks for it.
-- The centered extension popup window now auto-closes when it loses focus and re-focuses the existing popup instead of spawning duplicates after service-worker restarts.
-- Manual model refresh now targets the exact ChatGPT tab that opened the popup window first, with a short retry if the content script is still attaching after reload.
-- The centered popup window now resolves the launching ChatGPT tab before opening and tries that exact tab directly for manual model refresh before falling back to the background relay.
-- Restored the browser-attached extension popup so the manual model-refresh flow can be compared against the previous attached-popup behavior without removing the separate-window code.
-- Nudged the header `Refresh Models` button slightly lower and added a bit more vertical padding so it aligns more cleanly with the `Use Alt / Use Control` toggle.
+#### 03.24.2026
+- Improved: Send Top Bar To Bottom now loads much faster and more consistently, with better performance and no redraws or movement.
+
+#### 03.22.2026  
+- Fixed: Model picker hotkeys and labels now work.
+- Added: Unified model picker labels and shortcuts (`Latest`, `5.2`, `5.0 Thinking Mini`, `o3`) match across popup and overlay.
+- Added: Button for manual model sync. Shortcuts now open ‘Configure Models’, pick the model, then close.
+- Changed: Manual model sync reminder now shows once per week (was daily).
+
+#### 03.21.2026  
+- Fixed: Select and Copy, Dictation, and Add Files/Photos shortcuts work again.
+- Improved: ‘Move top bar to bottom’ is faster, more reliable, and no longer impacts page load time.
+- Added: Manual model refresh button in popup.
+- Added: Popup model picker shows loading indicator during update.
 
 #### 03.19.2026
-- Fixed model-picker labels so reused GPT-5 IDs no longer show stale names like `Auto` instead of `Instant`.
+- Fixed: Model-picker labels now update correctly when GPT-5 IDs are reused, so names like `Instant` and `Auto` stay accurate.
 
 #### 03.13.2026
-- Added a disabled-by-default Fade Message Buttons toggle to gate the message-button fade and hover behavior.
-- Disclaimer text hiding now stays active even when Fade Message Buttons is off.
-- Popup and Ctrl+/ overlay now use local embedded icon fonts, and popup text now uses system fonts by default, so they no longer depend on Google-hosted font/icon files.
+- Added: Fade Message Buttons toggle (off by default) to control message-button fade and hover behavior.
+- Improved: Disclaimer hiding now works even if Fade Message Buttons is off.
+- Changed: Popup and overlay now use local icon and system fonts—no dependency on Google-hosted files.
 
 #### 03.04.2026  
-- Model Picker labels extracted from ChatGPT’s menu now include GPT version numbers (for example “GPT-5.3 Instant”), preventing duplicate “Instant/Thinking” entries when the menu changes.
+- Improved: Model Picker labels now include GPT version numbers (e.g., “GPT-5.3 Instant”) to avoid duplicate entries when menus change.
 
 #### 02.13.2026  
-- Fixed stale model labels lingering in the Model Picker after ChatGPT removes models (storage now clears removed slots; popup reflects fewer available models).
+- Fixed: Model Picker now removes outdated labels when ChatGPT removes models, keeping the popup accurate.
 
 #### 01.19.2026  
-- Ctrl+/ shortcuts overlay now shows only assigned shortcuts (non-model sections) and labels match the popup (localized), including previously missing items like Share / Branch In New Chat / Cancel Dictation / Read Aloud.
-- Added Highlight Bold Text toggle with light/dark color pickers + a quick reset-to-defaults button.
-- Default “Select + Copy All Behavior” now includes both user + ChatGPT.
+- Improved: Ctrl+/ overlay now only shows assigned shortcuts, matches popup labels, and includes missing actions like Share, Branch In New Chat, Cancel Dictation, and Read Aloud.
+- Added: Highlight Bold Text toggle with color pickers and reset button.
+- Changed: Default “Select + Copy All” now copies both user and ChatGPT messages.
 
 #### 01.02.2026  
 - Send Edit shortcut works again  
@@ -77,24 +56,23 @@ Changes to ChatGPT’s icons broke several of my shortcuts. I have fixed these. 
 - Copy-lowest now always strips markdown and keeps list formatting  
 - Rapid Alt+C presses no longer break markdown cleanup or cause inconsistent copying  
 
+#### 12.25.2025
+- Changed: Model names are now per-profile only; export/import and Google Drive sync no longer overwrite your local labels.
+- Fixed: Settings now refresh correctly after cloud restore, file import, or “clear all shortcuts”—no need to reopen the popup.
 
-#### [12.25.2025]
-  - Treat modelNames as per-profile only: export/import and Google Drive sync no longer read or write modelNames, preventing older snapshots from overwriting local labels and migrations.
-  - Fixed settings hydration so cloud restore, file import, and “clear all shortcuts” immediately refresh shortcut inputs and model picker keys without reopening the popup.
+#### 12.20.2025
+- Fixed: Send Edit shortcut now finds the correct Send button after ChatGPT’s markup update.
 
-#### [12.20.2025]
-  - Fixed the Send Edit shortcut so it again finds the active edit card’s Send button after ChatGPT’s markup change.
+#### 12.19.2025
+- Added: Toggle to click inline code snippets to copy (off by default), available in settings and popup.
 
-#### [12.19.2025]
-  - Added a toggle to click inline code snippets to copy them (disabled by default) and wired it through settings/popup.
+#### 12.14.2025
+- Improved: Model picker grid inputs now auto-select contents on focus, so any click or Tab lets you overwrite immediately.
 
-#### [12.14.2025]
-  - Model picker grid inputs now auto-select their contents when focused so clicks or Tab start overwriting immediately instead of leaving the cursor after the label.
-
-#### [10.15.2025]
-  - Backup and restore user settings with your google account. Your data is private and not exposed to us or third parties. 
-  - Support for switching between all current models (GPT 5.1, 5, 4o, 4.1, 3o)
-  - Use Control+/ to show all assigned shortcuts. Model picker keys display incorrectly in the overlay (but correct in settings), and the fix is expected to post around 11/17/2025.
+#### 10.15.2025
+- Added: Backup and restore user settings with your Google account—your data stays private.
+- Added: Support for all current models (GPT 5.1, 5, 4o, 4.1, 3o).
+- Added: Control+/ shows all assigned shortcuts. (Note: Model picker keys in the overlay may be incorrect until the upcoming fix.)
 
 
 #### [10.06.2025]

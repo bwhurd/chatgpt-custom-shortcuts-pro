@@ -131,6 +131,7 @@ const OPTIONS_DEFAULTS = {
   // Timestamp for scraped model names; default empty to preserve across migrations
   modelNamesAt: '',
   modelCatalogRefreshPromptDay: '',
+  modelCatalogRefreshPromptWeek: '',
 };
 
 //

@@ -4005,7 +4005,9 @@ const delays = DELAYS;
             '#composer-submit-button',
             'button[data-testid="send-button"]',
             'button[aria-label="Send prompt"]',
-          ) || findClickableBySpriteId('#01bab7') || findClickableBySpriteId('#fa1dbd');
+          ) ||
+          findClickableBySpriteId('#01bab7') ||
+          findClickableBySpriteId('#fa1dbd');
         if (click(submitBtn)) return;
 
         // If submit isn't available, stop dictation.
@@ -4390,9 +4392,7 @@ const delays = DELAYS;
           }
 
           // Get all conversation turns in DOM order
-          const allTurns = Array.from(
-            document.querySelectorAll(TURN_SELECTOR_ENTIRE_CONV),
-          );
+          const allTurns = Array.from(document.querySelectorAll(TURN_SELECTOR_ENTIRE_CONV));
 
           // Filter by role
           const filteredTurns = allTurns.filter((turn) => {
@@ -5278,1221 +5278,1666 @@ div[data-id="hide-this-warning"] {
   document.head.appendChild(styleEl);
 })();
 
+(() => {
+  const IMPORTANT_ROOTS = ['important', 'importante', 'ज़रूरी', '重要', 'важн', 'важлив'];
+
+  const containsImportantRoot = (txt) =>
+    IMPORTANT_ROOTS.some((root) => txt.toLowerCase().includes(root.toLowerCase()));
+
+  const markDisclaimerNode = (node) => {
+    if (!(node instanceof Element)) return;
+    if (!node.matches('div.text-token-text-secondary')) return;
+
+    const txt = node.textContent.trim().replace(/\s+/g, ' ');
+    if (containsImportantRoot(txt)) {
+      node.setAttribute('data-id', 'hide-this-warning');
+    }
+  };
+
+  const markDisclaimerWarnings = (root) => {
+    if (!(root instanceof Element) && root !== document) return;
+    root.querySelectorAll('div.text-token-text-secondary').forEach(markDisclaimerNode);
+  };
+
+  window.__cspEnsureDisclaimerHider = () => {
+    if (window.__cspDisclaimerHiderInstalled) return;
+    window.__cspDisclaimerHiderInstalled = true;
+
+    markDisclaimerWarnings(document.getElementById('thread-bottom-container') || document);
+
+    const root = document.body || document.documentElement;
+    if (!root) return;
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'characterData') {
+          const parent = mutation.target?.parentElement;
+          if (parent?.matches('div.text-token-text-secondary')) {
+            markDisclaimerNode(parent);
+          }
+          continue;
+        }
+
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          markDisclaimerNode(node);
+          if (node.querySelector('div.text-token-text-secondary')) {
+            markDisclaimerWarnings(node);
+          }
+        }
+      }
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  };
+})();
+
 // ==================================================
-// @note TopBarToBottom Feature
+// @note TopBarToBottom Feature (single-flight / stable-anchor rewrite)
 // ==================================================
 (() => {
-  chrome.storage.sync.get(
-    { moveTopBarToBottomCheckbox: false },
-    ({ moveTopBarToBottomCheckbox: enabled }) => {
-      if (!enabled) return;
+  const READY_CLASS = 'csp-bottom-bar-ready';
+  const STYLE_ID = 'csp-bottom-bar-style';
 
-      // Blacklist logic for specific paths/hostnames
-      const hostname = location.hostname.replace(/^www\./, '');
-      const pathname = location.pathname;
+  const SELECTORS = {
+    PAGE_HEADER: '#page-header',
+    CONVERSATION_HEADER_ACTIONS: '#conversation-header-actions',
+    THREAD_BOTTOM_CONTAINER: '#thread-bottom-container',
+    THREAD_BOTTOM: '#thread-bottom',
+    COMPOSER_FORM: "form[data-type='unified-composer']",
+    COMPOSER_SURFACE: '[data-composer-surface="true"]',
+    MODEL_SWITCHER_BUTTON:
+      'button[data-testid="model-switcher-dropdown-button"], ' +
+      'button[data-testid="Model-switCher-dropdown-button"], ' +
+      'button[aria-label^="Model selector" i]',
+    PROFILE_BUTTON: 'button[data-testid="profile-button"]',
+    LOGIN_BUTTON: 'button[data-testid="login-button"]',
+  };
 
-      // Matches "*://chatgpt.com/gpts*"
-      const isGpts = hostname === 'chatgpt.com' && pathname.startsWith('/gpts');
-      // Matches "*://chatgpt.com/codex*"
-      const isCodex = hostname === 'chatgpt.com' && pathname.startsWith('/codex');
-      // Matches "*://chatgpt.com/g/*"
-      const isG = hostname === 'chatgpt.com' && pathname.startsWith('/g/');
-      // Matches "*://sora.chatgpt.com/*"
-      const isSora = hostname === 'sora.chatgpt.com';
-      // Matches "*://chatgpt.com/library/*"
-      const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
+  const RELEVANT_MUTATION_SELECTORS = [
+    SELECTORS.PAGE_HEADER,
+    SELECTORS.CONVERSATION_HEADER_ACTIONS,
+    SELECTORS.THREAD_BOTTOM_CONTAINER,
+    SELECTORS.THREAD_BOTTOM,
+    SELECTORS.COMPOSER_FORM,
+    SELECTORS.MODEL_SWITCHER_BUTTON,
+  ];
 
-      if (isGpts || isCodex || isG || isSora || isLibrary) {
-        document.documentElement?.classList.remove('csp-bottom-bar-ready');
-        document.body?.classList.remove('csp-bottom-bar-ready');
+  function setReadyState(ready) {
+    const isReady = Boolean(ready);
+    document.documentElement?.classList.toggle(READY_CLASS, isReady);
+    document.body?.classList.toggle(READY_CLASS, isReady);
+  }
+
+  function clearReadyState() {
+    setReadyState(false);
+  }
+
+  function hasLoginButtonPresent() {
+    return !!document.querySelector(SELECTORS.LOGIN_BUTTON);
+  }
+
+  function isExcludedTopBarToBottomPath() {
+    const hostname = location.hostname.replace(/^www\./, '');
+    const pathname = location.pathname;
+
+    const isGpts = hostname === 'chatgpt.com' && pathname.startsWith('/gpts');
+    const isCodex = hostname === 'chatgpt.com' && pathname.startsWith('/codex');
+    const isG = hostname === 'chatgpt.com' && pathname.startsWith('/g/');
+    const isSora = hostname === 'sora.chatgpt.com';
+    const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
+
+    return isGpts || isCodex || isG || isSora || isLibrary;
+  }
+
+  function coerceStoredNumber(value, fallback) {
+    if (typeof coerceNumberFromStorage === 'function') {
+      return coerceNumberFromStorage(value, fallback);
+    }
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function createDebounce(fn, wait = 80) {
+    let t = 0;
+    return (...args) => {
+      clearTimeout(t);
+      t = window.setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  function injectBottomBarStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      .${READY_CLASS} .draggable.sticky.top-0,
+      .${READY_CLASS} #page-header {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+      }
+
+      :root {
+        --csp-bottom-bar-gap: 0.5em;
+        --csp-bottom-bar-top-gap: 0;
+        --csp-bottom-bar-height: 36px;
+        --csp-bottom-bar-composer-offset: calc(
+          var(--csp-bottom-bar-height) +
+          var(--csp-bottom-bar-gap) +
+          var(--csp-bottom-bar-top-gap)
+        );
+        --csp-bottom-bar-lane-height: calc(
+          var(--csp-bottom-bar-height) +
+          var(--csp-bottom-bar-gap) +
+          var(--csp-bottom-bar-top-gap)
+        );
+      }
+
+      #bottomBarContainer {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin-top: 2px !important;
+        margin-bottom: calc(2px - 0.5em) !important;
+        overflow-anchor: none !important;
+        min-height: 36px !important;
+        box-sizing: border-box !important;
+        background: transparent !important;
+      }
+
+      #bottomBarContainer[data-pending="true"] {
+        visibility: hidden !important;
+      }
+
+      #bottomBarContainer button:hover {
+        filter: brightness(1.1) !important;
+      }
+
+      div[data-id="hide-this-warning"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+      }
+
+      #bottomBarContainer button[data-testid="open-sidebar-button"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+      }
+
+      #bottomBarContainer #conversation-header-actions a[href="/"][data-discover="true"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+      }
+
+      div#bottomBarLeft {
+        scale: 0.9;
+      }
+
+      div#bottomBarCenter {
+        scale: 0.9;
+      }
+
+      div#bottomBarRight {
+        scale: 0.85;
+        padding-right: 0em;
+      }
+
+      #bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
+      #bottomBarContainer button:has(svg > path[d^="M6.83496"]),
+      #bottomBarContainer button:has(svg > path[d^="M2.6687"]),
+      #bottomBarContainer a:has(svg > path[d^="M2.6687"]),
+      #bottomBarContainer a:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
+      #bottomBarContainer button:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
+      #bottomBarContainer button:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
+      #bottomBarContainer a:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
+      #bottomBarContainer a:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
+      #bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"]),
+      #bottomBarContainer a:has(svg > path[d^="M11.6663 12.6686L11.801"]),
+      #bottomBarContainer button:has(svg > path[d^="M11.6663 12.6686L11.801"]) {
+        visibility: hidden !important;
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+      }
+
+      #bottomBarContainer .truncate,
+      #bottomBarLeft .truncate,
+      #bottomBarCenter .truncate,
+      #bottomBarRight .truncate {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        word-break: break-word !important;
+      }
+
+      .mb-4 {
+        margin-bottom: 4px;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function findHeaderModelButton() {
+    const pageHeader = document.querySelector(SELECTORS.PAGE_HEADER);
+
+    if (pageHeader instanceof Element) {
+      const fromHeader = Array.from(
+        pageHeader.querySelectorAll(SELECTORS.MODEL_SWITCHER_BUTTON),
+      ).find((el) => !el.closest('#bottomBarContainer'));
+      if (fromHeader) return fromHeader;
+    }
+
+    return (
+      Array.from(document.querySelectorAll(SELECTORS.MODEL_SWITCHER_BUTTON)).find(
+        (el) => !el.closest('#bottomBarContainer'),
+      ) || null
+    );
+  }
+
+  function findHeaderConversationActions() {
+    const pageHeader = document.querySelector(SELECTORS.PAGE_HEADER);
+
+    if (pageHeader instanceof Element) {
+      const fromHeader = pageHeader.querySelector(SELECTORS.CONVERSATION_HEADER_ACTIONS);
+      if (fromHeader instanceof Element && !fromHeader.closest('#bottomBarContainer')) {
+        return fromHeader;
+      }
+    }
+
+    return (
+      Array.from(document.querySelectorAll(SELECTORS.CONVERSATION_HEADER_ACTIONS)).find(
+        (el) => !el.closest('#bottomBarContainer'),
+      ) || null
+    );
+  }
+
+  function findAnchorSnapshot() {
+    const threadBottomContainer = document.querySelector(SELECTORS.THREAD_BOTTOM_CONTAINER);
+    if (!(threadBottomContainer instanceof Element)) return null;
+
+    const composerForm =
+      threadBottomContainer.querySelector(SELECTORS.COMPOSER_FORM) ||
+      document.querySelector(SELECTORS.COMPOSER_FORM);
+
+    if (!(composerForm instanceof Element)) return null;
+
+    const composerContainer =
+      composerForm.querySelector(SELECTORS.COMPOSER_SURFACE) ||
+      composerForm.querySelector('.border-token-border-default') ||
+      composerForm;
+
+    const mountAfterEl = composerForm;
+    const mountParent = composerForm.parentElement;
+    if (!(mountParent instanceof Element)) return null;
+
+    return {
+      threadBottomContainer,
+      composerForm,
+      composerContainer: composerContainer instanceof Element ? composerContainer : composerForm,
+      mountParent,
+      mountAfterEl,
+    };
+  }
+
+  function createBottomBarController() {
+    const BOTTOM_BAR_PERF_DEBUG_ENABLED = false;
+    const state = {
+      started: false,
+      observer: null,
+      scheduled: false,
+      reconcileRunning: false,
+      suppressObserverUntil: 0,
+
+      root: null,
+      lane: null,
+      row: null,
+      left: null,
+      center: null,
+      right: null,
+
+      mountedHostParent: null,
+      mountedAnchor: null,
+      composerContainer: null,
+      modelButton: null,
+      headerActions: null,
+
+      anchorCandidate: null,
+      anchorStableFrames: 0,
+
+      revealed: false,
+      shellAttachedAt: 0,
+      revealTimer: 0,
+
+      opacityValue: 0.6,
+      opacityPromise: null,
+
+      textScaleResizeObserver: null,
+      textScaleResizeHandler: null,
+      textScaleWindowBound: false,
+
+      nonCriticalHelpersStarted: false,
+      profileButtonObserverStarted: false,
+
+      perfSessionId: BOTTOM_BAR_PERF_DEBUG_ENABLED
+        ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        : '',
+      perfStart: BOTTOM_BAR_PERF_DEBUG_ENABLED ? performance.now() : 0,
+      perfSeq: 0,
+      perfLogs: [],
+      pendingReasons: new Set(),
+      attachCount: 0,
+      repairCount: 0,
+      firstAttachAt: 0,
+      firstRevealAt: 0,
+      firstReadyAt: 0,
+      lastReadyState: null,
+      lastRepairReason: '',
+      lastRevealWaitBucket: -1,
+    };
+
+    const PERF_LOG_PREFIX = '[CSP_BB_PERF]';
+    const PERF_SUGGESTED_PATH =
+      'C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\tests\\bottom-bar-perf-log.ndjson';
+
+    function roundMs(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function perfLog(event, data = {}) {
+      if (!BOTTOM_BAR_PERF_DEBUG_ENABLED) return null;
+
+      const now = performance.now();
+
+      const entry = {
+        source: 'csp-bottom-bar',
+        sessionId: state.perfSessionId,
+        seq: ++state.perfSeq,
+        event,
+        dtMs: roundMs(now - state.perfStart),
+        href: location.href,
+        ts: new Date().toISOString(),
+        ...data,
+      };
+
+      state.perfLogs.push(entry);
+
+      if (!Array.isArray(window.__cspBottomBarPerfLog)) {
+        window.__cspBottomBarPerfLog = [];
+      }
+
+      window.__cspBottomBarPerfLog.push(entry);
+      window.__cspBottomBarPerfLastEntry = entry;
+      window.__cspBottomBarPerfSuggestedPath = PERF_SUGGESTED_PATH;
+      window.__cspBottomBarPerfExportNdjson = () =>
+        (window.__cspBottomBarPerfLog || []).map((row) => JSON.stringify(row)).join('\n');
+
+      try {
+        window.dispatchEvent(new CustomEvent('csp-bottom-bar-perf', { detail: entry }));
+      } catch {}
+
+      console.log(PERF_LOG_PREFIX, JSON.stringify(entry));
+      return entry;
+    }
+
+    function applyReadyState(ready, source = 'unknown') {
+      const next = Boolean(ready);
+
+      if (BOTTOM_BAR_PERF_DEBUG_ENABLED && state.lastReadyState !== next) {
+        perfLog('ready_state', { ready: next, source });
+        state.lastReadyState = next;
+      }
+
+      setReadyState(next);
+
+      if (BOTTOM_BAR_PERF_DEBUG_ENABLED && next && !state.firstReadyAt) {
+        state.firstReadyAt = performance.now();
+        perfLog('first_ready', {
+          source,
+          sinceStartMs: roundMs(state.firstReadyAt - state.perfStart),
+          sinceFirstAttachMs: state.firstAttachAt
+            ? roundMs(state.firstReadyAt - state.firstAttachAt)
+            : null,
+          sinceRevealMs: state.firstRevealAt
+            ? roundMs(state.firstReadyAt - state.firstRevealAt)
+            : null,
+        });
+      }
+    }
+
+    function start() {
+      if (state.started) return;
+      state.started = true;
+
+      if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
+        if (!Array.isArray(window.__cspBottomBarPerfLog)) {
+          window.__cspBottomBarPerfLog = [];
+        }
+
+        window.__cspBottomBarPerfSuggestedPath = PERF_SUGGESTED_PATH;
+        window.__cspBottomBarPerfExportNdjson = () =>
+          (window.__cspBottomBarPerfLog || []).map((row) => JSON.stringify(row)).join('\n');
+
+        perfLog('controller_start', {
+          documentReadyState: document.readyState,
+        });
+      }
+
+      void loadOpacityValue(); // async, but not blocking first mount
+      installMainObserver();
+      scheduleReconcile('start');
+    }
+
+    function loadOpacityValue() {
+      if (state.opacityPromise) return state.opacityPromise;
+
+      state.opacityPromise = new Promise((resolve) => {
+        if (!chrome?.storage?.sync) {
+          state.opacityValue = 0.6;
+          window.popupBottomBarOpacityValue = state.opacityValue;
+          applyIdleOpacity();
+          resolve(state.opacityValue);
+          return;
+        }
+
+        try {
+          chrome.storage.sync.get({ popupBottomBarOpacityValue: 0.6 }, (res) => {
+            if (chrome.runtime.lastError) {
+              state.opacityValue = 0.6;
+            } else {
+              state.opacityValue = coerceStoredNumber(res.popupBottomBarOpacityValue, 0.6);
+            }
+
+            window.popupBottomBarOpacityValue = state.opacityValue;
+            applyIdleOpacity();
+            resolve(state.opacityValue);
+          });
+        } catch {
+          state.opacityValue = 0.6;
+          window.popupBottomBarOpacityValue = state.opacityValue;
+          applyIdleOpacity();
+          resolve(state.opacityValue);
+        }
+      });
+
+      return state.opacityPromise;
+    }
+
+    function applyIdleOpacity() {
+      const opacity = String(coerceStoredNumber(state.opacityValue, 0.6));
+
+      if (state.root instanceof HTMLElement) {
+        state.root.style.opacity = '1';
+      }
+
+      if (state.row instanceof HTMLElement) {
+        state.row.style.opacity = opacity;
         return;
       }
 
-      // --- Early gate ---
-      (async function main() {
-        function hasLoginButtonPresent() {
-          return !!document.querySelector('button[data-testid="login-button"]');
-        }
-        if (hasLoginButtonPresent()) {
-          document.documentElement?.classList.remove('csp-bottom-bar-ready');
-          document.body?.classList.remove('csp-bottom-bar-ready');
+      if (state.root instanceof HTMLElement) {
+        state.root.style.opacity = opacity;
+      }
+    }
+
+    function installMainObserver() {
+      if (state.observer) return;
+
+      const observationRoot = document.body || document.documentElement;
+      if (!(observationRoot instanceof Node)) return;
+
+      state.observer = new MutationObserver((mutations) => {
+        if (performance.now() < state.suppressObserverUntil) return;
+        if (!mutations.length) return;
+
+        if (mutations.every(isInternalBottomBarMutation)) return;
+
+        const repairReason = getRepairReason();
+        if (repairReason) {
+          if (BOTTOM_BAR_PERF_DEBUG_ENABLED && repairReason !== state.lastRepairReason) {
+            state.lastRepairReason = repairReason;
+            state.repairCount += 1;
+
+            perfLog('repair_detected', {
+              repairReason,
+              repairCount: state.repairCount,
+              revealed: state.revealed,
+              attachCount: state.attachCount,
+            });
+          }
+
+          scheduleReconcile(`repair:${repairReason}`);
           return;
-        } // GATE: do nothing!
+        }
 
-        (function startBottomBarFeature() {
-          const BOTTOM_BAR_READY_CLASS = 'csp-bottom-bar-ready';
+        if (!mutations.some(isRelevantMutation)) return;
 
-          const setBottomBarReadyState = (ready) => {
-            const isReady = Boolean(ready);
-            document.documentElement?.classList.toggle(BOTTOM_BAR_READY_CLASS, isReady);
-            document.body?.classList.toggle(BOTTOM_BAR_READY_CLASS, isReady);
-          };
+        scheduleReconcile(
+          state.revealed ? 'mutation:relevant_after_reveal' : 'mutation:relevant_before_reveal',
+        );
+      });
 
-          // -------------------- Section 1. Utilities --------------------
-          const BOTTOM_BAR_TARGET_SELECTORS = [
-            '#page-header',
-            "form[data-type='unified-composer']",
-            '#bottomBarContainer',
-          ];
-          const MODEL_SWITCHER_TARGET_SELECTORS = [
-            'button[data-testid="model-switcher-dropdown-button"]',
-            'button[data-testid="Model-switCher-dropdown-button"]',
-            'button[aria-label^="Model selector" i]',
-          ];
+      state.observer.observe(observationRoot, {
+        childList: true,
+        subtree: true,
+      });
+    }
 
-          async function waitForElement(selector, timeout = 12000) {
-            const existing = document.querySelector(selector);
-            if (existing) return existing;
+    function suppressOwnMutations(ms = 250) {
+      state.suppressObserverUntil = performance.now() + ms;
+    }
 
-            return new Promise((resolve) => {
-              const root = document.body || document.documentElement;
-              if (!root) {
-                resolve(null);
-                return;
-              }
+    function scheduleReconcile(reason = 'unspecified') {
+      state.pendingReasons.add(reason);
 
-              let done = false;
-              const finish = (el) => {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                observer.disconnect();
-                resolve(el || null);
-              };
+      if (state.scheduled) return;
+      state.scheduled = true;
 
-              const timer = setTimeout(() => finish(null), timeout);
-              const observer = new MutationObserver(() => {
-                const el = document.querySelector(selector);
-                if (el) finish(el);
-              });
+      perfLog('reconcile_scheduled', {
+        reason,
+        pendingReasonCount: state.pendingReasons.size,
+      });
 
-              observer.observe(root, { childList: true, subtree: true });
-            });
+      requestAnimationFrame(() => {
+        state.scheduled = false;
+        const reasons = Array.from(state.pendingReasons);
+        state.pendingReasons.clear();
+        void reconcile(reasons);
+      });
+    }
+
+    function anchorMatches(a, b) {
+      return (
+        !!a &&
+        !!b &&
+        a.mountParent === b.mountParent &&
+        a.mountAfterEl === b.mountAfterEl &&
+        a.composerContainer === b.composerContainer
+      );
+    }
+
+    function ensureStableAnchor(snapshot) {
+      if (
+        !(snapshot?.mountParent instanceof Element) ||
+        !snapshot.mountParent.isConnected ||
+        !(snapshot?.mountAfterEl instanceof Element) ||
+        !snapshot.mountAfterEl.isConnected
+      ) {
+        state.anchorCandidate = null;
+        state.anchorStableFrames = 0;
+        return false;
+      }
+
+      state.mountedHostParent = snapshot.mountParent;
+      state.mountedAnchor = snapshot.mountAfterEl;
+      state.composerContainer = snapshot.composerContainer;
+
+      const candidate = {
+        mountParent: snapshot.mountParent,
+        mountAfterEl: snapshot.mountAfterEl,
+        composerContainer: snapshot.composerContainer,
+      };
+
+      if (anchorMatches(candidate, state.anchorCandidate)) {
+        state.anchorStableFrames += 1;
+      } else {
+        state.anchorCandidate = candidate;
+        state.anchorStableFrames = 1;
+      }
+
+      return true;
+    }
+
+    function withScrollPreserved(fn) {
+      const sc = typeof getScrollableContainer === 'function' ? getScrollableContainer() : null;
+
+      const prevDistanceFromBottom = sc ? sc.scrollHeight - sc.scrollTop : 0;
+      fn();
+
+      if (sc) {
+        sc.scrollTop = sc.scrollHeight - prevDistanceFromBottom;
+      }
+    }
+
+    function createRoot() {
+      let root = document.getElementById('bottomBarContainer');
+
+      if (!(root instanceof HTMLElement)) {
+        root = document.createElement('div');
+        root.id = 'bottomBarContainer';
+      }
+
+      Object.assign(root.style, {
+        display: 'block',
+        position: '',
+        left: '',
+        top: '',
+        bottom: '',
+        width: '100%',
+        padding: '0',
+        margin: '0',
+        minHeight: 'unset',
+        lineHeight: '1',
+        fontSize: '12px',
+        boxSizing: 'border-box',
+        opacity: '1',
+        transition: 'opacity 0.18s ease',
+        visibility: state.revealed ? '' : 'hidden',
+        zIndex: '',
+        pointerEvents: '',
+      });
+
+      root.dataset.pending = state.revealed ? 'false' : 'true';
+
+      if (!root.__cspHoverBound) {
+        let fadeT = 0;
+
+        const toIdleOpacity = () => {
+          applyIdleOpacity();
+          if (typeof setGrayscale === 'function') setGrayscale(true);
+        };
+
+        root.addEventListener('mouseover', () => {
+          clearTimeout(fadeT);
+          if (state.root instanceof HTMLElement) {
+            state.root.style.opacity = '1';
+          }
+          if (state.row instanceof HTMLElement) {
+            state.row.style.opacity = '1';
+          }
+          if (typeof setGrayscale === 'function') setGrayscale(false);
+        });
+
+        root.addEventListener('mouseout', () => {
+          fadeT = window.setTimeout(toIdleOpacity, 2500);
+        });
+
+        root.__cspHoverBound = true;
+
+        window.setTimeout(() => {
+          if (root.isConnected) toIdleOpacity();
+        }, 2500);
+      }
+
+      state.root = root;
+      ensureTextScaleWatchers(root);
+
+      return root;
+    }
+
+    function ensureTextScaleWatchers(root) {
+      if (!state.textScaleResizeHandler) {
+        state.textScaleResizeHandler = createDebounce(() => {
+          const snapshot = findAnchorSnapshot();
+          if (snapshot) {
+            syncShellGeometry(snapshot);
           }
 
-          const nodeTouchesBottomBarTargets = (node) => {
-            if (!(node instanceof Element)) return false;
-            return BOTTOM_BAR_TARGET_SELECTORS.some(
-              (selector) => node.matches(selector) || !!node.querySelector(selector),
-            );
-          };
-
-          const nodeTouchesModelSwitcherTargets = (node) => {
-            if (!(node instanceof Element)) return false;
-            return MODEL_SWITCHER_TARGET_SELECTORS.some(
-              (selector) => node.matches(selector) || !!node.querySelector(selector),
-            );
-          };
-
-          const nodeMatchesSelector = (node, selector) =>
-            node instanceof Element && (node.matches(selector) || !!node.querySelector(selector));
-
-          const observeMountedSelector = (selector, onAttach, timeout = 12000) => {
-            let currentEl = null;
-            let detachCurrent = null;
-
-            const attach = (el) => {
-              if (!(el instanceof Element) || el === currentEl) return;
-              detachCurrent?.();
-              currentEl = el;
-              const maybeDetach = onAttach(el);
-              detachCurrent = typeof maybeDetach === 'function' ? maybeDetach : null;
-            };
-
-            const refresh = () => {
-              const next = document.querySelector(selector);
-              if (next instanceof Element) {
-                attach(next);
-                return;
-              }
-
-              if (currentEl && !currentEl.isConnected) {
-                detachCurrent?.();
-                detachCurrent = null;
-                currentEl = null;
-              }
-            };
-
-            waitForElement(selector, timeout).then((el) => {
-              if (el) attach(el);
-            });
-
-            const root = document.documentElement;
-            if (!root) return;
-
-            new MutationObserver((mutations) => {
-              if (currentEl && !currentEl.isConnected) {
-                refresh();
-                return;
-              }
-
-              const touchesSelector = mutations.some(
-                (mutation) =>
-                  Array.from(mutation.addedNodes).some((node) =>
-                    nodeMatchesSelector(node, selector),
-                  ) ||
-                  Array.from(mutation.removedNodes).some((node) =>
-                    nodeMatchesSelector(node, selector),
-                  ),
-              );
-
-              if (touchesSelector) refresh();
-            }).observe(root, { childList: true, subtree: true });
-
-            refresh();
-          };
-
-          if (!window.__bbDebounce) {
-            window.__bbDebounce = function (fn, wait = 80) {
-              let t;
-              return (...a) => {
-                clearTimeout(t);
-                t = setTimeout(() => fn.apply(this, a), wait);
-              };
-            };
+          if (state.root instanceof Element) {
+            adjustBottomBarTextScaling(state.root);
           }
-          const debounce = window.__bbDebounce;
+        }, 100);
+      }
 
-          const getHeaderFlexSegments = (header) => {
-            if (!(header instanceof Element)) return [];
+      if (!state.textScaleWindowBound) {
+        window.addEventListener('resize', state.textScaleResizeHandler);
+        state.textScaleWindowBound = true;
+      }
 
-            const segments = Array.from(header.children)
-              .map((child) => {
-                if (!(child instanceof Element)) return null;
-                if (child.matches('.flex.items-center')) return child;
-                return child.querySelector('.flex.items-center');
-              })
-              .filter((segment) => segment instanceof Element);
+      if (state.textScaleResizeObserver) {
+        state.textScaleResizeObserver.disconnect();
+      }
 
-            return segments.filter((segment, index, arr) => arr.indexOf(segment) === index);
-          };
+      state.textScaleResizeObserver = new ResizeObserver(state.textScaleResizeHandler);
+      state.textScaleResizeObserver.observe(root);
+    }
 
-          const getTopBarSegmentsNow = () => {
-            const header = document.querySelector('#page-header');
-            if (!header) return [null, null];
-            const flexChildren = getHeaderFlexSegments(header);
-            if (!flexChildren.length) return [null, null];
-            if (flexChildren.length === 1) return [flexChildren[0], flexChildren[0]];
-            return [flexChildren[0], flexChildren[flexChildren.length - 1]];
-          };
+    function ensureSlot(id, styles) {
+      let el = document.getElementById(id);
+      if (!(el instanceof HTMLElement)) {
+        el = document.createElement('div');
+        el.id = id;
+      }
+      Object.assign(el.style, styles);
+      return el;
+    }
 
-          const getMoveTopBarTargetsNow = () => {
-            const [topBarLeft, topBarRight] = getTopBarSegmentsNow();
-            const composerForm = document.querySelector("form[data-type='unified-composer']");
-            if (!topBarLeft || !topBarRight || !composerForm) return null;
-            return {
-              topBarLeft,
-              topBarRight,
-              composerForm,
-              composerContainer:
-                composerForm.querySelector('.border-token-border-default') || composerForm,
-            };
-          };
+    function syncShellGeometry(snapshot) {
+      if (!(state.root instanceof HTMLElement)) return;
+      if (!(snapshot?.composerContainer instanceof Element)) return;
 
-          const mutationTouchesMoveTopBarTargets = (mutation) => {
-            const target = mutation.target instanceof Element ? mutation.target : null;
-            if (target?.closest('#page-header') || target?.closest("form[data-type='unified-composer']")) {
-              return true;
-            }
+      const width = Math.max(0, Math.round(snapshot.composerContainer.clientWidth * 10) / 10);
+      if (!width) return;
 
-            return (
-              Array.from(mutation.addedNodes).some(nodeTouchesBottomBarTargets) ||
-              Array.from(mutation.removedNodes).some(nodeTouchesBottomBarTargets)
-            );
-          };
+      state.root.style.position = '';
+      state.root.style.left = '';
+      state.root.style.top = '';
+      state.root.style.bottom = '';
+      state.root.style.width = `${width}px`;
+      state.root.style.setProperty('--csp-bottom-bar-inner-max-width', `${width}px`);
+    }
 
-          async function waitForMoveTopBarTargets(timeout = 12000) {
-            const existing = getMoveTopBarTargetsNow();
-            if (existing) return existing;
+    function ensureShell(snapshot) {
+      if (!(snapshot?.mountParent instanceof Element) || !(snapshot?.mountAfterEl instanceof Element)) {
+        return null;
+      }
 
-            return new Promise((resolve) => {
-              const root = document.documentElement;
-              if (!root) {
-                resolve(null);
-                return;
-              }
+      const root = createRoot();
 
-              let done = false;
-              let rafId = 0;
-              const finish = (value) => {
-                if (done) return;
-                done = true;
-                cancelAnimationFrame(rafId);
-                clearTimeout(timer);
-                observer.disconnect();
-                resolve(value || null);
-              };
+      state.lane = ensureSlot('bottomBarLane', {
+        width: '100%',
+        boxSizing: 'border-box',
+        paddingLeft: '0px',
+        paddingRight: '0px',
+      });
 
-              const checkNow = () => {
-                if (hasLoginButtonPresent()) {
-                  finish(null);
-                  return true;
-                }
+      state.row = ensureSlot('bottomBarRow', {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        width: '100%',
+        maxWidth: '100%',
+        margin: '0',
+        padding: '0 12px',
+        minHeight: '36px',
+        lineHeight: '1',
+        fontSize: '12px',
+        boxSizing: 'border-box',
+        opacity: '1',
+        transition: 'opacity 0.18s ease',
+      });
 
-                const next = getMoveTopBarTargetsNow();
-                if (next) {
-                  finish(next);
-                  return true;
-                }
+      state.left = ensureSlot('bottomBarLeft', {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '2px',
+        minWidth: '0',
+        flex: '0 1 auto',
+      });
 
-                return false;
-              };
+      state.center = ensureSlot('bottomBarCenter', {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '6px',
+        minWidth: '0',
+        flex: '1 1 auto',
+      });
 
-              const queueFrameChecks = (frames = 6) => {
-                if (done || rafId) return;
+      state.right = ensureSlot('bottomBarRight', {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '2px',
+        minWidth: '0',
+        marginLeft: 'auto',
+        flex: '0 1 auto',
+      });
 
-                let remaining = frames;
-                const tick = () => {
-                  rafId = 0;
-                  if (checkNow() || done) return;
-                  remaining -= 1;
-                  if (remaining > 0) {
-                    rafId = requestAnimationFrame(tick);
-                  }
-                };
+      if (state.lane.parentElement !== root) root.appendChild(state.lane);
+      if (state.row.parentElement !== state.lane) state.lane.appendChild(state.row);
 
-                rafId = requestAnimationFrame(tick);
-              };
+      if (state.left.parentElement !== state.row) state.row.appendChild(state.left);
+      if (state.right.parentElement !== state.row) state.row.appendChild(state.right);
+      if (state.center.parentElement !== state.row || state.center.nextSibling !== state.right) {
+        state.row.insertBefore(state.center, state.right);
+      }
 
-              const timer = setTimeout(() => finish(null), timeout);
-              const observer = new MutationObserver((mutations) => {
-                if (!mutations.some(mutationTouchesMoveTopBarTargets)) return;
-                queueFrameChecks(8);
-              });
+      injectStaticButtons(state.left);
+      syncShellGeometry(snapshot);
+      applyIdleOpacity();
 
-              observer.observe(root, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'style', 'hidden', 'aria-hidden', 'data-testid'],
-              });
-              queueFrameChecks(10);
+      const mountParent = snapshot.mountParent;
+      const mountAfterEl = snapshot.mountAfterEl;
+      const needsAttach =
+        root.parentElement !== mountParent || root.previousElementSibling !== mountAfterEl;
+
+      if (needsAttach) {
+        const previousAnchor = state.mountedAnchor instanceof Element ? state.mountedAnchor : null;
+        const previousHostParent =
+          state.mountedHostParent instanceof Element ? state.mountedHostParent : null;
+
+        suppressOwnMutations(350);
+
+        withScrollPreserved(() => {
+          mountParent.insertBefore(root, mountAfterEl.nextSibling);
+        });
+
+        state.attachCount += 1;
+        state.mountedHostParent = mountParent;
+        state.mountedAnchor = mountAfterEl;
+        state.composerContainer = snapshot.composerContainer;
+        state.shellAttachedAt = performance.now();
+
+        if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
+          if (!state.firstAttachAt) {
+            state.firstAttachAt = state.shellAttachedAt;
+
+            perfLog('first_attach', {
+              attachCount: state.attachCount,
+              sinceStartMs: roundMs(state.firstAttachAt - state.perfStart),
+              anchorChanged: !!previousAnchor && previousAnchor !== mountAfterEl,
+              hostChanged: !!previousHostParent && previousHostParent !== mountParent,
+            });
+          } else {
+            perfLog('reattach', {
+              attachCount: state.attachCount,
+              sinceStartMs: roundMs(state.shellAttachedAt - state.perfStart),
+              sinceFirstAttachMs: roundMs(state.shellAttachedAt - state.firstAttachAt),
+              anchorChanged: previousAnchor !== mountAfterEl,
+              hostChanged: previousHostParent !== mountParent,
+              revealed: state.revealed,
             });
           }
+        }
+      } else {
+        state.mountedHostParent = mountParent;
+        state.mountedAnchor = mountAfterEl;
+        state.composerContainer = snapshot.composerContainer;
+      }
 
-          // ------------------------------------------------------------------------
-          // (A) One-time storage fetch approach:
-          //     Only fetch once from chrome.storage.sync to avoid repeated calls,
-          //     and keep the resolved value in a single Promise.
-          // ------------------------------------------------------------------------
-          let opacityValuePromise;
-          function ensureOpacityValueReady() {
-            // Return the already-fetched value if we have it
-            if (opacityValuePromise) return opacityValuePromise;
+      return {
+        bottomBar: root,
+        left: state.left,
+        center: state.center,
+        right: state.right,
+      };
+    }
 
-            // Otherwise, build the one-time promise that fetches from storage
-            opacityValuePromise = new Promise((resolve) => {
-              // If chrome.storage.sync is missing/invalid, fallback silently to 0.6
-              if (!chrome?.storage?.sync) {
-                window.popupBottomBarOpacityValue = 0.6;
-                return resolve(window.popupBottomBarOpacityValue);
-              }
+    function resolveMountedSlotNode(slot, preferredNode, previousNode) {
+      if (preferredNode instanceof Element) return preferredNode;
+      if (
+        previousNode instanceof Element &&
+        previousNode.isConnected &&
+        slot instanceof Element &&
+        slot.contains(previousNode)
+      ) {
+        return previousNode;
+      }
+      return null;
+    }
 
-              try {
-                chrome.storage.sync.get({ popupBottomBarOpacityValue: 0.6 }, (res) => {
-                  if (chrome.runtime.lastError) {
-                    // console.error("Error:", chrome.runtime.lastError); // comment out if you want silence
-                    window.popupBottomBarOpacityValue = 0.6;
-                  } else {
-                    window.popupBottomBarOpacityValue = coerceNumberFromStorage(
-                      res.popupBottomBarOpacityValue,
-                      0.6,
-                    );
-                  }
-                  resolve(window.popupBottomBarOpacityValue);
-                });
-              } catch {
-                // console.error("Failed chrome.storage.sync.get"); // left silent
-                window.popupBottomBarOpacityValue = 0.6;
-                resolve(window.popupBottomBarOpacityValue);
-              }
+    function syncSlotContent(slot, node) {
+      if (!(slot instanceof Element)) return null;
+
+      let changed = false;
+
+      Array.from(slot.children).forEach((child) => {
+        if (child === node) return;
+        child.remove();
+        changed = true;
+      });
+
+      if (!(node instanceof Element)) return null;
+
+      if (node.parentElement !== slot || slot.lastElementChild !== node || changed) {
+        suppressOwnMutations(300);
+        slot.appendChild(node);
+      }
+
+      return node;
+    }
+
+    function syncLeftSlotContent(left, node) {
+      if (!(left instanceof Element)) return null;
+
+      const keep = new Set(['static-sidebar-btn', 'static-newchat-btn']);
+
+      Array.from(left.children).forEach((child) => {
+        if (child === node) return;
+        if (keep.has(child.dataset.id)) return;
+        child.remove();
+      });
+
+      if (!(node instanceof Element)) return null;
+
+      node.style.marginLeft = 'calc(36px - 1em)';
+
+      const newChatButton = left.querySelector('button[data-id="static-newchat-btn"]');
+      const alreadyPositioned =
+        node.parentElement === left &&
+        (!newChatButton || newChatButton.nextElementSibling === node);
+
+      if (!alreadyPositioned) {
+        suppressOwnMutations(300);
+
+        if (newChatButton?.nextSibling) {
+          left.insertBefore(node, newChatButton.nextSibling);
+        } else if (newChatButton) {
+          left.appendChild(node);
+        } else {
+          left.appendChild(node);
+        }
+      }
+
+      return node;
+    }
+
+    function shouldHideTopHeader() {
+      return (
+        state.revealed &&
+        state.left instanceof Element &&
+        !!state.modelButton &&
+        state.left.contains(state.modelButton) &&
+        !findHeaderConversationActions()
+      );
+    }
+
+    function getRevealDecision(nextModelButton) {
+      const hasPrimaryControl = !!nextModelButton || !!state.modelButton;
+      const waitedMs = performance.now() - state.shellAttachedAt;
+      const waitedLongEnough = waitedMs >= 250;
+
+      if (!hasPrimaryControl && !waitedLongEnough) {
+        if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
+          const bucket = Math.floor(waitedMs / 50);
+
+          if (bucket !== state.lastRevealWaitBucket) {
+            state.lastRevealWaitBucket = bucket;
+
+            perfLog('pre_reveal_wait', {
+              reason: 'waiting_for_model_button',
+              waitedSinceLastAttachMs: roundMs(waitedMs),
+              waitedSinceFirstAttachMs: state.firstAttachAt
+                ? roundMs(performance.now() - state.firstAttachAt)
+                : null,
             });
-
-            return opacityValuePromise;
           }
-
-          // -------------------- Section 2. Main Logic & Reinject --------------------
-          requestAnimationFrame(() => {
-            (() => {
-              let runMoveTopBarLogicPromise = null;
-              let reinjectTimeout;
-              let placeModelSwitcherTimeout;
-              let suppressBottomBarObserverUntil = 0;
-              let lastBottomBarComposerContainer = null;
-              let lastBottomBarLeftRef = null;
-              let lastBottomBarRightRef = null;
-              let didScheduleStartupVerification = false;
-              let bottomBarStartupSettled = false;
-              let startupBottomBarObserver = null;
-              let steadyBottomBarObserver = null;
-              let promoteBottomBarObserverTimeout = null;
-
-              const hasStableBottomBarState = () => {
-                const bottomBar = document.getElementById('bottomBarContainer');
-                if (!bottomBar) return false;
-                if (
-                  lastBottomBarComposerContainer &&
-                  !lastBottomBarComposerContainer.isConnected
-                ) {
-                  return false;
-                }
-                if (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) return false;
-                if (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected) return false;
-                return true;
-              };
-
-              const scheduleStartupVerificationPasses = () => {
-                if (didScheduleStartupVerification) return;
-                didScheduleStartupVerification = true;
-
-                setTimeout(() => {
-                  if (bottomBarStartupSettled || hasStableBottomBarState()) {
-                    bottomBarStartupSettled = true;
-                    return;
-                  }
-                  void runMoveTopBarLogic();
-                }, 320);
-              };
-
-              const disconnectStartupBottomBarObserver = () => {
-                startupBottomBarObserver?.disconnect();
-                startupBottomBarObserver = null;
-              };
-
-              const disconnectSteadyBottomBarObserver = () => {
-                steadyBottomBarObserver?.disconnect();
-                steadyBottomBarObserver = null;
-              };
-
-              const schedulePromoteToSteadyBottomBarObserver = () => {
-                clearTimeout(promoteBottomBarObserverTimeout);
-                promoteBottomBarObserverTimeout = setTimeout(() => {
-                  if (!hasStableBottomBarState()) return;
-                  disconnectStartupBottomBarObserver();
-                  installSteadyBottomBarObserver();
-                }, 700);
-              };
-
-              function placeModelSwitcherInCenter(center, right) {
-                if (!center) return;
-                const findModelBtn = () =>
-                  document.querySelector('#page-header button[aria-label^="Model selector" i]') ||
-                  document.querySelector(
-                    '#page-header button[data-testid="model-switcher-dropdown-button"]',
-                  ) ||
-                  document.querySelector(
-                    '#page-header button[data-testid="Model-switCher-dropdown-button"]',
-                  ) ||
-                  document.querySelector(
-                    '#bottomBarContainer button[aria-label^="Model selector" i]',
-                  ) ||
-                  document.querySelector(
-                    '#bottomBarContainer button[data-testid="model-switcher-dropdown-button"]',
-                  ) ||
-                  document.querySelector(
-                    '#bottomBarContainer button[data-testid="Model-switCher-dropdown-button"]',
-                  ) ||
-                  document.querySelector('button[aria-label^="Model selector" i]') ||
-                  document.querySelector('button[data-testid="model-switcher-dropdown-button"]') ||
-                  document.querySelector('button[data-testid="Model-switCher-dropdown-button"]');
-
-                const btn = findModelBtn();
-                if (!btn) return;
-
-                let group =
-                  btn.closest('#page-header .flex.items-center') ||
-                  btn.closest('#bottomBarContainer .flex.items-center') ||
-                  btn.closest('.flex.items-center') ||
-                  btn;
-
-                if (center.contains(group)) return;
-                if (group === right) group = btn;
-                center.appendChild(group);
-              }
-
-              function schedulePlaceModelSwitcherInCenter() {
-                clearTimeout(placeModelSwitcherTimeout);
-                placeModelSwitcherTimeout = setTimeout(() => {
-                  placeModelSwitcherInCenter(
-                    document.getElementById('bottomBarCenter'),
-                    document.getElementById('bottomBarRight'),
-                  );
-                }, 140);
-              }
-
-              async function runMoveTopBarLogic() {
-                if (runMoveTopBarLogicPromise) return runMoveTopBarLogicPromise;
-                runMoveTopBarLogicPromise = (async () => {
-                  if (hasLoginButtonPresent()) {
-                    setBottomBarReadyState(false);
-                    return;
-                  }
-                  await ensureOpacityValueReady();
-                  const targets = await waitForMoveTopBarTargets(12000);
-                  if (!targets) {
-                    setBottomBarReadyState(!!document.getElementById('bottomBarContainer'));
-                    return;
-                  }
-
-                  injectBottomBar(
-                    targets.topBarLeft,
-                    targets.topBarRight,
-                    targets.composerContainer,
-                  );
-                  const hasBottomBar = !!document.getElementById('bottomBarContainer');
-                  if (!hasBottomBar) setBottomBarReadyState(false);
-                  if (hasBottomBar) scheduleStartupVerificationPasses();
-
-                  waitForElement('button[data-testid="profile-button"]').then((profileButton) => {
-                    if (profileButton) {
-                      applyInitialGrayscale(profileButton);
-                      observeProfileButton(profileButton);
-                    }
-                  });
-                })().finally(() => {
-                  runMoveTopBarLogicPromise = null;
-                });
-                return runMoveTopBarLogicPromise;
-              }
-
-              const scheduleRunMoveTopBarLogic = () => {
-                clearTimeout(reinjectTimeout);
-                reinjectTimeout = setTimeout(() => {
-                  void runMoveTopBarLogic();
-                }, 220);
-              };
-
-              function installStartupBottomBarObserver() {
-                if (startupBottomBarObserver) return;
-                const root = document.body || document.documentElement;
-                if (!root) return;
-
-                startupBottomBarObserver = new MutationObserver((mutations) => {
-                  if (Date.now() < suppressBottomBarObserverUntil) return;
-                  const bottomBar = document.getElementById('bottomBarContainer');
-                  const onlyBottomBarInternal = mutations.every(
-                    (mutation) =>
-                      mutation.target instanceof Element &&
-                      bottomBar &&
-                      mutation.target.closest('#bottomBarContainer') === bottomBar,
-                  );
-                  if (onlyBottomBarInternal) return;
-                  const touchesModelSwitcher = mutations.some(
-                    (mutation) =>
-                      Array.from(mutation.addedNodes).some(nodeTouchesModelSwitcherTargets) ||
-                      Array.from(mutation.removedNodes).some(nodeTouchesModelSwitcherTargets),
-                  );
-                  if (touchesModelSwitcher) schedulePlaceModelSwitcherInCenter();
-                  const touchesTarget = mutations.some(
-                    (mutation) =>
-                      Array.from(mutation.addedNodes).some(nodeTouchesBottomBarTargets) ||
-                      Array.from(mutation.removedNodes).some(nodeTouchesBottomBarTargets),
-                  );
-                  const currentTargetsInvalidated =
-                    !bottomBar ||
-                    (lastBottomBarComposerContainer && !lastBottomBarComposerContainer.isConnected) ||
-                    (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) ||
-                    (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected);
-                  if (!touchesTarget && !currentTargetsInvalidated) return;
-                  scheduleRunMoveTopBarLogic();
-                });
-
-                startupBottomBarObserver.observe(root, { childList: true, subtree: true });
-              }
-
-              function installSteadyBottomBarObserver() {
-                if (steadyBottomBarObserver) return;
-                const root = document.body || document.documentElement;
-                if (!root) return;
-
-                steadyBottomBarObserver = new MutationObserver((mutations) => {
-                  if (Date.now() < suppressBottomBarObserverUntil) return;
-                  const bottomBar = document.getElementById('bottomBarContainer');
-                  if (!bottomBar) {
-                    disconnectSteadyBottomBarObserver();
-                    installStartupBottomBarObserver();
-                    scheduleRunMoveTopBarLogic();
-                    return;
-                  }
-
-                  const touchesModelSwitcher = mutations.some(
-                    (mutation) =>
-                      Array.from(mutation.addedNodes).some(nodeTouchesModelSwitcherTargets) ||
-                      Array.from(mutation.removedNodes).some(nodeTouchesModelSwitcherTargets),
-                  );
-                  if (touchesModelSwitcher) schedulePlaceModelSwitcherInCenter();
-
-                  const currentTargetsInvalidated =
-                    (lastBottomBarComposerContainer && !lastBottomBarComposerContainer.isConnected) ||
-                    (lastBottomBarLeftRef && !lastBottomBarLeftRef.isConnected) ||
-                    (lastBottomBarRightRef && !lastBottomBarRightRef.isConnected);
-
-                  const bottomBarTouched = mutations.some(
-                    (mutation) =>
-                      Array.from(mutation.removedNodes).some(
-                        (node) =>
-                          node === bottomBar ||
-                          (node instanceof Element && node.contains(bottomBar)),
-                      ) ||
-                      (mutation.target instanceof Element &&
-                        mutation.target.closest('#bottomBarContainer') === bottomBar &&
-                        mutation.removedNodes.length > 0),
-                  );
-
-                  if (!currentTargetsInvalidated && !bottomBarTouched) return;
-
-                  disconnectSteadyBottomBarObserver();
-                  installStartupBottomBarObserver();
-                  scheduleRunMoveTopBarLogic();
-                });
-
-                steadyBottomBarObserver.observe(root, { childList: true, subtree: true });
-              }
-
-              void runMoveTopBarLogic();
-              installStartupBottomBarObserver();
-
-              // ---------- Section 3 • Bottom Bar Creation ----------
-              /* ----------------------------------------------------------------------- */
-              function injectBottomBar(topBarLeft, topBarRight, composerContainer) {
-                /* prevent double‑injection ------------------------------------------ */
-                let bottomBar = document.getElementById('bottomBarContainer');
-                const anchorEl = composerContainer.closest('form') || composerContainer;
-                const markBottomBarMutationWindow = (ms = 500) => {
-                  suppressBottomBarObserverUntil = Date.now() + ms;
-                };
-
-                /* width + scale helpers: always defined so calls never fail ---------- */
-                function setWidth() {
-                  if (!bottomBar) return;
-                  bottomBar.style.width = window.getComputedStyle(composerContainer).width;
-                }
-                function scaleOnce() {
-                  if (!bottomBar) return 1;
-                  const avail = composerContainer.clientWidth;
-                  const content = bottomBar.scrollWidth;
-                  const s = Math.min(1, avail / content);
-                  bottomBar.style.transform = `scale(${s})`;
-                  bottomBar.style.transformOrigin = 'left center';
-                  return s;
-                }
-                function scaleUntilStable() {
-                  let prev;
-                  const loop = () => {
-                    setWidth();
-                    const curr = scaleOnce();
-                    if (curr !== prev) {
-                      prev = curr;
-                      requestAnimationFrame(loop); // keep looping until stable
-                    }
-                  };
-                  loop();
-                }
-                const debouncedStable = debounce(scaleUntilStable, 60);
-
-                let left = document.getElementById('bottomBarLeft');
-                let center = document.getElementById('bottomBarCenter');
-                let right = document.getElementById('bottomBarRight');
-
-                const sameTargets =
-                  !!bottomBar &&
-                  composerContainer === lastBottomBarComposerContainer &&
-                  topBarLeft === lastBottomBarLeftRef &&
-                  topBarRight === lastBottomBarRightRef;
-
-                if (sameTargets && left && center && right) {
-                  const anchored = bottomBar.previousElementSibling === anchorEl;
-                  if (!anchored) {
-                    markBottomBarMutationWindow();
-                    anchorEl.insertAdjacentElement('afterend', bottomBar);
-                  }
-                  if (!left.contains(topBarLeft)) {
-                    markBottomBarMutationWindow();
-                    left.appendChild(topBarLeft);
-                  }
-                  if (!right.contains(topBarRight)) {
-                    markBottomBarMutationWindow();
-                    right.appendChild(topBarRight);
-                  }
-                  placeModelSwitcherInCenter(center, right);
-                  requestAnimationFrame(scaleUntilStable);
-                  bottomBarStartupSettled = true;
-                  setBottomBarReadyState(true);
-                  schedulePromoteToSteadyBottomBarObserver();
-                  return;
-                }
-
-                if (!bottomBar) {
-                  /* create bar ----------------------------------------------------- */
-                  bottomBar = document.createElement('div');
-                  bottomBar.id = 'bottomBarContainer';
-                  Object.assign(bottomBar.style, {
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0 12px',
-                    margin: '0',
-                    minHeight: 'unset',
-                    lineHeight: '1',
-                    gap: '8px',
-                    fontSize: '12px',
-                    boxSizing: 'border-box',
-                    opacity: '1',
-                    transition: 'opacity 0.5s',
-                    visibility: 'hidden',
-                  });
-
-                  /* observe container resize + window resize (only once) ----------- */
-                  new ResizeObserver(debouncedStable).observe(composerContainer);
-                  window.addEventListener('resize', debouncedStable);
-
-                  /* fade / opacity handlers --------------------------------------- */
-                  const idleOpacity = () => {
-                    const value = coerceNumberFromStorage(window.popupBottomBarOpacityValue, 0.6);
-                    if (bottomBar) bottomBar.style.opacity = String(value);
-                  };
-
-                  let fadeT;
-                  setTimeout(idleOpacity, 2500);
-                  bottomBar.addEventListener('mouseover', () => {
-                    clearTimeout(fadeT);
-                    if (bottomBar) bottomBar.style.opacity = '1';
-                    if (typeof setGrayscale === 'function') setGrayscale(false);
-                  });
-                  bottomBar.addEventListener('mouseout', () => {
-                    fadeT = setTimeout(() => {
-                      idleOpacity();
-                      if (typeof setGrayscale === 'function') setGrayscale(true);
-                    }, 2500);
-                  });
-
-                  /* capture scroll, insert, restore ------------------------------- */
-                  const sc =
-                    typeof getScrollableContainer === 'function' && getScrollableContainer();
-                  const prevScrollBot = sc ? sc.scrollHeight - sc.scrollTop : 0;
-                  markBottomBarMutationWindow(900);
-                  anchorEl.insertAdjacentElement('afterend', bottomBar);
-                  if (sc) sc.scrollTop += sc.scrollHeight - prevScrollBot;
-
-                  /* run first stable scale pass after insertion ------------------- */
-                  requestAnimationFrame(scaleUntilStable);
-                }
-
-                if (!left) {
-                  left = document.createElement('div');
-                  left.id = 'bottomBarLeft';
-                  left.style.display = 'flex';
-                  left.style.alignItems = 'center';
-                  left.style.gap = '2px';
-                  bottomBar.appendChild(left);
-                }
-
-                if (!right) {
-                  right = document.createElement('div');
-                  right.id = 'bottomBarRight';
-                  right.style.display = 'flex';
-                  right.style.alignItems = 'center';
-                  right.style.gap = '2px';
-                  right.style.marginLeft = 'auto';
-                  bottomBar.appendChild(right);
-                }
-
-                if (!center) {
-                  center = document.createElement('div');
-                  center.id = 'bottomBarCenter';
-                  center.style.display = 'flex';
-                  center.style.alignItems = 'center';
-                  center.style.gap = '6px';
-                  // ensure the center sits between left and right
-                  bottomBar.insertBefore(center, right);
-                } else if (center.nextSibling !== right) {
-                  // keep center situated between left and right if DOM reorders
-                  bottomBar.insertBefore(center, right);
-                }
-
-                // Clean up left so only static buttons + topBarLeft remain
-                [...left.children].forEach((c) => {
-                  const keep = ['static-sidebar-btn', 'static-newchat-btn'];
-                  if (!keep.includes(c.dataset.id) && c !== topBarLeft) c.remove();
-                });
-
-                markBottomBarMutationWindow();
-                setBottomBarReadyState(false);
-                if (!left.contains(topBarLeft)) left.appendChild(topBarLeft);
-                if (!right.contains(topBarRight)) right.appendChild(topBarRight);
-
-                placeModelSwitcherInCenter(center, right);
-
-                injectStaticButtons(left);
-                adjustBottomBarTextScaling(bottomBar);
-                debounce(() => {
-                  /* re‑scale once text truncation done */
-                  scaleUntilStable();
-                }, 50)();
-                lastBottomBarComposerContainer = composerContainer;
-                lastBottomBarLeftRef = topBarLeft;
-                lastBottomBarRightRef = topBarRight;
-                bottomBarStartupSettled = true;
-                requestAnimationFrame(() => {
-                  if (bottomBar) bottomBar.style.visibility = '';
-                  setBottomBarReadyState(true);
-                  schedulePromoteToSteadyBottomBarObserver();
-                });
-
-                /* hide stale disclaimer ------------------------------------------- */
-                const old = document.querySelector(
-                  'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs',
-                );
-                if (old)
-                  gsap.to(old, {
-                    opacity: 0,
-                    duration: 0.4,
-                    ease: 'sine.out',
-                    onComplete: () => {
-                      old.style.display = 'none';
-                    },
-                  });
-              }
-
-              // -------------------- Section 4. Static Buttons --------------------
-              function injectStaticButtons(leftContainer) {
-                // ---- 4.1  Static Toggle‑Sidebar Button ----
-                let btnSidebar = leftContainer.querySelector(
-                  'button[data-id="static-sidebar-btn"]',
-                );
-                if (!btnSidebar) {
-                  btnSidebar = createStaticButton({
-                    label: 'Static Toggle Sidebar',
-                    svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
-                    proxySelector:
-                      'button[data-testid="open-sidebar-button"],button[data-testid="close-sidebar-button"]',
-                    fallbackShortcut: {
-                      ctrl: true,
-                      shift: true,
-                      key: 's',
-                      code: 'KeyS',
-                    },
-                  });
-                  leftContainer.insertBefore(btnSidebar, leftContainer.firstChild);
-                }
-
-                // ---- 4.2  Static New‑Chat Button ----
-                let btnNewChat = leftContainer.querySelector(
-                  'button[data-id="static-newchat-btn"]',
-                );
-                if (!btnNewChat) {
-                  btnNewChat = createStaticButton({
-                    label: 'Static New Chat',
-                    svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
-                    proxySelector: 'button[data-testid="new-chat-button"]',
-                    fallbackShortcut: {
-                      ctrl: true,
-                      shift: true,
-                      key: 'o',
-                      code: 'KeyO',
-                    },
-                  });
-                  leftContainer.insertBefore(btnNewChat, btnSidebar.nextSibling);
-                }
-              }
-
-              /* ---------- shared helper ---------- */
-              function createStaticButton({ label, svg, proxySelector, fallbackShortcut }) {
-                const btn = document.createElement('button');
-                btn.setAttribute('aria-label', label);
-                btn.setAttribute(
-                  'data-id',
-                  label.toLowerCase().includes('sidebar')
-                    ? 'static-sidebar-btn'
-                    : 'static-newchat-btn',
-                );
-
-                // ---- visual styling (unchanged) ----
-                btn.innerHTML = svg;
-                btn.className =
-                  'text-token-text-secondary focus-visible:bg-token-surface-hover ' +
-                  'enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary ' +
-                  'h-10 rounded-lg px-2 focus-visible:outline-0';
-                Object.assign(btn.style, {
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '36px',
-                  padding: '8px',
-                });
-
-                /* ---- behaviour ---- */
-                btn.onclick = (e) => {
-                  e.preventDefault();
-                  e.stopImmediatePropagation();
-
-                  // Attempt shortcut first (if defined)…
-                  if (fallbackShortcut) {
-                    const { key, code, ctrl, shift, alt = false, meta = false } = fallbackShortcut;
-                    const isMac = isMacPlatform();
-
-                    const evtInit = {
-                      key: key.toUpperCase(),
-                      code,
-                      keyCode: key.toUpperCase().charCodeAt(0),
-                      which: key.toUpperCase().charCodeAt(0),
-                      bubbles: true,
-                      cancelable: true,
-                      composed: true,
-                      shiftKey: !!shift,
-                      ctrlKey: !!ctrl && !isMac,
-                      metaKey: !!meta || (isMac && !!ctrl),
-                      altKey: !!alt,
-                    };
-
-                    // `dispatchEvent` returns FALSE if preventDefault was called → means the page handled our shortcut
-                    const shortcutUnhandled = document.dispatchEvent(
-                      new KeyboardEvent('keydown', evtInit),
-                    );
-                    document.dispatchEvent(new KeyboardEvent('keyup', evtInit));
-
-                    // …fallback to click only when the shortcut was NOT handled
-                    if (shortcutUnhandled) {
-                      const target = document.querySelector(proxySelector);
-                      if (target?.offsetParent !== null) target.click();
-                    }
-                  } else {
-                    // No shortcut defined → always click
-                    const target = document.querySelector(proxySelector);
-                    if (target?.offsetParent !== null) target.click();
-                  }
-                };
-
-                return btn;
-              }
-
-              // -------------------- Section 5. Grayscale Profile Button --------------------
-              let profileBtnRef;
-              function applyInitialGrayscale(btn) {
-                if (!btn) return;
-                profileBtnRef = btn;
-                btn.style.setProperty('filter', 'grayscale(100%)', 'important');
-                btn.style.setProperty('transition', 'filter 0.4s ease', 'important');
-              }
-              function setGrayscale(state) {
-                if (!profileBtnRef) return;
-                profileBtnRef.style.setProperty(
-                  'filter',
-                  state ? 'grayscale(100%)' : 'grayscale(0%)',
-                  'important',
-                );
-              }
-              function observeProfileButton(btn) {
-                const parent = btn.parentElement || document.body;
-                const observer = new MutationObserver(() => {
-                  const newBtn = document.querySelector('button[data-testid="profile-button"]');
-                  if (newBtn && newBtn !== profileBtnRef) {
-                    applyInitialGrayscale(newBtn);
-                  }
-                });
-                observer.observe(parent, { childList: true, subtree: false });
-              }
-
-              // ---------- Section 6 • Text Truncation ----------
-
-              function applyOneLineEllipsis(el) {
-                el.style.setProperty('white-space', 'nowrap', 'important');
-                el.style.setProperty('overflow', 'hidden', 'important');
-                el.style.setProperty('text-overflow', 'ellipsis', 'important');
-                // keep the current font‑size; no shrinking logic
-              }
-
-              function adjustBottomBarTextScaling(bar) {
-                bar.querySelectorAll('.truncate').forEach((el) => {
-                  if (
-                    el.closest(
-                      'button[data-id="static-sidebar-btn"],button[data-id="static-newchat-btn"]',
-                    )
-                  )
-                    return;
-                  applyOneLineEllipsis(el);
-                });
-              }
-
-              function initAdjustBottomBarTextScaling() {
-                const bar = document.querySelector('#bottomBarContainer, .bottom-bar');
-                if (!bar) return;
-
-                const run = () => adjustBottomBarTextScaling(bar);
-                const deb = debounce(run, 100);
-
-                run(); // initial pass
-                window.addEventListener('resize', deb);
-                new ResizeObserver(deb).observe(bar); // re‑apply on layout changes
-              }
-
-              if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initAdjustBottomBarTextScaling, {
-                  once: true,
-                });
-              } else {
-                initAdjustBottomBarTextScaling();
-              }
-            })();
+        }
+
+        clearTimeout(state.revealTimer);
+        state.revealTimer = window.setTimeout(() => {
+          scheduleReconcile('reveal_wait_timeout');
+        }, 250);
+
+        return {
+          shouldReveal: false,
+          reason: 'waiting_for_model_button',
+          waitedMs: roundMs(waitedMs),
+        };
+      }
+
+      clearTimeout(state.revealTimer);
+      state.lastRevealWaitBucket = -1;
+
+      return {
+        shouldReveal: true,
+        reason: hasPrimaryControl ? 'primary_control_ready' : 'timeout',
+        waitedMs: roundMs(waitedMs),
+      };
+    }
+
+    function commitReveal(shell, nextModelButton, nextHeaderActions, revealDecision) {
+      if (!shell) return;
+
+      state.modelButton = syncLeftSlotContent(
+        shell.left,
+        resolveMountedSlotNode(shell.left, nextModelButton, state.modelButton),
+      );
+
+      state.headerActions = syncSlotContent(
+        shell.right,
+        resolveMountedSlotNode(shell.right, nextHeaderActions, state.headerActions),
+      );
+
+      adjustBottomBarTextScaling(shell.bottomBar);
+      hideStaleDisclaimer();
+
+      if (shell.bottomBar instanceof HTMLElement) {
+        shell.bottomBar.style.visibility = '';
+        shell.bottomBar.dataset.pending = 'false';
+      }
+
+      state.revealed = true;
+      state.lastRepairReason = '';
+
+      if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
+        if (!state.firstRevealAt) {
+          state.firstRevealAt = performance.now();
+        }
+
+        perfLog('reveal_commit', {
+          reason: revealDecision?.reason || 'unknown',
+          sinceStartMs: roundMs(state.firstRevealAt - state.perfStart),
+          sinceFirstAttachMs: state.firstAttachAt
+            ? roundMs(state.firstRevealAt - state.firstAttachAt)
+            : null,
+          sinceLastAttachMs: state.shellAttachedAt
+            ? roundMs(state.firstRevealAt - state.shellAttachedAt)
+            : null,
+          modelButtonPresent: !!state.modelButton,
+          headerActionsPresent: !!state.headerActions,
+        });
+      }
+
+      applyReadyState(shouldHideTopHeader(), 'reveal_commit');
+    }
+
+    function syncRevealedSlots(shell, nextModelButton, nextHeaderActions) {
+      if (!shell) return;
+
+      clearTimeout(state.revealTimer);
+
+      state.modelButton = syncLeftSlotContent(
+        shell.left,
+        resolveMountedSlotNode(shell.left, nextModelButton, state.modelButton),
+      );
+
+      state.headerActions = syncSlotContent(
+        shell.right,
+        resolveMountedSlotNode(shell.right, nextHeaderActions, state.headerActions),
+      );
+
+      adjustBottomBarTextScaling(shell.bottomBar);
+      hideStaleDisclaimer();
+      state.lastRepairReason = '';
+      applyReadyState(shouldHideTopHeader(), 'sync_revealed_slots');
+    }
+
+    function getRepairReason() {
+      if (!(state.root instanceof Element)) return null;
+      if (!state.root.isConnected) return 'root_disconnected';
+
+      if (!(state.left instanceof Element)) return 'left_slot_missing';
+      if (!(state.center instanceof Element)) return 'center_slot_missing';
+      if (!(state.right instanceof Element)) return 'right_slot_missing';
+
+      if (state.mountedHostParent && !state.mountedHostParent.isConnected) {
+        return 'mount_parent_disconnected';
+      }
+
+      if (state.mountedAnchor && !state.mountedAnchor.isConnected) {
+        return 'anchor_disconnected';
+      }
+
+      if (state.mountedHostParent && state.root.parentElement !== state.mountedHostParent) {
+        return 'mount_parent_mismatch';
+      }
+
+      if (state.mountedAnchor && state.root.previousElementSibling !== state.mountedAnchor) {
+        return 'anchor_mismatch';
+      }
+
+      if (!state.left.querySelector('button[data-id="static-sidebar-btn"]')) {
+        return 'static_sidebar_missing';
+      }
+
+      if (!state.left.querySelector('button[data-id="static-newchat-btn"]')) {
+        return 'static_newchat_missing';
+      }
+
+      if (state.modelButton instanceof Element) {
+        if (!state.modelButton.isConnected) return 'model_button_disconnected';
+        if (!state.left.contains(state.modelButton)) return 'model_button_unmounted';
+      }
+
+      if (state.headerActions instanceof Element) {
+        if (!state.headerActions.isConnected) return 'header_actions_disconnected';
+        if (!state.right.contains(state.headerActions)) return 'header_actions_unmounted';
+      }
+
+      return null;
+    }
+
+    function nodeIsInsideBottomBar(node) {
+      const el =
+        node instanceof Element
+          ? node
+          : node && node.parentElement instanceof Element
+            ? node.parentElement
+            : null;
+      return !!(el && el.closest('#bottomBarContainer') === state.root);
+    }
+
+    function isInternalBottomBarMutation(mutation) {
+      if (!nodeIsInsideBottomBar(mutation.target)) return false;
+
+      const touchedOutside = [...mutation.addedNodes, ...mutation.removedNodes].some(
+        (node) => !nodeIsInsideBottomBar(node),
+      );
+
+      return !touchedOutside;
+    }
+
+    function elementTouchesTrackedNode(element, tracked) {
+      return (
+        tracked instanceof Element &&
+        (element === tracked || element.contains(tracked) || tracked.contains(element))
+      );
+    }
+
+    function nodeTouchesRelevant(node) {
+      if (!(node instanceof Element)) return false;
+      if (node.closest('#bottomBarContainer')) return false;
+
+      if (
+        RELEVANT_MUTATION_SELECTORS.some(
+          (selector) => node.matches(selector) || !!node.querySelector(selector),
+        )
+      ) {
+        return true;
+      }
+
+      if (elementTouchesTrackedNode(node, state.mountedAnchor)) return true;
+      if (elementTouchesTrackedNode(node, state.composerContainer)) return true;
+      if (elementTouchesTrackedNode(node, state.modelButton)) return true;
+      if (elementTouchesTrackedNode(node, state.headerActions)) return true;
+
+      return false;
+    }
+
+    function isRelevantMutation(mutation) {
+      const target = mutation.target instanceof Element ? mutation.target : null;
+
+      if (target && !target.closest('#bottomBarContainer')) {
+        if (
+          target.closest(SELECTORS.PAGE_HEADER) ||
+          target.closest(SELECTORS.THREAD_BOTTOM_CONTAINER) ||
+          target.closest(SELECTORS.THREAD_BOTTOM) ||
+          target.closest(SELECTORS.COMPOSER_FORM)
+        ) {
+          return true;
+        }
+
+        if (elementTouchesTrackedNode(target, state.mountedAnchor)) return true;
+        if (elementTouchesTrackedNode(target, state.composerContainer)) return true;
+        if (elementTouchesTrackedNode(target, state.modelButton)) return true;
+        if (elementTouchesTrackedNode(target, state.headerActions)) return true;
+      }
+
+      return [...mutation.addedNodes, ...mutation.removedNodes].some(nodeTouchesRelevant);
+    }
+
+    function maybeStartNonCriticalHelpers() {
+      if (state.nonCriticalHelpersStarted || !state.revealed) return;
+      state.nonCriticalHelpersStarted = true;
+
+      const run = () => {
+        initStripComposerLabels();
+
+        waitForElement(SELECTORS.PROFILE_BUTTON, 12000).then((profileButton) => {
+          if (profileButton && !state.profileButtonObserverStarted) {
+            state.profileButtonObserverStarted = true;
+            applyInitialGrayscale(profileButton);
+            observeProfileButton(profileButton);
+          }
+        });
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(run, { timeout: 600 });
+      } else {
+        window.setTimeout(run, 180);
+      }
+    }
+
+    async function reconcile(reasons = ['unspecified']) {
+      if (state.reconcileRunning) {
+        perfLog('reconcile_skipped', {
+          reasons,
+          why: 'already_running',
+        });
+        return;
+      }
+
+      state.reconcileRunning = true;
+
+      perfLog('reconcile_start', {
+        reasons,
+        revealed: state.revealed,
+        attachCount: state.attachCount,
+      });
+
+      try {
+        if (hasLoginButtonPresent()) {
+          perfLog('reconcile_abort', {
+            reasons,
+            why: 'login_button_present',
           });
+          applyReadyState(false, 'login_button_present');
+          return;
+        }
 
-          // -------------------- Section 7. Style Injection ("global") --------------------
+        const snapshot = findAnchorSnapshot();
 
-          (function injectBottomBarStyles() {
-            const style = document.createElement('style');
-            style.textContent = `
-                    .${BOTTOM_BAR_READY_CLASS} .draggable.sticky.top-0,
-                    .${BOTTOM_BAR_READY_CLASS} #page-header {
-                        opacity: 0 !important; pointer-events: none !important;
-                        position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important;
-                    }
-                    #bottomBarContainer { padding-top:0!important; padding-bottom:0!important; margin-top:2px!important; margin-bottom:calc(2px - 0.5em)!important; overflow-anchor:none!important;}
-                    #bottomBarContainer button:hover {filter:brightness(1.1)!important;}
-                    div[data-id="hide-this-warning"] {
-                        opacity:0!important; pointer-events:none!important; position:absolute!important;
-                        width:1px!important; height:1px!important; overflow:hidden!important;
-                    }
-                    #bottomBarContainer button[data-testid="open-sidebar-button"] {
-                        opacity: 0 !important;
-                        pointer-events: none !important;
-                        position: absolute !important;
-                        width: 1px !important;
-                        height: 1px !important;
-                        overflow: hidden !important;
-                    }
-                    #bottomBarContainer #conversation-header-actions a[href="/"][data-discover="true"] {
-                        opacity: 0 !important;
-                        pointer-events: none !important;
-                        position: absolute !important;
-                        width: 1px !important;
-                        height: 1px !important;
-                        overflow: hidden !important;
-                    }
-                    div#bottomBarLeft { scale: 0.9; }
-                    div#bottomBarCenter { scale: 0.9; }
-                    div#bottomBarRight { scale: 0.85; padding-right: 0em;}
-                    #thread-bottom-container {margin-bottom:0em;}
+        if (!snapshot) {
+          perfLog('reconcile_wait', {
+            reasons,
+            why: 'snapshot_missing',
+          });
+          applyReadyState(false, 'snapshot_missing');
+          return;
+        }
 
-                    #bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
-                    #bottomBarContainer button:has(svg > path[d^="M6.83496"]),
-                    #bottomBarContainer button:has(svg > path[d^="M2.6687"]),
-                    #bottomBarContainer a:has(svg > path[d^="M2.6687"]),
-                    #bottomBarContainer a:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
-                    #bottomBarContainer button:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
-                    #bottomBarContainer button:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
-                    #bottomBarContainer a:has(svg > path[d^="M9.65723 2.66504C9.47346"]),
-                    #bottomBarContainer a:has(svg > path[d^="M15.6729 3.91287C16.8918"]),
-                    #bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"]),
-                    #bottomBarContainer a:has(svg > path[d^="M11.6663 12.6686L11.801"]),
-                    #bottomBarContainer button:has(svg > path[d^="M11.6663 12.6686L11.801"]) {
-                    visibility: hidden !important;
-                    position: absolute !important;
-                    width: 1px !important;
-                    height: 1px !important;
-                    overflow: hidden !important;
-                    }
+        if (!ensureStableAnchor(snapshot)) {
+          perfLog('reconcile_wait', {
+            reasons,
+            why: 'anchor_unstable',
+            stableFrames: state.anchorStableFrames,
+          });
+          scheduleReconcile('anchor_unstable');
+          return;
+        }
 
-                    /* one‑line truncation for bottom‑bar text */
-                    #bottomBarContainer .truncate,
-                    #bottomBarLeft      .truncate,
-                    #bottomBarCenter    .truncate,
-                    #bottomBarRight     .truncate {
-                    
-                    white-space: nowrap !important;   /* single line */
-                    overflow: hidden !important;
-                    text-overflow: ellipsis !important;
-                    word-break: break-word !important;
-                    /* removed: -webkit-line-clamp, -webkit-box-orient, font‑size, line‑height, max‑height */
-                    }
+        const shell = ensureShell(snapshot);
+        if (!shell) {
+          perfLog('reconcile_abort', {
+            reasons,
+            why: 'shell_unavailable',
+          });
+          applyReadyState(false, 'shell_unavailable');
+          return;
+        }
 
+        const nextModelButton = resolveMountedSlotNode(
+          shell.left,
+          findHeaderModelButton(),
+          state.modelButton,
+        );
 
-                    /* ReferenceLocation 101 hide the user setting button in sidebar, but ONLY when moveTopBarToBottomCheckbox feature is enabled */
+        const nextHeaderActions = resolveMountedSlotNode(
+          shell.right,
+          findHeaderConversationActions(),
+          state.headerActions,
+        );
 
-                    /* Nudge the legacy models submenu (left popper) up by 50px when bottomBarContainer is present */
+        state.composerContainer = snapshot.composerContainer;
 
-                    .mb-4 {
-                    margin-bottom: 4px;
-                    }
+        if (state.revealed) {
+          if (reasons.some((reason) => String(reason).startsWith('repair:'))) {
+            perfLog('post_reveal_repair_pass', { reasons });
+          }
 
-                `;
-            document.head.appendChild(style);
-          })();
+          syncRevealedSlots(shell, nextModelButton, nextHeaderActions);
+        } else {
+          const revealDecision = getRevealDecision(nextModelButton);
 
-          // -------------------- Section 7.1. Bottom Bar Mutation Observer for Duplicate Buttons --------------------
-          (() => {
-            const PATH_PREFIXES = ['M15.6729', 'M8.85719'];
-            const SELECTOR = ['button', 'a']
-              .map((tag) =>
-                PATH_PREFIXES.map((prefix) => `${tag} svg > path[d^="${prefix}"]`).join(','),
-              )
-              .join(',');
+          if (revealDecision.shouldReveal) {
+            commitReveal(shell, nextModelButton, nextHeaderActions, revealDecision);
+          } else {
+            applyReadyState(false, 'pre_reveal_wait');
+          }
+        }
 
-            function hideMatchedElements(container) {
-              if (!container) return;
-              // Find all matching paths in the container
-              const paths = container.querySelectorAll(SELECTOR);
-              paths.forEach((path) => {
-                const el = path.closest('button,a');
-                if (el) {
-                  el.style.setProperty('visibility', 'hidden', 'important');
-                  el.style.setProperty('position', 'absolute', 'important');
-                  el.style.setProperty('width', '1px', 'important');
-                  el.style.setProperty('height', '1px', 'important');
-                  el.style.setProperty('overflow', 'hidden', 'important');
-                  // Optional: add a data attribute so you can track which elements were hidden
-                  el.setAttribute('data-ext-hidden', 'true');
-                }
-              });
-            }
+        maybeStartNonCriticalHelpers();
+      } finally {
+        state.reconcileRunning = false;
+      }
+    }
 
-            observeMountedSelector('#bottomBarContainer', (container) => {
-              const debouncedHide = debounce(() => hideMatchedElements(container), 60);
+    return { start };
+  }
 
-              hideMatchedElements(container);
-              const observer = new MutationObserver((mutationsList) => {
-                const hasRelevantMutations = mutationsList.some(
-                  (mutation) =>
-                    mutation.target instanceof Element &&
-                    mutation.target.closest('#bottomBarContainer') === container &&
-                    (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0),
-                );
-                if (hasRelevantMutations) debouncedHide();
-              });
-              observer.observe(container, {
-                childList: true,
-                subtree: true,
-              });
+  // -------------------- Shared helpers used after controller starts --------------------
 
-              return () => {
-                observer.disconnect();
-              };
-            });
-          })();
+  function waitForElement(selector, timeout = 12000) {
+    const existing = document.querySelector(selector);
+    if (existing) return Promise.resolve(existing);
 
-          // -------------------- Section 8. Hide Disclaimers (live observation) --------------------
-          (() => {
-            // "Important" roots in: English, Spanish, Hindi, Japanese, Ukrainian, Russian
-            const importantRoots = [
-              'important', // English
-              'importante', // Spanish
-              'ज़रूरी', // Hindi (zaruri)
-              '重要', // Japanese
-              'важн', // Russian (catch важную, важное, важно, важная, etc.)
-              'важлив', // Ukrainian (catch важливу, важливо, etc.)
-            ];
+    return new Promise((resolve) => {
+      const root = document.body || document.documentElement;
+      if (!root) {
+        resolve(null);
+        return;
+      }
 
-            function containsImportantRoot(txt) {
-              return importantRoots.some((root) => txt.toLowerCase().includes(root.toLowerCase()));
-            }
+      let done = false;
 
-            function markImportantWarnings(root) {
-              if (!(root instanceof Element) && root !== document) return;
-              root.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
-                const txt = el.textContent.trim().replace(/\s+/g, ' ');
-                if (containsImportantRoot(txt)) {
-                  el.setAttribute('data-id', 'hide-this-warning');
-                }
-              });
-            }
+      const finish = (el) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(el || null);
+      };
 
-            const markNodeIfRelevant = (node) => {
-              if (!(node instanceof Element)) return;
+      const timer = window.setTimeout(() => finish(null), timeout);
 
-              if (node.matches('div.text-token-text-secondary')) {
-                const txt = node.textContent.trim().replace(/\s+/g, ' ');
-                if (containsImportantRoot(txt)) {
-                  node.setAttribute('data-id', 'hide-this-warning');
-                }
-              }
+      const observer = new MutationObserver(() => {
+        const el = document.querySelector(selector);
+        if (el) finish(el);
+      });
 
-              if (node.querySelector('div.text-token-text-secondary')) {
-                markImportantWarnings(node);
-              }
-            };
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+      });
+    });
+  }
 
-            markImportantWarnings(document);
+  function nodeMatchesSelector(node, selector) {
+    return node instanceof Element && (node.matches(selector) || !!node.querySelector(selector));
+  }
 
-            const root = document.body || document.documentElement;
-            if (!root) return;
+  function observeMountedSelector(selector, onAttach, timeout = 12000) {
+    let currentEl = null;
+    let detachCurrent = null;
 
-            const observer = new MutationObserver((mutations) => {
-              for (const mutation of mutations) {
-                if (mutation.type === 'characterData') {
-                  const parent = mutation.target?.parentElement;
-                  if (parent?.matches('div.text-token-text-secondary')) {
-                    markNodeIfRelevant(parent);
-                  }
-                  continue;
-                }
+    const attach = (el) => {
+      if (!(el instanceof Element) || el === currentEl) return;
+      detachCurrent?.();
+      currentEl = el;
+      const maybeDetach = onAttach(el);
+      detachCurrent = typeof maybeDetach === 'function' ? maybeDetach : null;
+    };
 
-                for (const node of mutation.addedNodes) {
-                  markNodeIfRelevant(node);
-                }
-              }
-            });
+    const refresh = () => {
+      const next = document.querySelector(selector);
+      if (next instanceof Element) {
+        attach(next);
+        return;
+      }
 
-            observer.observe(root, {
-              childList: true,
-              subtree: true,
-              characterData: true,
-            });
-          })();
+      if (currentEl && !currentEl.isConnected) {
+        detachCurrent?.();
+        detachCurrent = null;
+        currentEl = null;
+      }
+    };
 
-          // -------------------- Section 9. Remove Composer Button Labels (lang-agnostic) --------------------
-          (function stripComposerLabels() {
-            const ACTION_WRAPPER =
-              '[style*="--vt-composer-search-action"],[style*="--vt-composer-research-action"]';
-            const IMAGE_BUTTON = 'button[data-testid="composer-button-create-image"]';
+    waitForElement(selector, timeout).then((el) => {
+      if (el) attach(el);
+    });
 
-            const stripLabel = (btn) => {
-              btn.querySelectorAll('span, div').forEach((node) => {
-                if (!node.querySelector('svg') && !node.dataset.labelStripped) {
-                  node.dataset.labelStripped = 'true';
-                  gsap.to(node, {
-                    opacity: 0,
-                    duration: 0.15,
-                    ease: 'sine.out',
-                    onComplete: () => node.remove(),
-                  });
-                }
-              });
-            };
-            const scan = (root) => {
-              if (!(root instanceof Element) && root !== document) return;
-              root.querySelectorAll(ACTION_WRAPPER).forEach((wrp) => {
-                const btn = wrp.querySelector('button');
-                if (btn) stripLabel(btn);
-              });
-              root.querySelectorAll(IMAGE_BUTTON).forEach((btn) => {
-                stripLabel(btn); // no implicit return from callback
-              });
-            };
+    const root = document.body || document.documentElement;
+    if (!root) return;
 
-            observeMountedSelector("form[data-type='unified-composer']", (composerForm) => {
-              const debouncedScan = debounce(() => scan(composerForm), 60);
+    const observer = new MutationObserver((mutations) => {
+      if (currentEl && !currentEl.isConnected) {
+        refresh();
+        return;
+      }
 
-              scan(composerForm);
-              const observer = new MutationObserver((mutations) => {
-                const hasRelevantMutations = mutations.some(
-                  (mutation) =>
-                    mutation.target instanceof Element &&
-                    mutation.target.closest("form[data-type='unified-composer']") === composerForm &&
-                    (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0),
-                );
-                if (hasRelevantMutations) debouncedScan();
-              });
-              observer.observe(composerForm, { childList: true, subtree: true });
+      const touchesSelector = mutations.some(
+        (mutation) =>
+          Array.from(mutation.addedNodes).some((node) => nodeMatchesSelector(node, selector)) ||
+          Array.from(mutation.removedNodes).some((node) => nodeMatchesSelector(node, selector)),
+      );
 
-              return () => {
-                observer.disconnect();
-              };
-            });
-          })();
-        })(); // runs bottom-bar startup immediately after the gate
-      })(); // closes async function main()
-    }, // closes chrome.storage.sync.get callback
-  ); // closes chrome.storage.sync.get
-})(); // closes the outer IIFE
+      if (touchesSelector) refresh();
+    });
+
+    observer.observe(root, { childList: true, subtree: true });
+    refresh();
+  }
+
+  // -------------------- Static buttons --------------------
+
+  function injectStaticButtons(leftContainer) {
+    let btnSidebar = leftContainer.querySelector('button[data-id="static-sidebar-btn"]');
+    if (!btnSidebar) {
+      btnSidebar = createStaticButton({
+        label: 'Static Toggle Sidebar',
+        svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
+        proxySelector:
+          'button[data-testid="open-sidebar-button"],button[data-testid="close-sidebar-button"]',
+        fallbackShortcut: {
+          ctrl: true,
+          shift: true,
+          key: 's',
+          code: 'KeyS',
+        },
+      });
+      leftContainer.insertBefore(btnSidebar, leftContainer.firstChild);
+    }
+
+    let btnNewChat = leftContainer.querySelector('button[data-id="static-newchat-btn"]');
+    if (!btnNewChat) {
+      btnNewChat = createStaticButton({
+        label: 'Static New Chat',
+        svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
+        proxySelector: 'button[data-testid="new-chat-button"]',
+        fallbackShortcut: {
+          ctrl: true,
+          shift: true,
+          key: 'o',
+          code: 'KeyO',
+        },
+      });
+      leftContainer.insertBefore(btnNewChat, btnSidebar.nextSibling);
+    }
+  }
+
+  function createStaticButton({ label, svg, proxySelector, fallbackShortcut }) {
+    const btn = document.createElement('button');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute(
+      'data-id',
+      label.toLowerCase().includes('sidebar') ? 'static-sidebar-btn' : 'static-newchat-btn',
+    );
+
+    btn.innerHTML = svg;
+    btn.className =
+      'text-token-text-secondary focus-visible:bg-token-surface-hover ' +
+      'enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary ' +
+      'h-10 rounded-lg px-2 focus-visible:outline-0';
+
+    Object.assign(btn.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '36px',
+      padding: '8px',
+    });
+
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (fallbackShortcut) {
+        const { key, code, ctrl, shift, alt = false, meta = false } = fallbackShortcut;
+        const isMac =
+          typeof isMacPlatform === 'function'
+            ? !!isMacPlatform()
+            : /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+
+        const evtInit = {
+          key: key.toUpperCase(),
+          code,
+          keyCode: key.toUpperCase().charCodeAt(0),
+          which: key.toUpperCase().charCodeAt(0),
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          shiftKey: !!shift,
+          ctrlKey: !!ctrl && !isMac,
+          metaKey: !!meta || (isMac && !!ctrl),
+          altKey: !!alt,
+        };
+
+        const shortcutUnhandled = document.dispatchEvent(new KeyboardEvent('keydown', evtInit));
+        document.dispatchEvent(new KeyboardEvent('keyup', evtInit));
+
+        if (shortcutUnhandled) {
+          const target = document.querySelector(proxySelector);
+          if (target?.offsetParent !== null) target.click();
+        }
+      } else {
+        const target = document.querySelector(proxySelector);
+        if (target?.offsetParent !== null) target.click();
+      }
+    };
+
+    return btn;
+  }
+
+  // -------------------- Grayscale Profile Button --------------------
+
+  let profileBtnRef;
+
+  function applyInitialGrayscale(btn) {
+    if (!btn) return;
+    profileBtnRef = btn;
+    btn.style.setProperty('filter', 'grayscale(100%)', 'important');
+    btn.style.setProperty('transition', 'filter 0.4s ease', 'important');
+  }
+
+  function setGrayscale(state) {
+    if (!profileBtnRef) return;
+    profileBtnRef.style.setProperty(
+      'filter',
+      state ? 'grayscale(100%)' : 'grayscale(0%)',
+      'important',
+    );
+  }
+
+  function observeProfileButton(btn) {
+    const parent = btn.parentElement || document.body;
+    const observer = new MutationObserver(() => {
+      const newBtn = document.querySelector(SELECTORS.PROFILE_BUTTON);
+      if (newBtn && newBtn !== profileBtnRef) {
+        applyInitialGrayscale(newBtn);
+      }
+    });
+    observer.observe(parent, { childList: true, subtree: false });
+  }
+
+  // -------------------- Bottom bar text handling --------------------
+
+  function applyOneLineEllipsis(el) {
+    el.style.setProperty('white-space', 'nowrap', 'important');
+    el.style.setProperty('overflow', 'hidden', 'important');
+    el.style.setProperty('text-overflow', 'ellipsis', 'important');
+  }
+
+  function adjustBottomBarTextScaling(bar) {
+    if (!(bar instanceof Element)) return;
+
+    bar.querySelectorAll('.truncate').forEach((el) => {
+      if (el.closest('button[data-id="static-sidebar-btn"],button[data-id="static-newchat-btn"]')) {
+        return;
+      }
+      applyOneLineEllipsis(el);
+    });
+  }
+
+  function hideStaleDisclaimer() {
+    const warning =
+      document.querySelector('[data-id="hide-this-warning"]') ||
+      document.querySelector(
+        'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs',
+      );
+
+    if (warning instanceof HTMLElement) {
+      warning.style.display = 'none';
+    }
+  }
+
+  // -------------------- Remove Composer Button Labels (deferred) --------------------
+
+  function initStripComposerLabels() {
+    const ACTION_WRAPPER =
+      '[style*="--vt-composer-search-action"],[style*="--vt-composer-research-action"]';
+    const IMAGE_BUTTON = 'button[data-testid="composer-button-create-image"]';
+    const debounce = createDebounce;
+
+    const stripLabel = (btn) => {
+      btn.querySelectorAll('span, div').forEach((node) => {
+        if (node.querySelector('svg') || node.dataset.labelStripped) return;
+
+        node.dataset.labelStripped = 'true';
+
+        if (window.gsap?.to) {
+          gsap.to(node, {
+            opacity: 0,
+            duration: 0.15,
+            ease: 'sine.out',
+            onComplete: () => node.remove(),
+          });
+        } else {
+          node.style.opacity = '0';
+          node.remove();
+        }
+      });
+    };
+
+    const scan = (root) => {
+      if (!(root instanceof Element) && root !== document) return;
+
+      root.querySelectorAll(ACTION_WRAPPER).forEach((wrp) => {
+        const btn = wrp.querySelector('button');
+        if (btn) stripLabel(btn);
+      });
+
+      root.querySelectorAll(IMAGE_BUTTON).forEach((btn) => {
+        stripLabel(btn);
+      });
+    };
+
+    observeMountedSelector(SELECTORS.COMPOSER_FORM, (composerForm) => {
+      const debouncedScan = debounce(() => scan(composerForm), 60);
+
+      scan(composerForm);
+
+      const observer = new MutationObserver((mutations) => {
+        const hasRelevantMutations = mutations.some(
+          (mutation) =>
+            mutation.target instanceof Element &&
+            mutation.target.closest(SELECTORS.COMPOSER_FORM) === composerForm &&
+            (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0),
+        );
+
+        if (hasRelevantMutations) debouncedScan();
+      });
+
+      observer.observe(composerForm, { childList: true, subtree: true });
+
+      return () => observer.disconnect();
+    });
+  }
+
+  // -------------------- Boot --------------------
+
+  chrome.storage.sync.get(
+    { moveTopBarToBottomCheckbox: false },
+    ({ moveTopBarToBottomCheckbox: enabled }) => {
+      if (!enabled) {
+        clearReadyState();
+        return;
+      }
+
+      if (isExcludedTopBarToBottomPath()) {
+        clearReadyState();
+        return;
+      }
+
+      if (hasLoginButtonPresent()) {
+        clearReadyState();
+        return;
+      }
+
+      const boot = () => {
+        injectBottomBarStyles();
+        window.__cspEnsureDisclaimerHider?.();
+        createBottomBarController().start();
+      };
+
+      if (document.body || document.readyState !== 'loading') {
+        boot();
+      } else {
+        document.addEventListener('DOMContentLoaded', boot, { once: true });
+      }
+    },
+  );
+})();
 
 // ==================================================
 // @note styles when there is no bottombar (unchecked)
@@ -6527,17 +6972,7 @@ div[data-id="hide-this-warning"] {
                     `;
           document.head.appendChild(style);
 
-          (() => {
-            const observer = new MutationObserver(() => {
-              document.querySelectorAll('div.text-token-text-secondary').forEach((el) => {
-                const txt = el.textContent.trim().replace(/\s+/g, ' ');
-                if (txt.includes('Check important info')) {
-                  el.setAttribute('data-id', 'hide-this-warning');
-                }
-              });
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-          })();
+          window.__cspEnsureDisclaimerHider?.();
         }, 100);
       })();
     },
@@ -6690,13 +7125,17 @@ div[data-id="hide-this-warning"] {
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
   const MODEL_MENU_ITEM_SELECTOR = ':scope > [role="menuitem"][data-radix-collection-item]';
   const getModelActionSlots = () =>
-    typeof window.ModelLabels?.getActionSlots === 'function' ? window.ModelLabels.getActionSlots() : [];
+    typeof window.ModelLabels?.getActionSlots === 'function'
+      ? window.ModelLabels.getActionSlots()
+      : [];
   const getModelActionBySlot = (slot) =>
     typeof window.ModelLabels?.getActionBySlot === 'function'
       ? window.ModelLabels.getActionBySlot(slot)
       : null;
   const getModelActionById = (id) =>
-    typeof window.ModelLabels?.getActionById === 'function' ? window.ModelLabels.getActionById(id) : null;
+    typeof window.ModelLabels?.getActionById === 'function'
+      ? window.ModelLabels.getActionById(id)
+      : null;
   const DEFAULT_ACTIVE_MODEL_CONFIG_ID =
     typeof window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID === 'string'
       ? window.ModelLabels.DEFAULT_ACTIVE_CONFIG_ID
@@ -6705,11 +7144,11 @@ div[data-id="hide-this-warning"] {
     typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
       ? window.ModelLabels.normalizeActiveConfigId(value)
       : [
-          'configure-latest',
-          'configure-5-2',
-          'configure-5-0-thinking-mini',
-          'configure-o3',
-        ].includes(String(value || '').trim())
+            'configure-latest',
+            'configure-5-2',
+            'configure-5-0-thinking-mini',
+            'configure-o3',
+          ].includes(String(value || '').trim())
         ? String(value || '').trim()
         : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   let ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
@@ -6761,11 +7200,14 @@ div[data-id="hide-this-warning"] {
           testId,
           { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
         ) => {
-          const target = await waitForAsync(() => {
-            const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
-            if (!matches.length) return null;
-            return pick(matches) || matches[0] || null;
-          }, { timeout, interval });
+          const target = await waitForAsync(
+            () => {
+              const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
+              if (!matches.length) return null;
+              return pick(matches) || matches[0] || null;
+            },
+            { timeout, interval },
+          );
           if (!target) return;
           if (typeof flashBorder === 'function') flashBorder(target);
           await sleepAsync(90);
@@ -6775,11 +7217,14 @@ div[data-id="hide-this-warning"] {
     testId,
     { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
   ) =>
-    waitForAsync(() => {
-      const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
-      if (!matches.length) return null;
-      return pick(matches) || matches[0] || null;
-    }, { timeout, interval });
+    waitForAsync(
+      () => {
+        const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
+        if (!matches.length) return null;
+        return pick(matches) || matches[0] || null;
+      },
+      { timeout, interval },
+    );
   const setCachedActiveModelConfigId = (value) => {
     const next = normalizeActiveModelConfigId(value);
     ACTIVE_MODEL_CONFIG_ID = next;
@@ -6801,7 +7246,8 @@ div[data-id="hide-this-warning"] {
   const PREPARED_SESSION_HIDDEN_ELEMENTS = new Set();
   let PREPARED_MODEL_CONFIG_SESSION = null;
   const hideLiveScrapeElement = (el) => {
-    if (!SCRAPE_HIDE_UI_ACTIVE || !(el instanceof Element) || SCRAPE_HIDDEN_ELEMENTS.has(el)) return;
+    if (!SCRAPE_HIDE_UI_ACTIVE || !(el instanceof Element) || SCRAPE_HIDDEN_ELEMENTS.has(el))
+      return;
     SCRAPE_HIDDEN_ELEMENTS.add(el);
     if (!el.hasAttribute('data-csp-scrape-inline-visibility'))
       el.setAttribute('data-csp-scrape-inline-visibility', el.style.visibility || '');
@@ -6870,7 +7316,12 @@ div[data-id="hide-this-warning"] {
     const session = PREPARED_MODEL_CONFIG_SESSION;
     const combobox = session?.combobox;
     const dialog = combobox?.closest?.('[role="dialog"]');
-    if (!(combobox instanceof Element) || !combobox.isConnected || !(dialog instanceof Element) || !dialog.isConnected) {
+    if (
+      !(combobox instanceof Element) ||
+      !combobox.isConnected ||
+      !(dialog instanceof Element) ||
+      !dialog.isConnected
+    ) {
       PREPARED_MODEL_CONFIG_SESSION = null;
       clearPreparedSessionHiddenElements();
       return null;
@@ -6960,14 +7411,15 @@ div[data-id="hide-this-warning"] {
     const triggerId = document.querySelector(MENU_BTN_SELECTOR)?.id || '';
     if (triggerId && labelledby === triggerId) return true;
 
-    if (items.some((item) => normModelTid(item.getAttribute('data-testid')) === 'model-configure-modal')) {
+    if (
+      items.some(
+        (item) => normModelTid(item.getAttribute('data-testid')) === 'model-configure-modal',
+      )
+    ) {
       return true;
     }
 
-    if (items.some(isModelSubmenuTriggerItem)) return true;
-
-    const header = menuEl.querySelector('.__menu-label')?.textContent?.trim() || '';
-    if (/^(latest|gpt[\s.-]*)/i.test(header) && items.some(isKnownModelMenuItem)) return true;
+    if (items.some(isKnownModelMenuItem)) return true;
 
     return false;
   };
@@ -7606,7 +8058,9 @@ div[data-id="hide-this-warning"] {
         if (!action) return null;
         const primaryItems = getPrimaryMenuItems(state);
         const presentationActions = getPrimaryPresentationActionsForState(state);
-        const primaryMatchIndex = presentationActions.findIndex((candidate) => candidate.id === action.id);
+        const primaryMatchIndex = presentationActions.findIndex(
+          (candidate) => candidate.id === action.id,
+        );
         if (primaryMatchIndex !== -1) return primaryItems[primaryMatchIndex] || null;
         if (action.actionKind === 'configure-option')
           return findMainItemByTestId('model-configure-modal', state) || null;
@@ -7722,13 +8176,14 @@ div[data-id="hide-this-warning"] {
         return dialog;
       };
       const hideConfigureListboxUiForScrape = (listbox) => {
-        const wrapper =
-          listbox?.closest('[data-radix-popper-content-wrapper]') || listbox || null;
+        const wrapper = listbox?.closest('[data-radix-popper-content-wrapper]') || listbox || null;
         hideLiveScrapeElement(wrapper);
       };
       const collectConfigureFrontendRows = (dialog, activeConfigId) => {
         if (!(dialog instanceof Element)) return [];
-        const rowButtons = Array.from(dialog.querySelectorAll('button.__menu-item.hoverable.text-start'));
+        const rowButtons = Array.from(
+          dialog.querySelectorAll('button.__menu-item.hoverable.text-start'),
+        );
         return rowButtons
           .map((button) => {
             const label = __cspTextNoHint(button);
@@ -7744,7 +8199,10 @@ div[data-id="hide-this-warning"] {
             return {
               id: actionId,
               slot: action.slot,
-              label,
+              label:
+                typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                  ? window.ModelLabels.getCanonicalActionLabel(actionId, label)
+                  : label,
             };
           })
           .filter(Boolean);
@@ -7754,7 +8212,9 @@ div[data-id="hide-this-warning"] {
           typeof window.ModelLabels?.defaultNames === 'function'
             ? window.ModelLabels.defaultNames()
             : Array(MAX_SLOTS).fill('');
-        const configureOptions = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
+        const configureOptions = Array.isArray(catalog?.configureOptions)
+          ? catalog.configureOptions
+          : [];
         configureOptions.forEach((option) => {
           const action =
             typeof window.ModelLabels?.getActionById === 'function'
@@ -7762,19 +8222,27 @@ div[data-id="hide-this-warning"] {
               : null;
           if (!action || !Number.isInteger(action.slot)) return;
           names[action.slot] =
-            typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-              ? window.ModelLabels.normalizeStoredActionName(action.slot, option.label)
-              : String(option?.label || '').trim();
+            typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+              ? window.ModelLabels.getCanonicalActionLabel(action.id, option.label)
+              : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+                ? window.ModelLabels.normalizeStoredActionName(action.slot, option.label)
+                : String(option?.label || '').trim();
         });
         const frontendByConfig =
           catalog && typeof catalog.frontendByConfig === 'object' ? catalog.frontendByConfig : {};
         Object.values(frontendByConfig).forEach((rows) => {
           (Array.isArray(rows) ? rows : []).forEach((row) => {
             if (!Number.isInteger(row?.slot)) return;
+            const action =
+              typeof window.ModelLabels?.getActionById === 'function'
+                ? window.ModelLabels.getActionById(row?.id)
+                : null;
             names[row.slot] =
-              typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-                ? window.ModelLabels.normalizeStoredActionName(row.slot, row.label)
-                : String(row?.label || '').trim();
+              action && typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                ? window.ModelLabels.getCanonicalActionLabel(action.id, row.label)
+                : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+                  ? window.ModelLabels.normalizeStoredActionName(row.slot, row.label)
+                  : String(row?.label || '').trim();
           });
         });
         return names.slice(0, MAX_SLOTS);
@@ -7837,12 +8305,17 @@ div[data-id="hide-this-warning"] {
 
           const scrapeOrder = availableOptions
             .slice()
-            .sort((a, b) => (a.id === 'configure-latest' ? -1 : b.id === 'configure-latest' ? 1 : 0));
+            .sort((a, b) =>
+              a.id === 'configure-latest' ? -1 : b.id === 'configure-latest' ? 1 : 0,
+            );
 
           for (const option of scrapeOrder) {
             await selectConfigureOptionDuringScrape(combobox, getModelActionById(option.id));
             hideConfigureDialogUiForScrape();
-            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog(), option.id);
+            frontendByConfig[option.id] = collectConfigureFrontendRows(
+              findConfigureDialog(),
+              option.id,
+            );
           }
           if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
             frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(
@@ -7858,9 +8331,11 @@ div[data-id="hide-this-warning"] {
             configureOptions: availableOptions.map((option) => ({
               id: option.id,
               label:
-                typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-                  ? window.ModelLabels.normalizeStoredActionName(option.slot, option.label)
-                  : option.label,
+                typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                  ? window.ModelLabels.getCanonicalActionLabel(option.id, option.label)
+                  : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+                    ? window.ModelLabels.normalizeStoredActionName(option.slot, option.label)
+                    : option.label,
             })),
             frontendByConfig,
           };
@@ -7958,14 +8433,16 @@ div[data-id="hide-this-warning"] {
         if (action.optionKind === 'first') return options[0] || null;
         if (action.optionKind === 'value') {
           return (
-            options.find((option) => getConfigureOptionLabel(option) === String(action.optionValue || '')) ||
-            null
+            options.find(
+              (option) => getConfigureOptionLabel(option) === String(action.optionValue || ''),
+            ) || null
           );
         }
         return null;
       };
       const inferActiveConfigFromCombobox = (combobox) => {
-        const value = combobox?.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const value =
+          combobox?.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim() || '';
         if (!value) return DEFAULT_ACTIVE_MODEL_CONFIG_ID;
         if (value === '5.2') return 'configure-5-2';
         if (value === '5.0') return 'configure-5-0-thinking-mini';
@@ -7992,7 +8469,9 @@ div[data-id="hide-this-warning"] {
       };
       const findConfigureFrontendRowForAction = (action, dialog) => {
         if (!(dialog instanceof Element) || !action) return null;
-        const expected = String(action.rowLabel || action.label || '').trim().toLowerCase();
+        const expected = String(action.rowLabel || action.label || '')
+          .trim()
+          .toLowerCase();
         if (!expected) return null;
         return (
           Array.from(dialog.querySelectorAll('button.__menu-item.hoverable.text-start')).find(
@@ -8030,7 +8509,9 @@ div[data-id="hide-this-warning"] {
             return;
           }
 
-          const ready = initialState ? { state: initialState } : await waitForMainMenuActionTarget(action);
+          const ready = initialState
+            ? { state: initialState }
+            : await waitForMainMenuActionTarget(action);
           const state = ready?.state || getVisibleModelMenuState();
           hideOpenModelUiForScrape(state);
           const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
@@ -8230,7 +8711,10 @@ div[data-id="hide-this-warning"] {
         const clickedConfigureOption = t?.closest('[role="option"][data-radix-collection-item]');
         if (clickedConfigureOption) {
           const listbox = clickedConfigureOption.closest('[role="listbox"]');
-          const inferredConfigId = inferActiveConfigFromConfigureOption(clickedConfigureOption, listbox);
+          const inferredConfigId = inferActiveConfigFromConfigureOption(
+            clickedConfigureOption,
+            listbox,
+          );
           if (inferredConfigId) {
             setTimeout(() => {
               persistActiveModelConfigId(inferredConfigId);
@@ -8304,7 +8788,8 @@ div[data-id="hide-this-warning"] {
 
     const waitForMainOpen = (cb) => {
       const currentState = getVisibleModelMenuState();
-      if (btn.getAttribute('aria-expanded') === 'true' && currentState.main) return cb(currentState);
+      if (btn.getAttribute('aria-expanded') === 'true' && currentState.main)
+        return cb(currentState);
       btn.focus();
       pressSpace(btn);
 
@@ -9125,7 +9610,9 @@ setTimeout(() => {
         ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
         : cfg?.activeModelConfigId || 'configure-latest';
     const actionSlots =
-      typeof window.ModelLabels?.getActionSlots === 'function' ? window.ModelLabels.getActionSlots() : [];
+      typeof window.ModelLabels?.getActionSlots === 'function'
+        ? window.ModelLabels.getActionSlots()
+        : [];
     const names =
       typeof window.ModelLabels?.resolveActionableNames === 'function'
         ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
@@ -9139,9 +9626,9 @@ setTimeout(() => {
           )
         : typeof window.ModelLabels?.getPresentationGroups === 'function'
           ? window.ModelLabels.getPresentationGroups(activeModelConfigId, names)
-        : typeof window.ModelLabels?.getActionGroups === 'function'
-          ? window.ModelLabels.getActionGroups()
-          : [];
+          : typeof window.ModelLabels?.getActionGroups === 'function'
+            ? window.ModelLabels.getActionGroups()
+            : [];
     let codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
         ? window.__modelPickerKeyCodes.slice(0, actionSlots.length)

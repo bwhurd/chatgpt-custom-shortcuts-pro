@@ -8,11 +8,15 @@
 ## UI preview workflow
 
 - For popup, overlay, tooltip, layout, animation, and other user-facing UI work, use Playwright instead of relying on static file inspection alone when extension context matters.
+- After any shipped extension file changes (`content.js`, `popup.*`, `background.js`, `manifest.json`, storage/schema wiring, or other extension-loaded assets), manually reload the unpacked extension in `chrome://extensions` by clicking the extension's Reload button before running any Playwright confirmation. Do not trust a Playwright check against a stale extension build.
 - Run `npm run playwright:install` once per machine to download Chromium for Playwright.
 - Run `npm run preview:popup` to load the unpacked extension in Chromium and inspect the real popup with `chrome.*` APIs available.
 - Run `npm run screenshot:popup` to capture a fresh popup screenshot to `test-results/playwright/popup-preview.png`.
 - Run `npm run test:popup-visual` for a snapshot-based visual regression check of the popup.
 - Run `npm run test:popup-visual:update` only when an intentional popup/UI change should become the new accepted baseline.
+- Use `tests/playwright/chatgpt-session.mjs` or the `playwright:chatgpt:*` scripts to launch persistent logged-in ChatGPT sessions in three scenarios: no extension, extension with `moveTopBarToBottomCheckbox=false`, and extension with `moveTopBarToBottomCheckbox=true`.
+- Use `tests/playwright/chatgpt-scenario-benchmark.mjs` / `npm run playwright:chatgpt:benchmark` to verify the shared logged-in ChatGPT profile, print the top visible sidebar titles, and run the plain / `moveTopBarToBottomCheckbox=false` / `moveTopBarToBottomCheckbox=true` reload comparisons for named conversations.
+- Optional manual load profiling helper: `tests/playwright/chatgpt-load-profiler.user.js` logs ChatGPT reload timings plus CSP/bottom-bar markers for extension-off / `moveTopBarToBottomCheckbox` false / true comparisons.
 - Treat this as the preferred validation path for popup-facing work before and after edits; `popup.html` by itself is not a faithful preview of the MV3 extension popup.
 
 ## Repository search
@@ -130,6 +134,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 - Inline code click-to-copy is gated by `clickToCopyInlineCodeEnabled`; keep the listener/style in sync with storage.
 - UI tweaks:
   - Injects the bottom bar when `moveTopBarToBottom` is enabled, including static toggle/new-chat buttons, opacity sliders, and arrow fades. Blacklists routes (`/gpts`, `/codex`, `/g/`, `sora.chatgpt.com`, `/library/`) via hostname/path gate.
+  - Current `TopBarToBottom` approach: keep the bottom bar in normal document flow immediately after the composer form, and preserve the single-flight observer/repair controller; do not switch it back to a fixed/body-mounted visual model unless explicitly requested.
   - Fades the slim sidebar (`stage-sidebar-tiny-bar`) with user-configurable opacity, pausing when overlays or the full sidebar are open.
   - Keeps edit buttons visible via forced opacity classes and styles.
   - Auto-click convenience flows: “Something went wrong” → Try again, “Open link” warnings, “Read Aloud”/“Stop” menu items, etc.
@@ -145,7 +150,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Localizes `<title>` and `[data-i18n]` text, then runs `initTooltips()`, `balanceWrappedLabels()`, and tooltip-boundary nudging to keep tooltips legible.
   - Maintains `ShortcutUtils` shared API (display text, normalization, conflict detection). `saveShortcutValue` writes canonical KeyboardEvent.code strings, enforces duplicates via `showDuplicateModal`, and persists NBSP (`\u00A0`) for cleared slots.
   - Model picker chips and the injected model-picker grid use grouped metadata from `shared/model-picker-labels.js`. `window.MODEL_NAMES` is the actionable flat list (no `'→'` arrow), `window.__modelPickerKeyCodes` stays the flat shortcut array, and the popup renders both the primary row and compact `Configure Models` row from that shared source. A segmented pill component (`.p-segmented-controls`) toggles Alt vs Control for model hotkeys by wiring hidden radios.
-  - Popup-open model-catalog refresh is manual only: show the opaque `Loading available models...` / refresh overlay on first popup open of the day, plus a header refresh button, but do not auto-start scraping when the popup loads.
+  - Popup-open model-catalog refresh is manual only: show the opaque `Loading available models...` / refresh overlay on first popup open of the week, plus a header refresh button, but do not auto-start scraping when the popup loads.
   - Popup search/filter bar attaches to `.shortcut-container`, builds a list of headings/items, and filters + highlights matches without destroying layout.
   - Cloud Sync UI: login button requests `identity` permission, then triggers `CloudAuth.googleLogin`. Save/Restore buttons call `CloudStorage.saveSyncedSettings/loadSyncedSettings`, showing spinner states via `busy()` and success checkmarks via `successFlash()`. Logout clears CloudAuth tokens/profile.
   - Duplicate modal: Reusable overlay that lists conflicting assignments, supports “Don’t ask again”, and can run in simple HTML mode for general confirmations.

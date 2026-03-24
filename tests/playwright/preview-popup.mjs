@@ -4,6 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
+import { focusCodexWindow } from './focus-codex-window.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,4 +121,5 @@ try {
     }
 } finally {
     await context.close();
+    await focusCodexWindow();
 }

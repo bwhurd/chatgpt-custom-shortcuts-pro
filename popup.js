@@ -100,7 +100,7 @@ const MODEL_CONFIG_VISUAL_SETTLE_MS = 1100;
 const MODEL_SCRAPE_OVERLAY_TRANSITION_MS = 180;
 const MODEL_SCRAPE_OVERLAY_TRANSITION_FALLBACK_MS = MODEL_SCRAPE_OVERLAY_TRANSITION_MS + 180;
 const MODEL_SCRAPE_OVERLAY_MIN_VISIBLE_MS = 1500;
-const MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY = 'modelCatalogRefreshPromptDay';
+const MODEL_CATALOG_REFRESH_PROMPT_WEEK_KEY = 'modelCatalogRefreshPromptWeek';
 const POPUP_SOURCE_TAB_ID = Number(new URLSearchParams(window.location.search).get('sourceTabId') || 0) || 0;
 const isExternalActiveConfigSource = (source = '') =>
   source === 'bootstrap' || source === 'storage:onChanged' || source === 'cloud-restore';
@@ -4481,12 +4481,14 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     'Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected.';
   const getModelCatalogRefreshButtonText = () =>
     chrome?.i18n?.getMessage?.('label_modelPickerRefreshModels') || 'Refresh Models';
-  const getTodayDateKey = () => {
+  const getCurrentWeekKey = () => {
     const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = utc.getUTCDay() || 7;
+    utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
+    return `${utc.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
   };
   const setModelCatalogRefreshPromptVisible = (value, source = 'popup') => {
     const next = !!value;
@@ -5414,18 +5416,18 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
   const primeManualCatalogRefreshPrompt = () => {
     try {
-      chrome.storage.sync.get([MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY], (stored) => {
-        const today = getTodayDateKey();
-        const seenDay = String(stored?.[MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY] || '').trim();
-        const shouldPrompt = seenDay !== today;
-        setModelCatalogRefreshPromptVisible(shouldPrompt, 'popup:daily-check');
+      chrome.storage.sync.get([MODEL_CATALOG_REFRESH_PROMPT_WEEK_KEY], (stored) => {
+        const currentWeek = getCurrentWeekKey();
+        const seenWeek = String(stored?.[MODEL_CATALOG_REFRESH_PROMPT_WEEK_KEY] || '').trim();
+        const shouldPrompt = seenWeek !== currentWeek;
+        setModelCatalogRefreshPromptVisible(shouldPrompt, 'popup:weekly-check');
         if (shouldPrompt) {
-          chrome.storage.sync.set({ [MODEL_CATALOG_REFRESH_PROMPT_DAY_KEY]: today });
+          chrome.storage.sync.set({ [MODEL_CATALOG_REFRESH_PROMPT_WEEK_KEY]: currentWeek });
         }
         renderAll({ allowPendingRebuild: true });
       });
     } catch {
-      setModelCatalogRefreshPromptVisible(true, 'popup:daily-check:fallback');
+      setModelCatalogRefreshPromptVisible(true, 'popup:weekly-check:fallback');
       renderAll({ allowPendingRebuild: true });
     }
   };

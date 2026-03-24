@@ -480,10 +480,19 @@
     return '';
   };
 
+  const getCanonicalActionLabel = (actionId, observedLabel = '') => {
+    const action = getActionById(actionId);
+    const fallback = (observedLabel ?? '').toString().trim();
+    if (!action) return fallback;
+    if (action.id === 'configure-5-0-thinking-mini') return '5.0 Thinking Mini';
+    return String(action.label || fallback || '').trim();
+  };
+
   const normalizeStoredActionName = (slot, value) => {
     const text = (value ?? '').toString().trim();
     if (!text) return '';
-    if (slot === 5 && text === '5.0') return '5.0 Thinking Mini';
+    const action = getActionBySlot(slot);
+    if (action?.id) return getCanonicalActionLabel(action.id, text);
     return text;
   };
 
@@ -550,6 +559,7 @@
     getPopupPrimaryActions,
     getPopupPresentationGroups,
     mapFrontendLabelToActionId,
+    getCanonicalActionLabel,
     defaultKeyCodes,
     normalizeStoredActionName,
     resolveActionableNames,
