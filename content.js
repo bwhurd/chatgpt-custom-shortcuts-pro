@@ -3599,59 +3599,69 @@ const delays = DELAYS;
           return clone.innerText.replace(/\u00A0/g, ' ').trim();
         }
 
-        // Build processed HTML + Text from a single content element (mirror 111s behavior)
-        function buildProcessedClipboardPayload_Single(contentEl) {
-          const cloneForHtml = contentEl.cloneNode(true);
-
-          // Preserve user message hard line breaks visually
-          const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
-          if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
-
-          // Normalize DOM to Word-friendly HTML
-          normalizeCodeBlocksInClone(cloneForHtml);
-          demotePTagsAndStripDataAttrs(cloneForHtml);
-          splitListsAroundCodeBlocks_Word(cloneForHtml);
-
+        // Build processed HTML + Text from one or more content elements in the same turn.
+        function buildProcessedClipboardPayload_Single(contentEls) {
+          const elements = Array.isArray(contentEls) ? contentEls.filter(Boolean) : [contentEls].filter(Boolean);
+          if (!elements.length) return { html: '', text: '' };
           // Wrapper (acts like 111s turn wrapper — but no visible label)
           const turnWrapper = document.createElement('div');
           turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
           // Preserve role tag (purely metadata)
-          const roleContainer = contentEl.closest?.('[data-message-author-role]');
+          const roleContainer = elements[0].closest?.('[data-message-author-role]');
           turnWrapper.setAttribute(
             'data-role',
             roleContainer?.getAttribute?.('data-message-author-role') || 'assistant',
           );
 
-          // 1) Body container (Word-friendly spacing + code/list normalization)
-          const bodyDiv = document.createElement('div');
-          bodyDiv.innerHTML = cloneForHtml.innerHTML;
+          const textParts = [];
+          for (const contentEl of elements) {
+            const cloneForHtml = contentEl.cloneNode(true);
 
-          applyWordSpacingAndFont_Word(bodyDiv);
-          splitListsAroundCodeBlocks_Word(bodyDiv);
-          inlineGuardFirstRuns_Word(bodyDiv);
+            // Preserve user message hard line breaks visually
+            const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
+            if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
 
-          // Assemble like 111s (simple container)
-          turnWrapper.appendChild(bodyDiv);
+            // Normalize DOM to Word-friendly HTML
+            normalizeCodeBlocksInClone(cloneForHtml);
+            demotePTagsAndStripDataAttrs(cloneForHtml);
+            splitListsAroundCodeBlocks_Word(cloneForHtml);
+
+            // 1) Body container (Word-friendly spacing + code/list normalization)
+            const bodyDiv = document.createElement('div');
+            bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+            applyWordSpacingAndFont_Word(bodyDiv);
+            splitListsAroundCodeBlocks_Word(bodyDiv);
+            inlineGuardFirstRuns_Word(bodyDiv);
+
+            turnWrapper.appendChild(bodyDiv);
+            textParts.push(buildPlainTextWithFences(contentEl));
+          }
+
           const html =
             '<div data-export="chatgpt-shortcuts-single-message">' +
             turnWrapper.outerHTML +
             '</div>';
 
-          // Plain text variant with fenced code (no labels)
-          const text = buildPlainTextWithFences(contentEl);
+          const text = textParts.filter(Boolean).join('\n\n');
 
           return { html, text };
         }
 
-        // Copy processed payload built from a content element
-        async function copyProcessedFromElement(el) {
-          const { html, text } = buildProcessedClipboardPayload_Single(el);
+        // Copy processed payload built from one or more content elements
+        async function copyProcessedFromElements(contentEls) {
+          const { html, text } = buildProcessedClipboardPayload_Single(contentEls);
+          if (!html && !text) return;
           await writeClipboardHTMLAndText_Single(html, text);
         }
 
         // Visual selection (for feedback) + processed copy
-        function doSelectAndCopy(el, shouldCopy = true) {
+        function doSelectAndCopy(contentEls, shouldCopy = true) {
           try {
+            const elements = Array.isArray(contentEls)
+              ? contentEls.filter(Boolean)
+              : [contentEls].filter(Boolean);
+            if (!elements.length) return;
             const selection = window.getSelection?.();
             if (selection) selection.removeAllRanges();
 
@@ -3664,11 +3674,13 @@ const delays = DELAYS;
                 },
               });
 
-            const startWalker = makeTextWalker(el);
+            const firstEl = elements[0];
+            const lastEl = elements[elements.length - 1];
+            const startWalker = makeTextWalker(firstEl);
             const startNode = startWalker.nextNode();
             let endNode = null;
             if (startNode) {
-              const endWalker = makeTextWalker(el);
+              const endWalker = makeTextWalker(lastEl);
               for (let n = endWalker.nextNode(); n; n = endWalker.nextNode()) endNode = n;
             }
             const range = document.createRange();
@@ -3676,11 +3688,11 @@ const delays = DELAYS;
               range.setStart(startNode, 0);
               range.setEnd(endNode, endNode.nodeValue.length);
             } else {
-              range.selectNodeContents(el);
+              range.selectNodeContents(firstEl);
             }
             if (selection) selection.addRange(range);
 
-            if (shouldCopy) void copyProcessedFromElement(el);
+            if (shouldCopy) void copyProcessedFromElements(elements);
           } catch (err) {
             if (DEBUG) console.debug('doSelectAndCopy failed:', err);
           }
@@ -3689,12 +3701,59 @@ const delays = DELAYS;
         const TURN_SELECTOR_SELECT_COPY =
           'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
 
-        function findRoleContainerFromTurn(turn) {
-          return (
-            turn?.querySelector?.('[data-message-author-role="assistant"]') ||
-            turn?.querySelector?.('[data-message-author-role="user"]') ||
-            null
-          );
+        function findRoleContainersFromTurn(turn, preferredRole = null) {
+          if (!turn) return [];
+          const selectors = preferredRole
+            ? [`[data-message-author-role="${preferredRole}"]`]
+            : ['[data-message-author-role="assistant"]', '[data-message-author-role="user"]'];
+          for (const selector of selectors) {
+            const matches = Array.from(turn.querySelectorAll(selector));
+            if (matches.length) return matches;
+          }
+          return [];
+        }
+
+        function findContentElsForTurn(turn, preferredRole = null) {
+          const seen = new Set();
+          return findRoleContainersFromTurn(turn, preferredRole)
+            .map((roleContainer) => findContentElForTurn(roleContainer))
+            .filter((contentEl) => {
+              if (!contentEl) return false;
+              if (!(contentEl.innerText || contentEl.textContent || '').trim()) return false;
+              if (seen.has(contentEl)) return false;
+              seen.add(contentEl);
+              return true;
+            });
+        }
+
+        function findPreferredRoleForTurn(turn) {
+          const dataTurn = turn?.getAttribute?.('data-turn');
+          if (dataTurn === 'assistant' || dataTurn === 'user') return dataTurn;
+          return findRoleContainersFromTurn(turn, 'assistant').length ? 'assistant' : 'user';
+        }
+
+        function findDirectContentEls(btn) {
+          const roleContainer = btn.closest?.('[data-message-author-role]');
+          if (!roleContainer) return [];
+          const contentEl = findContentElForTurn(roleContainer);
+          return contentEl && (contentEl.innerText || contentEl.textContent || '').trim()
+            ? [contentEl]
+            : [];
+        }
+
+        function getContentElsForCopyButton(btn) {
+          const turn = btn.closest(TURN_SELECTOR_SELECT_COPY);
+          const directContentEls = findDirectContentEls(btn);
+          if (directContentEls.length) return directContentEls;
+          return findContentElsForTurn(turn, findPreferredRoleForTurn(turn));
+        }
+
+        function turnHasRole(turn, role) {
+          return findRoleContainersFromTurn(turn, role).length > 0;
+        }
+
+        function getPrimaryContentElsForTurn(turn) {
+          return findContentElsForTurn(turn, findPreferredRoleForTurn(turn));
         }
 
         // Innermost visible text container for a given role container
@@ -3720,16 +3779,10 @@ const delays = DELAYS;
             const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
             if (!btn) return;
 
-            const roleContainer =
-              btn.closest('[data-message-author-role]') ||
-              findRoleContainerFromTurn(btn.closest(TURN_SELECTOR_SELECT_COPY));
-
-            if (!roleContainer) return;
-
-            const contentEl = findContentElForTurn(roleContainer);
-            if (contentEl && (contentEl.innerText || contentEl.textContent || '').trim()) {
+            const contentEls = getContentElsForCopyButton(btn);
+            if (contentEls.length) {
               // Always show selection AND copy processed HTML/Text
-              doSelectAndCopy(contentEl, true);
+              doSelectAndCopy(contentEls, true);
             }
           });
           window.__selectThenCopyCopyHandlerAttached = true;
@@ -3749,27 +3802,24 @@ const delays = DELAYS;
               const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
               const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
 
-              const composerRect = (() => {
-                const composer = document.getElementById('composer-background');
-                return composer ? composer.getBoundingClientRect() : null;
-              })();
+              const composerTop = getComposerTopEdge();
 
               const visibleTurns = allConversationTurns.filter((el) => {
                 const rect = el.getBoundingClientRect();
                 const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
                 const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
                 if (!(horizontallyVisible && verticallyVisible)) return false;
-                if (composerRect && rect.top >= composerRect.top) return false;
+                if (Number.isFinite(composerTop) && rect.top >= composerTop) return false;
                 return true;
               });
 
               const filteredVisibleTurns = visibleTurns.filter((el) => {
                 if (
                   onlySelectAssistant &&
-                  !el.querySelector('[data-message-author-role="assistant"]')
+                  !turnHasRole(el, 'assistant')
                 )
                   return false;
-                if (onlySelectUser && !el.querySelector('[data-message-author-role="user"]'))
+                if (onlySelectUser && !turnHasRole(el, 'user'))
                   return false;
                 return true;
               });
@@ -3790,22 +3840,16 @@ const delays = DELAYS;
 
               function selectAndCopyMessage(turn, shouldCopyParam) {
                 try {
-                  const isUser = !!turn.querySelector('[data-message-author-role="user"]');
-                  const isAssistant = !!turn.querySelector(
-                    '[data-message-author-role="assistant"]',
-                  );
+                  const isUser = turnHasRole(turn, 'user');
+                  const isAssistant = turnHasRole(turn, 'assistant');
 
                   if (onlySelectUser && !isUser) return;
                   if (onlySelectAssistant && !isAssistant) return;
 
-                  const roleContainer = isUser
-                    ? turn.querySelector('[data-message-author-role="user"]')
-                    : turn.querySelector('[data-message-author-role="assistant"]');
-                  const contentEl = findContentElForTurn(roleContainer);
+                  const contentEls = getPrimaryContentElsForTurn(turn);
+                  if (!contentEls.length) return;
 
-                  if (!contentEl || !contentEl.innerText.trim()) return;
-
-                  doSelectAndCopy(contentEl, !!shouldCopyParam);
+                  doSelectAndCopy(contentEls, !!shouldCopyParam);
                 } catch (err) {
                   if (DEBUG) console.debug('selectAndCopyMessage failed:', err);
                 }
@@ -3999,7 +4043,20 @@ const delays = DELAYS;
           return null;
         };
 
-        // If dictation is active, prefer submitting (not cancelling).
+        // Current idle composer can render both Dictate and Send at once, so the shortcut
+        // must prefer the dedicated dictate control over the normal submit button.
+        const stopBtn =
+          findFirstClickable('button[aria-label="Stop dictation"]') ||
+          findClickableBySpriteId('#85f94b');
+        if (click(stopBtn)) return;
+
+        // Otherwise start dictation (avoid Voice Mode button).
+        const dictateBtn =
+          findFirstClickable('button[aria-label="Dictate button"]') ||
+          findClickableBySpriteId('#29f921');
+        if (click(dictateBtn)) return;
+
+        // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
         const submitBtn =
           findFirstClickable(
             '#composer-submit-button',
@@ -4008,17 +4065,7 @@ const delays = DELAYS;
           ) ||
           findClickableBySpriteId('#01bab7') ||
           findClickableBySpriteId('#fa1dbd');
-        if (click(submitBtn)) return;
-
-        // If submit isn't available, stop dictation.
-        const stopBtn = findClickableBySpriteId('#85f94b');
-        if (click(stopBtn)) return;
-
-        // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn =
-          findFirstClickable('button[aria-label="Dictate button"]') ||
-          findClickableBySpriteId('#29f921');
-        click(dictateBtn);
+        click(submitBtn);
       },
       [shortcuts.shortcutKeyCancelDictation]: async () => {
         // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.
@@ -4171,33 +4218,38 @@ const delays = DELAYS;
         const TURN_SELECTOR_ENTIRE_CONV =
           'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
 
-        // Identify the content element for a user/assistant turn
-        function findContentElForTurn_EntireConv(container) {
-          const assistantScope = container.matches?.('[data-message-author-role="assistant"]')
-            ? container
-            : container.querySelector?.('[data-message-author-role="assistant"]');
-          const userScope = container.matches?.('[data-message-author-role="user"]')
-            ? container
-            : container.querySelector?.('[data-message-author-role="user"]');
-          if (assistantScope) {
-            return (
-              assistantScope.querySelector('.whitespace-pre-wrap') ||
-              assistantScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
-              assistantScope
-            );
+        // Identify the content elements for a user/assistant turn
+        function findContentElsForTurn_EntireConv(container) {
+          const assistantScopes = container.matches?.('[data-message-author-role="assistant"]')
+            ? [container]
+            : Array.from(container.querySelectorAll?.('[data-message-author-role="assistant"]') || []);
+          const userScopes = container.matches?.('[data-message-author-role="user"]')
+            ? [container]
+            : Array.from(container.querySelectorAll?.('[data-message-author-role="user"]') || []);
+          const scopes = assistantScopes.length ? assistantScopes : userScopes;
+          if (!scopes.length) {
+            return [
+              container.querySelector?.('.whitespace-pre-wrap') ||
+                container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
+                container,
+            ].filter(Boolean);
           }
-          if (userScope) {
-            return (
-              userScope.querySelector('.whitespace-pre-wrap') ||
-              userScope.querySelector('.prose, .markdown, .markdown-new-styling') ||
-              userScope
-            );
-          }
-          return (
-            container.querySelector?.('.whitespace-pre-wrap') ||
-            container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
-            container
-          );
+          const seen = new Set();
+          return scopes
+            .map(
+              (scope) =>
+                scope.querySelector('.whitespace-pre-wrap') ||
+                scope.querySelector('.prose, .markdown, .markdown-new-styling') ||
+                scope,
+            )
+            .filter((contentEl) => {
+              if (!contentEl) return false;
+              const txt = (contentEl.innerText || contentEl.textContent || '').trim();
+              if (!txt) return false;
+              if (seen.has(contentEl)) return false;
+              seen.add(contentEl);
+              return true;
+            });
         }
 
         // Checkboxes or booleans -> forced boolean
@@ -4404,26 +4456,23 @@ const delays = DELAYS;
           });
 
           // Map to content elements
-          const contentEls = filteredTurns
+          const turnContentGroups = filteredTurns
             .map((turn) => ({
-              el: findContentElForTurn_EntireConv(turn),
+              els: findContentElsForTurn_EntireConv(turn),
               turn,
             }))
-            .filter(({ el }) => {
-              if (!el) return false;
-              const txt = (el.innerText || el.textContent || '').trim();
-              return !!txt;
-            });
+            .filter(({ els }) => els.length);
 
           // Nothing to copy
-          if (!contentEls.length) return { html: '', text: '' };
+          if (!turnContentGroups.length) return { html: '', text: '' };
 
           // Build HTML + text blocks
           const blocksHTML = [];
           const blocksText = [];
+          const selectionEls = [];
 
-          for (const { el, turn } of contentEls) {
-            const roleContainer = el.closest?.('[data-message-author-role]');
+          for (const { els, turn } of turnContentGroups) {
+            const roleContainer = els[0]?.closest?.('[data-message-author-role]');
             const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
 
             // Determine label source
@@ -4437,19 +4486,6 @@ const delays = DELAYS;
             }
             const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
             const labelText = includeLabels ? nativeLabel || fallbackLabel : '';
-
-            // Clone content for HTML normalization
-            const cloneForHtml = el.cloneNode(true);
-
-            if (role === 'user') {
-              // Preserve user message line breaks visually
-              replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
-            }
-
-            // Normalize code blocks, strip list-bait attrs, and split lists around <pre>
-            normalizeCodeBlocksInClone(cloneForHtml);
-            demotePTagsAndStripDataAttrs(cloneForHtml);
-            splitListsAroundCodeBlocks_Word(cloneForHtml);
 
             // HTML block
             const turnWrapper = document.createElement('div');
@@ -4486,55 +4522,68 @@ const delays = DELAYS;
               turnWrapper.appendChild(labelH);
             }
 
-            // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
-            const bodyDiv = document.createElement('div');
-            bodyDiv.innerHTML = cloneForHtml.innerHTML;
+            const textParts = [];
+            for (const el of els) {
+              selectionEls.push(el);
 
-            // Apply Word-friendly spacing to real paragraphs (not divs)
-            (function applyWordSpacingAndFont_Word(root) {
-              if (!root) return;
-              const fontStack =
-                "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
-              const baseRules = [
-                `font-family:${fontStack}`,
-                'line-height:116%',
-                'mso-line-height-alt:116%',
-                'mso-line-height-rule:exactly',
-              ].join(';');
+              // Clone content for HTML normalization
+              const cloneForHtml = el.cloneNode(true);
 
-              // Apply to container
-              const base = root.getAttribute('style') || '';
-              root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+              if (role === 'user') {
+                // Preserve user message line breaks visually
+                replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+              }
 
-              // Apply to paragraph-like tags Word respects
-              const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
-              root.querySelectorAll(selector).forEach((el) => {
-                const s = el.getAttribute('style') || '';
-                const rules = [
+              // Normalize code blocks, strip list-bait attrs, and split lists around <pre>
+              normalizeCodeBlocksInClone(cloneForHtml);
+              demotePTagsAndStripDataAttrs(cloneForHtml);
+              splitListsAroundCodeBlocks_Word(cloneForHtml);
+
+              // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
+              const bodyDiv = document.createElement('div');
+              bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+              // Apply Word-friendly spacing to real paragraphs (not divs)
+              (function applyWordSpacingAndFont_Word(root) {
+                if (!root) return;
+                const fontStack =
+                  "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
+                const baseRules = [
                   `font-family:${fontStack}`,
-                  'margin-top:0pt',
-                  'margin-bottom:8pt',
                   'line-height:116%',
-                  'mso-margin-top-alt:0pt',
-                  'mso-margin-bottom-alt:8pt',
                   'mso-line-height-alt:116%',
                   'mso-line-height-rule:exactly',
                 ].join(';');
-                el.setAttribute('style', s ? `${s};${rules}` : rules);
-              });
-            })(bodyDiv);
 
-            turnWrapper.appendChild(bodyDiv);
+                // Apply to container
+                const base = root.getAttribute('style') || '';
+                root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+
+                // Apply to paragraph-like tags Word respects
+                const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
+                root.querySelectorAll(selector).forEach((el) => {
+                  const s = el.getAttribute('style') || '';
+                  const rules = [
+                    `font-family:${fontStack}`,
+                    'margin-top:0pt',
+                    'margin-bottom:8pt',
+                    'line-height:116%',
+                    'mso-margin-top-alt:0pt',
+                    'mso-margin-bottom-alt:8pt',
+                    'mso-line-height-alt:116%',
+                    'mso-line-height-rule:exactly',
+                  ].join(';');
+                  el.setAttribute('style', s ? `${s};${rules}` : rules);
+                });
+              })(bodyDiv);
+
+              turnWrapper.appendChild(bodyDiv);
+              textParts.push(buildPlainTextWithFences(el.cloneNode(true)));
+            }
 
             blocksHTML.push(turnWrapper.outerHTML);
 
-            // Build plain text with fenced code blocks (```lang ... ```)
-            const cloneForText = el.cloneNode(true);
-            if (role === 'user') {
-              // keep user message visual line breaks in text as-is (they are already \n in innerText)
-              // no <br> insertion needed for text variant
-            }
-            const contentText = buildPlainTextWithFences(cloneForText);
+            const contentText = textParts.filter(Boolean).join('\n\n');
             const textBlock = labelText ? `${labelText}\n${contentText}` : contentText;
             blocksText.push(textBlock);
           }
@@ -4545,7 +4594,7 @@ const delays = DELAYS;
             '</div>';
           const text = blocksText.join('\n\n');
 
-          return { html, text, contentEls: contentEls.map(({ el }) => el) };
+          return { html, text, contentEls: selectionEls };
         }
 
         return () => {
@@ -4819,6 +4868,96 @@ const delays = DELAYS;
 // @note UI Styling & Header Scaling
 // ====================================
 (() => {
+  const DYNAMIC_UI_SELECTOR = [
+    '.group\\/conversation-turn',
+    '.flex.h-\\[44px\\].items-center.justify-between',
+    '.md\\:h-header-height',
+    'a.group.flex.gap-2',
+  ].join(', ');
+
+  function shouldHideDynamicAnchor(node) {
+    if (!(node instanceof Element) || !node.matches('a.group.flex.gap-2')) return false;
+    return !node.closest(
+      'nav, aside#stage-sidebar, #stage-slideover-sidebar, [data-testid="stage-sidebar"], [data-testid="stage-slideover-sidebar"]',
+    );
+  }
+
+  function applyConversationTurnStyling(el) {
+    if (!(el instanceof HTMLElement) || el.dataset.cspTurnFadeBound === 'true') return;
+    el.dataset.cspTurnFadeBound = 'true';
+    el.style.display = 'flex';
+    el.style.opacity = '0.1';
+    el.style.transition = 'opacity 0.2s ease-in-out';
+    el.addEventListener('mouseenter', () => gsap.to(el, { opacity: 1, duration: 0.2 }));
+    el.addEventListener('mouseleave', () => gsap.to(el, { opacity: 0.1, duration: 0.2 }));
+  }
+
+  function applyDynamicUiStyling(node) {
+    if (!(node instanceof Element)) return;
+
+    if (node.matches('.group\\/conversation-turn')) {
+      applyConversationTurnStyling(node);
+    }
+
+    if (
+      node.matches('.flex.h-\\[44px\\].items-center.justify-between') &&
+      node.dataset.cspHeaderFadeApplied !== 'true'
+    ) {
+      node.dataset.cspHeaderFadeApplied = 'true';
+      gsap.to(node, {
+        opacity: 0.3,
+        duration: 0.2,
+        ease: 'sine.out',
+      });
+    }
+
+    if (node.matches('.md\\:h-header-height') && node.dataset.cspHeaderHeightApplied !== 'true') {
+      node.dataset.cspHeaderHeightApplied = 'true';
+      node.style.height = 'fit-content';
+    }
+
+    if (shouldHideDynamicAnchor(node) && node.dataset.cspAnchorHiddenApplied !== 'true') {
+      node.dataset.cspAnchorHiddenApplied = 'true';
+      gsap.set(node, {
+        opacity: 0,
+        pointerEvents: 'none',
+        width: 0,
+        height: 0,
+        overflow: 'hidden',
+      });
+    }
+  }
+
+  function forEachDynamicUiTarget(root, callback) {
+    if (!(root instanceof Element) || typeof callback !== 'function') return false;
+
+    let foundMatch = false;
+
+    if (root.matches(DYNAMIC_UI_SELECTOR)) {
+      foundMatch = true;
+      callback(root);
+    }
+
+    root.querySelectorAll(DYNAMIC_UI_SELECTOR).forEach((node) => {
+      foundMatch = true;
+      callback(node);
+    });
+
+    return foundMatch;
+  }
+
+  function hasDynamicUiTarget(root) {
+    return (
+      root instanceof Element &&
+      (root.matches(DYNAMIC_UI_SELECTOR) || !!root.querySelector(DYNAMIC_UI_SELECTOR))
+    );
+  }
+
+  function applyDynamicUiStylingInSubtree(root) {
+    if (!hasDynamicUiTarget(root)) return false;
+    return forEachDynamicUiTarget(root, applyDynamicUiStyling);
+  }
+
   function applyInitialTransitions() {
     // Profile button
     const profileBtn = document.querySelector('button[data-testid="profile-button"]');
@@ -4844,14 +4983,7 @@ const delays = DELAYS;
 
     // Conversation edit buttons hover behavior
     document.querySelectorAll('.group\\/conversation-turn').forEach((el) => {
-      el.style.display = 'flex';
-      el.style.opacity = '0.1';
-      el.style.transition = 'opacity 0.2s ease-in-out';
-      const parent = el.closest('.group\\/conversation-turn');
-      if (parent) {
-        parent.addEventListener('mouseenter', () => gsap.to(el, { opacity: 1, duration: 0.2 }));
-        parent.addEventListener('mouseleave', () => gsap.to(el, { opacity: 0.1, duration: 0.2 }));
-      }
+      applyConversationTurnStyling(el);
     });
 
     // Disclaimer text color match
@@ -4897,46 +5029,8 @@ const delays = DELAYS;
     const mo = new MutationObserver((muts) => {
       for (const m of muts) {
         for (const n of m.addedNodes) {
-          if (n.nodeType !== 1) continue;
-
-          // Late-loaded conversation edit buttons
-          if (n.matches('.group\\/conversation-turn')) {
-            gsap.set(n, { opacity: 0.1 });
-            const parent = n.closest('.group\\/conversation-turn');
-            if (parent) {
-              parent.addEventListener('mouseenter', () =>
-                gsap.to(n, { opacity: 1, duration: 0.2 }),
-              );
-              parent.addEventListener('mouseleave', () =>
-                gsap.to(n, { opacity: 0.1, duration: 0.2 }),
-              );
-            }
-          }
-
-          // Delayed header fade (originally timeout-based)
-          if (n.matches('.flex.h-\\[44px\\].items-center.justify-between')) {
-            gsap.to(n, {
-              opacity: 0.3,
-              duration: 0.2,
-              ease: 'sine.out',
-            });
-          }
-
-          // Shrink header height if `.md\:h-header-height` appears
-          if (n.matches('.md\\:h-header-height')) {
-            n.style.height = 'fit-content';
-          }
-
-          // Hide late anchor buttons
-          if (n.matches('a.group.flex.gap-2')) {
-            gsap.set(n, {
-              opacity: 0,
-              pointerEvents: 'none',
-              width: 0,
-              height: 0,
-              overflow: 'hidden',
-            });
-          }
+          if (!(n instanceof Element)) continue;
+          applyDynamicUiStylingInSubtree(n);
         }
       }
     });
@@ -5280,50 +5374,129 @@ div[data-id="hide-this-warning"] {
 
 (() => {
   const IMPORTANT_ROOTS = ['important', 'importante', 'ज़रूरी', '重要', 'важн', 'важлив'];
+  const DISCLAIMER_CONTAINER_SELECTOR =
+    'div[data-id="hide-this-warning"], div[class*="view-transition-name:var(--vt-disclaimer)"]';
+  const DISCLAIMER_TEXT_ROW_SELECTOR =
+    'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs, ' +
+    'div.text-token-text-secondary.text-center.text-xs';
+  const DISCLAIMER_RECHECK_DELAYS_MS = [0, 150, 600, 1500];
+  const pendingDisclaimerRechecks = new WeakSet();
 
   const containsImportantRoot = (txt) =>
     IMPORTANT_ROOTS.some((root) => txt.toLowerCase().includes(root.toLowerCase()));
 
-  const markDisclaimerNode = (node) => {
-    if (!(node instanceof Element)) return;
-    if (!node.matches('div.text-token-text-secondary')) return;
+  const findDisclaimerObserverRoot = () =>
+    document.getElementById('thread') ||
+    document.getElementById('thread-bottom-container')?.parentElement ||
+    document.getElementById('thread-bottom-container') ||
+    document.body ||
+    document.documentElement;
 
-    const txt = node.textContent.trim().replace(/\s+/g, ' ');
+  const isScopedDisclaimerTextRow = (node) =>
+    node instanceof Element &&
+    node.matches(DISCLAIMER_TEXT_ROW_SELECTOR) &&
+    !!node.closest?.(
+      '#thread, #thread-bottom, #thread-bottom-container, form[data-type="unified-composer"]',
+    );
+
+  const getDisclaimerContainer = (node) => {
+    if (!(node instanceof Element)) return null;
+    if (node.matches('div[data-id="hide-this-warning"]')) return node;
+
+    const explicitContainer = node.matches('div[class*="view-transition-name:var(--vt-disclaimer)"]')
+      ? node
+      : node.closest?.('div[class*="view-transition-name:var(--vt-disclaimer)"]');
+    if (explicitContainer instanceof Element) return explicitContainer;
+
+    if (isScopedDisclaimerTextRow(node)) return node;
+
+    const textRowContainer = node.closest?.(DISCLAIMER_TEXT_ROW_SELECTOR);
+    return isScopedDisclaimerTextRow(textRowContainer) ? textRowContainer : null;
+  };
+
+  const findLiveDisclaimerNode = (root = document) => {
+    if (!(root instanceof Element) && root !== document) return null;
+
+    if (root instanceof Element) {
+      const selfContainer = getDisclaimerContainer(root);
+      if (selfContainer instanceof Element) return selfContainer;
+    }
+
+    const tagged = root.querySelector?.('[data-id="hide-this-warning"]');
+    if (tagged instanceof Element) return tagged;
+
+    const explicit = root.querySelector?.(DISCLAIMER_CONTAINER_SELECTOR);
+    if (explicit instanceof Element) return explicit;
+
+    const textRow = Array.from(root.querySelectorAll?.(DISCLAIMER_TEXT_ROW_SELECTOR) || []).find(
+      isScopedDisclaimerTextRow,
+    );
+    return textRow instanceof Element ? textRow : null;
+  };
+
+  window.__cspFindLiveDisclaimerNode = (root) => findLiveDisclaimerNode(root);
+
+  const isDisclaimerCandidate = (node) => getDisclaimerContainer(node) instanceof Element;
+
+  const markDisclaimerNode = (node) => {
+    const container = getDisclaimerContainer(node);
+    if (!(container instanceof Element)) return;
+
+    const txt = container.textContent.trim().replace(/\s+/g, ' ');
     if (containsImportantRoot(txt)) {
-      node.setAttribute('data-id', 'hide-this-warning');
+      container.setAttribute('data-id', 'hide-this-warning');
     }
   };
 
   const markDisclaimerWarnings = (root) => {
     if (!(root instanceof Element) && root !== document) return;
-    root.querySelectorAll('div.text-token-text-secondary').forEach(markDisclaimerNode);
+    const liveNode = findLiveDisclaimerNode(root);
+    if (liveNode instanceof Element) {
+      markDisclaimerNode(liveNode);
+    }
+  };
+
+  const scheduleDisclaimerRecheck = (root) => {
+    if (!(root instanceof Element) || pendingDisclaimerRechecks.has(root)) return;
+    pendingDisclaimerRechecks.add(root);
+    DISCLAIMER_RECHECK_DELAYS_MS.forEach((delayMs, index) => {
+      setTimeout(() => {
+        if (index === DISCLAIMER_RECHECK_DELAYS_MS.length - 1) {
+          pendingDisclaimerRechecks.delete(root);
+        }
+        if (!root.isConnected) return;
+
+        const liveNode = findLiveDisclaimerNode(root);
+        if (liveNode instanceof Element) {
+          markDisclaimerNode(liveNode);
+        }
+      }, delayMs);
+    });
   };
 
   window.__cspEnsureDisclaimerHider = () => {
     if (window.__cspDisclaimerHiderInstalled) return;
     window.__cspDisclaimerHiderInstalled = true;
 
-    markDisclaimerWarnings(document.getElementById('thread-bottom-container') || document);
+    const initialRoot = findDisclaimerObserverRoot();
+    markDisclaimerWarnings(initialRoot);
+    const initialLiveNode = findLiveDisclaimerNode(initialRoot);
+    if (initialLiveNode instanceof Element) {
+      scheduleDisclaimerRecheck(initialLiveNode);
+    }
 
-    const root = document.body || document.documentElement;
+    const root = initialRoot;
     if (!root) return;
 
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        if (mutation.type === 'characterData') {
-          const parent = mutation.target?.parentElement;
-          if (parent?.matches('div.text-token-text-secondary')) {
-            markDisclaimerNode(parent);
-          }
-          continue;
-        }
-
         for (const node of mutation.addedNodes) {
           if (!(node instanceof Element)) continue;
-          markDisclaimerNode(node);
-          if (node.querySelector('div.text-token-text-secondary')) {
-            markDisclaimerWarnings(node);
-          }
+          const liveNode = findLiveDisclaimerNode(node);
+          if (!(liveNode instanceof Element) && !isDisclaimerCandidate(node)) continue;
+
+          markDisclaimerWarnings(node);
+          scheduleDisclaimerRecheck(liveNode instanceof Element ? liveNode : node);
         }
       }
     });
@@ -5331,7 +5504,6 @@ div[data-id="hide-this-warning"] {
     observer.observe(root, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
   };
 })();
@@ -5426,27 +5598,11 @@ div[data-id="hide-this-warning"] {
         overflow: hidden !important;
       }
 
-      :root {
-        --csp-bottom-bar-gap: 0.5em;
-        --csp-bottom-bar-top-gap: 0;
-        --csp-bottom-bar-height: 36px;
-        --csp-bottom-bar-composer-offset: calc(
-          var(--csp-bottom-bar-height) +
-          var(--csp-bottom-bar-gap) +
-          var(--csp-bottom-bar-top-gap)
-        );
-        --csp-bottom-bar-lane-height: calc(
-          var(--csp-bottom-bar-height) +
-          var(--csp-bottom-bar-gap) +
-          var(--csp-bottom-bar-top-gap)
-        );
-      }
-
       #bottomBarContainer {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin-top: 2px !important;
-        margin-bottom: calc(2px - 0.5em) !important;
+        margin-bottom: -18px !important;
         overflow-anchor: none !important;
         min-height: 36px !important;
         box-sizing: border-box !important;
@@ -5591,7 +5747,6 @@ div[data-id="hide-this-warning"] {
     if (!(mountParent instanceof Element)) return null;
 
     return {
-      threadBottomContainer,
       composerForm,
       composerContainer: composerContainer instanceof Element ? composerContainer : composerForm,
       mountParent,
@@ -5600,7 +5755,6 @@ div[data-id="hide-this-warning"] {
   }
 
   function createBottomBarController() {
-    const BOTTOM_BAR_PERF_DEBUG_ENABLED = false;
     const state = {
       started: false,
       observer: null,
@@ -5621,9 +5775,6 @@ div[data-id="hide-this-warning"] {
       modelButton: null,
       headerActions: null,
 
-      anchorCandidate: null,
-      anchorStableFrames: 0,
-
       revealed: false,
       shellAttachedAt: 0,
       revealTimer: 0,
@@ -5632,115 +5783,23 @@ div[data-id="hide-this-warning"] {
       opacityPromise: null,
 
       textScaleResizeObserver: null,
+      textScaleObservedRoot: null,
       textScaleResizeHandler: null,
       textScaleWindowBound: false,
 
       nonCriticalHelpersStarted: false,
       profileButtonObserverStarted: false,
-
-      perfSessionId: BOTTOM_BAR_PERF_DEBUG_ENABLED
-        ? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        : '',
-      perfStart: BOTTOM_BAR_PERF_DEBUG_ENABLED ? performance.now() : 0,
-      perfSeq: 0,
-      perfLogs: [],
-      pendingReasons: new Set(),
       attachCount: 0,
-      repairCount: 0,
-      firstAttachAt: 0,
-      firstRevealAt: 0,
-      firstReadyAt: 0,
-      lastReadyState: null,
-      lastRepairReason: '',
-      lastRevealWaitBucket: -1,
+      observationRoot: null,
     };
 
-    const PERF_LOG_PREFIX = '[CSP_BB_PERF]';
-    const PERF_SUGGESTED_PATH =
-      'C:\\Users\\bwhur\\Dropbox\\CGCSP-Github\\tests\\bottom-bar-perf-log.ndjson';
-
-    function roundMs(value) {
-      return Math.round(value * 10) / 10;
-    }
-
-    function perfLog(event, data = {}) {
-      if (!BOTTOM_BAR_PERF_DEBUG_ENABLED) return null;
-
-      const now = performance.now();
-
-      const entry = {
-        source: 'csp-bottom-bar',
-        sessionId: state.perfSessionId,
-        seq: ++state.perfSeq,
-        event,
-        dtMs: roundMs(now - state.perfStart),
-        href: location.href,
-        ts: new Date().toISOString(),
-        ...data,
-      };
-
-      state.perfLogs.push(entry);
-
-      if (!Array.isArray(window.__cspBottomBarPerfLog)) {
-        window.__cspBottomBarPerfLog = [];
-      }
-
-      window.__cspBottomBarPerfLog.push(entry);
-      window.__cspBottomBarPerfLastEntry = entry;
-      window.__cspBottomBarPerfSuggestedPath = PERF_SUGGESTED_PATH;
-      window.__cspBottomBarPerfExportNdjson = () =>
-        (window.__cspBottomBarPerfLog || []).map((row) => JSON.stringify(row)).join('\n');
-
-      try {
-        window.dispatchEvent(new CustomEvent('csp-bottom-bar-perf', { detail: entry }));
-      } catch {}
-
-      console.log(PERF_LOG_PREFIX, JSON.stringify(entry));
-      return entry;
-    }
-
-    function applyReadyState(ready, source = 'unknown') {
-      const next = Boolean(ready);
-
-      if (BOTTOM_BAR_PERF_DEBUG_ENABLED && state.lastReadyState !== next) {
-        perfLog('ready_state', { ready: next, source });
-        state.lastReadyState = next;
-      }
-
-      setReadyState(next);
-
-      if (BOTTOM_BAR_PERF_DEBUG_ENABLED && next && !state.firstReadyAt) {
-        state.firstReadyAt = performance.now();
-        perfLog('first_ready', {
-          source,
-          sinceStartMs: roundMs(state.firstReadyAt - state.perfStart),
-          sinceFirstAttachMs: state.firstAttachAt
-            ? roundMs(state.firstReadyAt - state.firstAttachAt)
-            : null,
-          sinceRevealMs: state.firstRevealAt
-            ? roundMs(state.firstReadyAt - state.firstRevealAt)
-            : null,
-        });
-      }
+    function applyReadyState(ready) {
+      setReadyState(Boolean(ready));
     }
 
     function start() {
       if (state.started) return;
       state.started = true;
-
-      if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
-        if (!Array.isArray(window.__cspBottomBarPerfLog)) {
-          window.__cspBottomBarPerfLog = [];
-        }
-
-        window.__cspBottomBarPerfSuggestedPath = PERF_SUGGESTED_PATH;
-        window.__cspBottomBarPerfExportNdjson = () =>
-          (window.__cspBottomBarPerfLog || []).map((row) => JSON.stringify(row)).join('\n');
-
-        perfLog('controller_start', {
-          documentReadyState: document.readyState,
-        });
-      }
 
       void loadOpacityValue(); // async, but not blocking first mount
       installMainObserver();
@@ -5799,80 +5858,69 @@ div[data-id="hide-this-warning"] {
       }
     }
 
-    function installMainObserver() {
-      if (state.observer) return;
+    function resolveObservationRoot(snapshot = null) {
+      return document.body || document.documentElement || null;
+    }
 
-      const observationRoot = document.body || document.documentElement;
-      if (!(observationRoot instanceof Node)) return;
+    function observeMainRoot(root) {
+      if (!(root instanceof Node) || !(state.observer instanceof MutationObserver)) return;
+      if (state.observationRoot === root) return;
 
-      state.observer = new MutationObserver((mutations) => {
-        if (performance.now() < state.suppressObserverUntil) return;
-        if (!mutations.length) return;
-
-        if (mutations.every(isInternalBottomBarMutation)) return;
-
-        const repairReason = getRepairReason();
-        if (repairReason) {
-          if (BOTTOM_BAR_PERF_DEBUG_ENABLED && repairReason !== state.lastRepairReason) {
-            state.lastRepairReason = repairReason;
-            state.repairCount += 1;
-
-            perfLog('repair_detected', {
-              repairReason,
-              repairCount: state.repairCount,
-              revealed: state.revealed,
-              attachCount: state.attachCount,
-            });
-          }
-
-          scheduleReconcile(`repair:${repairReason}`);
-          return;
-        }
-
-        if (!mutations.some(isRelevantMutation)) return;
-
-        scheduleReconcile(
-          state.revealed ? 'mutation:relevant_after_reveal' : 'mutation:relevant_before_reveal',
-        );
-      });
-
-      state.observer.observe(observationRoot, {
+      state.observer.disconnect();
+      state.observer.observe(root, {
         childList: true,
         subtree: true,
       });
+      state.observationRoot = root;
+    }
+
+    function installMainObserver(snapshot = null) {
+      if (!(state.observer instanceof MutationObserver)) {
+        state.observer = new MutationObserver((mutations) => {
+          if (performance.now() < state.suppressObserverUntil) return;
+          if (!mutations.length) return;
+
+          if (mutations.every(isInternalBottomBarMutation)) return;
+
+          if (
+            !(state.root instanceof Element) ||
+            !state.root.isConnected ||
+            (state.mountedHostParent && !state.mountedHostParent.isConnected) ||
+            (state.mountedAnchor && !state.mountedAnchor.isConnected)
+          ) {
+            scheduleReconcile('repair:tracked_node_disconnected');
+            return;
+          }
+
+          if (!mutations.some(isRelevantMutation)) return;
+
+          const repairReason = getRepairReason();
+          if (repairReason) {
+            scheduleReconcile(`repair:${repairReason}`);
+            return;
+          }
+
+          scheduleReconcile(
+            state.revealed ? 'mutation:relevant_after_reveal' : 'mutation:relevant_before_reveal',
+          );
+        });
+      }
+
+      observeMainRoot(resolveObservationRoot(snapshot));
     }
 
     function suppressOwnMutations(ms = 250) {
       state.suppressObserverUntil = performance.now() + ms;
     }
 
-    function scheduleReconcile(reason = 'unspecified') {
-      state.pendingReasons.add(reason);
-
+    function scheduleReconcile() {
       if (state.scheduled) return;
       state.scheduled = true;
 
-      perfLog('reconcile_scheduled', {
-        reason,
-        pendingReasonCount: state.pendingReasons.size,
-      });
-
       requestAnimationFrame(() => {
         state.scheduled = false;
-        const reasons = Array.from(state.pendingReasons);
-        state.pendingReasons.clear();
-        void reconcile(reasons);
+        void reconcile();
       });
-    }
-
-    function anchorMatches(a, b) {
-      return (
-        !!a &&
-        !!b &&
-        a.mountParent === b.mountParent &&
-        a.mountAfterEl === b.mountAfterEl &&
-        a.composerContainer === b.composerContainer
-      );
     }
 
     function ensureStableAnchor(snapshot) {
@@ -5882,27 +5930,13 @@ div[data-id="hide-this-warning"] {
         !(snapshot?.mountAfterEl instanceof Element) ||
         !snapshot.mountAfterEl.isConnected
       ) {
-        state.anchorCandidate = null;
-        state.anchorStableFrames = 0;
         return false;
       }
 
       state.mountedHostParent = snapshot.mountParent;
       state.mountedAnchor = snapshot.mountAfterEl;
       state.composerContainer = snapshot.composerContainer;
-
-      const candidate = {
-        mountParent: snapshot.mountParent,
-        mountAfterEl: snapshot.mountAfterEl,
-        composerContainer: snapshot.composerContainer,
-      };
-
-      if (anchorMatches(candidate, state.anchorCandidate)) {
-        state.anchorStableFrames += 1;
-      } else {
-        state.anchorCandidate = candidate;
-        state.anchorStableFrames = 1;
-      }
+      installMainObserver(snapshot);
 
       return true;
     }
@@ -6003,12 +6037,15 @@ div[data-id="hide-this-warning"] {
         state.textScaleWindowBound = true;
       }
 
+      if (state.textScaleObservedRoot === root && state.textScaleResizeObserver) return;
+
       if (state.textScaleResizeObserver) {
         state.textScaleResizeObserver.disconnect();
       }
 
       state.textScaleResizeObserver = new ResizeObserver(state.textScaleResizeHandler);
       state.textScaleResizeObserver.observe(root);
+      state.textScaleObservedRoot = root;
     }
 
     function ensureSlot(id, styles) {
@@ -6028,16 +6065,14 @@ div[data-id="hide-this-warning"] {
       const width = Math.max(0, Math.round(snapshot.composerContainer.clientWidth * 10) / 10);
       if (!width) return;
 
-      state.root.style.position = '';
-      state.root.style.left = '';
-      state.root.style.top = '';
-      state.root.style.bottom = '';
       state.root.style.width = `${width}px`;
-      state.root.style.setProperty('--csp-bottom-bar-inner-max-width', `${width}px`);
     }
 
     function ensureShell(snapshot) {
-      if (!(snapshot?.mountParent instanceof Element) || !(snapshot?.mountAfterEl instanceof Element)) {
+      if (
+        !(snapshot?.mountParent instanceof Element) ||
+        !(snapshot?.mountAfterEl instanceof Element)
+      ) {
         return null;
       }
 
@@ -6111,10 +6146,6 @@ div[data-id="hide-this-warning"] {
         root.parentElement !== mountParent || root.previousElementSibling !== mountAfterEl;
 
       if (needsAttach) {
-        const previousAnchor = state.mountedAnchor instanceof Element ? state.mountedAnchor : null;
-        const previousHostParent =
-          state.mountedHostParent instanceof Element ? state.mountedHostParent : null;
-
         suppressOwnMutations(350);
 
         withScrollPreserved(() => {
@@ -6126,28 +6157,6 @@ div[data-id="hide-this-warning"] {
         state.mountedAnchor = mountAfterEl;
         state.composerContainer = snapshot.composerContainer;
         state.shellAttachedAt = performance.now();
-
-        if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
-          if (!state.firstAttachAt) {
-            state.firstAttachAt = state.shellAttachedAt;
-
-            perfLog('first_attach', {
-              attachCount: state.attachCount,
-              sinceStartMs: roundMs(state.firstAttachAt - state.perfStart),
-              anchorChanged: !!previousAnchor && previousAnchor !== mountAfterEl,
-              hostChanged: !!previousHostParent && previousHostParent !== mountParent,
-            });
-          } else {
-            perfLog('reattach', {
-              attachCount: state.attachCount,
-              sinceStartMs: roundMs(state.shellAttachedAt - state.perfStart),
-              sinceFirstAttachMs: roundMs(state.shellAttachedAt - state.firstAttachAt),
-              anchorChanged: previousAnchor !== mountAfterEl,
-              hostChanged: previousHostParent !== mountParent,
-              revealed: state.revealed,
-            });
-          }
-        }
       } else {
         state.mountedHostParent = mountParent;
         state.mountedAnchor = mountAfterEl;
@@ -6247,22 +6256,6 @@ div[data-id="hide-this-warning"] {
       const waitedLongEnough = waitedMs >= 250;
 
       if (!hasPrimaryControl && !waitedLongEnough) {
-        if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
-          const bucket = Math.floor(waitedMs / 50);
-
-          if (bucket !== state.lastRevealWaitBucket) {
-            state.lastRevealWaitBucket = bucket;
-
-            perfLog('pre_reveal_wait', {
-              reason: 'waiting_for_model_button',
-              waitedSinceLastAttachMs: roundMs(waitedMs),
-              waitedSinceFirstAttachMs: state.firstAttachAt
-                ? roundMs(performance.now() - state.firstAttachAt)
-                : null,
-            });
-          }
-        }
-
         clearTimeout(state.revealTimer);
         state.revealTimer = window.setTimeout(() => {
           scheduleReconcile('reveal_wait_timeout');
@@ -6271,17 +6264,14 @@ div[data-id="hide-this-warning"] {
         return {
           shouldReveal: false,
           reason: 'waiting_for_model_button',
-          waitedMs: roundMs(waitedMs),
         };
       }
 
       clearTimeout(state.revealTimer);
-      state.lastRevealWaitBucket = -1;
 
       return {
         shouldReveal: true,
         reason: hasPrimaryControl ? 'primary_control_ready' : 'timeout',
-        waitedMs: roundMs(waitedMs),
       };
     }
 
@@ -6307,28 +6297,8 @@ div[data-id="hide-this-warning"] {
       }
 
       state.revealed = true;
-      state.lastRepairReason = '';
 
-      if (BOTTOM_BAR_PERF_DEBUG_ENABLED) {
-        if (!state.firstRevealAt) {
-          state.firstRevealAt = performance.now();
-        }
-
-        perfLog('reveal_commit', {
-          reason: revealDecision?.reason || 'unknown',
-          sinceStartMs: roundMs(state.firstRevealAt - state.perfStart),
-          sinceFirstAttachMs: state.firstAttachAt
-            ? roundMs(state.firstRevealAt - state.firstAttachAt)
-            : null,
-          sinceLastAttachMs: state.shellAttachedAt
-            ? roundMs(state.firstRevealAt - state.shellAttachedAt)
-            : null,
-          modelButtonPresent: !!state.modelButton,
-          headerActionsPresent: !!state.headerActions,
-        });
-      }
-
-      applyReadyState(shouldHideTopHeader(), 'reveal_commit');
+      applyReadyState(shouldHideTopHeader());
     }
 
     function syncRevealedSlots(shell, nextModelButton, nextHeaderActions) {
@@ -6348,8 +6318,7 @@ div[data-id="hide-this-warning"] {
 
       adjustBottomBarTextScaling(shell.bottomBar);
       hideStaleDisclaimer();
-      state.lastRepairReason = '';
-      applyReadyState(shouldHideTopHeader(), 'sync_revealed_slots');
+      applyReadyState(shouldHideTopHeader());
     }
 
     function getRepairReason() {
@@ -6489,61 +6458,32 @@ div[data-id="hide-this-warning"] {
       }
     }
 
-    async function reconcile(reasons = ['unspecified']) {
-      if (state.reconcileRunning) {
-        perfLog('reconcile_skipped', {
-          reasons,
-          why: 'already_running',
-        });
-        return;
-      }
+    async function reconcile() {
+      if (state.reconcileRunning) return;
 
       state.reconcileRunning = true;
 
-      perfLog('reconcile_start', {
-        reasons,
-        revealed: state.revealed,
-        attachCount: state.attachCount,
-      });
-
       try {
         if (hasLoginButtonPresent()) {
-          perfLog('reconcile_abort', {
-            reasons,
-            why: 'login_button_present',
-          });
-          applyReadyState(false, 'login_button_present');
+          applyReadyState(false);
           return;
         }
 
         const snapshot = findAnchorSnapshot();
 
         if (!snapshot) {
-          perfLog('reconcile_wait', {
-            reasons,
-            why: 'snapshot_missing',
-          });
-          applyReadyState(false, 'snapshot_missing');
+          applyReadyState(false);
           return;
         }
 
         if (!ensureStableAnchor(snapshot)) {
-          perfLog('reconcile_wait', {
-            reasons,
-            why: 'anchor_unstable',
-            stableFrames: state.anchorStableFrames,
-          });
-          scheduleReconcile('anchor_unstable');
+          applyReadyState(false);
           return;
         }
 
         const shell = ensureShell(snapshot);
         if (!shell) {
-          perfLog('reconcile_abort', {
-            reasons,
-            why: 'shell_unavailable',
-          });
-          applyReadyState(false, 'shell_unavailable');
+          applyReadyState(false);
           return;
         }
 
@@ -6562,10 +6502,6 @@ div[data-id="hide-this-warning"] {
         state.composerContainer = snapshot.composerContainer;
 
         if (state.revealed) {
-          if (reasons.some((reason) => String(reason).startsWith('repair:'))) {
-            perfLog('post_reveal_repair_pass', { reasons });
-          }
-
           syncRevealedSlots(shell, nextModelButton, nextHeaderActions);
         } else {
           const revealDecision = getRevealDecision(nextModelButton);
@@ -6573,7 +6509,7 @@ div[data-id="hide-this-warning"] {
           if (revealDecision.shouldReveal) {
             commitReveal(shell, nextModelButton, nextHeaderActions, revealDecision);
           } else {
-            applyReadyState(false, 'pre_reveal_wait');
+            applyReadyState(false);
           }
         }
 
@@ -6831,6 +6767,7 @@ div[data-id="hide-this-warning"] {
 
   function hideStaleDisclaimer() {
     const warning =
+      window.__cspFindLiveDisclaimerNode?.() ||
       document.querySelector('[data-id="hide-this-warning"]') ||
       document.querySelector(
         'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs',
@@ -7034,6 +6971,7 @@ div[data-id="hide-this-warning"] {
 (() => {
   // --- Parameters ---
   const BUTTON_TEXT = 'Open link';
+  const LINK_CANDIDATE_SELECTOR = 'a.btn-primary, a[rel][target]';
 
   /**
    * Checks if a node or its descendants have an <a> with the target text
@@ -7042,13 +6980,14 @@ div[data-id="hide-this-warning"] {
   function tryClickOpenLink(node) {
     // Only Element nodes
     if (node.nodeType !== 1) return;
+    if (!(node instanceof Element)) return;
 
     // Helper for quick text check
     function findButton(root) {
       // Check for <a> with child div containing our BUTTON_TEXT
       // We assume (as in your HTML) structure:
       //    <a ...><div>Open link</div></a>
-      const anchors = root.querySelectorAll('a.btn-primary');
+      const anchors = root.querySelectorAll(LINK_CANDIDATE_SELECTOR);
       for (const a of anchors) {
         if (
           a.textContent.trim() === BUTTON_TEXT ||
@@ -7065,13 +7004,13 @@ div[data-id="hide-this-warning"] {
       return null;
     }
 
+    if (!node.matches(LINK_CANDIDATE_SELECTOR) && !node.querySelector(LINK_CANDIDATE_SELECTOR)) {
+      return;
+    }
+
     // Check self, then descendants. This is cheap for typical small dialog nodes.
     let btn = null;
-    if (
-      node.matches &&
-      (node.matches('a.btn-primary') || node.matches('a[rel][target]')) &&
-      node.textContent.trim() === BUTTON_TEXT
-    ) {
+    if (node.matches(LINK_CANDIDATE_SELECTOR) && node.textContent.trim() === BUTTON_TEXT) {
       btn = node;
     } else {
       btn = findButton(node);
@@ -7124,6 +7063,13 @@ div[data-id="hide-this-warning"] {
   const MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
   const MODEL_MENU_ITEM_SELECTOR = ':scope > [role="menuitem"][data-radix-collection-item]';
+  const escapeSelectorValue = (value) => {
+    try {
+      return CSS?.escape ? CSS.escape(String(value)) : String(value);
+    } catch {
+      return String(value);
+    }
+  };
   const getModelActionSlots = () =>
     typeof window.ModelLabels?.getActionSlots === 'function'
       ? window.ModelLabels.getActionSlots()
@@ -7380,6 +7326,29 @@ div[data-id="hide-this-warning"] {
       ? getOpenMenus()
       : Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR));
 
+  const hasExpandedModelMenuTrigger = () =>
+    document.querySelector(MENU_BTN_SELECTOR)?.getAttribute('aria-expanded') === 'true';
+
+  const hasOpenModelMenuCandidate = () => {
+    const triggerId = document.querySelector(MENU_BTN_SELECTOR)?.id || '';
+    if (
+      triggerId &&
+      document.querySelector(
+        `${MODEL_MENU_SELECTOR}[aria-labelledby="${escapeSelectorValue(triggerId)}"]`,
+      )
+    ) {
+      return true;
+    }
+
+    return !!document.querySelector(
+      `${MODEL_MENU_SELECTOR} [data-testid="model-configure-modal"], ` +
+        `${MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`,
+    );
+  };
+
+  const isModelMenuLikelyActive = () =>
+    hasExpandedModelMenuTrigger() || hasOpenModelMenuCandidate();
+
   const getDirectModelMenuItems = (menuEl) =>
     menuEl instanceof Element ? Array.from(menuEl.querySelectorAll(MODEL_MENU_ITEM_SELECTOR)) : [];
 
@@ -7621,12 +7590,25 @@ div[data-id="hide-this-warning"] {
         const style = document.createElement('style');
         style.id = '__altHintStyle';
         style.textContent = `
+                @keyframes csp-alt-hint-fade-in {
+                    from {
+                        opacity: 0;
+                        transform: translateY(2px);
+                    }
+                    to {
+                        opacity: .55;
+                        transform: translateY(0);
+                    }
+                }
                 .alt-hint {
                     font-size: 10px;
                     opacity: .55;
                     margin-left: 6px;
                     user-select: none;
                     pointer-events: none;
+                    display: inline-flex;
+                    align-items: center;
+                    animation: csp-alt-hint-fade-in 140ms ease-out;
                 }`;
         document.head.appendChild(style);
       })();
@@ -7645,6 +7627,22 @@ div[data-id="hide-this-warning"] {
         span.className = 'alt-hint';
         span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
         (target || el).appendChild(span);
+      };
+
+      const getExpectedPrimaryHintTexts = (primaryItems, primaryActions) =>
+        primaryItems.map((_, i) => {
+          const slot = primaryActions[i]?.slot;
+          return slot == null ? '' : `${MOD_KEY_TEXT}+${displayFromCode(KEY_CODES[slot])}`;
+        });
+
+      const primaryHintsAlreadyApplied = (primaryItems, expectedHintTexts) => {
+        const expectedCount = expectedHintTexts.filter(Boolean).length;
+        if (document.querySelectorAll('.alt-hint').length !== expectedCount) return false;
+        for (let i = 0; i < primaryItems.length; ++i) {
+          const actual = primaryItems[i]?.el?.querySelector('.alt-hint')?.textContent?.trim() || '';
+          if ((expectedHintTexts[i] || '') !== actual) return false;
+        }
+        return true;
       };
 
       // --- Ultra-light model-name capture: piggybacks on applyHints ---
@@ -8571,11 +8569,19 @@ div[data-id="hide-this-warning"] {
         flashBottomBar();
       };
 
-      const applyHints = () => {
-        removeAllLabels();
-        const state = getVisibleModelMenuState();
+      let hintScheduleToken = 0;
+
+      const applyHints = (state = getVisibleModelMenuState()) => {
         const primaryItems = getPrimaryMenuItems(state);
         const primaryActions = getPrimaryPresentationActionsForState(state);
+        if (!primaryItems.length || !primaryActions.length) return false;
+        const expectedHintTexts = getExpectedPrimaryHintTexts(primaryItems, primaryActions);
+        if (primaryHintsAlreadyApplied(primaryItems, expectedHintTexts)) {
+          syncActiveConfigFromMenuState(state, { persist: true });
+          __cspMaybePersistModelNames();
+          return true;
+        }
+        removeAllLabels();
         for (let i = 0; i < primaryItems.length && i < primaryActions.length; ++i) {
           const slot = primaryActions[i]?.slot;
           if (slot == null) continue;
@@ -8584,11 +8590,22 @@ div[data-id="hide-this-warning"] {
         syncActiveConfigFromMenuState(state, { persist: true });
         // Persist labels -> names once menus are present (submenu must be open for full set)
         __cspMaybePersistModelNames();
+        return true;
       };
-      const scheduleHints = () => requestAnimationFrame(applyHints);
+      const scheduleHints = ({ retries = 0, interval = DELAY_APPLY_HINTS_OBSERVER_MS } = {}) => {
+        const token = ++hintScheduleToken;
+        const run = () => {
+          if (token !== hintScheduleToken) return;
+          const applied = applyHints();
+          if (applied || retries <= 0) return;
+          retries -= 1;
+          setTimeout(() => requestAnimationFrame(run), interval);
+        };
+        requestAnimationFrame(run);
+      };
 
       // Expose a minimal hook so outer listeners can refresh labels when keys change
-      window.__mp_applyHints = applyHints;
+      window.__mp_applyHints = (options = {}) => scheduleHints(options);
 
       const openMenuForAction = (nextAction, done) => {
         ensureMainMenuOpen();
@@ -8685,7 +8702,10 @@ div[data-id="hide-this-warning"] {
       // Keep click-to-open labels, but also observe DOM so labels appear *when* submenu mounts
       document.addEventListener('click', (e) => {
         if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN_SELECTOR))) {
-          setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_MAIN_MS);
+          setTimeout(
+            () => scheduleHints({ retries: 12, interval: DELAY_APPLY_HINTS_AFTER_MAIN_MS }),
+            0,
+          );
         }
         const t = e.target instanceof Element ? e.target : null;
         const clickedPrimaryItem = t?.closest(
@@ -8727,7 +8747,10 @@ div[data-id="hide-this-warning"] {
             '[role="menuitem"][aria-controls]',
         );
         if (submenuTriggerClicked) {
-          setTimeout(applyHints, DELAY_APPLY_HINTS_AFTER_SUBMENU_MS);
+          setTimeout(
+            () => scheduleHints({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }),
+            0,
+          );
         }
       });
 
@@ -8735,10 +8758,17 @@ div[data-id="hide-this-warning"] {
       (() => {
         let lastCount = 0;
         const obs = new MutationObserver(() => {
+          if (!isModelMenuLikelyActive()) {
+            lastCount = 0;
+            return;
+          }
           const count = getOpenModelMenus().length;
           if (count !== lastCount) {
             lastCount = count;
-            setTimeout(applyHints, DELAY_APPLY_HINTS_OBSERVER_MS);
+            setTimeout(
+              () => scheduleHints({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS }),
+              0,
+            );
           }
         });
         obs.observe(document.documentElement, {
@@ -8747,8 +8777,8 @@ div[data-id="hide-this-warning"] {
         });
       })();
 
-      if (document.querySelector(MENU_BTN_SELECTOR)?.getAttribute('aria-expanded') === 'true') {
-        scheduleHints();
+      if (isModelMenuLikelyActive()) {
+        scheduleHints({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS });
       }
     },
   );
@@ -9173,21 +9203,41 @@ setTimeout(() => {
     { fadeSlimSidebarEnabled: false },
     ({ fadeSlimSidebarEnabled: enabled }) => {
       window._fadeSlimSidebarEnabled = enabled;
-      if (!enabled) {
-        const barEl = document.getElementById('stage-sidebar-tiny-bar');
-        if (barEl) {
-          barEl.style.removeProperty('transition');
-          barEl.style.removeProperty('opacity');
-          barEl.style.removeProperty('pointer-events');
-        }
-        return;
-      }
 
       let bar = null;
       let hover = false;
       let idleTimer = null;
       let idleTimerVersion = 0;
       let classObserver = null;
+      let domObserver = null;
+      let overlayObserver = null;
+      let settleUntil = 0;
+
+      const INITIAL_SETTLE_MS = 1200;
+      const IDLE_FADE_DELAY_MS = 2500;
+
+      function isFeatureEnabled() {
+        return window._fadeSlimSidebarEnabled === true;
+      }
+
+      function beginSettle(ms = INITIAL_SETTLE_MS) {
+        settleUntil = Math.max(settleUntil, Date.now() + ms);
+      }
+
+      function getSettleDelayMs() {
+        return Math.max(0, settleUntil - Date.now());
+      }
+
+      function isSettling() {
+        return getSettleDelayMs() > 0;
+      }
+
+      function resetBarStyles(barEl) {
+        if (!barEl) return;
+        barEl.style.removeProperty('transition');
+        barEl.style.removeProperty('opacity');
+        barEl.style.removeProperty('pointer-events');
+      }
 
       // -- NEW: Helper to check if large sidebar is open --
       function isLargeSidebarOpen() {
@@ -9221,15 +9271,33 @@ setTimeout(() => {
         bar.removeEventListener('mouseenter', onEnter, true);
         bar.removeEventListener('mouseleave', onLeave, true);
         if (classObserver) classObserver.disconnect();
+        classObserver = null;
         clearTimeout(idleTimer);
         idleTimerVersion++;
         bar = null;
       }
 
-      // Overlay detection unchanged
+      function disconnectGlobalObservers() {
+        domObserver?.disconnect();
+        overlayObserver?.disconnect();
+        domObserver = null;
+        overlayObserver = null;
+      }
+
+      function stopFeature() {
+        disconnectGlobalObservers();
+        detachCurrentBar();
+        resetBarStyles(document.getElementById('stage-sidebar-tiny-bar'));
+      }
+
       function overlayIsOpen() {
         const selectors = [
           '[id^="radix-"][data-state="open"]',
+          '[role="menu"][data-radix-menu-content][data-state="open"]',
+          '[role="dialog"]',
+          '[aria-modal="true"]',
+          '[role="listbox"]',
+          '[data-radix-popper-content-wrapper]',
           '.modal, .slideover, .overlay, .DialogOverlay, .MenuOverlay',
           '[data-state="open"]',
           '[data-overlay="true"]',
@@ -9238,22 +9306,7 @@ setTimeout(() => {
           const el = document.querySelector(sel);
           if (el && isVisible(el)) return true;
         }
-        // Heuristic fallback: look for large, fixed overlays with high z-index
-        const candidates = Array.from(document.body.querySelectorAll('*'));
-        return candidates.some((elem) => {
-          if (!(elem instanceof HTMLElement)) return false;
-          const style = window.getComputedStyle(elem);
-          if (
-            (style.position === 'fixed' || style.position === 'absolute') &&
-            (parseInt(style.zIndex, 10) || 0) > 1000 &&
-            elem.offsetWidth >= window.innerWidth * 0.75 &&
-            elem.offsetHeight >= window.innerHeight * 0.5
-          ) {
-            // Don't match alerts/toasts, only major overlays
-            return isVisible(elem);
-          }
-          return false;
-        });
+        return false;
       }
       function isVisible(el) {
         if (!el) return false;
@@ -9262,7 +9315,7 @@ setTimeout(() => {
       }
 
       function setOpacity(value) {
-        if (!bar) return;
+        if (!bar || !isFeatureEnabled()) return;
         if (overlayIsOpen()) {
           bar.style.setProperty('opacity', '0', 'important');
           bar.style.pointerEvents = 'none';
@@ -9274,7 +9327,7 @@ setTimeout(() => {
       }
 
       function fadeToIdle() {
-        if (!bar) return;
+        if (!bar || !isFeatureEnabled()) return;
         if (overlayIsOpen()) {
           setOpacity('0');
           return;
@@ -9290,29 +9343,39 @@ setTimeout(() => {
           }, 0);
           return;
         }
+        if (isSettling()) return;
         setOpacity(getIdleOpacity().toString());
       }
 
-      function onEnter() {
-        hover = true;
-        clearTimeout(idleTimer);
-        setOpacity('1');
-      }
-      function onLeave() {
-        hover = false;
+      function scheduleIdleFade(delayMs = IDLE_FADE_DELAY_MS) {
         clearTimeout(idleTimer);
         idleTimerVersion++;
         const thisVersion = idleTimerVersion;
         idleTimer = setTimeout(() => {
           if (idleTimerVersion === thisVersion) fadeToIdle();
-        }, 2500);
+        }, getSettleDelayMs() + delayMs);
+      }
+
+      function onEnter() {
+        if (!isFeatureEnabled()) return;
+        hover = true;
+        clearTimeout(idleTimer);
+        setOpacity('1');
+      }
+      function onLeave() {
+        if (!isFeatureEnabled()) return;
+        hover = false;
+        scheduleIdleFade();
       }
 
       async function attachToBar(el) {
+        if (!isFeatureEnabled() || !(el instanceof HTMLElement)) return;
         detachCurrentBar();
         await ensureOpacityLoaded();
+        if (!isFeatureEnabled() || !el.isConnected) return;
 
         bar = el;
+        beginSettle();
         // Show instantly, then restore the fade
         bar.style.setProperty('transition', 'none', 'important');
         setOpacity('1');
@@ -9341,6 +9404,7 @@ setTimeout(() => {
         );
 
         classObserver = new MutationObserver(() => {
+          if (!bar || !isFeatureEnabled()) return;
           // Sidebar just closed or opened; handle transition instantly
           if (isLargeSidebarOpen()) {
             bar.style.setProperty('transition', 'none', 'important');
@@ -9352,21 +9416,16 @@ setTimeout(() => {
             setTimeout(() => {
               if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
             }, 0);
-          } else {
-            bar.style.setProperty('transition', 'none', 'important');
-            setOpacity('1');
-            void bar.offsetWidth;
-            setTimeout(() => {
-              if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-              clearTimeout(idleTimer);
-              idleTimerVersion++;
-              const thisVersion = idleTimerVersion;
-              idleTimer = setTimeout(() => {
-                if (idleTimerVersion === thisVersion) fadeToIdle();
-              }, 2500);
-            }, 0);
-          }
-        });
+            } else {
+              bar.style.setProperty('transition', 'none', 'important');
+              setOpacity('1');
+              void bar.offsetWidth;
+              setTimeout(() => {
+                if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+                scheduleIdleFade();
+              }, 0);
+            }
+          });
 
         // We want to observe changes on the large sidebar, not the slimbar
         const largeSidebar = document.getElementById('stage-sidebar');
@@ -9378,48 +9437,60 @@ setTimeout(() => {
         }
 
         setOpacity('1');
-        clearTimeout(idleTimer);
-        idleTimerVersion++;
-        const thisVersion = idleTimerVersion;
-        idleTimer = setTimeout(() => {
-          if (idleTimerVersion === thisVersion) fadeToIdle();
-        }, 2500);
+        scheduleIdleFade();
       }
 
-      // DOM observer to attach/detach
-      const domObserver = new MutationObserver(() => {
-        const el = document.getElementById('stage-sidebar-tiny-bar');
-        if (el !== bar) {
-          if (el) {
-            attachToBar(el);
-            window.flashSlimSidebarBar?.();
-          } else {
-            detachCurrentBar();
-          }
-        } else {
-          fadeToIdle();
-        }
-      });
-      domObserver.observe(document.body, { childList: true, subtree: true });
+      function ensureGlobalObservers() {
+        if (!isFeatureEnabled() || domObserver || overlayObserver) return;
+        const observationRoot = document.body || document.documentElement;
+        if (!(observationRoot instanceof Node)) return;
 
-      // Also observe overlay-relevant changes (class/style on body/overlays)
-      const overlayObserver = new MutationObserver(fadeToIdle);
-      overlayObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style'],
-      });
+        // DOM observer to attach/detach
+        domObserver = new MutationObserver(() => {
+          if (!isFeatureEnabled()) return;
+          const el = document.getElementById('stage-sidebar-tiny-bar');
+          if (el !== bar) {
+            if (el) {
+              attachToBar(el);
+              window.flashSlimSidebarBar?.();
+            } else {
+              detachCurrentBar();
+            }
+          } else {
+            fadeToIdle();
+          }
+        });
+        domObserver.observe(observationRoot, { childList: true, subtree: true });
+
+        // Also observe overlay-relevant changes (class/style on body/overlays)
+        overlayObserver = new MutationObserver(() => {
+          if (!isFeatureEnabled()) return;
+          fadeToIdle();
+        });
+        overlayObserver.observe(observationRoot, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['class', 'style'],
+        });
+      }
+
+      function startFeature() {
+        if (!isFeatureEnabled()) return;
+        ensureGlobalObservers();
+        const first = document.getElementById('stage-sidebar-tiny-bar');
+        if (first) attachToBar(first);
+      }
 
       // (Removed setInterval: fadeToIdle() is now handled only by user idle, DOM mutation, or overlayObserver events.)
 
       // startup
       function startup() {
-        const first = document.getElementById('stage-sidebar-tiny-bar');
-        if (first) attachToBar(first);
+        if (isFeatureEnabled()) startFeature();
+        else stopFeature();
       }
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startup);
+        document.addEventListener('DOMContentLoaded', startup, { once: true });
       } else {
         startup();
       }
@@ -9436,25 +9507,18 @@ setTimeout(() => {
         }
 
         if ('fadeSlimSidebarEnabled' in chg) {
-          window._fadeSlimSidebarEnabled = chg.fadeSlimSidebarEnabled.newValue;
-          const nowOn = chg.fadeSlimSidebarEnabled.newValue;
+          window._fadeSlimSidebarEnabled = chg.fadeSlimSidebarEnabled.newValue === true;
+          const nowOn = window._fadeSlimSidebarEnabled;
           if (!nowOn) {
-            detachCurrentBar();
-            const barEl = document.getElementById('stage-sidebar-tiny-bar');
-            if (barEl) {
-              barEl.style.removeProperty('transition');
-              barEl.style.removeProperty('opacity');
-              barEl.style.removeProperty('pointer-events');
-            }
+            stopFeature();
           } else {
-            const barEl = document.getElementById('stage-sidebar-tiny-bar');
-            if (barEl) attachToBar(barEl);
+            startFeature();
           }
         }
       });
 
       window.flashSlimSidebarBar = (dur = 2500) => {
-        if (!bar) return;
+        if (!bar || !isFeatureEnabled()) return;
         if (overlayIsOpen()) {
           setOpacity('0');
           hover = false;
@@ -9463,13 +9527,8 @@ setTimeout(() => {
         clearTimeout(idleTimer);
         idleTimerVersion++;
         setOpacity('1');
-        const thisVersion = idleTimerVersion;
-        idleTimer = setTimeout(() => {
-          if (idleTimerVersion === thisVersion) {
-            hover = false;
-            fadeToIdle();
-          }
-        }, dur);
+        hover = false;
+        scheduleIdleFade(dur);
       };
     },
   );

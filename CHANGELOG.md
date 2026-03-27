@@ -4,6 +4,16 @@ Changes typically post to the chrome web store a couple days after date in chang
 
 If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
+#### 03.27.2026
+- Fixed: `Send Top Bar To Bottom` now hides the bottom disclaimer text again by recognizing both the explicit disclaimer container and the live centered disclaimer row, with short delayed rechecks instead of the old broad text-node watcher.
+- Adjusted: `Send Top Bar To Bottom` now sits lower by increasing the bottom bar's negative bottom margin, which moves the composer and bottom bar down together without changing the sticky container height.
+
+#### 03.25.2026
+- Fixed: Dictation toggle now prefers the dedicated `Dictate button` over the normal composer send button when both controls are present, so the shortcut no longer fires `Send prompt` in idle composer state.
+- Fixed: `Select and Copy` now uses ChatGPT's current sticky composer boundary when filtering visible turns, so it stops cycling to turns hidden under the bottom composer.
+- Fixed: `Select and Copy` and `Select and Copy All` now copy all assistant/user message blocks inside a turn instead of only the first block, matching ChatGPT's newer multi-block assistant turn markup.
+- Improved: disclaimer hiding now watches only the thread/composer region and targets the actual disclaimer container shape instead of scanning broad `text-token-text-secondary` nodes across the whole page.
+
 #### 03.24.2026
 - Improved: Send Top Bar To Bottom now loads much faster and more consistently, with better performance and no redraws or movement.
 
