@@ -4945,16 +4945,46 @@ const delays = DELAYS;
     return foundMatch;
   }
 
-  function hasDynamicUiTarget(root) {
-    return (
-      root instanceof Element &&
-      (root.matches(DYNAMIC_UI_SELECTOR) || !!root.querySelector(DYNAMIC_UI_SELECTOR))
-    );
+  function applyDynamicUiStylingInSubtree(root) {
+    if (!(root instanceof Element)) return false;
+    if (!root.matches(DYNAMIC_UI_SELECTOR) && root.childElementCount === 0) return false;
+    return forEachDynamicUiTarget(root, applyDynamicUiStyling);
   }
 
-  function applyDynamicUiStylingInSubtree(root) {
-    if (!hasDynamicUiTarget(root)) return false;
-    return forEachDynamicUiTarget(root, applyDynamicUiStyling);
+  const pendingDynamicUiRoots = [];
+  let dynamicUiFlushHandle = 0;
+
+  function queueDynamicUiRoot(root) {
+    if (!(root instanceof Element)) return;
+    if (!root.matches(DYNAMIC_UI_SELECTOR) && root.childElementCount === 0) return;
+
+    for (let i = pendingDynamicUiRoots.length - 1; i >= 0; i--) {
+      const pending = pendingDynamicUiRoots[i];
+      if (!(pending instanceof Element) || !pending.isConnected) {
+        pendingDynamicUiRoots.splice(i, 1);
+        continue;
+      }
+      if (pending === root || pending.contains(root)) return;
+      if (root.contains(pending)) {
+        pendingDynamicUiRoots.splice(i, 1);
+      }
+    }
+
+    pendingDynamicUiRoots.push(root);
+
+    if (dynamicUiFlushHandle) return;
+
+    const flush = () => {
+      dynamicUiFlushHandle = 0;
+      const roots = pendingDynamicUiRoots.splice(0, pendingDynamicUiRoots.length);
+      roots.forEach((queuedRoot) => applyDynamicUiStylingInSubtree(queuedRoot));
+    };
+
+    if (typeof window.requestAnimationFrame === 'function') {
+      dynamicUiFlushHandle = window.requestAnimationFrame(flush);
+    } else {
+      dynamicUiFlushHandle = window.setTimeout(flush, 16);
+    }
   }
 
   function applyInitialTransitions() {
@@ -5029,12 +5059,12 @@ const delays = DELAYS;
       for (const m of muts) {
         for (const n of m.addedNodes) {
           if (!(n instanceof Element)) continue;
-          applyDynamicUiStylingInSubtree(n);
+          queueDynamicUiRoot(n);
         }
       }
     });
 
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+    mo.observe(document.body || document.documentElement, { childList: true, subtree: true });
   };
 
   // Run when DOM is ready
@@ -6924,6 +6954,7 @@ div[data-id="hide-this-warning"] {
 (() => {
   const containerSel = 'div.flex.h-full.w-full.flex-col.items-center.justify-center.gap-4';
   const btnSel = `${containerSel} button.btn-secondary`;
+  const TRY_AGAIN_RELEVANT_SELECTOR = `${containerSel}, button.btn-secondary`;
 
   // 1) Inject fade CSS
   const style = document.createElement('style');
@@ -6938,27 +6969,73 @@ div[data-id="hide-this-warning"] {
     `;
   document.head.append(style);
 
-  // 2) Centralized click + fade logic
-  let scheduled = false;
-  const handleNode = (node) => {
-    if (!(node instanceof HTMLElement) || !node.matches(containerSel)) return;
-    node.classList.add('visible'); // fade in
-    if (scheduled) return;
-    scheduled = true;
-    requestIdleCallback(() => {
-      node.querySelector(btnSel)?.click();
-      node.classList.remove('visible'); // fade out
-      scheduled = false;
+  function scheduleTryAgainFlush(callback) {
+    if (typeof window.requestIdleCallback === 'function') {
+      return window.requestIdleCallback(callback, { timeout: 500 });
+    }
+    return window.setTimeout(callback, 80);
+  }
+
+  let flushHandle = 0;
+  const pendingRoots = [];
+
+  function collectTryAgainContainers(root) {
+    if (!(root instanceof Element)) return [];
+    const containers = new Set();
+    if (root.matches(containerSel)) containers.add(root);
+    if (root.matches('button.btn-secondary')) {
+      const closest = root.closest(containerSel);
+      if (closest) containers.add(closest);
+    }
+    root.querySelectorAll(TRY_AGAIN_RELEVANT_SELECTOR).forEach((match) => {
+      const container = match.matches(containerSel) ? match : match.closest(containerSel);
+      if (container) containers.add(container);
     });
-  };
+    return Array.from(containers);
+  }
+
+  function queueTryAgainRoot(root) {
+    if (!(root instanceof Element)) return;
+    if (!root.matches(TRY_AGAIN_RELEVANT_SELECTOR) && root.childElementCount === 0) return;
+
+    for (let i = pendingRoots.length - 1; i >= 0; i--) {
+      const pending = pendingRoots[i];
+      if (!(pending instanceof Element) || !pending.isConnected) {
+        pendingRoots.splice(i, 1);
+        continue;
+      }
+      if (pending === root || pending.contains(root)) return;
+      if (root.contains(pending)) pendingRoots.splice(i, 1);
+    }
+
+    pendingRoots.push(root);
+    if (flushHandle) return;
+    flushHandle = scheduleTryAgainFlush(() => {
+      flushHandle = 0;
+      const roots = pendingRoots.splice(0, pendingRoots.length);
+      const containers = new Set();
+      roots.forEach((candidateRoot) => {
+        collectTryAgainContainers(candidateRoot).forEach((container) => containers.add(container));
+      });
+      containers.forEach((container) => {
+        if (!(container instanceof HTMLElement) || !container.isConnected) return;
+        container.classList.add('visible');
+        window.setTimeout(() => {
+          if (!container.isConnected) return;
+          container.querySelector(btnSel)?.click();
+          container.classList.remove('visible');
+        }, 0);
+      });
+    });
+  }
 
   // 3) Initial pass in case it’s already there
-  document.querySelectorAll(containerSel).forEach(handleNode);
+  document.querySelectorAll(containerSel).forEach((node) => queueTryAgainRoot(node));
 
   // 4) Watch for new ones
   new MutationObserver((muts) => {
     for (const { addedNodes } of muts) {
-      addedNodes.forEach(handleNode);
+      addedNodes.forEach(queueTryAgainRoot);
     }
   }).observe(document.body, { childList: true, subtree: true });
 })();
@@ -6971,6 +7048,8 @@ div[data-id="hide-this-warning"] {
   // --- Parameters ---
   const BUTTON_TEXT = 'Open link';
   const LINK_CANDIDATE_SELECTOR = 'a.btn-primary, a[rel][target]';
+  const pendingOpenLinkRoots = [];
+  let openLinkFlushHandle = 0;
 
   /**
    * Checks if a node or its descendants have an <a> with the target text
@@ -7021,11 +7100,36 @@ div[data-id="hide-this-warning"] {
     }
   }
 
+  function flushOpenLinkRoots() {
+    openLinkFlushHandle = 0;
+    const roots = pendingOpenLinkRoots.splice(0, pendingOpenLinkRoots.length);
+    roots.forEach((root) => tryClickOpenLink(root));
+  }
+
+  function queueOpenLinkRoot(root) {
+    if (!(root instanceof Element)) return;
+    if (!root.matches(LINK_CANDIDATE_SELECTOR) && root.childElementCount === 0) return;
+
+    for (let i = pendingOpenLinkRoots.length - 1; i >= 0; i--) {
+      const pending = pendingOpenLinkRoots[i];
+      if (!(pending instanceof Element) || !pending.isConnected) {
+        pendingOpenLinkRoots.splice(i, 1);
+        continue;
+      }
+      if (pending === root || pending.contains(root)) return;
+      if (root.contains(pending)) pendingOpenLinkRoots.splice(i, 1);
+    }
+
+    pendingOpenLinkRoots.push(root);
+    if (openLinkFlushHandle) return;
+    openLinkFlushHandle = window.setTimeout(flushOpenLinkRoots, 30);
+  }
+
   // --- Observe only child additions (very cheap) ---
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const n of m.addedNodes) {
-        tryClickOpenLink(n);
+        queueOpenLinkRoot(n);
       }
     }
   });
@@ -8962,11 +9066,14 @@ setTimeout(() => {
       let idleTimerVersion = 0;
       let classObserver = null;
       let domObserver = null;
-      let overlayObserver = null;
+      let refreshTimer = null;
+      let refreshListenersAttached = false;
+      let pendingFlashAfterAttach = false;
       let settleUntil = 0;
 
       const INITIAL_SETTLE_MS = 1200;
       const IDLE_FADE_DELAY_MS = 2500;
+      const BAR_REFRESH_DEBOUNCE_MS = 80;
 
       function isFeatureEnabled() {
         return window._fadeSlimSidebarEnabled === true;
@@ -9029,11 +9136,27 @@ setTimeout(() => {
         bar = null;
       }
 
+      function clearRefreshTimer() {
+        if (!refreshTimer) return;
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+
+      function removeRefreshListeners() {
+        if (!refreshListenersAttached) return;
+        document.removeEventListener('pointerdown', scheduleInteractionRefresh, true);
+        document.removeEventListener('keydown', scheduleInteractionRefresh, true);
+        document.removeEventListener('visibilitychange', scheduleInteractionRefresh, true);
+        window.removeEventListener('resize', scheduleInteractionRefresh, true);
+        refreshListenersAttached = false;
+      }
+
       function disconnectGlobalObservers() {
         domObserver?.disconnect();
-        overlayObserver?.disconnect();
         domObserver = null;
-        overlayObserver = null;
+        clearRefreshTimer();
+        removeRefreshListeners();
+        pendingFlashAfterAttach = false;
       }
 
       function stopFeature() {
@@ -9120,6 +9243,63 @@ setTimeout(() => {
         scheduleIdleFade();
       }
 
+      function relevantNodeForSlimSidebarRefresh(node) {
+        if (!(node instanceof Element) && !(node instanceof DocumentFragment)) return false;
+        const selector =
+          '#stage-sidebar-tiny-bar, #stage-sidebar, [data-radix-popper-content-wrapper], [role="menu"][data-radix-menu-content], [role="dialog"], [aria-modal="true"], [role="listbox"], [data-overlay="true"]';
+        if (node instanceof Element && node.matches(selector)) return true;
+        return typeof node.querySelector === 'function' && !!node.querySelector(selector);
+      }
+
+      function mutationsNeedSlimSidebarRefresh(mutations) {
+        for (const mutation of mutations) {
+          for (const node of mutation.addedNodes) {
+            if (relevantNodeForSlimSidebarRefresh(node)) return true;
+          }
+          for (const node of mutation.removedNodes) {
+            if (relevantNodeForSlimSidebarRefresh(node)) return true;
+          }
+        }
+        return false;
+      }
+
+      function refreshBarState() {
+        if (!isFeatureEnabled()) return;
+        const el = document.getElementById('stage-sidebar-tiny-bar');
+        if (el !== bar) {
+          if (el) {
+            const shouldFlash = pendingFlashAfterAttach;
+            pendingFlashAfterAttach = false;
+            const attachPromise = attachToBar(el);
+            if (shouldFlash) {
+              Promise.resolve(attachPromise).then(() => {
+                window.flashSlimSidebarBar?.();
+              });
+            }
+          } else {
+            pendingFlashAfterAttach = false;
+            detachCurrentBar();
+          }
+          return;
+        }
+        pendingFlashAfterAttach = false;
+        fadeToIdle();
+      }
+
+      function scheduleBarRefresh(delayMs = BAR_REFRESH_DEBOUNCE_MS, { flashIfNew = false } = {}) {
+        if (!isFeatureEnabled()) return;
+        if (flashIfNew) pendingFlashAfterAttach = true;
+        clearRefreshTimer();
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          refreshBarState();
+        }, delayMs);
+      }
+
+      function scheduleInteractionRefresh() {
+        scheduleBarRefresh(120);
+      }
+
       async function attachToBar(el) {
         if (!isFeatureEnabled() || !(el instanceof HTMLElement)) return;
         detachCurrentBar();
@@ -9193,38 +9373,22 @@ setTimeout(() => {
       }
 
       function ensureGlobalObservers() {
-        if (!isFeatureEnabled() || domObserver || overlayObserver) return;
+        if (!isFeatureEnabled() || domObserver) return;
         const observationRoot = document.body || document.documentElement;
         if (!(observationRoot instanceof Node)) return;
 
-        // DOM observer to attach/detach
-        domObserver = new MutationObserver(() => {
-          if (!isFeatureEnabled()) return;
-          const el = document.getElementById('stage-sidebar-tiny-bar');
-          if (el !== bar) {
-            if (el) {
-              attachToBar(el);
-              window.flashSlimSidebarBar?.();
-            } else {
-              detachCurrentBar();
-            }
-          } else {
-            fadeToIdle();
-          }
+        domObserver = new MutationObserver((mutations) => {
+          if (!isFeatureEnabled() || !mutationsNeedSlimSidebarRefresh(mutations)) return;
+          scheduleBarRefresh(BAR_REFRESH_DEBOUNCE_MS, { flashIfNew: true });
         });
         domObserver.observe(observationRoot, { childList: true, subtree: true });
-
-        // Also observe overlay-relevant changes (class/style on body/overlays)
-        overlayObserver = new MutationObserver(() => {
-          if (!isFeatureEnabled()) return;
-          fadeToIdle();
-        });
-        overlayObserver.observe(observationRoot, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['class', 'style'],
-        });
+        if (!refreshListenersAttached) {
+          document.addEventListener('pointerdown', scheduleInteractionRefresh, true);
+          document.addEventListener('keydown', scheduleInteractionRefresh, true);
+          document.addEventListener('visibilitychange', scheduleInteractionRefresh, true);
+          window.addEventListener('resize', scheduleInteractionRefresh, true);
+          refreshListenersAttached = true;
+        }
       }
 
       function startFeature() {
@@ -9234,7 +9398,7 @@ setTimeout(() => {
         if (first) attachToBar(first);
       }
 
-      // (Removed setInterval: fadeToIdle() is now handled only by user idle, DOM mutation, or overlayObserver events.)
+      // (Removed setInterval: fadeToIdle() is now handled by user idle, relevant DOM changes, and interaction-triggered refreshes.)
 
       // startup
       function startup() {

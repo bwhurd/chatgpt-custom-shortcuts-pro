@@ -4,6 +4,7 @@
 - This file tells the coding agent how to modify the extension safely and which files it can touch.
 - IMPORTANT: If required information is missing, stop and ask the user instead of guessing (for example, ask them to copy relevant HTML from the ChatGPT page’s inspector into the prompt).
 - Packaging reminder: if you add new shipped files/folders, update `build-zip.js` `includeItems` so the Chrome Web Store upload zip contains them.
+- Release artifact reminder: when a version bump or zip build is part of the task, include the generated `dist/*.zip` release archive in git commits/pushes unless the user explicitly says not to.
 
 ## UI preview workflow
 
@@ -21,9 +22,9 @@
 
 ## Repository search
 
-- files to include: `AGENTS.md, .gitignore, package.json, package-lock.json, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, lib/*.min.js, tools/*.zip, tests/playwright/**`
+- files to include: `AGENTS.md, .gitignore, package.json, package-lock.json, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, dist/*.zip, lib/*.min.js, tools/*.zip, tests/playwright/**`
 - exclude any files and folders not listed above
-- explicitly exclude these folders: `node_modules`, `dist`, `netlify`, `css-cleanup`, `.git`
+- explicitly exclude these folders: `node_modules`, `netlify`, `css-cleanup`, `.git`
 
 ## Scope
 Only read, edit, and consider the files listed below when working on this project. Ignore all other files and directories unless explicitly directed otherwise:
@@ -52,6 +53,7 @@ Only read, edit, and consider the files listed below when working on this projec
 
 5. Assets
    - `icons/icon16.png, icon32.png, icon48.png, icon128.png` : shipped UI icons for browser and extension surfaces
+   - `dist/*.zip`                : built release archives that should be committed/pushed when generated for a release/version task; never edit manually
    - `CHANGELOG.md`               : release notes for behavior visible changes
 
 6. Read only vendor and bundles
@@ -169,7 +171,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 
 ### Assets, localization, and directories
 - `_locales/*/messages.json` contains all user-facing strings (labels, tooltips, status messages). Any new UI copy must be added to every locale.
-- `lib/` GSAP bundles and `tools/*.zip` backups are read-only; do not modify them.
+- `lib/` GSAP bundles and `tools/*.zip` backups are read-only; do not modify them. `dist/*.zip` release archives may be added/updated by the zip build, but should not be manually edited.
 - `icons/` contains shipped UI icons; add new assets rather than replacing existing ones.
 - Tests (if/when added) belong in `tests/` and should be runnable via `npm test`.
 
@@ -215,7 +217,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 - JS: 4-space indentation, single quotes, semicolons. HTML: 4 spaces. CSS: 2 spaces. Keep comments concise and only for non-obvious logic.
 - Localization is mandatory for all user-visible text (popup labels, tooltips, toasts, status lines, Cloud sync messages, overlay copy).
 - Prefer language-agnostic selectors (`data-*`, stable roles/structure, canonical ids). Do not key behavior off localized text when a reliable non-language selector exists.
-- Do not edit or remove third-party bundles in `lib/`, archived builds (`*.zip`), or shipped icons. Add new assets instead.
+- Do not edit or remove third-party bundles in `lib/`, `tools/*.zip` backups, or shipped icons. `dist/*.zip` release archives are build outputs and may be added/updated for releases, but should not be hand-edited.
 - Service worker code must stay event-driven; don’t introduce timers or long-lived loops.
 - Respect existing permissions; do not add new permissions or host matches without explicit approval.
 - Update `CHANGELOG.md` for behavior-visible changes and keep `_locales` in sync.
