@@ -611,6 +611,12 @@ const delays = DELAYS;
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const dispatch = (type, Ctor) => {
+        const isPress = type === 'pointerdown' || type === 'mousedown';
+        const isRelease =
+          type === 'pointerup' ||
+          type === 'mouseup' ||
+          type === 'pointerout' ||
+          type === 'pointerleave';
         try {
           el.dispatchEvent(
             new Ctor(type, {
@@ -619,6 +625,9 @@ const delays = DELAYS;
               composed: true,
               clientX: cx,
               clientY: cy,
+              button: 0,
+              buttons: isPress ? 1 : isRelease ? 0 : 0,
+              view: window,
             }),
           );
         } catch {
@@ -757,7 +766,9 @@ const delays = DELAYS;
       if (!scope) continue;
 
       const candidates = Array.from(
-        scope.querySelectorAll(':is(div[type="button"],button)[aria-haspopup="menu"]'),
+        scope.querySelectorAll(
+          ':is([aria-haspopup="menu"][id^="radix-"], div[type="button"][aria-haspopup="menu"], div[role="button"][aria-haspopup="menu"], button[aria-haspopup="menu"])',
+        ),
       ).filter(isVisible);
 
       if (!candidates.length) continue;
@@ -786,14 +797,19 @@ const delays = DELAYS;
     callFlash(trigger);
 
     const waitMs = openRadixMenuIfNeeded(trigger, delays);
+    const fallbackText = typeof options.fallbackText === 'string' ? options.fallbackText : undefined;
+    const tryClickMenuItem = (attempt = 0) => {
+      if (!findOpenMenuForTrigger(trigger) && attempt < 1) {
+        const retryTrigger = findGptMenuTrigger() || trigger;
+        callFlash(retryTrigger);
+        smartClick(retryTrigger);
+        setTimeout(() => tryClickMenuItem(attempt + 1), delays.MENU_READY_OPEN);
+        return;
+      }
+      clickMenuItemByPathPrefix(trigger, subItemPathPrefix, delays, 0, fallbackText);
+    };
     setTimeout(() => {
-      clickMenuItemByPathPrefix(
-        trigger,
-        subItemPathPrefix,
-        delays,
-        0,
-        typeof options.fallbackText === 'string' ? options.fallbackText : undefined,
-      );
+      tryClickMenuItem(0);
     }, waitMs);
 
     return true;
@@ -1279,6 +1295,12 @@ const delays = DELAYS;
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const dispatch = (type, Ctor) => {
+        const isPress = type === 'pointerdown' || type === 'mousedown';
+        const isRelease =
+          type === 'pointerup' ||
+          type === 'mouseup' ||
+          type === 'pointerout' ||
+          type === 'pointerleave';
         try {
           el.dispatchEvent(
             new Ctor(type, {
@@ -1287,6 +1309,9 @@ const delays = DELAYS;
               composed: true,
               clientX: cx,
               clientY: cy,
+              button: 0,
+              buttons: isPress ? 1 : isRelease ? 0 : 0,
+              view: window,
             }),
           );
         } catch {
