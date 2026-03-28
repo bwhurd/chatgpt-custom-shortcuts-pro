@@ -387,10 +387,10 @@
 		"message": "Напишите, что вы хотите изменить или улучшить в предыдущем ответе."
 	},
 	"label_RegenerateWithDifferentModel": {
-		"message": "Пересоздать с другой моделью"
+		"message": "Не искать в интернете"
 	},
 	"tt_RegenerateWithDifferentModel": {
-		"message": "Создаёт новый ответ с другой моделью ИИ."
+		"message": "Повторно создаёт ответ без веб-поиска."
 	},
 	"label_ReadAloud": {
 		"message": "Озвучить"

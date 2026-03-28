@@ -387,10 +387,10 @@
 		"message": "Type how you want the previous response changed or improved."
 	},
 	"label_RegenerateWithDifferentModel": {
-		"message": "Regenerate with Different Model"
+		"message": "Don't Search the Web"
 	},
 	"tt_RegenerateWithDifferentModel": {
-		"message": "Creates a new response using a different AI model."
+		"message": "Regenerates the response without using web search."
 	},
 	"label_ReadAloud": {
 		"message": "Read Aloud"

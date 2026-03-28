@@ -2202,7 +2202,6 @@ document.addEventListener('DOMContentLoaded', () => {
     onlySelectUserCheckbox: false,
     onlySelectAssistantCheckbox: false,
     disableCopyAfterSelectCheckbox: false,
-    rememberSidebarScrollPositionCheckbox: false,
     fadeSlimSidebarEnabled: false,
     selectThenCopyAllMessagesBothUserAndChatGpt: true,
     selectThenCopyAllMessagesOnlyAssistant: false,
@@ -3137,12 +3136,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // === Backup & Restore (Export/Import) ===
   (function settingsBackupInit() {
-    // DRY whitelist: all default keys minus shortcut keys
+    const schemaShortcutConfig = window.CSP_SETTINGS_SCHEMA?.shortcuts || {};
+    const legacyShortcutKeys = Array.isArray(schemaShortcutConfig.deprecatedShortcutKeys)
+      ? schemaShortcutConfig.deprecatedShortcutKeys.slice()
+      : [];
+
+    // DRY whitelist: all default keys minus visible or legacy shortcut keys
     const OPTION_KEYS = Object.keys(DEFAULT_PRESET_DATA).filter(
-      (key) => !shortcutKeys.includes(key),
+      (key) => !shortcutKeys.includes(key) && !legacyShortcutKeys.includes(key),
     );
     function getExportKeySet() {
-      return new Set([...shortcutKeys, ...OPTION_KEYS]);
+      return new Set([...shortcutKeys, ...legacyShortcutKeys, ...OPTION_KEYS]);
     }
 
     // i18n helper — mirrors your 111/222 approach but works in JS too.
@@ -3436,6 +3440,12 @@ document.addEventListener('DOMContentLoaded', () => {
           out[k] = effectiveShortcutCode(k, stored);
         });
 
+        legacyShortcutKeys.forEach((k) => {
+          if (!Object.hasOwn(all, k) && !Object.hasOwn(DEFAULT_PRESET_DATA, k)) return;
+          const stored = Object.hasOwn(all, k) ? all[k] : DEFAULT_PRESET_DATA[k];
+          out[k] = normalizeShortcutVal(stored);
+        });
+
         // Always export exactly the MODEL_PICKER_MAX_SLOTS model-picker codes (trim/pad, normalized)
         out.modelPickerKeyCodes = readModelPickerCodes(all);
 
@@ -3477,7 +3487,7 @@ document.addEventListener('DOMContentLoaded', () => {
       Object.keys(src || {}).forEach((k) => {
         if (!keySet.has(k)) return;
         let v = src[k];
-        if (shortcutKeys.includes(k)) {
+        if (shortcutKeys.includes(k) || legacyShortcutKeys.includes(k)) {
           v = normalizeShortcutVal(v);
         }
         next[k] = v;

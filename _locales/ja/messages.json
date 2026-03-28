@@ -387,10 +387,10 @@
 		"message": "直前の回答をどう変えたい・良くしたいか入力してください。"
 	},
 	"label_RegenerateWithDifferentModel": {
-		"message": "別のモデルで再生成"
+		"message": "ウェブ検索しない"
 	},
 	"tt_RegenerateWithDifferentModel": {
-		"message": "別のAIモデルで新しい回答を作成します。"
+		"message": "ウェブ検索を使わずに回答を再生成します。"
 	},
 	"label_ReadAloud": {
 		"message": "読み上げ"

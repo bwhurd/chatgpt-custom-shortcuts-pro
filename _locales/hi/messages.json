@@ -387,10 +387,10 @@
 		"message": "लिखें कि आप पिछले जवाब में क्या बदलना या सुधारना चाहते हैं।"
 	},
 	"label_RegenerateWithDifferentModel": {
-		"message": "दूसरे मॉडल से दोबारा बनाएँ"
+		"message": "वेब पर खोज न करें"
 	},
 	"tt_RegenerateWithDifferentModel": {
-		"message": "किसी दूसरे AI मॉडल से नया जवाब बनाता है।"
+		"message": "वेब खोज का उपयोग किए बिना जवाब को फिर से बनाता है।"
 	},
 	"label_ReadAloud": {
 		"message": "जोर से पढ़ें"

@@ -63,7 +63,12 @@
         keyPrefix: 'shortcutKey',
         extraShortcutKeys: ['selectThenCopy', 'selectThenCopyAllMessages'],
         // Keys kept for legacy/back-compat in storage, but never shown in the Ctrl+/ overlay.
-        deprecatedShortcutKeys: ['shortcutKeyRegenerate', 'shortcutKeyCopyAllResponses'],
+        deprecatedShortcutKeys: [
+            'shortcutKeyRegenerate',
+            'shortcutKeyCopyAllResponses',
+            'shortcutKeyRegenerateMoreConcise',
+            'shortcutKeyRegenerateAddDetails',
+        ],
         // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
         // Used for modifier-aware duplicate detection in popup.js.
         ctrlShortcutKeys: ['shortcutKeyShowShortcuts'],
@@ -106,8 +111,6 @@
 
             shortcutKeyRegenerateTryAgain: 'label_regenerate',
             shortcutKeyRegenerateWithDifferentModel: 'label_RegenerateWithDifferentModel',
-            shortcutKeyRegenerateMoreConcise: 'label_MoreConcise',
-            shortcutKeyRegenerateAddDetails: 'label_AddDetails',
             shortcutKeyRegenerateAskToChangeResponse: 'label_RegenerateAskToChangeResponse',
 
             shortcutKeySearchWeb: 'label_search_web',
@@ -183,8 +186,6 @@
                 header: 'Regenerate Response',
                 keys: [
                     'shortcutKeyRegenerateTryAgain',
-                    'shortcutKeyRegenerateMoreConcise',
-                    'shortcutKeyRegenerateAddDetails',
                     'shortcutKeyRegenerateWithDifferentModel',
                     'shortcutKeyRegenerateAskToChangeResponse',
                 ],
@@ -220,7 +221,6 @@
             enableStopWithControlBackspaceCheckbox: true,
             useAltForModelSwitcherRadio: true,
             useControlForModelSwitcherRadio: false,
-            rememberSidebarScrollPositionCheckbox: false,
             selectThenCopyAllMessagesBothUserAndChatGpt: true,
             selectThenCopyAllMessagesOnlyAssistant: false,
             selectThenCopyAllMessagesOnlyUser: false,

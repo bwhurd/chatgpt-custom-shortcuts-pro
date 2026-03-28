@@ -81,7 +81,7 @@ const OPTIONS_DEFAULTS = {
   colorBoldTextEnabled: false,
   colorBoldTextLightColor: '#2037e6',
   colorBoldTextDarkColor: '#4da3ff',
-  rememberSidebarScrollPositionCheckbox: false,
+  rememberSidebarScrollPositionCheckbox: false, // temporarily hard-disabled; keep key for back-compat
   popupSlimSidebarOpacityValue: '0.0',
   fadeSlimSidebarEnabled: false,
   enableSendWithControlEnterCheckbox: true,
@@ -176,6 +176,11 @@ if (typeof OptionsSync === 'undefined') {
           fifteen[i] = typeof v === 'string' ? v : '';
         });
         stored.modelPickerKeyCodes = fifteen;
+      },
+
+      // 3.5) Keep the legacy sidebar-scroll toggle inert while the feature is disabled.
+      (stored) => {
+        stored.rememberSidebarScrollPositionCheckbox = false;
       },
 
       // 4) Blank inherited hidden digit defaults for newly visible configure actions.

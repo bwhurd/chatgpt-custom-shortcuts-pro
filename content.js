@@ -188,7 +188,6 @@ const VISIBILITY_DEFAULTS = (() => {
     enableStopWithControlBackspaceCheckbox: true,
     useAltForModelSwitcherRadio: true,
     useControlForModelSwitcherRadio: false,
-    rememberSidebarScrollPositionCheckbox: false,
     selectThenCopyAllMessagesBothUserAndChatGpt: true,
     selectThenCopyAllMessagesOnlyAssistant: false,
     selectThenCopyAllMessagesOnlyUser: false,
@@ -486,11 +485,11 @@ const delays = DELAYS;
   const visibilityExtraKeys = Array.isArray(schemaExtra)
     ? schemaExtra
     : [
-        'hideArrowButtonsCheckbox',
-        'popupBottomBarOpacityValue',
-        'fadeSlimSidebarEnabled',
-        'popupSlimSidebarOpacityValue',
-      ];
+      'hideArrowButtonsCheckbox',
+      'popupBottomBarOpacityValue',
+      'fadeSlimSidebarEnabled',
+      'popupSlimSidebarOpacityValue',
+    ];
 
   const VISIBILITY_KEYS = [...Object.keys(VISIBILITY_DEFAULTS), ...visibilityExtraKeys];
 
@@ -658,7 +657,7 @@ const delays = DELAYS;
     if (!expanded) {
       try {
         triggerEl.focus?.();
-      } catch {}
+      } catch { }
 
       // Radix triggers are frequently non-button elements; use a real pointer click.
       smartClick(triggerEl);
@@ -713,9 +712,9 @@ const delays = DELAYS;
     const selector = svgSelectorForTokensLocal(pathPrefix);
     const item = menu
       ? Array.from(menu.querySelectorAll(selector))
-          .map((p) => p.closest(MENU_ITEM_ROLES))
-          .filter(Boolean)
-          .filter(isVisible)[0] || null
+        .map((p) => p.closest(MENU_ITEM_ROLES))
+        .filter(Boolean)
+        .filter(isVisible)[0] || null
       : null;
 
     if (item) {
@@ -1332,10 +1331,10 @@ const delays = DELAYS;
     };
     try {
       el.dispatchEvent(new KeyboardEvent('keydown', opts));
-    } catch {}
+    } catch { }
     try {
       el.dispatchEvent(new KeyboardEvent('keyup', opts));
-    } catch {}
+    } catch { }
   };
 
   const waitFor = async (getter, { timeout = 3000, interval = 50 } = {}) => {
@@ -1561,7 +1560,7 @@ const delays = DELAYS;
     const ensureVisible = (el) => {
       try {
         el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-      } catch {}
+      } catch { }
     };
 
     const target = await waitFor(
@@ -1833,7 +1832,7 @@ const delays = DELAYS;
       if (window.gsap && typeof flashBorder === 'function') flashBorder(target);
       try {
         target.scrollIntoView({ block: 'center', behavior: 'instant' });
-      } catch (_) {}
+      } catch (_) { }
       target.removeAttribute?.('disabled');
       target.focus({ preventScroll: true });
       placeCaret(target, { caret, selectAll });
@@ -2478,7 +2477,7 @@ const delays = DELAYS;
                 container = candidate;
               }
             }
-          } catch {}
+          } catch { }
 
           let contTop = 0;
           let contHeight = window.innerHeight;
@@ -2487,7 +2486,7 @@ const delays = DELAYS;
               const cr = container.getBoundingClientRect();
               contTop = cr.top;
               contHeight = container.clientHeight;
-            } catch {}
+            } catch { }
           }
 
           const rect = button.getBoundingClientRect();
@@ -2510,13 +2509,13 @@ const delays = DELAYS;
             if (!canClick) return;
             try {
               button.click();
-            } catch {}
+            } catch { }
           };
 
           const finish = () => {
             try {
               if (typeof flashBorder === 'function') flashBorder(button);
-            } catch {}
+            } catch { }
             setTimeout(safeClick, DELAY_SAFE_CLICK);
           };
 
@@ -2614,7 +2613,7 @@ const delays = DELAYS;
             if (targetButton) {
               gsapScrollToCenterAndClick(targetButton);
             }
-          } catch {}
+          } catch { }
         }, DELAY_INITIAL_SCAN);
       },
       [shortcuts.shortcutKeySendEdit]: () => {
@@ -2839,7 +2838,7 @@ const delays = DELAYS;
           document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !==
           null
         ) {
-          setTimeout(() => {}, 30);
+          setTimeout(() => { }, 30);
           return;
         }
 
@@ -2848,7 +2847,7 @@ const delays = DELAYS;
           'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
         );
         if (safeClick(direct)) {
-          setTimeout(() => {}, 30);
+          setTimeout(() => { }, 30);
           return;
         }
 
@@ -2876,13 +2875,13 @@ const delays = DELAYS;
           const el = document.querySelector(sel);
           const btn = el?.closest('button');
           if (safeClick(btn)) {
-            setTimeout(() => {}, 30);
+            setTimeout(() => { }, 30);
             return;
           }
         }
 
         // 4) If still nothing, just exit
-        setTimeout(() => {}, 30);
+        setTimeout(() => { }, 30);
       },
       [shortcuts.shortcutKeyActivateInput]: function activateInput() {
         const selectors = [
@@ -2947,9 +2946,9 @@ const delays = DELAYS;
             container === window
               ? { top: 0, height: window.innerHeight }
               : {
-                  top: container.getBoundingClientRect().top,
-                  height: container.clientHeight,
-                };
+                top: container.getBoundingClientRect().top,
+                height: container.clientHeight,
+              };
 
           const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
           const current = container === window ? window.scrollY : container.scrollTop;
@@ -2961,7 +2960,7 @@ const delays = DELAYS;
           const maxScroll =
             container === window
               ? (document.scrollingElement || document.documentElement).scrollHeight -
-                window.innerHeight
+              window.innerHeight
               : container.scrollHeight - container.clientHeight;
           targetY = Math.max(0, Math.min(targetY, maxScroll));
 
@@ -2980,9 +2979,9 @@ const delays = DELAYS;
             container === window
               ? { top: 0, height: window.innerHeight }
               : {
-                  top: container.getBoundingClientRect().top,
-                  height: container.clientHeight,
-                };
+                top: container.getBoundingClientRect().top,
+                height: container.clientHeight,
+              };
 
           const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
           const currentScroll = container === window ? window.scrollY : container.scrollTop;
@@ -3025,11 +3024,11 @@ const delays = DELAYS;
           const comp = composerRect();
           return comp
             ? !(
-                rect.bottom < comp.top ||
-                rect.top > comp.bottom ||
-                rect.right < comp.left ||
-                rect.left > comp.right
-              )
+              rect.bottom < comp.top ||
+              rect.top > comp.bottom ||
+              rect.right < comp.left ||
+              rect.left > comp.right
+            )
             : false;
         };
 
@@ -3145,9 +3144,9 @@ const delays = DELAYS;
             container === window
               ? { top: 0, height: window.innerHeight }
               : {
-                  top: container.getBoundingClientRect().top,
-                  height: container.clientHeight,
-                };
+                top: container.getBoundingClientRect().top,
+                height: container.clientHeight,
+              };
 
           const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
           const current = container === window ? window.scrollY : container.scrollTop;
@@ -3159,7 +3158,7 @@ const delays = DELAYS;
           const maxScroll =
             container === window
               ? (document.scrollingElement || document.documentElement).scrollHeight -
-                window.innerHeight
+              window.innerHeight
               : container.scrollHeight - container.clientHeight;
           targetY = Math.max(0, Math.min(targetY, maxScroll));
 
@@ -3178,9 +3177,9 @@ const delays = DELAYS;
             container === window
               ? { top: 0, height: window.innerHeight }
               : {
-                  top: container.getBoundingClientRect().top,
-                  height: container.clientHeight,
-                };
+                top: container.getBoundingClientRect().top,
+                height: container.clientHeight,
+              };
 
           const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
           const currentScroll = container === window ? window.scrollY : container.scrollTop;
@@ -3231,11 +3230,11 @@ const delays = DELAYS;
           const comp = composerRect();
           return comp
             ? !(
-                rect.bottom < comp.top ||
-                rect.top > comp.bottom ||
-                rect.right < comp.left ||
-                rect.left > comp.right
-              )
+              rect.bottom < comp.top ||
+              rect.top > comp.bottom ||
+              rect.right < comp.left ||
+              rect.left > comp.right
+            )
             : false;
         };
 
@@ -3870,19 +3869,9 @@ const delays = DELAYS;
         const SUB_ITEM_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // sub-item icon path (prefix)
         clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
-      [shortcuts.shortcutKeyRegenerateMoreConcise]: () => {
-        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['M10.2002 7.91699L16.8669', '#155a34']; // sub-item icon path (prefix)
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyRegenerateAddDetails]: () => {
-        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['M14.3013 12.6816C14.6039', '#71a046']; // sub-item icon path (prefix)
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
       [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
         const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['M15.4707 17.137C15.211', '#77bc5f']; // sub-item icon path (prefix)
+        const SUB_ITEM_BTN_PATH = ['#9254a2']; // legacy storage key now targets "Don't Search the Web"
         clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
       [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
@@ -3902,7 +3891,7 @@ const delays = DELAYS;
         function activate(el) {
           try {
             el.focus();
-          } catch {}
+          } catch { }
           try {
             el.dispatchEvent(
               new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
@@ -3910,10 +3899,10 @@ const delays = DELAYS;
             el.dispatchEvent(
               new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }),
             );
-          } catch {}
+          } catch { }
           try {
             el.click();
-          } catch {}
+          } catch { }
         }
 
         // 1) If a Stop item is visible in an open menu, click it (stop playback).
@@ -3983,20 +3972,6 @@ const delays = DELAYS;
         await runActionByIcon(ICON_PATH_PREFIX);
       },
       [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
-        const composerRoot =
-          document.getElementById('thread-bottom-container') ||
-          document.querySelector('form[data-type="unified-composer"]') ||
-          document.getElementById('composer-background') ||
-          document.body;
-        const composePlusBtn =
-          composerRoot.querySelector('#composer-plus-btn') ||
-          composerRoot.querySelector('button[data-testid="composer-plus-btn"]') ||
-          composerRoot.querySelector('button[aria-label="Add files and more"]');
-        if (composePlusBtn) {
-          flashBorder(composePlusBtn);
-          smartClick(composePlusBtn);
-          return;
-        }
         const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
         await runActionByIcon(ICON_PATH_PREFIX);
       },
@@ -4028,7 +4003,7 @@ const delays = DELAYS;
           if (!el) return false;
           try {
             el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-          } catch {}
+          } catch { }
           flashBorder(el);
           smartClick(el);
           return true;
@@ -4043,17 +4018,17 @@ const delays = DELAYS;
           return null;
         };
 
-        // Current idle composer can render both Dictate and Send at once, so the shortcut
-        // must prefer the dedicated dictate control over the normal submit button.
-        const stopBtn =
-          findFirstClickable('button[aria-label="Stop dictation"]') ||
-          findClickableBySpriteId('#85f94b');
-        if (click(stopBtn)) return;
+        // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
+        // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
+        const submitDictationBtn =
+          findClickableBySpriteId('#fa1dbd') ||
+          findFirstClickable('button[aria-label="Submit dictation"]');
+        if (click(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
         const dictateBtn =
-          findFirstClickable('button[aria-label="Dictate button"]') ||
-          findClickableBySpriteId('#29f921');
+          findClickableBySpriteId('#29f921') ||
+          findFirstClickable('button[aria-label="Dictate button"]');
         if (click(dictateBtn)) return;
 
         // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
@@ -4076,19 +4051,18 @@ const delays = DELAYS;
           document.body;
 
         const btn =
-          composerRoot.querySelector('button[aria-label="Stop dictation"]') ||
           (() => {
             const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
             const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
             return use?.closest('button, [role="button"], a, [tabindex]') || null;
-          })();
+          })() || composerRoot.querySelector('button[aria-label="Stop dictation"]');
 
         // Only stop if Stop dictation is currently available; otherwise no-op.
         if (!btn) return;
 
         try {
           btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-        } catch {}
+        } catch { }
         flashBorder(btn);
         await sleep(DELAYS.beforeFinalClick);
         smartClick(btn);
@@ -4230,8 +4204,8 @@ const delays = DELAYS;
           if (!scopes.length) {
             return [
               container.querySelector?.('.whitespace-pre-wrap') ||
-                container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
-                container,
+              container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
+              container,
             ].filter(Boolean);
           }
           const seen = new Set();
@@ -4732,7 +4706,7 @@ const delays = DELAYS;
           // Get model codes cache safely (may be provided by ShortcutUtils)
           const modelCodes =
             window.ShortcutUtils &&
-            typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
+              typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
               ? window.ShortcutUtils.getModelPickerCodesCache()
               : [];
 
@@ -5602,7 +5576,7 @@ div[data-id="hide-this-warning"] {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin-top: 2px !important;
-        margin-bottom: -18px !important;
+        margin-bottom: -15px !important;
         overflow-anchor: none !important;
         min-height: 36px !important;
         box-sizing: border-box !important;
@@ -7090,11 +7064,11 @@ div[data-id="hide-this-warning"] {
     typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
       ? window.ModelLabels.normalizeActiveConfigId(value)
       : [
-            'configure-latest',
-            'configure-5-2',
-            'configure-5-0-thinking-mini',
-            'configure-o3',
-          ].includes(String(value || '').trim())
+        'configure-latest',
+        'configure-5-2',
+        'configure-5-0-thinking-mini',
+        'configure-o3',
+      ].includes(String(value || '').trim())
         ? String(value || '').trim()
         : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   let ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
@@ -7103,62 +7077,62 @@ div[data-id="hide-this-warning"] {
     typeof window.ModelLabels?.defaultKeyCodes === 'function'
       ? window.ModelLabels.defaultKeyCodes()
       : (() => {
-          const out = new Array(MAX_SLOTS).fill('');
-          out[0] = 'Digit1';
-          out[1] = 'Digit2';
-          out[2] = 'Digit0';
-          out[3] = 'Digit3';
-          out[4] = 'Digit4';
-          out[5] = 'Digit5';
-          out[6] = 'Digit6';
-          return out;
-        })();
+        const out = new Array(MAX_SLOTS).fill('');
+        out[0] = 'Digit1';
+        out[1] = 'Digit2';
+        out[2] = 'Digit0';
+        out[3] = 'Digit3';
+        out[4] = 'Digit4';
+        out[5] = 'Digit5';
+        out[6] = 'Digit6';
+        return out;
+      })();
   const sleepAsync =
     typeof sleep === 'function' ? sleep : (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const smartClickSafe =
     typeof smartClick === 'function'
       ? smartClick
       : (el) => {
-          if (!el) return false;
-          try {
-            el.click?.();
-            return true;
-          } catch {
-            return false;
-          }
-        };
+        if (!el) return false;
+        try {
+          el.click?.();
+          return true;
+        } catch {
+          return false;
+        }
+      };
   const waitForAsync =
     typeof waitFor === 'function'
       ? waitFor
       : async (getter, { timeout = 3000, interval = 50 } = {}) => {
-          const start = Date.now();
-          while (Date.now() - start < timeout) {
-            const result = getter();
-            if (result) return result;
-            await sleepAsync(interval);
-          }
-          return null;
-        };
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          const result = getter();
+          if (result) return result;
+          await sleepAsync(interval);
+        }
+        return null;
+      };
   const clickButtonByTestIdSafe =
     typeof clickButtonByTestId === 'function'
       ? clickButtonByTestId
       : async (
-          testId,
-          { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
-        ) => {
-          const target = await waitForAsync(
-            () => {
-              const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
-              if (!matches.length) return null;
-              return pick(matches) || matches[0] || null;
-            },
-            { timeout, interval },
-          );
-          if (!target) return;
-          if (typeof flashBorder === 'function') flashBorder(target);
-          await sleepAsync(90);
-          smartClickSafe(target);
-        };
+        testId,
+        { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
+      ) => {
+        const target = await waitForAsync(
+          () => {
+            const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
+            if (!matches.length) return null;
+            return pick(matches) || matches[0] || null;
+          },
+          { timeout, interval },
+        );
+        if (!target) return;
+        if (typeof flashBorder === 'function') flashBorder(target);
+        await sleepAsync(90);
+        smartClickSafe(target);
+      };
   const waitForButtonByTestIdSafe = async (
     testId,
     { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
@@ -7182,8 +7156,8 @@ div[data-id="hide-this-warning"] {
     if (next === LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID) return next;
     LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = next;
     try {
-      chrome.storage.sync.set({ activeModelConfigId: next }, () => {});
-    } catch {}
+      chrome.storage.sync.set({ activeModelConfigId: next }, () => { });
+    } catch { }
     return next;
   };
   const MODEL_CATALOG_STORAGE_KEY = 'modelCatalog';
@@ -7318,8 +7292,8 @@ div[data-id="hide-this-warning"] {
     typeof window.ModelLabels?.normTid === 'function'
       ? window.ModelLabels.normTid(tid)
       : String(tid || '')
-          .toLowerCase()
-          .trim();
+        .toLowerCase()
+        .trim();
 
   const getOpenRadixMenus = () =>
     typeof getOpenMenus === 'function'
@@ -7342,7 +7316,7 @@ div[data-id="hide-this-warning"] {
 
     return !!document.querySelector(
       `${MODEL_MENU_SELECTOR} [data-testid="model-configure-modal"], ` +
-        `${MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`,
+      `${MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`,
     );
   };
 
@@ -7809,9 +7783,9 @@ div[data-id="hide-this-warning"] {
               if (sig === lastSig && now - lastWrite < 1000) return;
               lastSig = sig;
               lastWrite = now;
-              chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => {});
+              chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => { });
             });
-          } catch (_) {}
+          } catch (_) { }
         }
 
         return (arrN) => {
@@ -7856,7 +7830,7 @@ div[data-id="hide-this-warning"] {
           for (let i = 0; i < incoming.length; i++) {
             next[start + i] = normalizeName(start + i, incoming[i]) || '';
           }
-          chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => {});
+          chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => { });
         });
       };
 
@@ -7897,7 +7871,7 @@ div[data-id="hide-this-warning"] {
             sendResponse({ ok: true });
           }
         });
-      } catch (_) {}
+      } catch (_) { }
 
       // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS.
       function getOrderedMenuItems() {
@@ -8344,7 +8318,7 @@ div[data-id="hide-this-warning"] {
               modelNames,
               modelNamesAt: catalog.scrapedAt,
             },
-            () => {},
+            () => { },
           );
 
           if (keepPreparedSession) {
@@ -8357,7 +8331,7 @@ div[data-id="hide-this-warning"] {
             });
             try {
               smartClickSafe(closeButton);
-            } catch {}
+            } catch { }
             PREPARED_MODEL_CONFIG_SESSION = null;
           }
 
@@ -8410,7 +8384,7 @@ div[data-id="hide-this-warning"] {
         attempts.push(async () => {
           try {
             configureItem.click?.();
-          } catch {}
+          } catch { }
         });
 
         for (const attempt of attempts) {
@@ -8743,8 +8717,8 @@ div[data-id="hide-this-warning"] {
         }
         const submenuTriggerClicked = t?.closest(
           '[role="menuitem"][data-has-submenu], ' +
-            '[role="menuitem"][aria-haspopup="menu"], ' +
-            '[role="menuitem"][aria-controls]',
+          '[role="menuitem"][aria-haspopup="menu"], ' +
+          '[role="menuitem"][aria-controls]',
         );
         if (submenuTriggerClicked) {
           setTimeout(
@@ -8896,7 +8870,7 @@ div[data-id="hide-this-warning"] {
       const readyState = state || getVisibleModelMenuState();
       if (!readyState.submenuTrigger) return;
       // Let Radix mount main content before searching
-      setTimeout(() => forceOpenSubmenu(() => {}), 40);
+      setTimeout(() => forceOpenSubmenu(() => { }), 40);
     });
   };
 
@@ -8932,267 +8906,20 @@ div[data-id="hide-this-warning"] {
 
 // ====================================
 // rememberSidebarScrollPositionCheckbox
-// Robust scroll-restore for rail + overlay (2025)
+// Temporarily hard-disabled pending a rewrite.
 // ====================================
 setTimeout(() => {
-  (() => {
+  try {
     chrome.storage.sync.get(
       { rememberSidebarScrollPositionCheckbox: false },
-      async ({ rememberSidebarScrollPositionCheckbox: enabled }) => {
-        if (!enabled) return;
-
-        const SAVE_DEBOUNCE_MS = 150;
-        const IDLE_WAIT_MS = 1000;
-        const POLL_INTERVAL_MS = 100;
-        const MAX_WAIT_MS = 5000;
-        const FINAL_DELAY_MS = 2000;
-
-        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-        // --- State we swap when the overlay/rail changes ---
-        let cur = {
-          container: null,
-          keySuffix: 'rail',
-          saveTimer: null,
-          userScrolled: false,
-          cleanup: () => {},
-        };
-
-        // Helpers --------------------------------------------------------------
-        const isPage = (el) => el === document.scrollingElement;
-
-        const on = (el, type, handler, opts) => {
-          (isPage(el) ? window : el).addEventListener(type, handler, opts);
-          return () => (isPage(el) ? window : el).removeEventListener(type, handler, opts);
-        };
-
-        const getMaxScroll = (el) =>
-          isPage(el)
-            ? Math.max(0, (document.scrollingElement?.scrollHeight || 0) - window.innerHeight)
-            : Math.max(0, el.scrollHeight - el.clientHeight);
-
-        const getScrollTop = (el) =>
-          isPage(el)
-            ? document.scrollingElement?.scrollTop || document.documentElement.scrollTop || 0
-            : el.scrollTop;
-
-        const setScrollTop = (el, v) => {
-          if (isPage(el)) window.scrollTo(0, v);
-          else el.scrollTop = v;
-        };
-
-        const getScrollHeight = (el) =>
-          isPage(el) ? document.scrollingElement?.scrollHeight || 0 : el.scrollHeight;
-
-        const isVisible = (el) => {
-          if (!el) return false;
-          const cs = getComputedStyle(el);
-          if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0)
-            return false;
-          const rects = el.getClientRects();
-          return rects && rects.length > 0 && rects[0].height > 0 && rects[0].width > 0;
-        };
-
-        // Walk up from a node to find the actual scrollport (incl. Radix viewport)
-        function pickScrollContainer(start) {
-          // Prefer Radix ScrollArea viewport if present
-          const radixViewport = start.querySelector('[data-radix-scroll-area-viewport]');
-          if (radixViewport && isVisible(radixViewport)) return radixViewport;
-
-          // Otherwise, walk ancestors until we find a scrollable clipped element
-          let el = start;
-          while (el) {
-            if (isVisible(el)) {
-              const cs = getComputedStyle(el);
-              const canScroll = /(auto|scroll|overlay)/.test(cs.overflowY);
-              const clipped = el.clientHeight > 0 && el.scrollHeight > el.clientHeight;
-              if (canScroll && clipped) return el;
-            }
-            el = el.parentElement;
-          }
-          // Fallback: page scroll (rail hidden; overlay not found)
-          return document.scrollingElement || document.documentElement;
+      ({ rememberSidebarScrollPositionCheckbox: enabled }) => {
+        window.rememberSidebarScrollPositionCheckbox = false;
+        if (enabled !== false) {
+          chrome.storage.sync.set({ rememberSidebarScrollPositionCheckbox: false });
         }
-
-        // Find the *visible* sidebar root (overlay if open, else rail)
-        function findVisibleSidebarRoot() {
-          // Overlay: often lives in a portal with these IDs
-          const overlayIds = ['stage-popover-sidebar', 'stage-slideover-sidebar'];
-          for (const id of overlayIds) {
-            const root = document.getElementById(id);
-            if (root && isVisible(root)) return { root, mode: 'overlay' };
-          }
-
-          // Otherwise, use a visible nav as anchor (rail or overlay)
-          const navs = Array.from(document.querySelectorAll('nav[aria-label="Chat history"]'));
-          const visible = navs.filter(isVisible);
-          if (visible.length) {
-            // Pick the one with the highest z-index (overlay beats rail)
-            const best = visible
-              .map((el) => ({
-                el,
-                zi: parseInt(getComputedStyle(el).zIndex || '0', 10) || 0,
-              }))
-              .sort((a, b) => b.zi - a.zi)[0].el;
-            // Root is the closest container that likely owns the panel
-            const root =
-              best.closest('#stage-popover-sidebar, #stage-slideover-sidebar, aside, nav') || best;
-            const mode =
-              root.id && /stage-(popover|slideover)-sidebar/.test(root.id) ? 'overlay' : 'rail';
-            return { root, mode };
-          }
-
-          // Nothing visible yet
-          return null;
-        }
-
-        async function waitForInitialIdle(el) {
-          let lastH = getScrollHeight(el);
-          let lastChange = Date.now();
-          while (Date.now() - lastChange < IDLE_WAIT_MS) {
-            await sleep(200);
-            const h = getScrollHeight(el);
-            if (h !== lastH) {
-              lastH = h;
-              lastChange = Date.now();
-            }
-          }
-        }
-
-        async function restoreScroll(el, storageKey) {
-          const raw = sessionStorage.getItem(storageKey);
-          if (raw === null) return;
-          const desired = parseInt(raw, 10);
-          if (Number.isNaN(desired)) return;
-
-          const start = Date.now();
-
-          while (Date.now() - start < MAX_WAIT_MS) {
-            if (cur.userScrolled) return;
-
-            // nudge to bottom to trigger lazy loading in history
-            setScrollTop(el, getMaxScroll(el));
-
-            if (cur.userScrolled) return;
-
-            if (getMaxScroll(el) >= desired) {
-              setScrollTop(el, desired);
-              return;
-            }
-            await sleep(POLL_INTERVAL_MS);
-          }
-        }
-
-        function attachSaver(el, storageKey) {
-          const cleanups = [];
-
-          const commit = (pos) => sessionStorage.setItem(storageKey, String(pos));
-
-          // Save on scroll (trusted)
-          cleanups.push(
-            on(
-              el,
-              'scroll',
-              (e) => {
-                if (e.isTrusted) {
-                  cur.userScrolled = true; // real user scrolled
-                  clearTimeout(cur.saveTimer);
-                  cur.saveTimer = setTimeout(() => commit(getScrollTop(el)), SAVE_DEBOUNCE_MS);
-                }
-              },
-              { passive: true },
-            ),
-          );
-
-          // Also consider pre-scroll intent (wheel/touch/keydown/mousedown)
-          const markIntent = () => {
-            cur.userScrolled = true;
-          };
-          ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach((evt) => {
-            cleanups.push(on(el, evt, markIntent, { passive: true }));
-          });
-
-          window.addEventListener('beforeunload', () => {
-            commit(getScrollTop(el));
-          });
-
-          return () => {
-            for (const fn of cleanups) {
-              // call if it's a function; do not return any value from an array callback
-              if (typeof fn === 'function') {
-                fn();
-              }
-            }
-          };
-        }
-
-        async function initOnce() {
-          const found = findVisibleSidebarRoot();
-          if (!found) return; // nothing visible yet (e.g., before the overlay opens)
-
-          const { root, mode } = found;
-          const anchor =
-            root.querySelector('nav[aria-label="Chat history"]') ||
-            root.querySelector('[data-radix-scroll-area-viewport]') ||
-            root;
-
-          const container = pickScrollContainer(anchor);
-          const keySuffix = mode; // 'overlay' or 'rail'
-          const STORAGE_KEY = `__chat_sidebar_scrollTop__::${location.pathname}::${keySuffix}`;
-
-          // If container hasn't changed, do nothing
-          if (cur.container === container) return;
-
-          // Cleanup previous listeners
-          cur.cleanup();
-          cur = {
-            ...cur,
-            container,
-            keySuffix,
-            userScrolled: false,
-            cleanup: () => {},
-          };
-
-          // Wait for content to finish initial growth, then restore
-          await waitForInitialIdle(container);
-          await restoreScroll(container, STORAGE_KEY);
-
-          // Attach saver and final safeguard
-          cur.cleanup = attachSaver(container, STORAGE_KEY);
-
-          setTimeout(() => {
-            if (cur.userScrolled) return;
-            const raw = sessionStorage.getItem(STORAGE_KEY);
-            const desired = raw !== null ? Number.parseInt(raw, 10) : NaN;
-            if (!Number.isNaN(desired)) setScrollTop(container, desired);
-          }, FINAL_DELAY_MS);
-        }
-
-        // Observe DOM changes so we re-target when overlay opens/closes
-        const mo = new MutationObserver(() => {
-          initOnce();
-        });
-        mo.observe(document.documentElement, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['class', 'style', 'data-state', 'aria-hidden'],
-        });
-
-        // Also re-evaluate on resize (rail vs overlay threshold)
-        window.addEventListener(
-          'resize',
-          () => {
-            initOnce();
-          },
-          { passive: true },
-        );
-
-        // Kick off now; observer will re-run as needed
-        initOnce();
       },
     );
-  })();
+  } catch { }
 }, 500);
 
 // ==================================================
@@ -9416,16 +9143,16 @@ setTimeout(() => {
             setTimeout(() => {
               if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
             }, 0);
-            } else {
-              bar.style.setProperty('transition', 'none', 'important');
-              setOpacity('1');
-              void bar.offsetWidth;
-              setTimeout(() => {
-                if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-                scheduleIdleFade();
-              }, 0);
-            }
-          });
+          } else {
+            bar.style.setProperty('transition', 'none', 'important');
+            setOpacity('1');
+            void bar.offsetWidth;
+            setTimeout(() => {
+              if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+              scheduleIdleFade();
+            }, 0);
+          }
+        });
 
         // We want to observe changes on the large sidebar, not the slimbar
         const largeSidebar = document.getElementById('stage-sidebar');
@@ -9633,27 +9360,27 @@ setTimeout(() => {
 
     const mods = isMac
       ? {
-          MetaLeft: '⌘',
-          MetaRight: '⌘',
-          AltLeft: '⌥',
-          AltRight: '⌥',
-          ControlLeft: 'Ctrl',
-          ControlRight: 'Ctrl',
-          ShiftLeft: '⇧',
-          ShiftRight: '⇧',
-          Fn: 'fn',
-        }
+        MetaLeft: '⌘',
+        MetaRight: '⌘',
+        AltLeft: '⌥',
+        AltRight: '⌥',
+        ControlLeft: 'Ctrl',
+        ControlRight: 'Ctrl',
+        ShiftLeft: '⇧',
+        ShiftRight: '⇧',
+        Fn: 'fn',
+      }
       : {
-          MetaLeft: 'Win',
-          MetaRight: 'Win',
-          AltLeft: 'Alt',
-          AltRight: 'Alt',
-          ControlLeft: 'Ctrl',
-          ControlRight: 'Ctrl',
-          ShiftLeft: 'Shift',
-          ShiftRight: 'Shift',
-          Fn: 'Fn',
-        };
+        MetaLeft: 'Win',
+        MetaRight: 'Win',
+        AltLeft: 'Alt',
+        AltRight: 'Alt',
+        ControlLeft: 'Ctrl',
+        ControlRight: 'Ctrl',
+        ShiftLeft: 'Shift',
+        ShiftRight: 'Shift',
+        Fn: 'Fn',
+      };
 
     if (code in baseMap) return baseMap[code];
     if (code in mods) return mods[code];
@@ -9679,10 +9406,10 @@ setTimeout(() => {
     const actionGroups =
       typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
         ? window.ModelLabels.getPopupPresentationGroups(
-            activeModelConfigId,
-            names,
-            cfg?.modelCatalog || null,
-          )
+          activeModelConfigId,
+          names,
+          cfg?.modelCatalog || null,
+        )
         : typeof window.ModelLabels?.getPresentationGroups === 'function'
           ? window.ModelLabels.getPresentationGroups(activeModelConfigId, names)
           : typeof window.ModelLabels?.getActionGroups === 'function'
@@ -9774,76 +9501,74 @@ ${groupMarkup.join('')}`;
     const sections = Array.isArray(schemaSections)
       ? schemaSections
       : [
-          {
-            header: 'Model Picker + UI Tweaks',
-            keys: [
-              'shortcutKeyToggleModelSelector',
-              'shortcutKeyThinkingStandard',
-              'shortcutKeyThinkingExtended',
-            ],
-          },
-          {
-            header: 'Quick Clicks',
-            keys: [
-              'shortcutKeyNewConversation',
-              'shortcutKeyActivateInput',
-              'shortcutKeyToggleSidebar',
-              'shortcutKeyPreviousThread',
-              'shortcutKeyNextThread',
-              'shortcutKeySearchConversationHistory',
-            ],
-          },
-          {
-            header: 'Scroll',
-            keys: [
-              'shortcutKeyScrollToTop',
-              'shortcutKeyClickNativeScrollToBottom',
-              'shortcutKeyScrollUpOneMessage',
-              'shortcutKeyScrollDownOneMessage',
-              'shortcutKeyScrollUpTwoMessages',
-              'shortcutKeyScrollDownTwoMessages',
-            ],
-          },
-          {
-            header: 'Clipboard',
-            keys: [
-              'shortcutKeyCopyLowest',
-              'selectThenCopy',
-              'selectThenCopyAllMessages',
-              'shortcutKeyCopyAllCodeBlocks',
-            ],
-          },
-          {
-            header: 'Compose + Send',
-            keys: [
-              'shortcutKeyEdit',
-              'shortcutKeySendEdit',
-              'shortcutKeyTemporaryChat',
-              'shortcutKeyToggleDictate',
-            ],
-          },
-          {
-            header: 'Regenerate Response',
-            keys: [
-              'shortcutKeyRegenerateTryAgain',
-              'shortcutKeyRegenerateMoreConcise',
-              'shortcutKeyRegenerateAddDetails',
-              'shortcutKeyRegenerateWithDifferentModel',
-              'shortcutKeyRegenerateAskToChangeResponse',
-            ],
-          },
-          {
-            header: 'Message Tools',
-            keys: [
-              'shortcutKeySearchWeb',
-              'shortcutKeyStudy',
-              'shortcutKeyCreateImage',
-              'shortcutKeyToggleCanvas',
-              'shortcutKeyAddPhotosFiles',
-              'shortcutKeyThinkLonger',
-            ],
-          },
-        ];
+        {
+          header: 'Model Picker + UI Tweaks',
+          keys: [
+            'shortcutKeyToggleModelSelector',
+            'shortcutKeyThinkingStandard',
+            'shortcutKeyThinkingExtended',
+          ],
+        },
+        {
+          header: 'Quick Clicks',
+          keys: [
+            'shortcutKeyNewConversation',
+            'shortcutKeyActivateInput',
+            'shortcutKeyToggleSidebar',
+            'shortcutKeyPreviousThread',
+            'shortcutKeyNextThread',
+            'shortcutKeySearchConversationHistory',
+          ],
+        },
+        {
+          header: 'Scroll',
+          keys: [
+            'shortcutKeyScrollToTop',
+            'shortcutKeyClickNativeScrollToBottom',
+            'shortcutKeyScrollUpOneMessage',
+            'shortcutKeyScrollDownOneMessage',
+            'shortcutKeyScrollUpTwoMessages',
+            'shortcutKeyScrollDownTwoMessages',
+          ],
+        },
+        {
+          header: 'Clipboard',
+          keys: [
+            'shortcutKeyCopyLowest',
+            'selectThenCopy',
+            'selectThenCopyAllMessages',
+            'shortcutKeyCopyAllCodeBlocks',
+          ],
+        },
+        {
+          header: 'Compose + Send',
+          keys: [
+            'shortcutKeyEdit',
+            'shortcutKeySendEdit',
+            'shortcutKeyTemporaryChat',
+            'shortcutKeyToggleDictate',
+          ],
+        },
+        {
+          header: 'Regenerate Response',
+          keys: [
+            'shortcutKeyRegenerateTryAgain',
+            'shortcutKeyRegenerateWithDifferentModel',
+            'shortcutKeyRegenerateAskToChangeResponse',
+          ],
+        },
+        {
+          header: 'Message Tools',
+          keys: [
+            'shortcutKeySearchWeb',
+            'shortcutKeyStudy',
+            'shortcutKeyCreateImage',
+            'shortcutKeyToggleCanvas',
+            'shortcutKeyAddPhotosFiles',
+            'shortcutKeyThinkLonger',
+          ],
+        },
+      ];
 
     const out = [];
     out.push(`<div class="shortcut-container">
@@ -10178,7 +9903,7 @@ ${groupMarkup.join('')}`;
       if (!changes || !changes.shortcutKeyShowShortcuts) return;
       setShowShortcutsCode(changes.shortcutKeyShowShortcuts.newValue);
     });
-  } catch (_) {}
+  } catch (_) { }
 
   const getAllSettings = () =>
     new Promise((resolve) => {

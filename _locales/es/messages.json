@@ -387,10 +387,10 @@
 		"message": "Escribe cómo quieres cambiar o mejorar la respuesta anterior."
 	},
 	"label_RegenerateWithDifferentModel": {
-		"message": "Regenerar con otro modelo"
+		"message": "No buscar en la web"
 	},
 	"tt_RegenerateWithDifferentModel": {
-		"message": "Crea una nueva respuesta con otro modelo de IA."
+		"message": "Regenera la respuesta sin usar búsqueda web."
 	},
 	"label_ReadAloud": {
 		"message": "Leer en voz alta"

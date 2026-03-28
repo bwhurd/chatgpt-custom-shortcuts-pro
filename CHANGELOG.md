@@ -7,6 +7,8 @@ If you don't want to wait, download and load the latest zip from the [dist folde
 #### 03.27.2026
 - Fixed: `Send Top Bar To Bottom` now hides the bottom disclaimer text again by recognizing both the explicit disclaimer container and the live centered disclaimer row, with short delayed rechecks instead of the old broad text-node watcher.
 - Adjusted: `Send Top Bar To Bottom` now sits lower by increasing the bottom bar's negative bottom margin, which moves the composer and bottom bar down together without changing the sticky container height.
+- Changed: `Remember Sidebar Scroll Position` is temporarily hidden and hard-disabled pending a rewrite.
+- Changed: The regenerate shortcut grid now removes `More Concise` and `Add Details`, and repurposes the legacy `Regenerate with Different Model` slot to `Don't Search the Web`.
 
 #### 03.25.2026
 - Fixed: Dictation toggle now prefers the dedicated `Dictate button` over the normal composer send button when both controls are present, so the shortcut no longer fires `Send prompt` in idle composer state.

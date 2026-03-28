@@ -102,7 +102,7 @@ This project intentionally avoids “update the same key in 6 places”. New set
 ## Project summary
 This MV3 extension layers a programmable shortcut system over chatgpt.com. Users can:
 - Configure dozens of Alt/Ctrl-based shortcuts for scrolling, copying, regenerating, and tool toggles via the popup UI.
-- Toggle UI tweaks such as moving the ChatGPT header to the bottom, fading the slim sidebar, remembering sidebar scroll position, injecting legacy arrow buttons, and clicking inline code to copy (opt-in).
+- Toggle UI tweaks such as moving the ChatGPT header to the bottom, fading the slim sidebar, injecting legacy arrow buttons, and clicking inline code to copy (opt-in).
 - Copy formatted messages or code blocks with Markdown stripping and Word-friendly formatting.
 - Trigger model switches (main and legacy) with Alt+digits, including a Ctrl+/ overlay that lists all assigned shortcuts.
 - Sync their settings to Google Drive (`appDataFolder`) and restore them across devices.
@@ -138,7 +138,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
   - Fades the slim sidebar (`stage-sidebar-tiny-bar`) with user-configurable opacity, pausing when overlays or the full sidebar are open.
   - Keeps edit buttons visible via forced opacity classes and styles.
   - Auto-click convenience flows: “Something went wrong” → Try again, “Open link” warnings, “Read Aloud”/“Stop” menu items, etc.
-  - Remembers sidebar scroll in both rail and overlay modes using sessionStorage keys keyed by pathname + mode.
+- `rememberSidebarScrollPositionCheckbox` is intentionally hidden and hard-disabled pending a rewrite; leave it inert unless explicitly asked to restore it.
 - Overlays:
   - `window.toggleModelSelector` supports both the current single-level model menu and older legacy-submenu layouts, opening deeper submenu content only when that path actually exists.
   - `Ctrl+/` shortcut overlay links `popup.css` inside its shadow DOM so local icon fonts are available, and also injects the embedded `FULL_POPUP_CSS` copy for layout parity. It renders only assigned shortcuts. The model picker grid now uses the same grouped model-action source of truth as the popup, including the compact `Configure Models` row. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
@@ -180,7 +180,7 @@ This MV3 extension layers a programmable shortcut system over chatgpt.com. Users
 - Copy sanitization: `selectThenCopy` and `selectThenCopyAllMessages` transform DOM content into HTML+plain text pairs that preserve code fences, CRLF endings, and Word-friendly spacing. Don’t bypass these helpers; adjust their utilities (`splitByCodeFences`, `removeMarkdown`, `buildPlainTextWithFences`) if you need new behavior.
 - Top bar to bottom + slim sidebar: The bottom bar injector is guarded by URL checks and login-state detection. It diff-injects static buttons, segmented model switcher, and opacity sliders, and re-runs on DOM mutations. Slim sidebar fading respects overlay state and full sidebar visibility; both features rely on chrome.storage flags and should remain in sync.
 - PageUp/PageDown takeover: Toggleable via `pageUpDownTakeover`. It installs/removes keydown & wheel/touch listeners dynamically.
-- Remember sidebar scroll position: Stores per-path/mode scroll positions in `sessionStorage`, using mutation observers to detect when the overlay or rail becomes visible.
+- Remember sidebar scroll position is currently intentionally disabled and should remain inert until it is reworked.
 - Auto-click helpers: Watch for warning dialogs and “Something went wrong” containers; they must remain resilient and only target relevant nodes to avoid accidental clicks.
 
 ## Adding or adjusting shortcuts/toggles
