@@ -332,6 +332,12 @@
 	"tt_fade_message_buttons": {
 		"message": "Keep message action buttons faded until hover."
 	},
+	"label_hide_pasted_library_files": {
+		"message": "Hide Pasted Files"
+	},
+	"tt_hide_pasted_library_files": {
+		"message": "Hide files in the Library whose names contain \"Pasted\". Turn it off to show them again."
+	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: clicks the lowest visible '<' previous thread button. ———————————————————  Ctrl+Alt+{shortcut}: scrolls to find other responses with multiple threads."
 	},

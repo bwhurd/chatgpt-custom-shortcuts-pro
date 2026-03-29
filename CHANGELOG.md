@@ -4,6 +4,12 @@ Changes typically post to the chrome web store a couple days after date in chang
 
 If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
+#### 03.28.2026
+- Added: `Hide Pasted Files` for ChatGPT Library files, with a popup setting and an on-page Library control that works across English, Spanish, Japanese, Ukrainian, Russian, and Hindi pasted-file names.
+- Fixed: the `Hide Pasted Files` Library control now injects cleanly on `/library` reloads instead of flashing or duplicating during ChatGPT's route hydration.
+- Changed: the popup now keeps `Refresh Models` visible during the weekly model-refresh prompt, and both refresh click targets have a lighter hover/focus affordance.
+- Changed: after the first successful manual `Refresh Models`, the popup can seed `Thinking Standard` / `Thinking Extended` to `Alt + 8` / `Alt + 9` when those keys are still free, while model-key resets/defaults use the shared model-action source of truth and keep `Configure...` on `Alt + 0`.
+
 #### 03.27.2026
 - Fixed: `Send Top Bar To Bottom` now hides the bottom disclaimer text again by recognizing both the explicit disclaimer container and the live centered disclaimer row, with short delayed rechecks instead of the old broad text-node watcher.
 - Adjusted: `Send Top Bar To Bottom` now sits lower by increasing the bottom bar's negative bottom margin, which moves the composer and bottom bar down together without changing the sticky container height.

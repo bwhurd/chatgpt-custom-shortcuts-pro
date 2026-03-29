@@ -332,6 +332,12 @@
 	"tt_fade_message_buttons": {
 		"message": "Mantiene atenuados los botones del mensaje hasta pasar el cursor."
 	},
+	"label_hide_pasted_library_files": {
+		"message": "Ocultar archivos pegados"
+	},
+	"tt_hide_pasted_library_files": {
+		"message": "Oculta en la Biblioteca los archivos cuyos nombres contienen \"Pasted\". Desactívalo para mostrarlos de nuevo."
+	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: hace clic en el botón «<» de hilo anterior visible más abajo. ———————————————————  Ctrl+Alt+{shortcut}: se desplaza para encontrar otras respuestas con varios hilos."
 	},

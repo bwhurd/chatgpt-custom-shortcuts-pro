@@ -80,20 +80,54 @@ const getPopupModelPresentationGroups = (activeConfigId, incomingNames, catalog)
   typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
     ? window.ModelLabels.getPopupPresentationGroups(activeConfigId, incomingNames, catalog)
     : getModelPresentationGroups(activeConfigId, incomingNames);
-const buildDefaultModelPickerCodes = () =>
-  typeof window.ModelLabels?.defaultKeyCodes === 'function'
-    ? window.ModelLabels.defaultKeyCodes()
-    : (() => {
-        const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
-        out[0] = 'Digit1';
-        out[1] = 'Digit2';
-        out[2] = 'Digit0';
-        out[3] = 'Digit3';
-        out[4] = 'Digit4';
-        out[5] = 'Digit5';
-        out[6] = 'Digit6';
-        return out;
-      })();
+const buildDefaultModelPickerCodes = ({ useCurrentCatalog = false } = {}) => {
+  if (
+    useCurrentCatalog &&
+    typeof window.ModelLabels?.buildDefaultKeyCodesFromPresentationGroups === 'function'
+  ) {
+    const groups = getPopupModelPresentationGroups(
+      DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+      window.MODEL_NAMES || [],
+      window.__modelCatalog || null,
+    );
+    const next = window.ModelLabels.buildDefaultKeyCodesFromPresentationGroups(groups);
+    if (Array.isArray(next) && next.length) {
+      const out = next.slice(0, MODEL_PICKER_MAX_SLOTS);
+      while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
+      return out;
+    }
+  }
+
+  if (typeof window.ModelLabels?.defaultKeyCodes === 'function') {
+    const out = window.ModelLabels.defaultKeyCodes().slice(0, MODEL_PICKER_MAX_SLOTS);
+    while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
+    return out;
+  }
+
+  const out = new Array(MODEL_PICKER_MAX_SLOTS).fill('');
+  out[0] = 'Digit1';
+  out[1] = 'Digit2';
+  out[2] = 'Digit0';
+  out[3] = 'Digit3';
+  out[4] = 'Digit4';
+  out[5] = 'Digit5';
+  out[6] = 'Digit6';
+  out[7] = 'Digit7';
+  return out;
+};
+const MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS = Object.freeze({
+  shortcutKeyThinkingStandard: 'Digit8',
+  shortcutKeyThinkingExtended: 'Digit9',
+});
+const THINKING_SHORTCUTS_MANUAL_SEED_KEY = 'cspThinkingShortcutsManualSeededV1';
+const AUTO_MANAGED_SYNC_KEYS = new Set([
+  'activeModelConfigId',
+  'modelCatalog',
+  'modelNames',
+  'modelNamesAt',
+  'modelCatalogRefreshPromptDay',
+  'modelCatalogRefreshPromptWeek',
+]);
 const getActiveModelConfigId = () => normalizeActiveModelConfigId(window.__activeModelConfigId);
 const MODEL_CONFIG_CLICK_DEBOUNCE_MS = 140;
 const MODEL_CONFIG_VISUAL_SETTLE_MS = 1100;
@@ -137,6 +171,95 @@ const getPreferredModelViewLabelsBySlot = () => {
   });
   return labels;
 };
+const normalizeModelPickerCodesForComparison = (codes) => {
+  const out = Array.isArray(codes) ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
+  while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
+  return out;
+};
+const hasDefaultModelPickerCodes = (codes) => {
+  const normalized = normalizeModelPickerCodesForComparison(codes);
+  const defaults = normalizeModelPickerCodesForComparison(buildDefaultModelPickerCodes());
+  return normalized.every((value, index) => value === defaults[index]);
+};
+const isPristineUserSettingsSnapshot = (snapshot) =>
+  !Object.keys(snapshot || {}).some(
+    (key) =>
+      snapshot?.[key] !== undefined &&
+      !AUTO_MANAGED_SYNC_KEYS.has(key) &&
+      !(key === 'modelPickerKeyCodes' && hasDefaultModelPickerCodes(snapshot[key])),
+  );
+const hasHydratedModelCatalog = (catalog) => {
+  if (!catalog || typeof catalog !== 'object') return false;
+  if (Array.isArray(catalog.configureOptions) && catalog.configureOptions.length) return true;
+  return Object.values(catalog.frontendByConfig || {}).some((rows) => Array.isArray(rows) && rows.length > 0);
+};
+const waitForPaint = (count = 2) =>
+  new Promise((resolve) => {
+    const step = (remaining) => {
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame?.(() => step(remaining - 1)) ?? setTimeout(() => step(remaining - 1), 16);
+    };
+    step(count);
+  });
+const storageGetAsync = (area, keys) =>
+  new Promise((resolve) => {
+    try {
+      area.get(keys, (result) => resolve(result || {}));
+    } catch {
+      resolve({});
+    }
+  });
+const storageSetAsync = (area, data) =>
+  new Promise((resolve) => {
+    try {
+      area.set(data, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+async function maybeSeedThinkingShortcutsAfterManualCatalogRefresh({ hadCatalogBefore = false } = {}) {
+  if (hadCatalogBefore || !hasHydratedModelCatalog(window.__modelCatalog)) return;
+
+  const localState = await storageGetAsync(chrome.storage.local, [THINKING_SHORTCUTS_MANUAL_SEED_KEY]);
+  if (localState?.[THINKING_SHORTCUTS_MANUAL_SEED_KEY]) return;
+
+  await waitForPaint(2);
+
+  const shortcutIds = Object.keys(MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS);
+  const currentValues = await storageGetAsync(chrome.storage.sync, shortcutIds);
+  const patch = {};
+
+  shortcutIds.forEach((id) => {
+    const currentValue = currentValues?.[id];
+    if (currentValue !== undefined && currentValue !== '' && currentValue !== '\u00A0') return;
+
+    const code = MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS[id];
+    const conflicts =
+      typeof window.ShortcutUtils?.buildConflictsForCode === 'function'
+        ? window.ShortcutUtils.buildConflictsForCode(code, { type: 'shortcut', id })
+        : [];
+    if (conflicts.length) return;
+    patch[id] = code;
+  });
+
+  if (Object.keys(patch).length) {
+    await storageSetAsync(chrome.storage.sync, patch);
+    Object.entries(patch).forEach(([id, code]) => {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement)) return;
+      input.dataset.keyCode = code;
+      input.value =
+        typeof window.ShortcutUtils?.displayFromCode === 'function'
+          ? window.ShortcutUtils.displayFromCode(code)
+          : code;
+    });
+  }
+
+  await storageSetAsync(chrome.storage.local, { [THINKING_SHORTCUTS_MANUAL_SEED_KEY]: true });
+}
 const queryCurrentChatGptTab = () =>
   new Promise((resolve) => {
     try {
@@ -951,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', () => {
       while (src.length < MODEL_PICKER_MAX_SLOTS) src.push('');
       return src;
     }
-    return DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+    return buildDefaultModelPickerCodes({ useCurrentCatalog: true }).slice();
   }
 
   function saveModelPickerKeyCodes(codes, cb) {
@@ -981,7 +1104,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const hasArray = Array.isArray(codes);
       const out = hasArray ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
       while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
-      return hasArray ? out : DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+      return hasArray ? out : buildDefaultModelPickerCodes({ useCurrentCatalog: true }).slice();
     };
 
     window.__modelPickerHydrating = new Promise((resolve) => {
@@ -2380,12 +2503,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })();
 
-    chrome.storage.sync.get(allKeys, (data) => {
+    chrome.storage.sync.get(null, (fullData) => {
+      const data = Object.fromEntries(allKeys.map((key) => [key, fullData?.[key]]));
       const patch = {};
+      const isPristineInstall = isPristineUserSettingsSnapshot(fullData);
+      const freshModelPickerDefaults = buildDefaultModelPickerCodes({ useCurrentCatalog: true });
 
       allKeys.forEach((key) => {
         if (data[key] === undefined) {
-          patch[key] = DEFAULT_PRESET_DATA[key];
+          patch[key] =
+            key === 'modelPickerKeyCodes' && isPristineInstall
+              ? freshModelPickerDefaults.slice()
+              : DEFAULT_PRESET_DATA[key];
         }
       });
 
@@ -3371,7 +3500,10 @@ document.addEventListener('DOMContentLoaded', () => {
           window.__modelPickerKeyCodes ||
           null;
 
-        const defaults = DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MODEL_PICKER_MAX_SLOTS);
+        const defaults = buildDefaultModelPickerCodes({ useCurrentCatalog: true }).slice(
+          0,
+          MODEL_PICKER_MAX_SLOTS,
+        );
 
         const source = storageRaw || cacheRaw || defaults;
         const out = [];
@@ -3833,7 +3965,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- constants ---
     const NBSP = '\u00A0';
     const EMPTY_MODEL_PICKER = Array(MODEL_PICKER_MAX_SLOTS).fill('');
-    const DEFAULT_MODEL_PICKER = DEFAULT_MODEL_PICKER_KEY_CODES.slice();
+    const getDefaultModelPicker = () => buildDefaultModelPickerCodes({ useCurrentCatalog: true });
 
     const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
 
@@ -3922,7 +4054,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 2) Repopulate the model picker with the original 1..0 defaults
-            applyModelPickerCodes(DEFAULT_MODEL_PICKER, 'Model shortcuts restored to defaults.');
+            applyModelPickerCodes(getDefaultModelPicker(), 'Model shortcuts restored to defaults.');
           },
           { proceedText: 'Reset all to defaults?', simple: true, allowHTML: true },
         );
@@ -4126,18 +4258,7 @@ function modelPickerInitSafe() {
     function triggerReset() {
       showConfirmReset((yes) => {
         if (!yes) return;
-        const defaults = [
-          'Digit1',
-          'Digit2',
-          'Digit3',
-          'Digit4',
-          'Digit5',
-          'Digit6',
-          'Digit7',
-          'Digit8',
-          'Digit9',
-          'Digit0',
-        ];
+        const defaults = buildDefaultModelPickerCodes({ useCurrentCatalog: true });
         window.saveModelPickerKeyCodes(defaults, (ok) => {
           if (typeof window.showToast === 'function') {
             window.showToast(
@@ -4680,6 +4801,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   const triggerManualCatalogRefresh = async (source = 'manual') => {
     const startScrape = window.__startModelCatalogScrape;
     if (typeof startScrape !== 'function' || isModelCatalogScrapeLoading()) return null;
+    const hadCatalogBefore = hasHydratedModelCatalog(window.__modelCatalog);
     setModelCatalogRefreshPromptVisible(false, `${source}:hide-prompt`);
     renderAll({ allowPendingRebuild: true });
     const result = await startScrape();
@@ -4692,6 +4814,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       window.toast?.show?.(msg);
       return null;
     }
+    renderAll({ allowPendingRebuild: true });
+    await maybeSeedThinkingShortcutsAfterManualCatalogRefresh({ hadCatalogBefore });
     return result;
   };
 
@@ -4710,7 +4834,10 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     const isLoading = isModelCatalogScrapeLoading();
     const isPromptVisible = isModelCatalogRefreshPromptVisible();
     const headerButton = document.getElementById('mp-refresh-models-button');
-    headerButton?.classList.toggle('mp-refresh-models-button-hidden', isPromptVisible);
+    if (headerButton) {
+      headerButton.disabled = isLoading;
+      headerButton.setAttribute('aria-disabled', isLoading ? 'true' : 'false');
+    }
     overlay.classList.toggle('mp-grid-loading-overlay-prompt', isPromptVisible && !isLoading);
     overlay.classList.toggle('mp-grid-loading-overlay-loading', isLoading);
     if (promptButton) {
@@ -4809,7 +4936,9 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
         ? window.ShortcutUtils.getModelPickerCodesCache
         : null;
 
-    const src = fn ? fn() : DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MAX_SLOTS);
+    const src = fn
+      ? fn()
+      : buildDefaultModelPickerCodes({ useCurrentCatalog: true }).slice(0, MAX_SLOTS);
     const raw = (Array.isArray(src) ? src : []).slice(0, MAX_SLOTS);
     while (raw.length < MAX_SLOTS) raw.push('');
     return raw;
@@ -5311,7 +5440,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       const doReset = () => {
         const yes = confirm('Reset all model keys to defaults?');
         if (!yes) return;
-        const defaults = DEFAULT_MODEL_PICKER_KEY_CODES.slice(0, MAX_SLOTS);
+        const defaults = buildDefaultModelPickerCodes({ useCurrentCatalog: true }).slice(0, MAX_SLOTS);
         window.saveModelPickerKeyCodes(defaults, () => {
           // Toast on reset
           window.toast.show('Model keys reset to defaults.');

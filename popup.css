@@ -1911,6 +1911,20 @@ span.dup-key {
   text-align: center;
   white-space: pre-line;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
+}
+
+#model-picker-grid .mp-grid-refresh-prompt:hover,
+#model-picker-grid .mp-grid-refresh-prompt:focus-visible {
+  background: #fbfcfd;
+  border-color: rgba(92, 102, 117, 0.24);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  color: #4b5563;
+  outline: none;
 }
 
 .mp-refresh-controls {
@@ -1964,10 +1978,26 @@ span.dup-key {
   white-space: nowrap;
   vertical-align: middle;
   transform: translateY(4px);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.mp-refresh-models-button.mp-refresh-models-button-hidden {
-  display: none;
+.mp-refresh-models-button:hover,
+.mp-refresh-models-button:focus-visible {
+  background: #fbfcfd;
+  border-color: rgba(92, 102, 117, 0.24);
+  color: #4b5563;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  outline: none;
+}
+
+.mp-refresh-models-button[disabled] {
+  cursor: default;
+  opacity: 0.72;
+  box-shadow: none;
 }
 
 .mp-refresh-models-button.custom-tooltip {

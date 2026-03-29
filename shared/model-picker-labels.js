@@ -227,16 +227,52 @@
 
   const defaultActionNames = () => ACTION_SLOTS.map((action) => action.label);
 
+  const DEFAULT_SEQUENTIAL_MODEL_CODES = Object.freeze([
+    'Digit1',
+    'Digit2',
+    'Digit3',
+    'Digit4',
+    'Digit5',
+    'Digit6',
+    'Digit7',
+  ]);
+  const DEFAULT_CONFIGURE_MODEL_CODE = 'Digit0';
+
+  const buildDefaultKeyCodesFromPresentationGroups = (groups) => {
+    const out = new Array(MAX_SLOTS).fill('');
+    const seenSlots = new Set();
+    let nextSequentialIndex = 0;
+
+    (Array.isArray(groups) ? groups : []).forEach((group) => {
+      (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
+        const base =
+          getActionById(action?.id) ||
+          (Number.isInteger(Number(action?.slot)) ? getActionBySlot(Number(action.slot)) : null) ||
+          action;
+        const slot = Number(base?.slot);
+        if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS || seenSlots.has(slot)) return;
+
+        seenSlots.add(slot);
+
+        if (base?.id === 'configure') {
+          out[slot] = DEFAULT_CONFIGURE_MODEL_CODE;
+          return;
+        }
+
+        if (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
+          out[slot] = DEFAULT_SEQUENTIAL_MODEL_CODES[nextSequentialIndex];
+          nextSequentialIndex += 1;
+        }
+      });
+    });
+
+    return out;
+  };
+
   const defaultKeyCodes = () => {
-    const arr = new Array(MAX_SLOTS).fill('');
-    arr[0] = 'Digit1';
-    arr[1] = 'Digit2';
-    arr[2] = 'Digit0';
-    arr[3] = 'Digit3';
-    arr[4] = 'Digit4';
-    arr[5] = 'Digit5';
-    arr[6] = 'Digit6';
-    return arr;
+    return buildDefaultKeyCodesFromPresentationGroups(
+      getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, defaultNames(), null),
+    );
   };
 
   const normalizeActiveConfigId = (value) =>
@@ -558,6 +594,7 @@
     getPresentationGroups,
     getPopupPrimaryActions,
     getPopupPresentationGroups,
+    buildDefaultKeyCodesFromPresentationGroups,
     mapFrontendLabelToActionId,
     getCanonicalActionLabel,
     defaultKeyCodes,

@@ -332,6 +332,12 @@
 	"tt_fade_message_buttons": {
 		"message": "ホバーするまでメッセージボタンを薄く表示します。"
 	},
+	"label_hide_pasted_library_files": {
+		"message": "貼り付けファイルを隠す"
+	},
+	"tt_hide_pasted_library_files": {
+		"message": "ライブラリで名前に「Pasted」を含むファイルを隠します。再表示するにはオフにします。"
+	},
 	"tt_prev_thread": {
 		"message": "Alt+{shortcut}: 画面で一番下に見えている「<」前のスレッドボタンをクリック。 ———————————————————  Ctrl+Alt+{shortcut}: 複数スレッドの他の回答を見つけるためにスクロール。"
 	},

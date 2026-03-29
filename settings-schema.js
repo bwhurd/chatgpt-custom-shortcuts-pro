@@ -227,6 +227,7 @@
             doNotIncludeLabelsCheckbox: false,
             clickToCopyInlineCodeEnabled: false,
             fadeMessageButtonsCheckbox: false,
+            hidePastedLibraryFilesEnabled: false,
         },
 
         // Extra keys fetched with visibility settings (non-boolean or legacy).

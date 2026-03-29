@@ -78,6 +78,7 @@ const OPTIONS_DEFAULTS = {
   removeMarkdownOnCopyCheckbox: true,
   clickToCopyInlineCodeEnabled: false,
   fadeMessageButtonsCheckbox: false,
+  hidePastedLibraryFilesEnabled: false,
   colorBoldTextEnabled: false,
   colorBoldTextLightColor: '#2037e6',
   colorBoldTextDarkColor: '#4da3ff',
