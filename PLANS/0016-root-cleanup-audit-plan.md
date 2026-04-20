@@ -25,7 +25,7 @@
 - `CGCSP-Github.code-workspace`
 - `CHANGELOG.md`
 - `Clean-CSS-Interactive.ps1`
-- `CodexPlan.md`
+- `PLANS/Done-0019-codexplan-root-pointer-archive.md`
 - `content.js`
 - `CONTRIBUTING.md`
 - `css-cleanup/`
@@ -106,7 +106,7 @@
 - `build-zip.js` - release zip builder and shipping authority.
 - `CGCSP-Github.code-workspace` - ignored local workspace file; keep unless explicitly cleaning local editor state.
 - `CHANGELOG.md` - release/support documentation referenced by root docs and README.
-- `CodexPlan.md` - legacy archive pointer kept by root routing.
+- `PLANS/Done-0019-codexplan-root-pointer-archive.md` - legacy Codex plan pointer archive kept under `PLANS/`.
 - `content.js` - ships in the release zip.
 - `CONTRIBUTING.md` - contributor documentation referenced by README and package metadata.
 - `dist/` - release output folder; `.gitignore` preserves `dist/*.zip`.

@@ -16,7 +16,7 @@ Division of responsibility:
 - `PROJECT_SPEC.md`: durable project overview, architecture shape, and tricky stable conventions
 - `PLANS/`: active, deferred, blocked, and completed plan markdown using status-in-filename protocol
 - `_temp-files/`: ignored scratch artifacts, copied inspector captures, reference scripts, and temporary support notes outside the startup path
-- `CodexPlan.md`: legacy archive pointer only
+- `PLANS/Done-0019-codexplan-root-pointer-archive.md`: legacy Codex plan pointer archive only
 - `SPECS/`: durable cross-file behavior, invariants, migrations, and troubleshooting references
 
 Add a spec when a topic is:

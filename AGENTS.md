@@ -1,6 +1,6 @@
 # ChatGPT Custom Shortcuts Pro agent
 
-This file is the root routing and policy doc for Codex work in this repo. Keep it operational. Put durable project overview and broad architecture in `PROJECT_SPEC.md`, deep subsystem detail in `SPECS/`, non-trivial active/deferred work in `PLANS/`, scratch or copied reference artifacts in `_temp-files/`, and keep `CodexPlan.md` as a legacy archive pointer only.
+This file is the root routing and policy doc for Codex work in this repo. Keep it operational. Put durable project overview and broad architecture in `PROJECT_SPEC.md`, deep subsystem detail in `SPECS/`, non-trivial active/deferred work in `PLANS/`, scratch or copied reference artifacts in `_temp-files/`, and keep old Codex plan history archived under `PLANS/Done-*`.
 
 ## Scope and context discipline
 
@@ -31,7 +31,7 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
 - Start from `AGENTS.md` as the routing source.
 - Then read only the task-relevant sections of `PROJECT_SPEC.md`, the relevant `SPECS/` file or files, and the relevant active plan file or files under `PLANS/`.
 - Open `SPECS/README.md` only when the right spec is unclear or when deciding where new durable detail belongs.
-- Treat `CodexPlan.md` as a legacy archive pointer, not as the live backlog or default startup payload.
+- Treat archived Codex plan files under `PLANS/Done-*` as lookup material, not as the live backlog or default startup payload.
 - Treat `README.md`, `Done-*` plans, `_temp-files/`, audits, and history notes as helpers, not mandatory startup docs.
 - Trust current code and file layout over stale docs, then update the doc that owns the truth if reality changed.
 - Do not default to repo-wide `git status`, `git diff`, `git log`, exhaustive tree scans, package inventories, or environment sweeps unless the user asked, the task is broad enough that wider context materially changes the answer, or validation of your own edits depends on it.
@@ -52,7 +52,7 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
 - `SPECS/` owns deep durable subsystem detail, invariants, migration notes, and repair references.
 - `PLANS/` owns non-trivial active work, deferred or blocked work, completed plan archives, and workstream-specific sequencing. It should contain plan markdown, not copied inspector captures or reference scripts.
 - `_temp-files/` owns ignored scratch artifacts, copied inspector captures, reference scripts, and temporary support notes. Do not read or search it unless the current user request explicitly names a file or path there.
-- `CodexPlan.md` is a compatibility pointer to archived material that used to live at the root. Do not move live work back into it.
+- Archived Codex plan files under `PLANS/Done-*` are compatibility material for older notes and links. Do not move live work back into them.
 - When reality changes, update only the doc that owns that information instead of duplicating it across multiple root docs.
 
 ## Project guardrails
@@ -88,7 +88,6 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
 - Root docs and planning:
   - `AGENTS.md`
   - `PROJECT_SPEC.md`
-  - `CodexPlan.md`
   - `PLANS/*.md`
   - `SPECS/**`
 - Core runtime and shared logic:
