@@ -73,7 +73,7 @@
 
 ## Packaging Reminder
 
-- If a new shipped file or folder is added, update `build-zip.js` `includeItems` so the sprite is included in the Chrome Web Store upload zip.
+- If a new shipped file or folder is added, update `scripts/build-zip.js` `includeItems` so the sprite is included in the Chrome Web Store upload zip.
 
 ## Implementation Checklist
 

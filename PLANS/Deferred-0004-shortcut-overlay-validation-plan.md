@@ -98,4 +98,4 @@ Quick validation (after implementation)
 Docs / cleanup (after pivot)
 - [x] Update `AGENTS.md` to reflect the real source-of-truth after the pivot (schema-driven, not popup-fetch-driven).
 - [x] Ensure `CHANGELOG.md` entry remains accurate after pivot.
-- [x] Add a reminder in `AGENTS.md` to include new shipped files in `build-zip.js` (and confirm no new extension-runtime files were added for this fix).
+- [x] Add a reminder in `AGENTS.md` to include new shipped files in `scripts/build-zip.js` (and confirm no new extension-runtime files were added for this fix).

@@ -12,7 +12,7 @@
 - [x] Create root `SPECS/` folder and move the existing settings / Fast Mode reference docs out of `PLANS/`.
 - [x] Add `SPECS/README.md` as the spec index and boundary guide.
 - [x] Add durable specs for Cloud Sync/settings data flow and model picker/shortcut architecture.
-- [x] Update `AGENTS.md` search/scope guidance to include `SPECS/**`, `CodexPlan.md`, `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, and `build-zip.js`.
+- [x] Update `AGENTS.md` search/scope guidance to include `SPECS/**`, `CodexPlan.md`, `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, and `scripts/build-zip.js`.
 - [x] Replace redundant AGENTS deep-dive sections with short references to the new spec set.
 
 ### ⚡ Lazy Load Fast Mode
@@ -49,7 +49,7 @@
   - [x] Wire the new setting through `OPTIONS_DEFAULTS`, popup preset defaults, and `settings-schema.js` so import/export/cloud sync and legacy installs all treat it as a normal off-by-default option.
   - [x] Gate `lazy-fast-bootstrap.js` at `document_start` so the page bridge is not injected unless the toggle is enabled.
   - [x] Gate the native Fast Mode controller in `content.js` so the banner, scroll handling, and in-place expansion logic remain inert unless the toggle is enabled.
-  - [x] Update locale strings, keep the changelog concise, bump the manifest version, and confirm `build-zip.js` already includes the required shipped files without any new include changes.
+  - [x] Update locale strings, keep the changelog concise, bump the manifest version, and confirm `scripts/build-zip.js` already includes the required shipped files without any new include changes.
   - [x] Reload the unpacked extension and validate both states live:
     - toggle off: Fast Mode is inert on ChatGPT pages
     - toggle on: Fast Mode baseline banner/controller still work

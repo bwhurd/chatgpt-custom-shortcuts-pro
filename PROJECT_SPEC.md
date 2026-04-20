@@ -64,6 +64,7 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 - The current top-bar-to-bottom approach keeps the injected bottom bar in normal document flow immediately after the composer form. Do not switch back to a fixed or body-mounted model without explicit project direction.
 - `rememberSidebarScrollPositionCheckbox` is intentionally hidden and inert pending a redesign.
 - If a task adds shipped files or folders under `extension/`, `scripts/build-zip.js` `includeItems` must be updated so release zips remain complete. Release zips must still place `manifest.json` at the zip root, not inside an `extension/` folder.
+- `netlify.toml` stays at the repo root because Netlify discovers project configuration there; keep `netlify/functions/` paired with it unless a deployment-specific pass changes the provider wiring.
 - When a version bump or release zip build is part of the task, the generated `dist/*.zip` archive is part of the expected release artifact set unless the user says otherwise.
 
 ## Validation and tooling posture
