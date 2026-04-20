@@ -188,3 +188,8 @@
 - [x] Run a popup smoke load from `extension/`: Chromium loaded `popup.html`, found `.shortcut-container`, found 86 controls, and reported no console or page errors.
 - [x] Resolve the popup visual baseline mismatch: update the popup screenshot harness to expand the scrollable popup container only for full-content snapshots, regenerate `popup-visual-win32.png` at `1100x2737`, and rerun `popup-visual.spec.mjs` successfully.
 - [x] Confirm extension reload path through Playwright: fresh Chromium contexts load the unpacked extension from `extension/`, open `popup.html`, and render without console or page errors. Manual reload in a persistent personal Chrome profile remains a user action before interactive use.
+
+## Final Local Clutter Cleanup
+
+- [x] Remove ignored root-local leftovers that were still making the repo look noisy: `.playwright/`, `.vscode/`, `CGCSP-Github.code-workspace`, `node_modules/`, and `test-results/`.
+- [x] Keep intentional root surfaces in place: `extension/`, `tests/`, `dist/`, `PLANS/`, `SPECS/`, `_temp-files/`, project docs, packaging metadata, and `netlify/`.
