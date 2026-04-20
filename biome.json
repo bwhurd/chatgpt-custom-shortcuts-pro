@@ -3,7 +3,14 @@
   "root": true,
   "files": {
     "includes": [
-      "**/*.{js,ts,jsx,tsx,json,css,html}"
+      "**/*.{js,ts,jsx,tsx,json,css,html}",
+      "!_temp-files",
+      "!dist",
+      "!tools",
+      "!node_modules",
+      "!.git",
+      "!.playwright",
+      "!test-results"
     ],
     "ignoreUnknown": false
   },
@@ -61,13 +68,7 @@
     }
   },
   "javascript": {
-    "globals": [
-      "chrome",
-      "gsap",
-      "ScrollToPlugin",
-      "Observer",
-      "Flip"
-    ],
+    "globals": ["chrome", "gsap", "ScrollToPlugin", "Observer", "Flip"],
     "formatter": {
       "semicolons": "always",
       "trailingCommas": "all",
@@ -80,9 +81,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "**/*.css"
-      ],
+      "includes": ["**/*.css"],
       "linter": {
         "rules": {
           "complexity": {

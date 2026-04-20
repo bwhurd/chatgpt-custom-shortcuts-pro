@@ -62,7 +62,7 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
 - Treat the popup authoring experience as high priority: respect i18n keys, tooltip balance, shared label behavior, and duplicate-shortcut safeguards.
 - Use the existing helpers and shared modules (`ShortcutUtils`, GSAP plugins, `CloudAuth`, `CloudStorage`, `ModelLabels`) instead of reimplementing similar logic.
 - If required DOM details are missing, stop and ask the user for the smallest useful inspector slice instead of guessing from localized or unstable selectors.
-- If you add new shipped files or folders under `extension/`, update `build-zip.js` `includeItems` so the release zip stays complete.
+- If you add new shipped files or folders under `extension/`, update `scripts/build-zip.js` `includeItems` so the release zip stays complete.
 - If a version bump or zip build is part of the task, include the generated `dist/*.zip` archive in commits and pushes unless the user explicitly says not to.
 - Respect existing permissions and host matches. Do not add new extension permissions or broader host access without explicit approval.
 
@@ -117,7 +117,8 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
   - `.gitignore`
   - `package.json`
   - `package-lock.json`
-  - `build-zip.js`
+  - `scripts/build-zip.js`
+  - `biome.json`
   - `tests/fixtures/**`
   - `tests/playwright/**`
   - `tests/validate-keys.js`

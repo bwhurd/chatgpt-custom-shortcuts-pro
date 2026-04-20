@@ -1,7 +1,7 @@
 ﻿# Root Cleanup Audit Plan
 
 - [x] Move the approved Group 2 root entries out of the project root.
-- [x] Treat `build-zip.js` `includeItems` as the Chrome Web Store release zip authority.
+- [x] Treat `scripts/build-zip.js` `includeItems` as the Chrome Web Store release zip authority.
 - [x] Use `_temp-files/cleanup-root-of-project/` only for approved archive moves.
 - [x] Move packaged extension files under `extension/` without changing their internal Chrome package layout.
 
@@ -21,7 +21,7 @@
 - `background.js`
 - `based-on-this.html`
 - `biome.json`
-- `build-zip.js`
+- `scripts/build-zip.js`
 - `CGCSP-Github.code-workspace`
 - `CHANGELOG.md`
 - `Clean-CSS-Interactive.ps1`
@@ -49,7 +49,7 @@
 - `popup.css`
 - `popup.html`
 - `popup.js`
-- `Privacy-Policy.md`
+- `docs/policies/Privacy-Policy.md`
 - `PROJECT_SPEC.md`
 - `README.md`
 - `scrub-this-css.css`
@@ -59,10 +59,10 @@
 - `shared/`
 - `SPECS/`
 - `storage.js`
-- `TERMS.md`
+- `docs/policies/TERMS.md`
 - `test-results/`
 - `tests/`
-- `THIRD_PARTY.md`
+- `docs/reference/THIRD_PARTY.md`
 - `tmp-bottom-bar-check.mjs`
 - `tools/`
 - `validate-keys.js`
@@ -103,7 +103,7 @@
 - `auth.js` - ships in the release zip.
 - `background.js` - ships in the release zip.
 - `biome.json` - lint/format configuration used by package scripts.
-- `build-zip.js` - release zip builder and shipping authority.
+- `scripts/build-zip.js` - release zip builder and shipping authority.
 - `CGCSP-Github.code-workspace` - ignored local workspace file; keep unless explicitly cleaning local editor state.
 - `CHANGELOG.md` - release/support documentation referenced by root docs and README.
 - `PLANS/Done-0019-codexplan-root-pointer-archive.md` - legacy Codex plan pointer archive kept under `PLANS/`.
@@ -128,7 +128,7 @@
 - `popup.css` - ships in the release zip.
 - `popup.html` - ships in the release zip.
 - `popup.js` - ships in the release zip.
-- `Privacy-Policy.md` - support/legal document.
+- `docs/policies/Privacy-Policy.md` - support/policy document.
 - `PROJECT_SPEC.md` - durable project overview.
 - `README.md` - project public overview.
 - `settings-schema.js` - ships in the release zip.
@@ -136,9 +136,9 @@
 - `shared/` - ships in the release zip.
 - `SPECS/` - durable subsystem specs.
 - `storage.js` - ships in the release zip.
-- `TERMS.md` - support/legal document.
+- `docs/policies/TERMS.md` - support/policy document.
 - `tests/` - active Playwright validation folder referenced by package scripts and routing docs.
-- `THIRD_PARTY.md` - third-party attribution/support document.
+- `docs/reference/THIRD_PARTY.md` - third-party attribution/reference document.
 - `tools/` - ignored tool/archive folder referenced by root routing; keep as a whole unless a later tools-specific pass says otherwise.
 - `vendor/` - ships in the release zip.
 
@@ -161,9 +161,9 @@
 
 - [x] Use one new top-level `extension/` folder for the actual Chrome extension source. This keeps the root simple while making the Chrome-loaded source obvious at a glance.
 - [x] Preserve the internal extension layout inside `extension/`; do not add deeper `src/`, `popup/`, `assets/`, or `docs/` folders in this pass.
-- [x] Keep the repo root for project control files and docs: `AGENTS.md`, `PROJECT_SPEC.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, legal/support docs, `package.json`, `package-lock.json`, `build-zip.js`, `biome.json`, `.gitignore`, `.gitattributes`, and provider config like `netlify.toml`.
+- [x] Keep the repo root for project control files and docs: `AGENTS.md`, `PROJECT_SPEC.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, package metadata, `.gitignore`, `.gitattributes`, and provider config like `netlify.toml`.
 - [x] Keep purpose folders at root: `PLANS/`, `SPECS/`, `tests/`, `tools/`, `_temp-files/`, `dist/`, `netlify/`, and generated local folders such as `node_modules/`.
-- [x] Rewire `build-zip.js` to read `extension/manifest.json` and archive every `includeItems` entry from `extension/` into the zip root, preserving the Chrome Web Store package layout.
+- [x] Rewire `scripts/build-zip.js` to read `extension/manifest.json` and archive every `includeItems` entry from `extension/` into the zip root, preserving the Chrome Web Store package layout.
 - [x] Rewire Playwright extension-loading helpers to load the unpacked extension from `extension/` instead of the repo root.
 - [x] Move `settings.json` to `tests/fixtures/settings.json`, update `tests/validate-keys.js`, and add `npm run validate:keys`.
 - [x] Remove the stale `package.json` `clean` script instead of reviving the archived CSS cleanup workflow.
@@ -183,7 +183,12 @@
 ## Remaining Validation
 
 - [x] Run key validation via bundled Node: `node tests/validate-keys.js` completed with no missing or unused keys after updating the fixture and JSON-only whitelist.
-- [x] Run zip build via bundled Node: `node build-zip.js` created `dist/4.5.1.4-1.zip`.
+- [x] Run zip build via bundled Node: `node scripts/build-zip.js` created `dist/4.5.1.4-1.zip`.
+
+## Final Tooling Placement
+
+- [x] Move the release builder from the repo root to `scripts/build-zip.js`.
+- [x] Keep `biome.json` at the repo root because Biome expects a root configuration file there.
 - [x] Inspect the zip file list: `manifest.json` is at the zip root and no entries are prefixed with `extension/`.
 - [x] Run a popup smoke load from `extension/`: Chromium loaded `popup.html`, found `.shortcut-container`, found 86 controls, and reported no console or page errors.
 - [x] Resolve the popup visual baseline mismatch: update the popup screenshot harness to expand the scrollable popup container only for full-content snapshots, regenerate `popup-visual-win32.png` at `1100x2737`, and rerun `popup-visual.spec.mjs` successfully.

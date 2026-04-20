@@ -1,11 +1,12 @@
-// build-zip.js
-// run in powershell with: node build-zip.js
+// scripts/build-zip.js
+// run in powershell with: node scripts/build-zip.js
 const fs = require('node:fs');
 const path = require('node:path');
 const archiver = require('archiver');
 const stripJsonComments = require('strip-json-comments');
 
-const extensionDir = path.join(__dirname, 'extension');
+const repoRoot = path.join(__dirname, '..');
+const extensionDir = path.join(repoRoot, 'extension');
 
 // 1. Read version from extension/manifest.json (handle BOM + comments)
 const manifestPath = path.join(extensionDir, 'manifest.json');
@@ -17,7 +18,7 @@ if (raw.charCodeAt(0) === 0xfeff) {
   raw = raw.slice(1);
 }
 
-// Remove // and /* */ comments (JSONC → JSON)
+// Remove // and /* */ comments (JSONC -> JSON)
 const cleaned = stripJsonComments(raw, { whitespace: false });
 
 let manifest;
@@ -36,7 +37,7 @@ if (!version || typeof version !== 'string') {
 }
 
 // 2. Ensure dist/ exists
-const distDir = path.join(__dirname, 'dist');
+const distDir = path.join(repoRoot, 'dist');
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir);
 }
@@ -54,7 +55,7 @@ const archive = archiver('zip', { zlib: { level: 9 } });
 
 output.on('close', () => {
   console.log(
-    `✅ Created ${path.basename(finalZipPath)} in dist/ (${archive.pointer()} total bytes)`,
+    `Created ${path.basename(finalZipPath)} in dist/ (${archive.pointer()} total bytes)`,
   );
 });
 archive.on('error', (err) => {
@@ -92,12 +93,12 @@ includeItems.forEach((item) => {
   if (fs.existsSync(itemPath)) {
     const stats = fs.statSync(itemPath);
     if (stats.isDirectory()) {
-      archive.directory(itemPath, item); // preserve folder name
+      archive.directory(itemPath, item);
     } else {
       archive.file(itemPath, { name: item });
     }
   } else {
-    console.warn(`⚠️ Skipping missing: ${item}`);
+    console.warn(`Skipping missing: ${item}`);
   }
 });
 
