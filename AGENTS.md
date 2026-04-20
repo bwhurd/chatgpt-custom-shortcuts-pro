@@ -1,224 +1,184 @@
 # ChatGPT Custom Shortcuts Pro agent
 
-- ChatGPT Custom Shortcuts Pro is a Chrome extension that adds configurable shortcuts and UI tweaks to chatgpt.com.
-- This file tells the coding agent how to modify the extension safely and which files it can touch.
-- IMPORTANT: If required information is missing, stop and ask the user instead of guessing (for example, ask them to copy relevant HTML from the ChatGPT page’s inspector into the prompt).
-- Packaging reminder: if you add new shipped files/folders, update `build-zip.js` `includeItems` so the Chrome Web Store upload zip contains them.
-- Release artifact reminder: when a version bump or zip build is part of the task, include the generated `dist/*.zip` release archive in git commits/pushes unless the user explicitly says not to.
+This file is the root routing and policy doc for Codex work in this repo. Keep it operational. Put durable project overview and broad architecture in `PROJECT_SPEC.md`, deep subsystem detail in `SPECS/`, non-trivial active/deferred work in `PLANS/`, scratch or copied reference artifacts in `_temp-files/`, and keep `CodexPlan.md` as a legacy archive pointer only.
 
-## UI preview workflow
+## Scope and context discipline
 
-- For popup, overlay, tooltip, layout, animation, and other user-facing UI work, use Playwright instead of relying on static file inspection alone when extension context matters.
-- After any shipped extension file changes (`content.js`, `popup.*`, `background.js`, `manifest.json`, storage/schema wiring, or other extension-loaded assets), manually reload the unpacked extension in `chrome://extensions` by clicking the extension's Reload button before running any Playwright confirmation. Do not trust a Playwright check against a stale extension build.
-- Run `npm run playwright:install` once per machine to download Chromium for Playwright.
-- Run `npm run preview:popup` to load the unpacked extension in Chromium and inspect the real popup with `chrome.*` APIs available.
-- Run `npm run screenshot:popup` to capture a fresh popup screenshot to `test-results/playwright/popup-preview.png`.
-- Run `npm run test:popup-visual` for a snapshot-based visual regression check of the popup.
-- Run `npm run test:popup-visual:update` only when an intentional popup/UI change should become the new accepted baseline.
-- Use `tests/playwright/chatgpt-session.mjs` or the `playwright:chatgpt:*` scripts to launch persistent logged-in ChatGPT sessions in three scenarios: no extension, extension with `moveTopBarToBottomCheckbox=false`, and extension with `moveTopBarToBottomCheckbox=true`.
-- Use `tests/playwright/chatgpt-scenario-benchmark.mjs` / `npm run playwright:chatgpt:benchmark` to verify the shared logged-in ChatGPT profile, print the top visible sidebar titles, and run the plain / `moveTopBarToBottomCheckbox=false` / `moveTopBarToBottomCheckbox=true` reload comparisons for named conversations.
-- Optional manual load profiling helper: `tests/playwright/chatgpt-load-profiler.user.js` logs ChatGPT reload timings plus CSP/bottom-bar markers for extension-off / `moveTopBarToBottomCheckbox` false / true comparisons.
-- Treat this as the preferred validation path for popup-facing work before and after edits; `popup.html` by itself is not a faithful preview of the MV3 extension popup.
+- Treat this section and `<context_budget>` as first-principle instructions for every pass.
+- Use the smallest context needed to complete the task safely.
+- Work inside the repo by default. Read outside the repo only when the task explicitly depends on shared workstation docs, external artifacts, or outside-project lookup.
+- If the user names specific files or folders, treat that as the full scope unless a direct dependency forces expansion.
+- If the task needs new files and the user did not name a location, choose the smallest sensible folder that cleanly owns the work.
+- Outside the active scope, read only the minimum routing docs or direct dependencies required. Do not modify outside the active scope unless the user expands it.
+- Do not scan the full repo for ordinary tasks. Expand scope only if the task is ambiguous, blocked, clearly cross-cutting, or the user asked for broader work.
 
-## Repository search
+<context_budget>
+- Treat context as scarce. Use the smallest context that still supports safe, correct execution.
+- Before any tool call, decide the minimum set of files/resources needed for the next batch.
+- Start with discovery, not broad reads: prefer `rg`, `rg --files`
+- Read only implicated content: matches before files; ranges, symbols, and diff hunks before whole files; targeted output before full logs.
+- Expand stepwise: scan -> focused read -> exact slice -> act. Expand only when current evidence is insufficient or safety/correctness requires it.
+- Keep output bounded: prefer concise summaries, diffs, head/tail, and targeted ranges over full-file or full-log dumps.
+- Batch related searches and reads. Parallelize independent calls. Read one-by-one only when the next read depends on the previous result.
+- Respect ignore boundaries. Do not use `--no-ignore` or inspect ignored/generated/vendor/dist/build artifacts unless required.
+- Do not reread unchanged content unless it changed, became newly relevant, or prior context was compacted away.
+- Read enough context before editing, then batch logical edits and targeted checks. Avoid repeated micro-edits and reread/test loops.
+- If the task shifts, discard stale assumptions and rescope. When enough context exists to proceed safely, stop searching and act.
+</context_budget>
 
-- files to include: `AGENTS.md, .gitignore, package.json, package-lock.json, auth.js, background.js, content.js, manifest.json, options-storage.js, settings-schema.js, popup.css, popup.html, popup.js, storage.js, shared/model-picker-labels.js, vendor/webext-options-sync.js, _locales/**/messages.json, icons/icon16.png, icon32.png, icon48.png, icon128.png, CHANGELOG.md, dist/*.zip, lib/*.min.js, tools/*.zip, tests/playwright/**`
-- exclude any files and folders not listed above
-- explicitly exclude these folders: `node_modules`, `netlify`, `css-cleanup`, `.git`
+## Start here
 
-## Scope
-Only read, edit, and consider the files listed below when working on this project. Ignore all other files and directories unless explicitly directed otherwise:
+- Start from `AGENTS.md` as the routing source.
+- Then read only the task-relevant sections of `PROJECT_SPEC.md`, the relevant `SPECS/` file or files, and the relevant active plan file or files under `PLANS/`.
+- Open `SPECS/README.md` only when the right spec is unclear or when deciding where new durable detail belongs.
+- Treat `CodexPlan.md` as a legacy archive pointer, not as the live backlog or default startup payload.
+- Treat `README.md`, `Done-*` plans, `_temp-files/`, audits, and history notes as helpers, not mandatory startup docs.
+- Trust current code and file layout over stale docs, then update the doc that owns the truth if reality changed.
+- Do not default to repo-wide `git status`, `git diff`, `git log`, exhaustive tree scans, package inventories, or environment sweeps unless the user asked, the task is broad enough that wider context materially changes the answer, or validation of your own edits depends on it.
 
-- `AGENTS.md`                     : main spec for this agent, scope rules, invariants
+## Active spec references
 
-1. Core logic and behavior
-   - `content.js`                 : main runtime logic acting on chatgpt.com DOM, shortcuts, scrolling, copy, overlays
-   - `options-storage.js`         : central option defaults, migrations, chrome.storage wiring
-   - `settings-schema.js`         : shared settings schema (see `schemaVersion`) for popup/content wiring and key lists (does not touch model picker logic)
-   - `storage.js`                 : CloudStorage helper syncing settings to Drive appDataFolder
-   - `auth.js`                    : CloudAuth helper for Google OAuth tokens and refresh
-   - `shared/model-picker-labels.js` : canonical model labels and test IDs used by content and popup
+- Open `PROJECT_SPEC.md` when the task touches durable project constraints, architecture, stable conventions, or cross-cutting assumptions that should survive across threads.
+- Open `SPECS/SPEC_ADDING_NEW_SETTINGS.md` when changing storage-backed settings, popup wiring, import/export, Drive sync, or early bootstrap gates.
+- Open `SPECS/SPEC_LAZY_FAST_MODE.md` when touching Fast Mode bootstrap, the page bridge, native expansion behavior, or Fast Mode troubleshooting.
+- Open `SPECS/SPEC_CLOUD_SYNC_AND_SETTINGS_DATA_FLOW.md` when changing Google login, Drive save or restore, or local settings export or import.
+- Open `SPECS/SPEC_MODEL_PICKER_AND_SHORTCUTS.md` when changing shortcut normalization, duplicate detection, model picker rendering, Ctrl+/ overlay behavior, or model-routing automation.
+- Open the relevant active numbered file under `PLANS/` before continuing non-trivial in-progress work. Open `Deferred-*`, `Blocked-*`, or `Done-*` plans only when resuming that workstream or when a current plan or user request points to them.
 
-2. UI surfaces (extension settings popup)
-   - `popup.html`                 : settings popup markup and i18n attributes
-   - `popup.js`                   : settings popup behavior and bindings to chrome.storage and Cloud helpers
-   - `popup.css`                  : shared popup/overlay visual styles, including local embedded icon fonts and popup typography
+## Documentation roles
 
-3. Extension shell and wiring
-   - `manifest.json`              : MV3 manifest, permissions, content script and background registration
-   - `background.js`              : service worker handling OAuth flows via chrome.identity
+- `AGENTS.md` owns routing, scope, editing discipline, brief tool notes, brief skill notes, repo-default validation posture, and stop-and-ask boundaries.
+- `PROJECT_SPEC.md` owns durable project identity, broad architecture shape, and tricky stable conventions that should remain true across tasks.
+- `SPECS/` owns deep durable subsystem detail, invariants, migration notes, and repair references.
+- `PLANS/` owns non-trivial active work, deferred or blocked work, completed plan archives, and workstream-specific sequencing. It should contain plan markdown, not copied inspector captures or reference scripts.
+- `_temp-files/` owns ignored scratch artifacts, copied inspector captures, reference scripts, and temporary support notes. Do not read or search it unless the current user request explicitly names a file or path there.
+- `CodexPlan.md` is a compatibility pointer to archived material that used to live at the root. Do not move live work back into it.
+- When reality changes, update only the doc that owns that information instead of duplicating it across multiple root docs.
 
-4. Config and localization
-   - `_locales/*/messages.json`   : localized strings for popup, overlays, toasts
+## Project guardrails
 
-5. Assets
-   - `icons/icon16.png, icon32.png, icon48.png, icon128.png` : shipped UI icons for browser and extension surfaces
-   - `dist/*.zip`                : built release archives that should be committed/pushed when generated for a release/version task; never edit manually
-   - `CHANGELOG.md`               : release notes for behavior visible changes
+- This repo is an MV3 Chrome extension for `chatgpt.com`. The unpacked extension source lives under `extension/`; the repo root is for project docs, tooling, validation, release output, and support services. Ship the smallest correct change that preserves existing shortcut semantics, popup behavior, and extension wiring unless the user explicitly asks for a larger change.
+- Keep `chrome.storage.sync` as the single source of truth for settings. New settings must flow through `options-storage.js`, popup wiring, and any relevant content/bootstrap path.
+- Treat the popup authoring experience as high priority: respect i18n keys, tooltip balance, shared label behavior, and duplicate-shortcut safeguards.
+- Use the existing helpers and shared modules (`ShortcutUtils`, GSAP plugins, `CloudAuth`, `CloudStorage`, `ModelLabels`) instead of reimplementing similar logic.
+- If required DOM details are missing, stop and ask the user for the smallest useful inspector slice instead of guessing from localized or unstable selectors.
+- If you add new shipped files or folders under `extension/`, update `build-zip.js` `includeItems` so the release zip stays complete.
+- If a version bump or zip build is part of the task, include the generated `dist/*.zip` archive in commits and pushes unless the user explicitly says not to.
+- Respect existing permissions and host matches. Do not add new extension permissions or broader host access without explicit approval.
 
-6. Read only vendor and bundles
-   - `vendor/webext-options-sync.js` : options sync shim used by options-storage
-   - `lib/*.min.js`               : bundled GSAP and third party scripts, never modify
-   - `tools/*.zip`                : backup archives, never modify
+## Skills
 
-7. Tooling and preview helpers
-   - `.gitignore`                 : ignore generated Playwright and local tooling artifacts
-   - `package.json`               : npm scripts and local developer tooling dependencies
-   - `package-lock.json`          : lockfile updates for developer tooling
-   - `tests/playwright/**`        : Playwright popup preview and screenshot helpers for user-facing UI work
+- Start from this root-doc set, not from a routing skill.
+- Use `$write-plan` when non-trivial work needs a new or updated plan file under `PLANS/`.
+- Use `$spec-check` when the coarse routing is known but the exact deeper spec or support doc is still unclear.
+- Use `$search-everything-outside-project` when a needed file, tool, config, SDK, or log is likely outside this repo root, or when in-repo search already failed.
+- Use `$find-robust-web-app-library` when the task is build-vs-buy or choosing a web-app library.
+- Use any additional local skill only when it has a narrow trigger and a clearer outcome than direct work from the repo docs.
 
+## Tools
 
-## Role
-- You are a senior MV3 extension engineer maintaining ChatGPT Custom Shortcuts Pro with GSAP-driven DOM automation.
-- Ship the smallest correct change that honors existing behavior, shortcut semantics, and UI structure unless the user explicitly asks otherwise.
-- Keep chrome.storage sync the single source of truth for settings; propagate changes through `options-storage.js`, `popup` UI, and `content.js`.
-- Treat the popup authoring experience as high-priority: respect i18n keys, tooltip balancing, and duplicate-shortcut safeguards.
-- Use the provided helpers (`ShortcutUtils`, GSAP plugins, CloudAuth/CloudStorage) instead of reimplementing similar logic.
+- When a task may benefit from verified shared machine-level tools on this workstation, optionally consult `C:\Users\bwhurd\tools\AGENTS.md` and the relevant section of `C:\Users\bwhurd\tools\PROJECT_SPEC.md`. This repo's docs and direct user instructions win.
+- Open the shared tool-wiring spec for tool choice, install or repair routing, command-resolution checks, or outside-project lookup: `C:\Users\bwhurd\tools\install-with-codex\Specs\0002-codex-tool-wiring-spec.md`
+- When a task needs broad in-scope text search or replacement across many files, consult `C:\Users\bwhurd\tools\TEXT_SEARCH_REPLACE_SPEC.md` and prefer its preview-first `rg` / `sd` workflow over broad file reads or unpreviewed replacements.
+- Use shared tools only when they are the obvious fit: `rg` / `fd` for discovery, previewed `rg` + `sd` for broad plain-text replacement, `sg` for syntax-aware rewrites, `jq` / `yq` for structured data or config work, `uv` for Python tool or venv work, `difft` for noisy structural diffs, and `xh` for deliberate HTTP or API inspection.
 
-## Adding new settings (wiring map)
-This project intentionally avoids “update the same key in 6 places”. New settings should follow this map.
+## File boundaries
 
-### New toggle (checkbox)
-- `options-storage.js`: add the default key/value to `OPTIONS_DEFAULTS` (required so popup seeding + validators recognize the key).
-- `popup.html`: add `<input type="checkbox" data-sync="<storageKey>">` (id can match for convenience); omit `checked` when the default is `false`.
-- `_locales/*/messages.json`: add label/tooltip strings if user-facing (use a `data-i18n` key for the label).
-- Content wiring (pick one):
-  - Schema-driven: add the key to `settings-schema.js` → `CSP_SETTINGS_SCHEMA.content.visibilityDefaults`, then read `window.<storageKey>` (populated by `applyVisibilitySettings`) in `content.js`.
-  - Self-contained: read `chrome.storage.sync.get({ <storageKey>: <default> })` and listen to `chrome.storage.onChanged` in `content.js` (no `settings-schema.js` change required).
-- `CHANGELOG.md`: update for user-visible behavior changes.
+- Read, edit, and consider only the files relevant to the active task and within this repo surface unless the user explicitly expands scope:
+- Root docs and planning:
+  - `AGENTS.md`
+  - `PROJECT_SPEC.md`
+  - `CodexPlan.md`
+  - `PLANS/*.md`
+  - `SPECS/**`
+- Core runtime and shared logic:
+  - `extension/content.js`
+  - `extension/lazy-fast-bootstrap.js`
+  - `extension/lazy-fast-bridge.js`
+  - `extension/options-storage.js`
+  - `extension/settings-schema.js`
+  - `extension/storage.js`
+  - `extension/auth.js`
+  - `extension/shared/model-picker-labels.js`
+- Popup and extension shell:
+  - `extension/popup.html`
+  - `extension/popup.js`
+  - `extension/popup.css`
+  - `extension/manifest.json`
+  - `extension/background.js`
+- Config, localization, assets, and release files:
+  - `extension/_locales/**/messages.json`
+  - `extension/icon16.png`
+  - `extension/icon32.png`
+  - `extension/icon48.png`
+  - `extension/icon128.png`
+  - `CHANGELOG.md`
+  - `dist/*.zip`
+- Tooling and preview helpers:
+  - `.gitignore`
+  - `package.json`
+  - `package-lock.json`
+  - `build-zip.js`
+  - `tests/fixtures/**`
+  - `tests/playwright/**`
+  - `tests/validate-keys.js`
+- Read-only third-party or archive material:
+  - `extension/vendor/webext-options-sync.js`
+  - `extension/lib/*.min.js`
+  - `tools/*.zip`
+- Scratch and copied support artifacts:
+  - `_temp-files/README.md`
+  - `_temp-files/**` only when the user explicitly references a file or path there
+- Ignore everything else unless the user explicitly directs otherwise.
+- Explicitly exclude `node_modules`, `netlify`, `css-cleanup`, `_temp-files` contents unless explicitly referenced, and `.git`.
 
-### New shortcut (Alt+...)
-- `options-storage.js`: add the default key/value to `OPTIONS_DEFAULTS` (legacy single-char defaults are OK; popup coerces to `KeyboardEvent.code`).
-- `popup.html`: add the shortcut input with `class="key-input"` and `data-sync="<storageKey>"`.
-- `content.js`: add the key to `shortcutDefaults` and implement the handler in the appropriate mapping (`keyFunctionMappingAlt`, Ctrl handler, etc.).
-- `settings-schema.js`: add/confirm a `CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey[storageKey]` entry so the Ctrl+/ overlay label matches the popup across locales.
-- `settings-schema.js`: add it to `CSP_SETTINGS_SCHEMA.shortcuts.overlaySections` to control section grouping/order (otherwise it will still surface under the overlay’s catch-all “Other” section when assigned).
+## Planning posture
 
-### Radio groups (mutually exclusive toggles)
-- `settings-schema.js`: add/update `CSP_SETTINGS_SCHEMA.popup.radioGroups` so the popup knows how to clear the other keys in the group.
-- `popup.html`: ensure each radio/checkbox in the group uses `data-sync` for the same storage keys.
+- Skip formal planning only for trivial work.
+- Put non-trivial active work in `PLANS/`, not in root docs.
+- Use `PLANS/0001-short-description-plan.md` for active work, `PLANS/Deferred-0001-short-description-plan.md` for deferred work, `PLANS/Blocked-0001-short-description-plan.md` for blocked work, and `PLANS/Done-0001-short-description-plan.md` for completed or archived plans.
+- Keep durable subsystem detail in `SPECS/`, not in plan files.
+- Keep copied inspector captures, reference scripts, and temporary support files in `_temp-files/`, not in `PLANS/`.
+- Treat deferred and done plans as lookup material only. Open them only when a current plan or user request points to them.
 
-### Guardrails (helps prevent dev mistakes)
-- `popup.js` logs a console warning if `popup.html` contains a `data-sync` key that is missing from both `OPTIONS_DEFAULTS` and popup defaults.
+## Validation posture
 
-## Project summary
-This MV3 extension layers a programmable shortcut system over chatgpt.com. Users can:
-- Configure dozens of Alt/Ctrl-based shortcuts for scrolling, copying, regenerating, and tool toggles via the popup UI.
-- Toggle UI tweaks such as moving the ChatGPT header to the bottom, fading the slim sidebar, injecting legacy arrow buttons, and clicking inline code to copy (opt-in).
-- Copy formatted messages or code blocks with Markdown stripping and Word-friendly formatting.
-- Trigger model switches (main and legacy) with Alt+digits, including a Ctrl+/ overlay that lists all assigned shortcuts.
-- Sync their settings to Google Drive (`appDataFolder`) and restore them across devices.
+- Validate the changed area with the smallest useful check.
+- For popup, overlay, tooltip, layout, animation, or other user-facing UI work, prefer the Playwright extension workflow instead of static file inspection alone.
+- After any shipped extension file changes (`extension/content.js`, `extension/popup.*`, `extension/background.js`, `extension/manifest.json`, storage or schema wiring, or other extension-loaded assets), manually reload the unpacked extension from `extension/` in `chrome://extensions` before any Playwright confirmation.
+- Use:
+  - `npm run playwright:install` once per machine to install Chromium
+  - `npm run preview:popup` to inspect the real popup with extension APIs available
+  - `npm run screenshot:popup` to capture `test-results/playwright/popup-preview.png`
+  - `npm run test:popup-visual` for popup visual regression checks
+  - `npm run test:popup-visual:update` only when an intentional UI change should become the new baseline
+  - `npm run playwright:chatgpt:*` and `npm run playwright:chatgpt:benchmark` when a task needs live ChatGPT extension validation
+- For code changes, prefer the smallest relevant test or script first. `npm test` is the default merge gate for shipped behavior changes.
+- For doc-only work, re-read the changed sections and confirm routing, ownership, and scope boundaries still make sense.
 
-## Tech stack & layout
-- Manifest (manifest.json): MV3, default locale `en`, exposes `_execute_action` command (`Alt+U`) and a service-worker background (`background.js`). Content script runs on `*://*.chatgpt.com/*` and preloads GSAP libraries plus `shared/model-picker-labels.js`.
-- Content script (`content.js`): Massive vanilla JS file registered after GSAP plugins; manipulates ChatGPT DOM, handles keyboard shortcuts, scroll automation, copy flows, menu automation, UI tweaks, and overlays.
-- Popup (`popup.html`, `popup.js`, `popup.css`): Config UI with Google login tile, segmented control for model-switcher modifier, dynamically injected model grid, and grouped shortcut inputs. `popup.js` binds storage, enforces conflicts, renders tooltips/search/filter, and orchestrates Cloud sync.
-- Service worker (`background.js`): OAuth broker. Launches `chrome.identity.launchWebAuthFlow`, exchanges codes via Netlify token proxy, and keeps tokens in `chrome.storage.session`.
-- Auth & storage helpers (`auth.js`, `storage.js`): `auth.js` exposes `window.CloudAuth` for popup/content, including token refresh and logout. `storage.js` exposes `window.CloudStorage` for local<->sync<->Drive persistence (file `extension_settings.json` in `appDataFolder`).
-- Options & shared data (`options-storage.js`, `vendor/webext-options-sync.js`, `shared/model-picker-labels.js`): Central defaults, migrations, and canonical model labels/test IDs. `OptionsSync` stub lives in `vendor/` and must be loaded before `options-storage.js`.
-- Assets: `_locales/*/messages.json` for every user-facing string, `lib/` GSAP bundles (read-only), `icons/` shipped assets, `tools/` backups/scripts (read-only). Tests (if added) live under `tests/`.
+## Outcome over suggested path
 
-## Core modules & responsibilities
-### content.js
-- Registers GSAP plugins (`ScrollToPlugin`, `Observer`, `Flip`) before doing anything else. All scrolling and animation helpers depend on GSAP being present.
-- `applyVisibilitySettings` hydrates globals (checkboxes/radios/faders). It is wrapped later to reinject legacy arrow buttons, so any new toggles must be inserted into this map.
-- Mutation observers:
-  - `observeConversationContainer` watches chat thread children and throttles expensive work via `requestIdleCallback`.
-  - Multiple observers handle top-bar relocation, slim sidebar fading, tooltip adjustments, and auto-click flows.
-- Shortcut infrastructure:
-  - Loads all shortcut keys from `chrome.storage.sync` (defaults defined in `options-storage.js`), normalizes them via `ShortcutUtils`, and builds Alt/Ctrl/Command key maps.
-  - Handles Alt+digit model switching, Alt+Ctrl preview mode for thread navigation, Ctrl+Enter/Backspace gating (only intercepts if send/stop toggles are enabled and a stop button exists), and global Ctrl+/ overlay.
-  - Exposes `window.ShortcutUtils` to the popup (code equality, char mapping, conflict clearing).
-- Automation helpers:
-  - Menu utilities (`clickGptHeaderThenSubItemSvg`, `clickLowestSvgThenSubItemSvg`, `runActionByIcon`, `clickButtonByTestId`) wrap pointer+keyboard events so selectors stay reliable across header/bottom bar variants.
-  - Scroll helpers (`scrollUpByMessages`, `goDownOneMessage`, `PageUp/PageDown` takeover) always reference `getScrollableContainer()` and respect `moveTopBarToBottomCheckbox`.
-- Copy flows (`copyFromLowestButton`, `selectThenCopy`, `selectThenCopyAllMessages`) sanitize Markdown, preserve code fences, and ensure Word output (CRLF delimiting, spacing guards). Never bypass these helpers when touching copy behavior.
-- Inline code click-to-copy is gated by `clickToCopyInlineCodeEnabled`; keep the listener/style in sync with storage.
-- UI tweaks:
-  - Injects the bottom bar when `moveTopBarToBottom` is enabled, including static toggle/new-chat buttons, opacity sliders, and arrow fades. Blacklists routes (`/gpts`, `/codex`, `/g/`, `sora.chatgpt.com`, `/library/`) via hostname/path gate.
-  - Current `TopBarToBottom` approach: keep the bottom bar in normal document flow immediately after the composer form, and preserve the single-flight observer/repair controller; do not switch it back to a fixed/body-mounted visual model unless explicitly requested.
-  - Fades the slim sidebar (`stage-sidebar-tiny-bar`) with user-configurable opacity, pausing when overlays or the full sidebar are open.
-  - Keeps edit buttons visible via forced opacity classes and styles.
-  - Auto-click convenience flows: “Something went wrong” → Try again, “Open link” warnings, “Read Aloud”/“Stop” menu items, etc.
-- `rememberSidebarScrollPositionCheckbox` is intentionally hidden and hard-disabled pending a rewrite; leave it inert unless explicitly asked to restore it.
-- Overlays:
-  - `window.toggleModelSelector` supports both the current single-level model menu and older legacy-submenu layouts, opening deeper submenu content only when that path actually exists.
-  - `Ctrl+/` shortcut overlay links `popup.css` inside its shadow DOM so local icon fonts are available, and also injects the embedded `FULL_POPUP_CSS` copy for layout parity. It renders only assigned shortcuts. The model picker grid now uses the same grouped model-action source of truth as the popup, including the compact `Configure Models` row. Non-model sections are grouped by `settings-schema.js` (`CSP_SETTINGS_SCHEMA.shortcuts.overlaySections`) and labels are resolved via i18n (`CSP_SETTINGS_SCHEMA.shortcuts.labelI18nByKey` → `chrome.i18n.getMessage`), with a key-name fallback and a catch-all “Other” section for assigned-but-ungrouped keys.
-- Global exports include `window.toggleSidebar`, `window.newConversation`, `window.globalScrollToBottom`, `window.clickGptHeaderThenSubItemSvg`, `window.toggleModelSelector`, clipboard helpers, and toast utilities.
+- Follow explicit user goals and hard constraints.
+- Treat stale plans, old status notes, and previous implementation paths as disposable.
+- If a simpler or safer path clearly reaches the same goal, take it and say so.
+- If a task stalls, a step fails hard, or a better path appears, update the relevant plan and continue on the better path instead of grinding through the old one.
+- In a normal implementation pass, keep doc and process maintenance to the minimum needed for continuity. Expand doc work only when docs are the task or stale docs are blocking correct work.
 
-### popup.html / popup.js / popup.css
-- UI sections (Cloud Sync, Model Picker, UI Tweaks, Quick Clicks, Scroll, Clipboard, Compose+Send, Regenerate, Message Tools, Utilities) map 1‑1 with chrome.storage keys. Every label/tooltip is localized via `_locales`.
-- `popup.js` duties:
-  - Localizes `<title>` and `[data-i18n]` text, then runs `initTooltips()`, `balanceWrappedLabels()`, and tooltip-boundary nudging to keep tooltips legible.
-  - Maintains `ShortcutUtils` shared API (display text, normalization, conflict detection). `saveShortcutValue` writes canonical KeyboardEvent.code strings, enforces duplicates via `showDuplicateModal`, and persists NBSP (`\u00A0`) for cleared slots.
-  - Model picker chips and the injected model-picker grid use grouped metadata from `shared/model-picker-labels.js`. `window.MODEL_NAMES` is the actionable flat list (no `'→'` arrow), `window.__modelPickerKeyCodes` stays the flat shortcut array, and the popup renders both the primary row and compact `Configure Models` row from that shared source. A segmented pill component (`.p-segmented-controls`) toggles Alt vs Control for model hotkeys by wiring hidden radios.
-  - Popup-open model-catalog refresh is manual only: show the opaque `Loading available models...` / refresh overlay on first popup open of the week, plus a header refresh button, but do not auto-start scraping when the popup loads.
-  - Popup search/filter bar attaches to `.shortcut-container`, builds a list of headings/items, and filters + highlights matches without destroying layout.
-  - Cloud Sync UI: login button requests `identity` permission, then triggers `CloudAuth.googleLogin`. Save/Restore buttons call `CloudStorage.saveSyncedSettings/loadSyncedSettings`, showing spinner states via `busy()` and success checkmarks via `successFlash()`. Logout clears CloudAuth tokens/profile.
-  - Duplicate modal: Reusable overlay that lists conflicting assignments, supports “Don’t ask again”, and can run in simple HTML mode for general confirmations.
-  - Toast queue: `window.toast.show()` uses GSAP when available, falls back to CSS transitions.
-- `popup.css` is the primary shared stylesheet for the popup and Ctrl+/ overlay. The overlay shadow root links `popup.css` for local font faces and also injects `FULL_POPUP_CSS` from `content.js`; when tweaking shared layout, keep the embedded `FULL_POPUP_CSS` string and any overlay-specific icon rules in sync to avoid drift.
+## Stop and ask
 
-### Cloud sync helpers (background.js, auth.js, storage.js)
-- `background.js` is the only component allowed to launch the OAuth flow (`chrome.identity.launchWebAuthFlow`). It requires the popup to request the optional `identity` permission first; the service worker cannot prompt on its own due to the lack of a user gesture.
-- Tokens (`access_token`, `refresh_token`, expiry) are stored in `chrome.storage.session` under `csp_auth_*` keys to avoid syncing credentials. `auth.js` (running in the popup/content context) requests tokens via `CloudAuth.getAuthToken({interactive})`, refreshing only on explicit user actions.
-- `CloudStorage` (storage.js) reads/writes only the known option keys (derived from `OPTIONS_DEFAULTS`). It caches the Drive file id (`csp_cloud_file_id_v1`), retries on 401/403 by clearing cached tokens, and merges remote data with local settings when needed.
+- Stop instead of guessing when:
+  - a fix requires HTML structure, network behavior, or other ChatGPT page detail that is not available from current repo docs or the current prompt
+  - unexpected local changes or a dirty worktree appear and proceeding safely would require deciding whether to preserve, work around, or discard them
+  - a fix would require destructive git or file-system actions such as hard reset, checkout or revert of existing changes, force clean, bulk deletion, or overwriting user-authored work
+  - a change would materially expand scope or restructure the repo
+  - multiple plausible homes or structures would affect future work
+  - a task would delete, rename, move, or overwrite significant user data
+  - a dependency, runtime, integration, or external service would materially change repo expectations
+  - credentials, paid services, external accounts, or machine-specific integrations are involved
+  - docs, runbooks, and current repo reality conflict in a way that needs a real project decision
 
-### Options & shared data
-- `options-storage.js` centralizes all defaults, including slider values (stored as strings), boolean toggles, shortcut defaults, model names, and `modelPickerKeyCodes`. It registers migrations to normalize Arrow key symbols, pad model key arrays to 15 entries, blank inherited hidden digit defaults for newly visible configure-model slots, and collapse legacy message-selection flags into `messageSelection`.
-- `vendor/webext-options-sync.js` is a stub that mimics the `webext-options-sync` API (with `getAll`, `set`, `setAll`, `migrations.removeUnused`). Always load it before `options-storage.js`.
-- `shared/model-picker-labels.js` exposes `window.ModelLabels` (canonical test-id→name map, grouped model-action metadata, default model-key assignments, helpers to strip hint text, and label fallback logic). Both popup and content script rely on this to keep model names and model-grid rendering resilient to ChatGPT DOM changes.
+## Response format
 
-### Assets, localization, and directories
-- `_locales/*/messages.json` contains all user-facing strings (labels, tooltips, status messages). Any new UI copy must be added to every locale.
-- `lib/` GSAP bundles and `tools/*.zip` backups are read-only; do not modify them. `dist/*.zip` release archives may be added/updated by the zip build, but should not be manually edited.
-- `icons/` contains shipped UI icons; add new assets rather than replacing existing ones.
-- Tests (if/when added) belong in `tests/` and should be runnable via `npm test`.
-
-## Behavior & workflow invariants
-- Settings propagation: `chrome.storage.sync` is the authority. `content.js` loads visibility keys by deriving them from a single defaults map (`VISIBILITY_DEFAULTS`, sourced from `settings-schema.js` when present) plus a small schema-driven extra-key list, then applies them through `applyVisibilitySettings`. New content-consumed toggles should be added to `settings-schema.js` (`content.visibilityDefaults`) and `options-storage.js` (`OPTIONS_DEFAULTS`).
-- Shortcut handling: `ShortcutUtils` normalizes everything to `KeyboardEvent.code`. Digits treat `DigitX` and `NumpadX` as equivalent. Clearing an input writes NBSP to storage. Duplicate detection distinguishes between model slots and popup shortcuts depending on whether the model picker is set to Alt or Control.
-- Model picker: `window.MODEL_NAMES` must never include the legacy `→` arrow once data is hydrated; the visible picker rows come from `shared/model-picker-labels.js` action metadata, while `modelPickerKeyCodes` remains a flat 15-slot storage array. `window.toggleModelSelector` and the model-switcher shortcut flow must stay aligned and support both the current single-level menu and any returning legacy submenu path. Configure-model actions use the language-agnostic path `data-testid="model-configure-modal"` → `#model-selection-label` nearby `button[role="combobox"][aria-controls]` → controlled `role="listbox"` / `role="option"` → `data-testid="close-button"`.
-- Copy sanitization: `selectThenCopy` and `selectThenCopyAllMessages` transform DOM content into HTML+plain text pairs that preserve code fences, CRLF endings, and Word-friendly spacing. Don’t bypass these helpers; adjust their utilities (`splitByCodeFences`, `removeMarkdown`, `buildPlainTextWithFences`) if you need new behavior.
-- Top bar to bottom + slim sidebar: The bottom bar injector is guarded by URL checks and login-state detection. It diff-injects static buttons, segmented model switcher, and opacity sliders, and re-runs on DOM mutations. Slim sidebar fading respects overlay state and full sidebar visibility; both features rely on chrome.storage flags and should remain in sync.
-- PageUp/PageDown takeover: Toggleable via `pageUpDownTakeover`. It installs/removes keydown & wheel/touch listeners dynamically.
-- Remember sidebar scroll position is currently intentionally disabled and should remain inert until it is reworked.
-- Auto-click helpers: Watch for warning dialogs and “Something went wrong” containers; they must remain resilient and only target relevant nodes to avoid accidental clicks.
-
-## Adding or adjusting shortcuts/toggles
-1. Defaults & storage: Add the key to `OPTIONS_DEFAULTS` (with migrations if needed).
-2. Popup UI: Add the control to `popup.html` using `data-sync="<storageKey>"`.
-3. Content wiring:
-   - Toggles: add the key to `settings-schema.js` → `content.visibilityDefaults` so it auto-loads into `window.<storageKey>`.
-   - Shortcuts: add the key to `content.js` `shortcutDefaults` and implement the handler in the appropriate map.
-4. Popup wiring: nothing to update in most cases (popup auto-binds `data-sync` inputs and auto-discovers `input.key-input` shortcuts). Only update `settings-schema.js` if you add a new radio group or need exclusions.
-5. Localization & docs: update `_locales/*/messages.json` and `CHANGELOG.md` for user-visible changes.
-
-## Cloud sync workflow
-- Optional permission `identity` must be granted from a user gesture (popup buttons). The service worker will reject login attempts if that permission is missing.
-- Tokens live in `chrome.storage.session` only. Never store them in sync or local storage.
-- Saving (`popup.js` Cloud Sync tile) calls `CloudStorage.loadLocalSettings` then `saveSyncedSettings` (both in `storage.js`). `loadLocalSettings` uses `optionsStorage.getAll()` when available, or `chrome.storage.sync.get(null)`, then filters to `OPTIONS_DEFAULTS` keys via `pickOptions`; `modelNames` is excluded from this payload so Drive snapshots never carry model labels. `saveSyncedSettings` writes the filtered object as JSON to Drive `appDataFolder/extension_settings.json` (file id cached as `csp_cloud_file_id_v1`).
-- Restoring calls `CloudStorage.loadSyncedSettings` → `saveLocalSettings` → `rehydrateSettingsUI` (all from `storage.js` or `popup.js`). `loadSyncedSettings` downloads the Drive JSON, trims it to `OPTIONS_DEFAULTS` keys, and excludes `modelNames`; `saveLocalSettings` writes the filtered object back to sync storage (via `optionsStorage.setAll` when present). `rehydrateSettingsUI` refreshes shortcut inputs, mirrors non-shortcut options, reapplies `modelPickerKeyCodes`, and ignores `modelNames` so local labels/migrations stay authoritative.
-- `CloudStorage._clearKnownFileId()` should be used if you ever invalidate the cached Drive file id.
-
-## Settings export, import, and sync wiring
-- Local file export lives in `popup.js` (`settingsBackupInit` → `exportSettingsToFile`). It builds an allowlist from `DEFAULT_PRESET_DATA` (popup defaults, not `OPTIONS_DEFAULTS`) plus all `shortcutKeys`, reads the entire `chrome.storage.sync` snapshot, and emits only keys that exist in that set. Every shortcut is forced into a `KeyboardEvent.code` via `effectiveShortcutCode`; `modelPickerKeyCodes` are read from the visible grid/UI cache and normalized to `MODEL_PICKER_MAX_SLOTS`; `modelNames` are explicitly removed before serialization so exports never include model labels. The downloaded JSON is `{ __meta, data }`, where `__meta` holds the manifest version and timestamp.
-- Local file import is also in `popup.js` (`importSettingsFromFile` → `importSettingsObj`). Parsed JSON uses `data` when present, drops any `modelNames` field, then filters keys against the same allowlist. Shortcut values are normalized to codes/NBSP, merged over the current `chrome.storage.sync` snapshot, and saved; UI is rehydrated, with `modelPickerKeyCodes` cached + `modelPickerHydrated` dispatched when provided. Model names from the file are ignored so local labels and migrations remain intact.
-- Drive save/restore flows reuse `CloudStorage` (see Cloud sync workflow above). Those paths exclude `modelNames` via `pickOptions`, so Drive uploads/downloads never read or write model labels.
-- Model name sources: `options-storage.js` seeds `modelNames` defaults (10 entries, no `→`); `shared/model-picker-labels.js` defines `MAX_SLOTS=15` and `defaultNames()` (includes an arrow slot and legacy labels); `content.js` scrapes menu labels into `modelNames` + `modelNamesAt` in sync storage via `__cspSaveModelNames`; `popup.js` hydrates `window.MODEL_NAMES` from storage/`ModelLabels` defaults (dropping the arrow) for rendering and ignores external sources (exports, imports, Drive) for `modelNames`.
-
-## Testing & validation
-- Run `npm ci && npm test` before merging any change. This is the canonical pass/fail gate.
-- For popup or other user-facing UI changes, also run `npm run screenshot:popup` or `npm run preview:popup` to validate the extension UI in Chromium with the unpacked extension loaded.
-- For popup visual regressions, use `npm run test:popup-visual`; update the baseline only when the UI change is intentional.
-- Optional scripts: `npm run lint` / `npm run format` (if they exist) can be used to maintain consistency.
-
-## Style & safety rails
-- JS: 4-space indentation, single quotes, semicolons. HTML: 4 spaces. CSS: 2 spaces. Keep comments concise and only for non-obvious logic.
-- Localization is mandatory for all user-visible text (popup labels, tooltips, toasts, status lines, Cloud sync messages, overlay copy).
-- Prefer language-agnostic selectors (`data-*`, stable roles/structure, canonical ids). Do not key behavior off localized text when a reliable non-language selector exists.
-- Do not edit or remove third-party bundles in `lib/`, `tools/*.zip` backups, or shipped icons. `dist/*.zip` release archives are build outputs and may be added/updated for releases, but should not be hand-edited.
-- Service worker code must stay event-driven; don’t introduce timers or long-lived loops.
-- Respect existing permissions; do not add new permissions or host matches without explicit approval.
-- Update `CHANGELOG.md` for behavior-visible changes and keep `_locales` in sync.
-- The user may have edited files already; never revert unrelated changes and avoid destructive git commands.
+- Return a concise summary grouped by file path when useful.
+- Include commands run, validation performed, and any notable risks or assumptions.
+- Return full file contents only when the user asks.

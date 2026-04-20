@@ -21,6 +21,13 @@ I keep this extension updated as ChatGPT evolves, but maintaining it solo is get
 
 For the full feature list, install the extension and open the settings panel.
 
+## Repo Layout
+
+- `extension/` - unpacked Chrome extension source
+- `dist/` - packaged extension ZIPs kept in-repo intentionally
+- `tests/` - Playwright validation helpers, fixtures, and visual baselines
+- `PLANS/` and `SPECS/` - active work tracking and durable project docs
+
 ---
 
 ## Quick Install (Manual)
@@ -31,6 +38,12 @@ If you are just a user, you do not need this repo unless you want to install man
 2. Unzip it locally  
 3. Go to `chrome://extensions` and enable Developer Mode  
 4. Click “Load unpacked” and select the unzipped folder  
+
+## Local Development
+
+- Load `extension/` as the unpacked extension in Chrome.
+- Use `npm install` to install local tooling.
+- Run `npm run zip` to build the latest packaged ZIP into `dist/`.
 
 ---
 

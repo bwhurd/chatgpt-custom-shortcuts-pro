@@ -4,8 +4,29 @@ Changes typically post to the chrome web store a couple days after date in chang
 
 If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
+#### 04.13.2026
+- Changed: experimental `Fast Mode` now ships behind a full-disable kill switch, hides its popup toggle, and forces any previously enabled `lazyFastModeEnabled` setting back off.
+- Fixed: model refresh, popup labels, and first-menu model hotkeys now recognize ChatGPT's current top-level `menuitemradio` rows for entries like `Instant` and `Thinking`, instead of assuming only plain `menuitem` rows.
+
+#### 04.10.2026
+- Fixed: with experimental `Fast Mode` enabled, a normal later reload now returns long conversations to the default fast retained window instead of staying fully or partially expanded from an earlier `Load older natively` or `Load full conversation natively` action.
+- Fixed: experimental `Fast Mode` no longer leaves a stale expansion anchor behind after a one-shot full native load, which could make later top-of-thread lazy loading and `Load older natively` appear to stop working.
+
+#### 04.09.2026
+- Changed: experimental `Fast Mode` is now an opt-in popup setting, disabled by default, and uses smoother native in-place older-history loading with preserved reading position.
+- Fixed: disclaimer hiding now removes ChatGPT's current footer disclaimer container directly instead of recoloring it with a theme token that can still resolve to visible text.
+- Changed: when `Send Top Bar To Bottom` is off, the old fallback composer `margin-bottom: -1em` pull-down is now disabled.
+
+#### 04.07.2026
+- Changed: experimental `Fast Mode` for long conversations now uses native progressive expansion instead of extension-rendered lazy message DOM, so older messages continue to load through ChatGPT's own UI and action rows.
+- Improved: `Fast Mode` now keeps a fast initial pruned load, shows a native in-thread summary, and lets you load older history or the full conversation natively while restoring your reading anchor after reload.
+- Changed: the abandoned TanStack/custom-render lazy-history path is no longer active in the main content-script runtime.
+- Fixed: disclaimer hiding now survives same-tab conversation switches when `Send Top Bar To Bottom` is off, by rechecking after ChatGPT route changes instead of watching only the initial thread root.
+- Fixed: `Refresh Models` now resolves the ChatGPT tab more robustly and falls back to the background relay path if direct popup-to-tab messaging fails.
+
 #### 03.28.2026
 - Added: `Hide Pasted Files` for ChatGPT Library files, with a popup setting and an on-page Library control that works across English, Spanish, Japanese, Ukrainian, Russian, and Hindi pasted-file names.
+- Added: after `Refresh Models`, Pro users can now get optional `Thinking Light` and `Thinking Heavy` shortcut tiles directly beneath the existing `Thinking Standard` and `Thinking Extended` popup shortcuts when those effort options are available.
 - Fixed: the `Hide Pasted Files` Library control now injects cleanly on `/library` reloads instead of flashing or duplicating during ChatGPT's route hydration.
 - Changed: the popup now keeps `Refresh Models` visible during the weekly model-refresh prompt, and both refresh click targets have a lighter hover/focus affordance.
 - Changed: after the first successful manual `Refresh Models`, the popup can seed `Thinking Standard` / `Thinking Extended` to `Alt + 8` / `Alt + 9` when those keys are still free, while model-key resets/defaults use the shared model-action source of truth and keep `Configure...` on `Alt + 0`.

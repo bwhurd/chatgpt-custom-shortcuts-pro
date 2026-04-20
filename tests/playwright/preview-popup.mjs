@@ -9,6 +9,7 @@ import { focusCodexWindow } from './focus-codex-window.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
+const extensionRoot = path.join(repoRoot, 'extension');
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((arg) => arg.startsWith('--')));
@@ -46,6 +47,26 @@ function waitForEnter() {
     });
 }
 
+async function expandScrollablePopupForSnapshot(page) {
+    await page.addStyleTag({
+        content: `
+            html,
+            body {
+                height: auto !important;
+                max-height: none !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+
+            .shortcut-container {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        `,
+    });
+}
+
 await mkdir(path.dirname(screenshotPath), { recursive: true });
 await mkdir(userDataDir, { recursive: true });
 
@@ -54,8 +75,8 @@ const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     viewport: initialViewport,
     args: [
-        `--disable-extensions-except=${repoRoot}`,
-        `--load-extension=${repoRoot}`,
+        `--disable-extensions-except=${extensionRoot}`,
+        `--load-extension=${extensionRoot}`,
     ],
 });
 
@@ -72,6 +93,7 @@ try {
     });
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(waitMs);
+    await expandScrollablePopupForSnapshot(page);
     const popupMetrics = await page.evaluate(() => {
         const container = document.querySelector('.shortcut-container');
         const body = document.body;

@@ -5,8 +5,10 @@ const path = require('node:path');
 const archiver = require('archiver');
 const stripJsonComments = require('strip-json-comments');
 
-// 1. Read version from manifest.json (handle BOM + comments)
-const manifestPath = path.join(__dirname, 'manifest.json');
+const extensionDir = path.join(__dirname, 'extension');
+
+// 1. Read version from extension/manifest.json (handle BOM + comments)
+const manifestPath = path.join(extensionDir, 'manifest.json');
 
 let raw = fs.readFileSync(manifestPath, 'utf8');
 
@@ -22,14 +24,14 @@ let manifest;
 try {
   manifest = JSON.parse(cleaned);
 } catch (err) {
-  console.error('❌ Failed to parse manifest.json. Make sure it is valid JSON.');
+  console.error('Failed to parse extension/manifest.json. Make sure it is valid JSON.');
   console.error(`   ${err.message}`);
   process.exit(1);
 }
 
 const version = manifest?.version;
 if (!version || typeof version !== 'string') {
-  console.error('❌ No valid "version" field found in manifest.json');
+  console.error('No valid "version" field found in extension/manifest.json');
   process.exit(1);
 }
 
@@ -70,6 +72,8 @@ const includeItems = [
   'shared',
   'background.js',
   'content.js',
+  'lazy-fast-bootstrap.js',
+  'lazy-fast-bridge.js',
   'popup.js',
   'popup.html',
   'popup.css',
@@ -84,7 +88,7 @@ const includeItems = [
 ];
 
 includeItems.forEach((item) => {
-  const itemPath = path.join(__dirname, item);
+  const itemPath = path.join(extensionDir, item);
   if (fs.existsSync(itemPath)) {
     const stats = fs.statSync(itemPath);
     if (stats.isDirectory()) {

@@ -9,6 +9,7 @@ import { focusCodexWindow } from './focus-codex-window.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
+const extensionRoot = path.join(repoRoot, 'extension');
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((arg) => arg.startsWith('--')));
@@ -66,7 +67,7 @@ await mkdir(config.profileDir, { recursive: true });
 
 const launchArgs = [];
 if (config.loadExtension) {
-    launchArgs.push(`--disable-extensions-except=${repoRoot}`, `--load-extension=${repoRoot}`);
+    launchArgs.push(`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`);
 }
 
 const context = await chromium.launchPersistentContext(config.profileDir, {

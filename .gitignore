@@ -8,11 +8,12 @@ css-cleanup/
 
 # Editor settings (ignore unless you want to share VS Code configs)
 .vscode/
+**/.vscode/
 CGCSP-Github.code-workspace
 
 # Test and Validation helpers
 build-sync.js
-settings.json
+/settings.json
 moveNewEntriesInMessagesJsonToEnd.py
 messagesJsonToMoveToEnd.txt
 moveAndRenameNumberedLanguageFiles.ps1
@@ -56,6 +57,21 @@ dist/*
 playwright-report/
 test-results/
 blob-report/
+tests/playwright/*.log
 
-# Local planning notes
-PLANS/
+# Local validation notes and captures
+tests/159p_lateststate_of_moveTopBarToBottom_iife.txt
+tests/fullPageHtmlFromInspector_*.txt
+tests/bottom-bar-benchmark-summary.json
+tests/bottom-bar-benchmark-summary.md
+tests/bottom-bar-perf-log.ndjson
+tests/bottom-bar-perf-log.ndjson.txt
+tests/playwright/chatgpt-load-followup-plan.md
+tests/playwright/chatgpt-local-profile-test-setup.md
+tests/playwright/topbar-to-bottom-*.json
+tests/playwright/topbar-to-bottom-*.js
+
+# Temporary scratch/reference artifacts
+_temp-files/**
+!_temp-files/
+!_temp-files/README.md

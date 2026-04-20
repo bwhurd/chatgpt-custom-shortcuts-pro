@@ -8,6 +8,7 @@ import { chromium, expect, test } from '@playwright/test';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..');
+const extensionRoot = path.join(repoRoot, 'extension');
 const initialViewport = {
     width: 1100,
     height: 1200,
@@ -48,6 +49,26 @@ async function fitPopupViewport(page) {
     });
 }
 
+async function expandScrollablePopupForSnapshot(page) {
+    await page.addStyleTag({
+        content: `
+            html,
+            body {
+                height: auto !important;
+                max-height: none !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+
+            .shortcut-container {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        `,
+    });
+}
+
 test('popup matches the approved visual baseline', async () => {
     test.slow();
 
@@ -57,8 +78,8 @@ test('popup matches the approved visual baseline', async () => {
         headless: true,
         viewport: initialViewport,
         args: [
-            `--disable-extensions-except=${repoRoot}`,
-            `--load-extension=${repoRoot}`,
+            `--disable-extensions-except=${extensionRoot}`,
+            `--load-extension=${extensionRoot}`,
         ],
     });
 
@@ -79,6 +100,7 @@ test('popup matches the approved visual baseline', async () => {
                 await document.fonts.ready;
             }
         });
+        await expandScrollablePopupForSnapshot(page);
         await page.waitForTimeout(500);
         await fitPopupViewport(page);
         await page.waitForTimeout(250);

@@ -1,0 +1,1177 @@
+# Codex Plan
+
+## Active
+
+### 📚 AGENTS And Specs Audit
+
+- Decision:
+  - `AGENTS.md` should stay a routing/guardrails file, not a second architecture manual.
+  - durable cross-file behavior and troubleshooting notes should live in `SPECS/`.
+  - `CodexPlan.md` should keep the live backlog, not absorb durable implementation references.
+- [x] Audit `AGENTS.md` for sections that are too deep or volatile to keep inline.
+- [x] Create root `SPECS/` folder and move the existing settings / Fast Mode reference docs out of `PLANS/`.
+- [x] Add `SPECS/README.md` as the spec index and boundary guide.
+- [x] Add durable specs for Cloud Sync/settings data flow and model picker/shortcut architecture.
+- [x] Update `AGENTS.md` search/scope guidance to include `SPECS/**`, `CodexPlan.md`, `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, and `build-zip.js`.
+- [x] Replace redundant AGENTS deep-dive sections with short references to the new spec set.
+
+### ⚡ Lazy Load Fast Mode
+
+- Goal: make very large ChatGPT conversations reach a native usable state quickly by reducing initial conversation hydration cost, while keeping the composer, send flow, and normal ChatGPT controls native.
+- Durable reference doc: `SPECS/SPEC_LAZY_FAST_MODE.md`
+- Decision:
+  - the extension must not own lazy-loaded message DOM as the primary path
+  - older messages need to be rendered by ChatGPT itself so styling, actions, dialogs, shared docs, and tool UIs stay exact
+  - Fast Mode should move toward in-place native expansion on upward lazy scrolling, not a full-document reload per expansion step
+  - prune-on-first-load can still be useful as a bootstrap optimization, but the active goal is to enlarge the native retained window without reloading the whole page
+  - auto upward-scroll expansion is deferred until an explicit in-place native expansion path is proven
+  - TanStack and custom inline rendering are no longer on the critical path
+
+#### Completed in this pass
+
+- [x] Keep the `document_start` bootstrap plus external page-world bridge as the early interception path.
+- [x] Keep the fast native route by pruning the initial `/backend-api/conversation/:id` payload before ChatGPT hydrates.
+- [x] Move retained-turn count from a hardcoded bridge constant to per-conversation page `sessionStorage`, so the native retained window can grow across reloads.
+- [x] Publish retained-window metadata in the bridge history payload so the content script can make deterministic expansion decisions.
+- [x] Disable the extension-owned inline lazy renderer as the primary path instead of trying to make extension DOM look and behave exactly like ChatGPT.
+- [x] Remove the automatic upward-scroll expansion trigger from the active proof path so reloads are always user-intentional.
+- [x] Before expanding, store the first visible native turn id and viewport offset as the reload anchor.
+- [x] On manual expansion, increase the retained native window by a fixed batch size, reload the route, and restore the saved native turn to its previous viewport position.
+- [x] Keep the composer, send flow, regenerate flow, and normal ChatGPT controls fully native throughout the lazy-load path.
+- [x] Add a native in-thread Fast Mode banner that states how many turns were loaded and exposes manual `Load older natively` and `Load full conversation natively` actions.
+- [x] Remove `shared/tanstack-virtual-core.js` from the active content-script load path so the new architecture does not keep paying runtime cost for the abandoned custom-render approach.
+- [x] Add Batch 2 instrumentation in `content.js` so manual expansion actions and retained-count writes are visible via per-conversation `sessionStorage`.
+
+#### Remaining follow-up
+
+- Fast Mode opt-in gate checklist:
+  - [x] Add a popup toggle for Fast Mode, placed between `Send Top Bar to Bottom` and `Fade Slim Sidebar`, with disabled-by-default storage wiring.
+  - [x] Wire the new setting through `OPTIONS_DEFAULTS`, popup preset defaults, and `settings-schema.js` so import/export/cloud sync and legacy installs all treat it as a normal off-by-default option.
+  - [x] Gate `lazy-fast-bootstrap.js` at `document_start` so the page bridge is not injected unless the toggle is enabled.
+  - [x] Gate the native Fast Mode controller in `content.js` so the banner, scroll handling, and in-place expansion logic remain inert unless the toggle is enabled.
+  - [x] Update locale strings, keep the changelog concise, bump the manifest version, and confirm `build-zip.js` already includes the required shipped files without any new include changes.
+  - [x] Reload the unpacked extension and validate both states live:
+    - toggle off: Fast Mode is inert on ChatGPT pages
+    - toggle on: Fast Mode baseline banner/controller still work
+    - toggle back off: Fast Mode returns to inert on reload
+
+- Verified live facts from the attached `Invoice Dispute Justification` tab:
+  - A clean per-conversation reset plus one plain route reload can still produce the intended baseline: `requestedRetainedTurnCount = 24`, `nativeTurnCount = 24`, banner visible.
+  - ChatGPT uses its internal `group/scroll-root ... overflow-y-auto` container as the actual scroll root; `window.scrollY` stays `0`.
+  - A deliberate `Load older natively` action can still write `retained = 64`, and the bridge can prune to `64`, but that reload-based step is no longer the desired end behavior.
+  - Batch 2 instrumentation is now active in `content.js`, with the persistent per-conversation debug snapshot stored at `sessionStorage['csp_lazy_fast_debug:<conversationId>']`.
+  - User clarification after the first Batch 2 run: the later `104` step may have been caused by a real manual second click, so that trace does not prove an unintended duplicate trigger.
+  - `window.__reactRouterDataRouter` exists on the live page and exposes a real `revalidate()` method.
+  - Calling `__reactRouterDataRouter.revalidate()` revalidates in-place without a document reload, but it did not refetch the conversation payload in the tested run.
+  - `router.state.loaderData['routes/_conversation.c.$conversationId']` is `null`, so the mounted conversation is not sitting in plain router loader data ready to be swapped.
+  - The mounted React tree receives a `conversation` handle prop, and that handle is signal-like rather than a plain thread object.
+  - The conversation context contains hidden symbol-backed stores, including:
+    - a conversation registry with `conversations`, `newClientIdToServerId`, and `allKnownConversationIds$`
+    - additional signal/store objects attached directly to the conversation handle
+  - The hidden conversation registry points back to the same mounted `conversation` handle for the live thread id, so the live React prop and the registry entry are the same object reference.
+  - Concrete owner candidates inspected on the live page:
+    - `conversation[Symbol()]` object `A0t` exposing `conversationTurnSnapshot$`, `conversationChatSDKEntries$`, `getLatestChatSDK$`, and `getLatestChatSDKForSession$`
+    - `conversation[Symbol()]` object `V$e` exposing `currentMessageId$`, `mapMessageId$`, `turnIndex$`, `hasRequestedNewData$`, and related overlay/map state
+    - `conversation[Symbol()]()` returning a large conversation state object with keys including `tree`, `_treeVersion`, `asyncTurns`, `scrollToMessageId`, and `pendingDeepLinkMessageId`
+    - `conversation[Symbol()]()` returning `{ tree, version }`, where `tree.constructorName === 'Ys'`
+    - `conversation[Symbol()]()` returning the rendered turn array, which currently contains the synthetic lazy root plus the mounted native turns
+    - `conversation[Symbol()]` object exposing `conversationVersion$` and `setConversationVersion`
+  - `A0t.conversationTurnSnapshot$()` still returned an empty array on the live thread, even while native turns were mounted, so it is not the retained-window owner.
+  - The live rendered-turn signal currently returns `25` items on the `24`-turn baseline: the synthetic lazy root plus the `24` mounted native turns.
+  - The mounted native turn-window owner is now concretely identified on live Fast Mode threads: a direct `conversation[Symbol()]()` signal currently found at symbol index `48` returns the synthetic lazy root plus the mounted native turn objects.
+  - On the live trimmed `Chess table terminology` thread, that owner array length was `25`, and `array[1]` was the exact same object reference as the first mounted native `turn` prop.
+  - Therefore the mounted native window is not only derived from the mutable `Ys` tree; it also has a concrete live turn-array owner directly attached to the mounted `conversation` handle.
+  - The `Ys` tree is a real mutable owner for branch nodes, not just a debug mirror. Live callable methods include `getBranch()`, `prependNode(existingNodeId, message)`, `addMessageNode(existingNodeId, message)`, `updateNodeMessage(messageId, message)`, and `setCurrentLeafId(nodeId)`.
+  - A plain same-document `fetch('/backend-api/conversation/:id')` from the page returned live `404 conversation_not_found`, so raw `window.fetch` without the app request context is not a viable probe.
+  - After capturing the real conversation request headers from the attached tab, an authenticated same-document fetch to `/backend-api/conversation/:id` succeeded with `200` and the bridge pruned/published `requestedRetainedTurnCount = 64` without any main-frame navigation.
+  - A plain authenticated `fetch('/backend-api/conversation/:id')` from page world is now also proven insufficient on active Fast Mode threads because the page-world bridge intercept prunes that response too.
+  - On the live trimmed `Chess table terminology` thread, the non-pruned full conversation payload was successfully fetched from a CDP-created isolated world in the same tab with the live bearer token, bypassing the page-world bridge interception.
+  - That isolated-world full fetch returned `mappingCount = 366` and grouped to `115` native turns, while the mounted trimmed page still held only `24` native turns.
+  - Using visible mounted user-turn ids as anchors against the isolated-world full payload, the current mounted native window on `Chess table terminology` was mapped to grouped turn index `91`, which proves there are `91` real older grouped turns above the mounted window.
+  - Using that authenticated `64`-turn payload, prepending the missing older branch nodes directly into the live `Ys` tree changed the native branch length in place from `45` to `141` with no document reload.
+  - That same tree mutation did not update the mounted rendered-turn signal or DOM:
+    - rendered-turn signal stayed at `25`
+    - native DOM turn count stayed at `24`
+    - toggling `conversationVersion$` through `setConversationVersion(...)` also did not recompute the rendered turns
+  - Therefore the live `Ys` tree is mutable and fetchable on the same document, but it is not the final rendered-window owner by itself. A second derived signal/cache layer still gates native turn rendering after tree changes.
+  - Same-document native DOM growth is now partially proven:
+    - on the lighter `Medical License Disclosure Review` thread, directly mutating the mounted turn-array owner in place and then triggering the owner reaction invalidation path eventually increased native DOM turn count from `24` to `25` on the same document with no navigation
+    - this was proven with a cloned live native turn object, not a real older turn yet
+  - The next live chess-thread probe attempted to prepend two real older grouped turns directly into the mounted turn-array owner:
+    - owner array length changed in place from `25` to `27`
+    - document URL/title stayed on the same route
+    - anchor id/top and `scrollTop` were recorded and preserved through the owner-array mutation step
+    - but owner reaction invalidation alone did not flush those two real older turns into the DOM
+  - A stronger rerender attempt that combined owner-array mutation with broad React hook dispatches caused the thread to fail into ChatGPT's native `Content failed to load` state on the same document.
+  - One plain route reload restored the chess thread back to the trimmed `24`-turn baseline after waiting for the route to settle.
+  - On the lighter `Medical License Disclosure Review` thread, the narrower synchronized local-cache probe was run and stayed flat:
+    - direct turn-array owner mutation plus numeric companion mutation plus the narrow tag-15 dispatch path kept native DOM at `24`
+    - adding the shared tag-15 metadata array (`hook 7/8/10/12`, all the same `25`-item `{ turnDate, isRenderable }` reference) still kept native DOM at `24`
+    - adding the sparse tag-15 `hook 19` result cache (`results.length 25 -> 26`, `lastRenderableTurnIndex 24 -> 25`) still kept native DOM at `24`
+    - therefore same-reference mutation of the local turn/meta/result caches is not enough to flush a new native row
+  - The current strongest live explanation is memo/dependency staleness rather than a missing broad rerender:
+    - the critical tag-15 component is a memoized owner with several tuple-shaped hook entries (`hook 1`, `3`, `4`, `9`, `11`, `19`, `21`)
+    - `hook 4` is especially suspicious because its memoized state and queue value are both a `4`-item tuple whose first slot is another `25`-item array that is not the mounted turn array, not the metadata array, and not the numeric companion array
+    - if the final native row list is derived behind that memo tuple, in-place mutation of the source arrays will keep the same dependency identities and can legitimately prevent recomputation
+  - Follow-up live inspection identified that tag-15 `hook 4` first slot concretely holds the rendered turn-id window:
+    - on the lighter thread its head was `[syntheticLazyRootId, firstMountedTurnId, secondMountedTurnId, ...]`
+    - replacing that id list by reference (`25 -> 26`) alongside the mutated mounted turn array (`25 -> 26`), numeric companion (`25 -> 26`), metadata snapshot (`25 -> 26`), and nulled memo deps still left native DOM at `24`
+    - therefore the render-window id list itself is still not the last gate; at least one downstream cache or row-materialization layer remains after `hook 4`
+  - A broader hook-reference scan across `jm`, `ihn`, `Hm`, and `ih` found no direct hook state references to the mounted turn array, metadata array, numeric companion array, or sparse result array.
+  - That strengthens the current owner picture:
+    - the interesting `25`-item render-window caches remain localized inside the tag-15 memo component
+    - the next probe should target the downstream row-materialization layer after the `hook 4` id list, not more broad React dispatch forcing
+  - Reconfirmed on the faster `Chess table terminology` thread with the new attachable standard Chrome `9333` session:
+    - clean reset + one plain reload again reached the intended baseline: `requestedRetainedTurnCount = 24`, `nativeTurnCount = 24`, banner visible
+    - the mounted turn-array owner is still the direct `conversation[Symbol()]()` getter at symbol index `48`
+    - the numeric companion owner on this thread is currently a separate direct `conversation[Symbol()]()` getter at symbol index `54`
+  - New direct owner facts from the faster-thread pass:
+    - the tag-15 owner `hook 0` ref is not a new row-materialization structure; `hook0.current` is another `4`-slot tuple whose first slot mirrors the same `25`-item id window from `hook 4`
+    - the tag-15 sparse cache `hook 19` is still not a row-object cache; on this thread `results.length = 25` and the head is sparse scalar data (`undefined, 0, undefined, ...`) plus `lastRenderableTurnIndex = 24`
+    - immediate child fibers under the tag-15 owner are still repeated per-turn `Am -> ihn -> provider` stacks; this pass did not find a new shared child-fiber row cache beneath that owner
+  - New signal/setter facts from the faster-thread pass:
+    - the nearby map/sidebar/widget signals (`V$e`, `R0t`, `A0t`) still expose real writable `.set(...)` methods and same-value writes succeed
+    - the direct mounted turn-array owner at symbol `48` is not truly writable even though `typeof owner.set === 'function'`
+      - its `.set` is only a proxy forwarder
+      - calling `owner.set(nextArray)` throws `Error: signal$.set is not a function`
+      - calling `owner.set(owner())` throws the same error
+    - the numeric companion owner at symbol `54` behaves the same way: apparent `.set` exists on the proxy wrapper, but same-value or replacement writes fail with `signal$.set is not a function`
+    - there is also a `conversation.ctx[Symbol()]()` getter that returns the exact same `25`-item mounted turn array by reference, but that ctx-level mirror has no `.set`
+    - therefore the currently identified mounted turn-array owners are read-only/computed mirrors, not the upstream writable source signal
+  - New conversation-state findings from the faster-thread pass:
+    - the `conversation[Symbol()]()` state object with `tree`, `_treeVersion`, and `asyncTurns` still has no obvious own callable keys
+    - on this thread `asyncTurns` also exposes no own keys, no own symbols, and no visible prototype methods
+    - on this thread the exposed `tree` object also showed no visible own/prototype method names through shallow reflection, despite the previously proven callable tree mutators
+  - New store-graph findings from the faster-thread follow-up:
+    - `conversation.ctx[Symbol()]()` at symbol index `273` returns the exact mounted `25`-item turn array by reference on this thread
+    - `conversation.ctx[Symbol()]()` at symbol index `379` returns the `25`-item numeric companion array (all `0` at the baseline head), also by reference
+    - the writable `R0t` / `V$e` signals are real but currently inert as mounted-window owners on this thread:
+      - `rootMessageId$()` and `originTurnIndex$()` are `undefined`
+      - `currentMessageId$()` and `mapMessageId$()` are `undefined`
+      - `turnIndex$()` is `-1`
+      - `hasRequestedNewData$()` and `isLoadingInitialNewData$()` are `false`
+    - the `A0t` widget/chat-sdk owner is still not the retained-window source:
+      - `conversationTurnSnapshot$()` is `[]`
+      - `conversationChatSDKEntries$()` is `[]`
+      - `getLatestChatSDK$()` returned `undefined`
+      - `getLatestChatSDKForSession$()` threw because there is no active widget session
+    - several writable `conversation.ctx` arrays (`316/317/318/319/324/325/361`) do include the current conversation id/title, but only as shallow recent-conversation/sidebar preview objects:
+      - `mapping` is absent
+      - `current_node` is `null`
+      - therefore those arrays are not the mounted thread payload owner either
+  - New tag-15 downstream-cache findings from the faster-thread follow-up:
+    - `hook 19` and `hook 21` are now concretely linked:
+      - `hook19.memoizedState[0].results` is the sparse `25`-item scalar row cache (`undefined, 0, undefined, ...`)
+      - `hook21.memoizedState[1]` is `[resultsArray, false, 24, null]`
+      - `hook21.memoizedState[1][0] === hook19.memoizedState[0].results`
+    - the per-turn `ho` renderer found beneath a mounted turn is not the thread-window owner:
+      - its `allMessages`, `groupedMessagesToRender`, and `allGroupedMessages` props are length `1` for a single turn
+      - that path is the inner message-group renderer for one turn, not the outer retained-window list
+    - a bounded same-document clone probe was run on the faster thread using only local live structures:
+      - baseline was clean: DOM `24`, turn-array `25`, numeric `25`, `hook4 ids 25`, `hook12 meta 25`, `hook19 results 25`, `hook21 count 24`
+      - the probe inserted one cloned live turn after the synthetic lazy root and updated, in place or by replacement as appropriate:
+        - ctx turn-array mirror
+        - ctx numeric mirror
+        - tag-15 `hook 4` rendered id list
+        - tag-15 `hook 12` metadata array
+        - tag-15 `hook 19` sparse result cache plus `lastRenderableTurnIndex`
+        - tag-15 `hook 21` tuple to `[newResults, false, 25, null]`
+      - the probe then triggered only the narrow tag-15 local `useState` dispatch (`hook 18`, reducer `Ia`)
+      - after mutation, all tracked live lengths increased in place (`25 -> 26`, `hook21 count 24 -> 25`) while:
+        - URL/title stayed on the same document
+        - DOM native turn count stayed `24`
+      - the probe restored the mutated structures cleanly, and one plain route reload re-established the clean fast baseline: `Fast Mode loaded latest 24 of 114 turns`, DOM `24`
+    - therefore `hook 21` is still not the final DOM gate; the remaining reconcile/materialization layer is lower than the currently identified tag-15 hook caches
+  - New child-fiber materialization findings from the faster-thread follow-up:
+    - a subtree walk beneath the tag-15 owner found no child-fiber props that directly carry the full `25`-item rendered id list, metadata array, or sparse result cache by reference
+    - the `Eu` child-fiber path is not the whole-thread owner:
+      - it receives `{ conversation, messageIds }`
+      - on the sampled mounted turn its `messageIds` length was `3`, not the `25`-item retained window
+    - the `{ clientThreadId, messages }` child-fiber path is also not the whole-thread owner:
+      - sampled instances (`a`, `Object`, `Ynn`, `Hnn`, `gnn`) received per-turn `messages` arrays of length `1` or `3`
+      - those are message-group/materialized-content arrays inside a single turn, not the mounted thread window
+    - the nearest concrete child-fiber wrapper with many children is a plain `div` / `aa` / `nst` chain whose `children` prop is a sparse `29`-slot React element array:
+      - counts on the sampled wrapper were `3 undefined`, `20 false`, `6` actual React elements
+      - visible element slots included components like `a`, `k1n`, `h1n`, `tst`, and `b4e`
+      - therefore this wrapper is already holding conditional React elements for one mounted turn container, not a hidden 24-turn source list that can simply be extended
+    - several deeper descendants (`prn`, `un`, `Ya`, `krn`, `Me`, and one anonymous `Object`) do read the mounted turn/numeric arrays in their local hooks, but no direct prop or hook owner for the full rendered thread list was found below tag-15 in this pass
+  - New keyed-child findings from the faster-thread subtree walk:
+    - the first repeated multi-element React arrays found below tag-15 are still per-turn fragment builders rather than whole-thread row owners
+    - the plain `div` / `aa` / `nst` wrapper directly under the per-turn path carries a sparse `29`-slot `children` array:
+      - about `6-7` real React elements plus many `false` / `undefined`
+      - visible element slots include `a`, `k1n`, `Symbol`, `h1n`, `tst`, and `b4e`
+      - `k1n` carries `conversation`, `turnIndex`, and `isUserTurn`, but not a `turn` object
+    - deeper message-content wrappers then narrow again to per-message or per-turn fragment arrays:
+      - `nst` / `div` with `data-message-id` carry a `10`-slot `children` array of message-fragment components like `Ion`, `Eo`, `Ynn`, `Hnn`, `ul`, and `Tze`
+      - those arrays are keyed to one message group / turn section, not the full retained window
+    - no child `props.children` array was found that directly contains `24`/`25` turn-level React elements with `turn` + `conversation` props
+    - this strengthens the current boundary:
+      - the missing owner is likely the keyed React-element builder above the per-turn `29`-slot wrapper
+      - the sampled child arrays below that point are already one-turn render output, not a whole-thread list ready to be extended
+  - New attached-Chrome pass on the faster `Chess table terminology` thread:
+    - the stable attach workflow at `http://127.0.0.1:9333` is now confirmed on standard Chrome with the logged-in extension profile
+    - a baseline route reload again produced the clean fast state: banner visible, `nativeTurnCount = 24`
+    - capturing the real `/backend-api/conversation/:id` request headers from that same reload and replaying them in a CDP isolated world again fetched the full unpruned payload on the same tab:
+      - captured header set included `authorization`, `oai-client-build-number`, `oai-client-version`, `oai-device-id`, `oai-language`, and `oai-session-id`
+      - full payload grouped to `114` turns
+      - the current mounted native window still starts at grouped turn index `90`
+    - a real older simple user turn above the mounted window was then selected from the full payload:
+      - turn id `7c76819d-7c56-42e9-a467-d7db828a6ad2`
+      - text preview `So the border is always wider. What are you talking about?`
+    - same-document insertion of that real older turn is now concretely proven:
+      - mutating the mounted turn array plus the tag-15 owner and its `alternate` caused that real older turn id to become the first visible native section id on the same document
+      - the top rendered text changed to the older real user text without navigation
+      - ChatGPT stayed on the same route and did not fail into `Content failed to load`
+    - however the mounted native window still remained capped at `24` DOM sections:
+      - after the real older-turn insertion the top ids became `[olderTurnId, oldFirstTurnId, oldSecondTurnId, ...]`
+      - DOM count stayed `24`
+      - the bottom of the mounted window implicitly slid forward instead of increasing the total mounted count
+    - the hook/cache owner picture tightened further during this pass:
+      - first-phase synchronized mutation could lift hook-layer structures to `26` items while DOM stayed `24`
+      - a deeper scan showed the tag-15 owner immediate child list still stayed at `25` `Am` children, which matches the old `24`-turn window plus the synthetic root
+      - hook-layer windows after mutation:
+        - `hook 4`, `hook 6`, `hook 12`, and `hook 21` could all be driven to the `26`-item / `25`-turn state
+        - `hook 0` and `hook 2` initially collapsed back to the old `25`-item id window
+      - a second-phase timed patch proved even more:
+        - after the first rerender, patching `hook 0` and `hook 2` to the same `26`-item id window and dispatching again kept `hook 0`, `2`, `4`, and `6` all at `26`
+        - despite that, the owner child list still remained `25`
+        - therefore the remaining cap is now below the known id/meta/result hook mirrors
+    - current strongest live conclusion:
+      - same-document native older-turn replacement/slide is proven with a real older turn
+      - full same-document expansion is still blocked by the materialized child-builder / rendered-children window below the tag-15 hook caches
+      - the next missing owner is no longer the known hook-layer id window itself; it is the child-fiber / rendered-children builder that still emits only `25` children
+  - New source-level owner facts from the follow-up pass on the same thread:
+    - the tag-15 owner function source is now captured directly from the live page
+    - the owner is not rendering from a hidden React child array; it explicitly renders:
+      - `const [c, h, v, I] = Ne(o.id, u)`
+      - `u(w)` returns `[Z.getConversationTurnIds(w), scrollToMessageId, scrollToMessageIsAssistant, eu(Z.getConversationTurns(w))]`
+      - children are then materialized by `f = c.map(w)` and wrapped as the returned fragment
+    - therefore the true child-count source is the first `Ne(...)` tuple slot `c`, which is the live rendered turn-id window
+    - the repeated `Am` children are created from those ids only; each child then resolves its real turn object separately:
+      - `Am` source uses `Ne(o.id, r)` where `r(h) => Z.getConversationTurnAtIndex(h, i)`
+      - so the outer owner decides how many turn rows exist, and each row resolves its own turn by index afterwards
+  - New hook-to-source mapping facts:
+    - `hook 4` is the live `Ne(...)` tuple `[c, h, v, I]`, not just a generic id-window cache wrapper
+      - baseline shape is `[array:25, undefined, undefined, null]`
+    - `hook 0` and `hook 2` are paired refs around that same `Ne(...)` tuple
+      - `hook0.current === [c, h, v, I]`
+      - `hook2.current.value === [c, h, v, I]`
+    - `hook 6` is the post-render effect that copies the live tuple into the ref cache:
+      - effect source contains `function(){p.hasValue=!0,p.value=m}`
+      - its deps are `[[c, h, v, I]]`
+    - `hook 12` is the live metadata array, while `hook 7`, `8`, and `10` are ref/cache mirrors around that metadata
+    - `hook 19` and `21` remain the sparse results/count layer beneath the id tuple
+  - New live mutation result from the source-level retry:
+    - replacing the `Ne(...)` tuple by whole-reference still did not expand the mounted native window
+    - the retry patched, on both the owner and its `alternate`:
+      - `hook 4` entire tuple `[c, h, v, I]`
+      - `hook 0.current`
+      - `hook 2.current.value`
+      - `hook 6` deps to `[nextTuple]`
+      - plus the live mounted turn array insertion of a real older user turn
+    - result:
+      - the real older turn again rendered at the top on the same document
+      - DOM count still stayed `24`
+      - after the rerender, the live `Ne(...)` tuple snapped back to `25`
+      - `hook 4`, `0`, and `2` all returned to `25`, which means the tuple is being recomputed from an upstream source we still have not patched
+    - therefore the remaining blocker is upstream of the `Ne(...)` tuple itself
+      - it is not enough to patch the owner’s local tuple/ref/effect layers after the fact
+      - the missing owner is now the conversation-state source consumed by `Z.getConversationTurnIds(w)` / `Z.getConversationTurns(w)`, or the selector/comparator path inside `Ne(...)` that keeps re-deriving the capped `25`-item tuple
+  - New React Compiler cache findings from the next live pass:
+    - the tag-15 owner fiber exposes the exact React Compiler memo cache used by the recovered source:
+      - `owner.updateQueue.memoCache.data[0]` is the live `28`-slot cache array `a[...]`
+      - `owner.updateQueue.memoCache.data[1]` is a separate smaller cache array and was not the retained-window owner
+    - the important cache slots are now concretely identified:
+      - `slot 0` = cached `disableScrollToMessage`
+      - `slot 1` = cached selector function `u(w) => [Z.getConversationTurnIds(w), scrollToMessageId, scrollToMessageIsAssistant, eu(Z.getConversationTurns(w))]`
+      - `slot 2` = cached `conversation`
+      - `slot 3` = cached rendered id window `c` (`25` ids at baseline)
+      - `slot 13` = cached materialized child element array `f` (`25` `Am` React elements at baseline)
+      - `slot 15` = cached `c.length` (`25` at baseline)
+      - `slot 25` = cached row builder function `(T, D) => jsx(Am, ...)`
+      - `slot 26` = cached `f` again for the final fragment memo
+      - `slot 27` = cached returned fragment element with `props.children = f`
+    - inspecting `slot 13` proved the child-element array shape directly:
+      - `slot13[0]` is an `Am` element for the synthetic lazy root with `turnIndex = 0`
+      - `slot13[1]` is the first visible native turn with `turnIndex = 1`
+      - `slot13[24]` is the final visible native turn with `turnIndex = 24` and `isFinalTurn = true`
+      - therefore the owner really is holding a `25`-element synthetic-root-plus-turn array, not a hidden larger child list
+  - New cache-level proof attempt and result:
+    - a full same-document cache patch was attempted after inserting a real older user turn into the mounted turn array:
+      - hook tuple layer patched to the expanded `26`-item id window
+      - metadata and sparse results layers patched to `26`
+      - compiler cache patched directly on the owner and its alternate:
+        - `slot 3` set to the `26`-item id window
+        - `slot 13` rebuilt as a `26`-element `Am` array with shifted `turnIndex` values and the real older turn inserted after the synthetic root
+        - `slot 15` set to `26`
+        - `slot 26` set to the rebuilt `26`-element child array
+        - `slot 27` rebuilt as the fragment wrapping that `26`-element array
+      - then the narrow local tag-15 dispatch was triggered
+    - result:
+      - the older real turn again rendered at the top on the same document
+      - DOM count still stayed `24`
+      - after the rerender, the compiler cache snapped back to the capped baseline:
+        - `slot 3` returned to `25`
+        - `slot 13` returned to `25`
+        - `slot 15` returned to `25`
+        - `slot 26` returned to `25`
+        - `hook 4` also returned to `25`
+      - `owner.updateQueue.stores` and `owner.updateQueue.events` were both `null`, so React's update queue is not exposing a separate retained-window store there
+    - current strongest live conclusion after this pass:
+      - the tag-15 owner hooks are not the root source
+      - the compiler cache is not the root source either
+      - something upstream of both `Ne(...)` and the compiler cache is re-deriving the capped `25`-item retained window on every rerender
+      - the next highest-value path is now the selector/comparator source inside `Ne(...)` or the hidden conversation-state source that feeds `Z.getConversationTurnIds(w)` / `Z.getConversationTurns(w)`
+  - New proof-of-concept breakthrough from the next two live passes:
+    - a same-document native expansion proof now exists through the mounted tag-15 owner render function itself
+    - instead of trying to out-race the upstream capped `25`-item selector state, the live owner render function was wrapped in place on the mounted fiber and its `alternate`
+    - that wrapper:
+      - called ChatGPT's original owner render function unchanged
+      - took the returned fragment of native `Am` rows
+      - inserted one additional native `Am` row after the synthetic lazy root
+      - shifted subsequent `turnIndex` values by `+1`
+      - preserved ChatGPT's own `Am` / `km` / `jm` native row component chain
+    - on the same document, the mounted native turn array was also patched with a real older user turn from the full unpruned payload so the inserted native row resolved real older content rather than a clone
+    - this produced the first true same-document native expansion proof:
+      - no route reload
+      - no main-frame navigation
+      - no custom extension-owned older-message DOM
+      - ChatGPT-native row components still rendered the older turn
+      - DOM turn count increased from `24` to `25`
+  - Faster-thread proof details (`Chess table terminology`, `69d50722-9460-8332-b03a-1d8a1211e0cf`):
+    - full payload still grouped to `114` turns
+    - candidate older real user turn:
+      - id `7c76819d-7c56-42e9-a467-d7db828a6ad2`
+      - preview `So the border is always wider. What are you talking about?`
+    - after wrapping the live owner render function and patching the mounted turn array:
+      - `nativeTurnCount` increased from `24` to `25`
+      - the top visible turn ids became `[candidateId, oldFirstId, oldSecondId, ...]`
+      - owner child count became `26` (`synthetic root + 25 native turns`)
+      - route/title stayed stable and `Content failed to load` did not appear
+  - Heavier-thread proof validation (`Invoice Dispute Justification`, `69d4219c-dfcc-832e-9847-f3a0f79e0df1`):
+    - clean baseline on that thread:
+      - banner visible
+      - `nativeTurnCount = 24`
+      - full payload grouped to `264` turns
+      - mounted window started at grouped turn index `240`
+    - candidate older real user turn:
+      - id `35f0d45e-3f23-42c0-9136-ecc504b8ab76`
+      - preview `But if I had a guilty plea then why was it not a conviction due to supervisikn`
+    - applying the same live render-wrapper proof there also succeeded:
+      - `nativeTurnCount` increased from `24` to `25`
+      - top visible ids became `[candidateId, oldFirstId, oldSecondId, ...]`
+      - owner child count became `26`
+      - same document, no navigation, no `Content failed to load`
+    - after validation, the browser was restored to the lighter `Chess table terminology` thread, back at the clean `24`-turn baseline
+  - New cleaner source-level proof on the lighter thread after the render-wrapper breakthrough:
+    - the mounted tag-15 owner's React Compiler memo cache `data[0][1]` is the cached selector function `u(w)` that feeds `Ne(o.id, u)`
+    - patching that selector function in place on the owner fiber and its `alternate` is enough to override the rendered turn-id window at the owner source, without wrapping the render function itself
+    - with the same real older turn patched into the mounted native turn array, the selector-level patch produced:
+      - `hook 4` length `25 -> 26`
+      - compiler cache slot `3` rendered id window `25 -> 26`
+      - compiler cache slots `13`, `15`, and `26` also recomputed to the expanded state
+      - native DOM turn count `24 -> 25`
+      - the real older turn id became the first visible native section id on the same document
+      - no navigation and no `Content failed to load`
+    - this is a cleaner proof than the render-wrapper path because it operates at the owner selector layer (`u(w) => [Z.getConversationTurnIds(w), ...]`) instead of post-processing the returned fragment of `Am` rows
+  - Current status after the proof:
+    - same-document native expansion is now proven feasible via a concrete live owner/path
+    - the cleaner selector-layer proof is now also live, but it is still a patched mounted-owner path rather than the deeper hidden conversation store source
+    - that means the project no longer has an existence-risk problem; it has an implementation-choice problem:
+      - either ship a smallest guarded selector-layer proof path first
+      - or continue searching for the deeper source that feeds `Z.getConversationTurnIds(w)` so the expansion is cleaner and less invasive
+  - New implementation-enabling live facts from the next attached-Chrome passes on `Chess table terminology`:
+    - A normal Fast Mode baseline reload already exposes the full unpruned raw conversation body to CDP network capture:
+      - `/backend-api/conversation/69d50722-9460-8332-b03a-1d8a1211e0cf`
+      - `mappingCount = 366`
+      - grouped turn count still `114`
+      - the mounted page stays trimmed to `24` native turns while the raw network body is full
+    - Comparing that raw payload to the mounted native turn objects clarified the real grouping rule for `turn.messages`:
+      - user turns are grouped from consecutive `user` messages
+      - assistant turns are grouped from consecutive `assistant` messages plus any interleaved `tool` messages, all the way until the next `user` message
+      - with that rule, the first sampled `8` mounted native turns matched exactly on both `messageIds` and `contentTypes`
+    - This means the initial pruned response already contains enough raw message objects to reconstruct mounted `turn.messages` arrays without doing a second full fetch later.
+  - New assistant-turn construction findings:
+    - A first attempt to construct the immediate older assistant turn (`fa42d869-23cc-48a8-a513-2de69764e79a`) from raw payload messages plus a flat placeholder `messageGroups` shape failed:
+      - title flipped to `ChatGPT`
+      - `nativeTurnCount = 0`
+      - ChatGPT entered its native `Content failed to load` state
+      - one plain reload restored the clean `24`-turn baseline
+    - Diffing a real mounted assistant turn against a raw-payload-built candidate exposed the missing shape:
+      - each message needs `clientMetadata: {}`
+      - assistant `messageGroups` are not just a flat placeholder
+      - hidden phases are represented as `type: -1` groups containing nested `groups`
+      - inside those hidden groups:
+        - `thoughts` map to subgroup `type: 2`
+        - `reasoning_recap` maps to subgroup `type: 3`
+      - visible assistant text messages live in separate `type: 0` groups
+    - Rebuilding the immediate older assistant turn with that richer shape and then using the existing selector-layer patch path succeeded:
+      - same document, no navigation
+      - `nativeTurnCount 24 -> 25`
+      - first visible id became `fa42d869-23cc-48a8-a513-2de69764e79a`
+      - top assistant text rendered natively
+      - `failedTextPresent = false`
+      - `hook 4` and compiler cache slot `3` both expanded to `26`
+  - New contiguous two-turn construction finding:
+    - Using only the initial raw payload body, the full two-turn gap above the mounted window was constructed and inserted in order:
+      - user `7c76819d-7c56-42e9-a467-d7db828a6ad2`
+      - assistant `fa42d869-23cc-48a8-a513-2de69764e79a`
+    - Correcting the user turn shape was required too:
+      - user messages also need `clientMetadata: {}`
+      - user `messageGroups[0].type` must be `0`, not `null`
+    - With those shapes, the same selector-layer patch produced:
+      - same document, no navigation
+      - `nativeTurnCount 24 -> 26`
+      - top ids became `[user88, assistant89, oldFirstTurn90, ...]`
+      - `hook 4` and compiler cache slot `3` expanded to `27`
+      - `failedTextPresent = false`
+    - Initial caveat on that contiguous two-turn proof:
+      - the inserted top user row rendered native text, but it also showed native `Something went wrong / Retry` affordance text
+      - the second inserted assistant row rendered native content correctly
+  - New owner-level explanation for the retry affordance:
+    - The retry UI is not a generic DOM glitch; it comes from a concrete native error-state path on the inserted user row
+    - The retry subtree on the inserted user row is rendered through:
+      - `H(...)` computing `a = n ? void 0 : p(e.messages[0], u, m, d)`
+      - then passing `errorState: a` into downstream user-row renderers (`j`, then `ssn`, then `ZL`)
+    - Live props on the inserted user row showed:
+      - `errorState.errCode = 'missing_last_completion'`
+      - `errorState.canRetry = true`
+      - `flagSeverity = 'warning'`
+      - `shouldHideContent = false`
+      - `turnExchangeId = 'b1807291-045e-4707-870d-e4c7b32432e0'`
+    - The natural mounted user row below it does not receive that `errorState` path.
+    - A red-herring follow-up was ruled out:
+      - adding the missing own `gizmoId` field to the constructed user turn did not remove the retry affordance
+      - patching the known local derived caches (`hook 12`, `19`, `21`) also did not remove it
+  - New tree-plus-selector proof on the same thread:
+    - Combining two already-known paths finally removed the retry affordance:
+      - prepend the raw missing message chain into the live `Ys` tree with `tree.prependNode(...)`
+      - then apply the existing selector-layer turn-window patch plus the constructed turn objects
+    - The raw prepended message chain for the contiguous two-turn gap was:
+      - `137e4d61-74da-4213-a6fd-02436d8cca59`
+      - `e4d1a8b3-f28d-471d-a2ce-8c6e71fafc38`
+      - `180c0191-abb9-4238-a00f-84170e9ae3c3`
+      - `fa42d869-23cc-48a8-a513-2de69764e79a`
+      - `7c76819d-7c56-42e9-a467-d7db828a6ad2`
+    - All five `tree.prependNode(firstMountedId, message)` calls succeeded live on the same document.
+    - Result after the combined tree+selector patch:
+      - same document, no navigation
+      - `nativeTurnCount 24 -> 26`
+      - top ids became `[user88, assistant89, oldFirstTurn90, ...]`
+      - the inserted top user row rendered only its native text
+      - the native retry affordance disappeared
+      - `failedTextPresent = false`
+    - This is the strongest implementation-direction proof so far:
+      - raw-payload-only construction is not enough by itself for a clean user row
+      - but raw payload + live tree mutation + selector-layer window expansion is enough to produce a clean contiguous same-document native expansion on the lighter thread
+  - New heavy-thread validation of the same path:
+    - The combined tree+selector path was then revalidated on the heavier `Invoice Dispute Justification` thread (`69d4219c-dfcc-832e-9847-f3a0f79e0df1`)
+    - Clean heavy baseline:
+      - `nativeTurnCount = 24`
+      - `keptStartIndex = 240`
+      - `totalTurnCount = 264`
+    - Inserted contiguous gap:
+      - user `35f0d45e-3f23-42c0-9136-ecc504b8ab76`
+      - assistant `7962d8e6-6780-45af-886b-154e0692789e`
+    - All raw tree prepend operations for that gap succeeded live
+    - Result:
+      - same document, no navigation
+      - `nativeTurnCount 24 -> 26`
+      - top ids became `[user238, assistant239, oldFirstTurn240, ...]`
+      - no retry buttons in the inserted window
+      - `failedTextPresent = false`
+      - `hook 4` / compiler selector window expanded to `27`
+    - This confirms the current path is not only a light-thread artifact; it also works on the heavier reference conversation
+  - New scale test on the lighter thread:
+    - The same combined path was then stressed with a larger contiguous prepend of `4` older grouped turns on `Chess table terminology`
+    - Inserted contiguous block:
+      - user `41b30c74-9c6d-4306-925b-47bbde06a4ad`
+      - assistant `e13f503f-5c3a-4944-80ec-24490096d616`
+      - user `7c76819d-7c56-42e9-a467-d7db828a6ad2`
+      - assistant `fa42d869-23cc-48a8-a513-2de69764e79a`
+    - All raw tree prepend operations for that larger block succeeded live
+    - Result:
+      - same document, no navigation
+      - `nativeTurnCount 24 -> 28`
+      - top ids became `[turn86, turn87, turn88, turn89, oldFirstTurn90, ...]`
+      - no retry buttons on any of the inserted first `4` rows
+      - `failedTextPresent = false`
+      - `hook 4` / compiler selector window expanded to `29`
+    - This is the first live evidence that the current path scales beyond a single user+assistant pair on the lighter reference thread
+  - Therefore the current critical path is:
+    - identify the mounted thread-window owner inside the live conversation handle/store graph
+    - prove that owner can be refreshed or expanded in-place
+    - only then wire lazy upward scrolling to that in-place native expansion path
+
+##### Immediate scope freeze
+
+- [ ] For the next pass, touch only `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, `content.js`, and `CodexPlan.md`.
+- [ ] Do not work on popup wiring, permissions, model scrape protection, blank reload recovery, TanStack helpers, benchmark work, or auto upward-scroll expansion until the single-click manual proof is stable.
+- [ ] Do not combine multiple speculative fixes in one pass. Each edit batch must target exactly one failure class and one validation gate.
+
+##### New critical proof target
+
+- [ ] The only success condition for the next implementation pass is:
+  - start from a verified `24`-turn baseline
+  - enlarge the mounted native retained window on the same document
+  - do not perform a full-document reload
+  - preserve the real scroll-root anchor during the expansion
+  - keep ChatGPT-owned styling/actions/tool UIs native
+
+##### Ranked hypotheses for the in-place path
+
+- [ ] Hypothesis A: the live conversation can be refreshed in-place through the app router or a related route-data invalidation path.
+  - Current status: partially weakened. `__reactRouterDataRouter.revalidate()` exists and stays on the same document, but it did not refetch conversation data in the observed run.
+- [ ] Hypothesis B: the mounted conversation is owned by a hidden signal/store layer that can be refreshed or mutated directly.
+  - Current status: strengthened. The mounted React tree receives a `conversation` handle with a hidden symbol-backed context and registry stores.
+- [ ] Hypothesis C: prune-on-load plus a later in-place store refresh can replace the current reload-per-expansion behavior.
+  - Current status: open. This requires identifying a store or fetch path that can accept a larger retained window on the same document.
+
+##### Next execution batches
+
+- [ ] Batch 1: lock the baseline protocol.
+  - Use only the attached ChatGPT tab, not a new browser session.
+  - Clear `csp_lazy_fast_retained_turn_count:<conversationId>` and `csp_lazy_fast_restore_anchor:<conversationId>`.
+  - Blur the active element before reload.
+  - Perform one plain route reload only.
+  - Wait until all of these are true at the same time:
+    - `requestedRetainedTurnCount = 24`
+    - `nativeTurnCount = 24`
+    - banner rendered
+    - both per-conversation session keys empty
+  - If any retained count above `24` appears before the next probe, stop and diagnose that baseline contamination first.
+- [ ] Batch 2: instrument only the manual expansion trigger path.
+  - Add a tiny debug surface on `window` and/or per-conversation `sessionStorage` with:
+    - `lastAction`
+    - `lastActionSource`
+    - `requestedRetainedTurnCount`
+    - `anchorTurnId`
+    - `anchorOffsetWithinScrollRoot`
+    - `lastActionAt`
+  - Record events only for:
+    - button click handler entry
+    - `requestNativeExpansion`
+    - retained-count write
+    - anchor write
+    - anchor clear
+    - history payload apply
+  - Keep the payload tiny and structured so it survives reload and can be read quickly during live checks.
+  - Result:
+    - completed in `content.js`
+    - persistent debug snapshot is readable from `sessionStorage['csp_lazy_fast_debug:<conversationId>']`
+    - the first live run captured the later `104` step as a second `load_older_button` activation rather than an unattributed retained-count mutation
+    - because the user may have manually clicked again during that run, the trace is still valid instrumentation but not yet valid proof of an unintended duplicate trigger
+- [ ] Batch 3: identify the in-place refresh owner.
+  - Start from the live conversation handle in the mounted React tree, not from DOM-only selectors.
+  - Inspect the hidden symbol-backed stores and signal accessors for:
+    - current turn snapshot
+    - current/root message ids
+    - fetch or refresh methods for older turns
+    - any store exposing `setState`/`getState` around thread data
+  - Update from the latest live pass:
+    - the mutable `Ys` tree is now proven, but mutating it does not change the mounted rendered-turn signal
+    - the next likely owner is the derived rendered-turn layer above that tree, likely tied to the conversation state object with `tree`, `_treeVersion`, and `asyncTurns`
+  - Exit only when the owner of the mounted rendered-turn signal is identified with concrete evidence, not just the mutable branch tree underneath it.
+  - [ ] Batch 4: prove an in-place native refresh on the same document.
+  - Trigger the identified owner or invalidation path without `location.reload()`.
+  - Verify that the document URL/title/history entry do not hard-reload.
+  - Verify that the mounted native turns or native thread state update in-place.
+  - Latest result:
+    - authenticated same-document fetch works
+    - live branch-tree mutation works
+    - rendered-turn recomputation still does not happen
+    - mounted turn-array owner mutation also works in place
+    - but real older-turn prepend still needs the companion flush/reconcile path beyond the turn-array owner itself
+  - Therefore the next single best probe is:
+    - identify and mutate the companion snapshot/reconcile layer that must be updated alongside the mounted turn-array owner
+    - prioritize the live tag-15 metadata snapshot path (`25`-item `{ turnDate, isRenderable }` array and adjacent memo refs) because broad owner-array mutation alone is now proven insufficient for real older-turn DOM insertion
+    - specifically inspect the row-materialization layer immediately after the tag-15 `hook 4` id list:
+      - determine which hook or child-fiber path turns that id list into actual rendered turn rows
+      - inspect sibling tuple hooks `1`, `3`, `9`, `11`, `19`, `21` for the id-list consumer now that `hook 4` and `hook 21` are both proven insufficient
+      - inspect child fibers beneath the tag-15 owner for the keyed React-element builder immediately above the per-turn `29`-slot wrapper (`aa` / `nst` / `div`) because the sampled `29`-slot and `10`-slot child arrays below that point already operate on one turn at a time
+    - avoid broad React dispatch forcing except as a last resort, because that path is now proven to risk the native `Content failed to load` failure state
+  - Why this is now the highest-value path:
+    - full same-document raw fetch is now solved via isolated-world fetch
+    - the mounted turn-array owner is now concretely identified and writable by reference
+    - the remaining gap is the final flush/reconcile layer between that owner array and actual native DOM insertion of real older turns
+    - the latest live pass narrowed that gap further:
+    - same-reference mutation plus narrow local dispatch is insufficient
+    - replacement-by-reference on the local metadata snapshot and memo deps is still insufficient
+    - replacement-by-reference on the tag-15 rendered id list is still insufficient
+    - replacement-by-reference on the tag-15 `hook 21` tuple alongside synchronized turn/id/meta/result updates is still insufficient
+    - the direct mounted turn-array getters are now also proven to be read-only/computed mirrors rather than writable source signals
+    - therefore the next likely remaining requirement is a keyed React-element builder just above the per-turn child wrappers, or another lower child-fiber row-materialization cache fed by the tag-15 hook caches (`hook 4`, `12`, `19`, `21`)
+    - updated highest-value next probe after the tree-plus-selector proof:
+      - decide whether to ship the smallest guarded manual in-place expansion path that:
+        - reuses the initial raw payload already seen by the bridge
+        - reconstructs the missing older turn objects in page world
+        - prepends the corresponding raw message chain into the live `Ys` tree
+        - patches the mounted owner selector window in place
+      - current evidence now says the remaining task is implementation hardening rather than existence-risk investigation:
+        - heavier-thread validation stayed clean
+        - the path also scaled to a `4`-turn contiguous prepend on the lighter thread
+      - the next single best probe is to determine the smallest bridge/runtime data handoff needed so the shipped manual button path can perform this tree+selector expansion from the initial pruned load, without a second authenticated full fetch
+      - new shipped manual-path implementation findings:
+        - the bridge/content manual button path now has a real shipped same-document attempt:
+          - `lazy-fast-bridge.js` caches the full raw payload in page world during prune
+          - `content.js` `Load older natively` now posts an in-place expansion request instead of immediately reloading
+          - `Load full conversation natively` still uses the old reload fallback path
+        - clean lighter-thread validation from `24` turns now proves the shipped path advances part of the native state in place without navigation:
+          - the sentinel survives, so the document does not reload
+          - the bridge updates the live `Ys` tree and mounted `turnArray`
+          - `turnArrayLen`, `hook 12`, and `hook 19.results` grow to `65`
+          - the mounted native `24`-turn DOM window slides upward to older real turns on the same document
+        - but the shipped path still does not complete the final render-width reconcile deterministically:
+          - `hook 4`, compiler cache slot `3`, cache slot `13`, cache slot `26`, and cache length slot `15` remain at `25` or snap back to `25`
+          - when that happens, the page shows only `24` mounted native turns even though the underlying turn window data is larger
+          - one later live state did show `63` mounted native turns with `hook 4/cache3 = 64`, so a delayed/native reconcile path likely exists, but it is not yet reproducible from the clean shipped button path
+        - direct second-phase bridge probes are now narrowed:
+          - patching `hook 4/cache3` from the expanded `turnArray` by hand snaps back
+          - patching the cached `Zm` row-element arrays (`cache13/cache26/cache27`) from the expanded `turnArray` also snaps back
+        - therefore the next single best probe is now even narrower:
+          - identify what actually promotes the successful shifted state from:
+            - `turnArray/hook12/hook19 = expanded`
+            - `hook4/cache3/cache13/cache26 = 25`
+          to the later successful fully expanded state where those caches become `64`
+          - in practice, this means tracing the hidden child-array / compiler-cache reconcile trigger rather than the raw tree or turn-array source, because those earlier layers are now proven to update first
+      - new deterministic shipped manual-path result:
+        - the false-negative reconcile gap is now explained and patched:
+          - the real deterministic gate was not the tree mutation or `hook 4` tuple patch by itself
+          - it was the owner's cached selector source in compiler cache slot `1`
+          - once that selector source was overridden to return the expanded tuple from the live `turnArray`, the row caches (`cache13/cache26`) built to full size and native DOM expansion became deterministic
+          - the bridge owner lookup also had to recognize its own selector override; otherwise later reconcile ticks falsely lost the owner and timed out
+        - shipped lighter-thread validation now succeeds from a clean baseline:
+          - `Chess table terminology`
+          - clean `24`-turn baseline
+          - one real `Load older natively` click
+          - no navigation / same document
+          - native DOM `24 -> 64`
+          - bridge history payload catches up to `requestedRetainedTurnCount = 64`
+          - banner later settles to `Fast Mode loaded latest 64 of 114 turns`
+          - anchor clears and no retry/failure UI appears
+        - shipped heavier-thread validation now also succeeds from a clean baseline:
+          - `Invoice Dispute Justification`
+          - clean `24`-turn baseline
+          - one real `Load older natively` click
+          - no navigation / same document
+          - native DOM `24 -> 64`
+          - bridge history payload catches up to `requestedRetainedTurnCount = 64`
+          - banner settles to `Fast Mode loaded latest 64 of 264 turns`
+          - anchor restores/clears and no retry/failure UI appears
+        - this means the shipped manual in-place native expansion proof now exists end-to-end:
+          - bridge captures raw full payload during prune
+          - manual button requests in-place native expansion
+          - page-world tree + selector source override expands the mounted native window on the same document
+          - content-side banner/history state catches up through the normal history payload channel
+        - repeated manual in-place expansion now also works on the shipped path after resetting the per-conversation restore gate for each new request:
+          - `content.js` now clears `state.restoredConversationId` before storing a fresh anchor for both:
+            - same-document `Load older natively`
+            - reload fallback `Load full conversation natively`
+          - this removes the stale same-conversation early-return in `maybeRestoreAnchor(...)` that previously blocked later anchor restore/cleanup on the same thread
+        - lighter-thread repeated validation now succeeds end-to-end on the same document:
+          - `Chess table terminology`
+          - clean `24`-turn baseline
+          - real manual-path sequence:
+            - `24 -> 64`
+            - `64 -> 104`
+            - `104 -> 114`
+          - final banner switches to `Fast Mode loaded all 114 turns natively.`
+          - native DOM reaches `114`
+          - anchor clears after each step
+          - no retry/failure UI appears
+          - note on inspection: the older button text node still reads `Load 0 older natively` in DOM if sampled directly, but the button is hidden at the full state; this is not a visible UI bug
+        - heavier-thread repeated validation now also succeeds on the same document:
+          - `Invoice Dispute Justification`
+          - clean `24`-turn baseline
+          - real manual-path sequence:
+            - `24 -> 64`
+            - `64 -> 104`
+          - native DOM reaches `104`
+          - bridge/debug retained count catches up to `104`
+          - anchor clears and no retry/failure UI appears
+        - the only observed false-negative during this pass was cooldown-related rather than architectural:
+          - a second click issued too quickly after the first successful expansion can be ignored by the existing `RELOAD_COOLDOWN_MS = 1500` guard
+          - waiting beyond that guard reproduces the second-step heavy-thread success immediately
+          - next hardening question is now UX-oriented:
+            - whether the manual button should temporarily disable during that cooldown window so rapid repeat clicks are visibly deferred instead of silently ignored
+        - new shipped cooldown-hardening result:
+          - the native banner buttons now respect the existing cooldown window instead of silently accepting an immediate repeat click
+          - `content.js` now disables `Load older natively` / `Load full conversation natively` while either:
+            - an in-place expansion is still pending
+            - or the post-expansion cooldown window is still active
+          - a small timeout-driven `updateBanner()` refresh re-enables them automatically when the cooldown expires
+        - post-patch live validation of the cooldown UX succeeded on both reference threads:
+          - lighter thread `Chess table terminology`
+            - clean `24`-turn baseline
+            - one real manual `Load older natively` click
+            - native/debug state reaches `64`
+            - button is visibly disabled during cooldown
+            - button re-enables automatically after cooldown
+          - heavier thread `Invoice Dispute Justification`
+            - clean `24`-turn baseline
+            - one real manual `Load older natively` click
+            - native/debug state reaches `64`
+            - button is visibly disabled during cooldown
+            - button re-enables automatically after cooldown
+        - new upward-auto-expansion implementation pass:
+          - the native banner runtime now tracks the current scroll root and samples its `scrollTop` on the existing route timer
+          - if the mounted window moves upward to the top threshold (`24px`) from a higher previous position, it requests the same in-place native expansion path via source `scroll_root_top`
+          - a global wheel-intent listener also attempts the same path at top-of-thread via source `scroll_root_wheel_top`
+        - current live validation blocker for the new auto path:
+          - on the attached lighter-thread baseline, `getScrollableContainer()` currently resolves to `HTML`, with `scrollHeight == clientHeight` and `overflowY = visible`
+          - that means the trimmed `24`-turn window is not actually overflowing in the current attached viewport, so there is no real upward scroll delta to observe from baseline
+          - separate input probing on this attached CDP session showed:
+            - Playwright `page.mouse.wheel(...)` did not reach the tab
+            - CDP `Input.dispatchMouseEvent` wheel injection also did not reach the tab
+            - page-world `window.dispatchEvent(new WheelEvent(...))` reached page-world listeners but still did not trigger the content-script auto path, which is consistent with content/page world isolation for synthetic events
+          - therefore the new auto path is implemented but not yet live-proven in this attached session
+        - next single best probe after this pass:
+          - validate the auto path with real user input on a thread/viewport where the trimmed mounted window actually overflows, or temporarily reduce viewport height so the trimmed `24`-turn state has a real internal scroll root before testing the top-threshold path again
+        - new auto-expansion instrumentation + bridge pass:
+          - `content.js` debug snapshots now preserve the most recent expansion request in stable fields:
+            - `lastRequestSource`
+            - `lastRequestRetainedTurnCount`
+            - `lastRequestAt`
+          - `lazy-fast-bridge.js` now also relays page-world top-intent as `csp-lazy-fast-auto-expand-intent`:
+            - page-world scroll-root binding
+            - page-world upward wheel capture
+            - throttled relay back to the content-side `requestNativeExpansion('older', source)` path
+        - updated live result after that pass:
+          - the effective winning auto source on this attached session was the existing content-side wheel-top path (`scroll_root_wheel_top`), not the new bridge relay
+          - but the new stable debug fields finally make that observable without racing the rolling event window
+        - proven live facts from the focused auto probes:
+          - lighter thread `Chess table terminology`
+            - clean `24`-turn baseline restored
+            - one synthetic top-wheel intent on the attached tab produced:
+              - `lastRequestSource = scroll_root_wheel_top`
+              - `lastRequestRetainedTurnCount = 64`
+              - matching `request_native_expansion`, `store_anchor`, and `set_retained_count` events
+            - after settle, the same thread reached:
+              - `summaryText = Fast Mode loaded latest 64 of 114 turns.`
+              - native DOM in the expected expanded range (`63-64`, depending on transient final row timing)
+              - cleared anchor
+          - heavier thread `Invoice Dispute Justification`
+            - the same synthetic top-wheel probe produced:
+              - `lastRequestSource = scroll_root_wheel_top`
+              - `lastRequestRetainedTurnCount = 64`
+            - after settle, the thread reached:
+              - `summaryText = Fast Mode loaded latest 64 of 264 turns.`
+              - native DOM in the expected expanded range (`63-64`)
+              - cleared anchor
+          - coexistence with the shipped manual path remains clean after auto:
+            - from the heavy thread's auto-expanded `64` state, one real `Load older natively` click still advanced to:
+              - `summaryText = Fast Mode loaded latest 104 of 264 turns.`
+              - `debugRequestedRetainedTurnCount = 104`
+              - `lastRequestSource = load_older_button`
+              - native DOM in the expected expanded range (`103-104`)
+              - cleared anchor
+        - revised best read:
+          - upward auto expansion is now effectively proven on the attached session through the same native in-place controller, with stable source attribution
+          - the remaining issue is not whether the auto path works
+          - it is whether to keep the bridge relay as a robustness layer or prune back to the simpler content-side wheel-top path once more real-user overflow validation is done
+        - new repeated-auto proof through the auto-intent message path:
+          - using the same auto-intent source that the page bridge emits (`csp-lazy-fast-auto-expand-intent`), the lighter thread now proves repeated in-place auto expansion end-to-end:
+            - `24 -> 64 -> 104 -> 114`
+            - each step records:
+              - `lastRequestSource = scroll_root_wheel_top_bridge`
+              - matching `lastRequestRetainedTurnCount`
+              - stored anchor during request
+              - cleared anchor after settle
+            - final lighter-thread state:
+              - `nativeTurnCount = 114`
+              - `summaryText = Fast Mode loaded all 114 turns natively.`
+              - older button hidden
+          - the heavier thread also proves repeated auto expansion through that same auto-intent path:
+            - `24 -> 64 -> 104`
+            - each step records:
+              - `lastRequestSource = scroll_root_wheel_top_bridge`
+              - matching retained-count advance
+              - stored anchor during request
+              - cleared anchor after settle
+            - settled heavy-thread states reached:
+              - `summaryText = Fast Mode loaded latest 64 of 264 turns.`
+              - `summaryText = Fast Mode loaded latest 104 of 264 turns.`
+        - new coexistence result after repeated auto:
+          - from the heavy thread's auto-expanded `104` state, one real manual `Load older natively` click still advanced cleanly to:
+            - `debugRequestedRetainedTurnCount = 144`
+            - `lastRequestSource = load_older_button`
+            - `summaryText = Fast Mode loaded latest 144 of 264 turns.`
+            - `nativeTurnCount = 144`
+            - cleared anchor
+        - updated best read after this pass:
+          - the shared native in-place controller now has proof for:
+            - manual repeated expansion
+            - auto-triggered repeated expansion
+            - manual-after-auto coexistence
+          - the next engineering decision is no longer about feasibility
+          - it is about cleanup/simplification:
+            - whether to keep both content-side wheel-top auto triggering and the new bridge auto-intent relay
+            - or prune one once real manual overflow testing shows which source is actually needed in normal use
+        - cleanup decision completed in the next pass:
+          - the content-side auto-trigger helpers were removed
+            - no content-side wheel-top listener
+            - no content-side scroll-root top polling state
+          - auto expansion is now bridge-owned:
+            - page-world bridge detects top-intent
+            - bridge relays `csp-lazy-fast-auto-expand-intent`
+            - content-side code reuses the existing native in-place controller from that relay
+        - bridge-owned auto stack is now live-proven after simplification:
+          - focused lighter-thread wheel probe:
+            - one synthetic top-wheel intent produced:
+              - `debugLastRequestSource = scroll_root_wheel_top_bridge`
+              - `debugLastRequestRetainedTurnCount = 64`
+              - stored anchor present during request
+          - repeated bridge-intent proof on lighter thread:
+            - `24 -> 64 -> 104 -> 114`
+            - every request/settle step stayed on:
+              - `debugLastRequestSource = scroll_root_wheel_top_bridge`
+            - final lighter-thread state:
+              - `nativeTurnCount = 114`
+              - `Fast Mode loaded all 114 turns natively.`
+              - older button hidden
+              - anchor cleared
+          - repeated bridge-intent proof on heavier thread:
+            - `24 -> 64 -> 104`
+            - every request/settle step stayed on:
+              - `debugLastRequestSource = scroll_root_wheel_top_bridge`
+            - settled heavy states reached:
+              - `nativeTurnCount = 64`, `Fast Mode loaded latest 64 of 264 turns.`
+              - `nativeTurnCount = 104`, `Fast Mode loaded latest 104 of 264 turns.`
+              - anchor cleared after each step
+        - manual-after-auto coexistence remains clean after the simplification:
+          - from the heavy thread's bridge-auto-expanded `104` state, one real manual `Load older natively` click still advanced to:
+            - `nativeTurnCount = 144`
+            - `debugRequestedRetainedTurnCount = 144`
+            - `lastRequestSource = load_older_button`
+            - `Fast Mode loaded latest 144 of 264 turns.`
+            - cleared anchor
+        - revised best read after the cleanup:
+          - the auto path is no longer split across competing content/page listeners
+          - bridge-owned auto plus the shared native expansion controller is now the simpler and fully proven stack
+          - the next useful work is cleanup around residual edge cases, not ownership discovery
+        - edge-case cleanup pass on smooth prepend motion:
+          - local library check result:
+            - no exact existing taxonomy match for `infinite scrolling`, `virtual scrolling`, or `scroll animation`
+            - closest existing category is the unfilled secondary-taxonomy line `Animation systems`
+            - current best engineering read for this extension:
+              - do not add a new turnkey third-party prepend/virtual-scroll library just for this
+              - ChatGPT owns the native thread DOM and render lifecycle, so a drop-in list/animation library is unlikely to `just work`
+              - use the already shipped GSAP stack first
+          - shipped experimental content-side cleanup now includes:
+            - a stable visible-anchor picker instead of blindly using the first intersecting turn
+            - a bounded GSAP anchor-restore tween instead of only `scrollTop += delta`
+            - temporary scroll-root guard during anchor restore:
+              - `overflow-anchor: none`
+              - `scroll-behavior: auto`
+            - attempted GSAP `Flip` capture/playback on the visible native turns around older-turn expansion
+          - live validation on lighter thread after manual unpacked-extension reload:
+            - clean baseline still holds:
+              - `Fast Mode loaded latest 24 of 114 turns.`
+            - native manual expansion still works:
+              - `24 -> 64`
+              - `64 -> 104`
+            - actual page-world scroll root reconfirmed:
+              - `DIV.group/scroll-root ... overflow-y-auto`
+            - forced mid-scroll probe still shows the prepend jump is not fully solved:
+              - observed scroll-top sequence before the latest `Flip` binding fix:
+                - `240 -> 311 -> 21076 -> 0`
+              - after the scroll-root guard patch it tightened but still jumped:
+                - `240 -> 311 -> 21076 -> 0`
+            - `Flip` attempt is not yet proven live:
+              - sampled tracked native turns did not show transform animation in the probe
+          - current best hypothesis:
+            - the visible jump is happening on a deeper row/wrapper layer than the top-level native turn element, so animating the turn shell itself is not yet enough
+            - CSS/browser scroll anchoring was part of the story, but not the only cause
+          - next best probe:
+            - identify the actual row wrapper that moves during prepend and target `Flip` or transform smoothing there, rather than on the outer turn section/article node
+            - if that still fails, instrument the content-world anchor math directly to capture:
+              - chosen anchor id
+              - desired offset
+              - computed delta
+              - actual scroll-root target during the bad `21076` jump
+        - follow-up live probe after the smooth-motion instrumentation:
+          - the row-wrapper theory was weaker than the scroll-root theory:
+            - tracking the actual mounted native turn plus its first `6` ancestors showed no transform animation on any sampled wrapper
+            - the whole thread stack moved together because the real scroll root was jumping
+          - actual bad-path sequence before the latest anchor-choice fix:
+            - stored anchor at `scrollTop = 260`:
+              - chosen anchor id: `5e5fb636-569a-413e-90ae-c7d272796012`
+              - desired offset: `539px`
+            - live sequence during one real `24 -> 64` click:
+              - `scrollTop: 260 -> 331 -> 21096 -> 186 -> 0`
+              - anchor never cleared
+            - direct anchor-math sample explained why:
+              - current offset ended at `113px`
+              - desired offset stayed `539px`
+              - delta stayed negative
+              - restoring that lower-in-viewport anchor would have required an impossible negative `scrollTop`
+          - concrete fix from that evidence:
+            - changed the stored anchor choice from:
+              - first fully visible / non-negative offset bias
+            - to:
+              - the turn closest to the top edge of the viewport
+            - also moved the scroll-root guard earlier:
+              - enable `overflow-anchor: none` immediately after anchor storage and before the in-place expansion request is posted
+          - post-fix live proof on lighter thread:
+            - real mid-scroll request:
+              - start `scrollTop = 260`
+              - final settle `scrollTop = 140`
+              - pending anchor cleared successfully
+            - the earlier pathological spike disappeared from the condensed trace:
+              - new observed path: `260 -> 140`
+            - same-document manual expansion still succeeds:
+              - `24 -> 64`
+              - summary `Fast Mode loaded latest 64 of 114 turns.`
+            - repeated manual expansion still succeeds after the fix:
+              - `64 -> 104`
+              - summary `Fast Mode loaded latest 104 of 114 turns.`
+              - anchor cleared
+          - updated best read:
+            - the main edge-case cleanup win in this pass was anchor semantics, not wrapper animation
+            - top-edge anchor selection is materially better for prepend expansion than first fully visible anchor selection on this live thread
+          - next best probe:
+            - keep the top-edge anchor path
+            - now reassess whether any additional GSAP `Flip` work is still worth keeping, since the major observed jump was mostly the scroll-root anchoring fight rather than a missing row animation
+        - external guidance pass for "make prepend feel like a smooth lazy loader":
+          - official stack guidance checked:
+            - GSAP `Flip` docs:
+              - `Flip.getState(...)` + DOM changes + `Flip.from(...)` is the intended way to hide layout jumps after structural DOM changes
+              - `absolute: true` is specifically recommended when layout changes are not behaving seamlessly
+            - GSAP `ScrollToPlugin` docs:
+              - keep scroll motion explicit through `gsap.to(scroller, { scrollTo: ... })`
+            - MDN `overflow-anchor` docs:
+              - browser scroll anchoring is on by default where supported
+              - use `overflow-anchor: none` when scroll anchoring itself is causing problems
+          - recent practitioner chatter / issue signal:
+            - TanStack reversed-list discussion:
+              - prepend flows are typically solved by preserving a measured offset (`delta`) rather than expecting the list to stay visually stable on its own
+            - FlashList issue `maintainVisibleContentPosition`:
+              - even libraries built for chat can still visibly move on prepend
+              - this is evidence against assuming a turnkey library will solve ChatGPT's native DOM prepend case for us
+            - AutoAnimate docs:
+              - attractive for ordinary app-owned lists, but it only animates a parent and its immediate children and may rewrite parent positioning
+              - that is still a poor fit for ChatGPT's internally owned thread DOM
+        - resulting implementation plan for the next cleanup pass:
+          - objective:
+            - make older-turn expansion feel like a brief "loading upstream" interaction instead of a visible yank to the top
+          - plan A: explicit in-flight freeze + spinner + delayed reveal
+            - when manual or auto older-load starts:
+              - store the top-edge anchor
+              - immediately enable the scroll-root guard
+              - set a real in-flight UI state on the banner:
+                - spinner
+                - `Loading older turns...`
+                - disable repeat triggers
+            - while the bridge expands the mounted native window:
+              - keep the scroll root visually frozen
+              - do not try to continuously chase `scrollTop` frame-by-frame
+            - after the new retained window is definitely present:
+              - compute the final anchor delta once
+              - reveal with one short GSAP `scrollTo` settle instead of many micro-adjustments
+          - plan B: targeted reveal animation only after stability
+            - only after plan A is stable, test whether a small `Flip.from(...)` on the visible native rows adds meaningful polish
+            - if no clear user-facing win is seen, remove the extra `Flip` path and keep only the freeze/spinner/reveal flow
+          - plan C: guardrails
+            - timeout the busy state and clear the guard on failure
+            - keep the current repeated manual proof intact:
+              - `24 -> 64 -> 104`
+            - do not add a new dependency for this pass
+        - implementation pass for plan A is now live-proven on the lighter thread:
+          - shipped content-side changes:
+            - real in-place busy state for same-document older expansion
+            - banner spinner + localized `Loading older turns...` summary
+            - freeze intermediate history churn by pinning the scroll root to the pre-expansion scroll position while busy
+            - defer anchor restore until `EXPAND_RESULT_SOURCE` success instead of trying to restore on every intermediate stored/history payload
+            - perform one final settle/reveal from the saved anchor and then clear the pending anchor
+          - manual unpacked-extension reload was performed before validation
+          - consolidated lighter-thread validation on `Chess table terminology`:
+            - clean baseline still works:
+              - `Fast Mode loaded latest 24 of 114 turns.`
+            - real mid-scroll `24 -> 64` click now shows the intended brief busy state:
+              - first observed state:
+                - `scrollTop = 260`
+                - summary `Loading older turns...`
+                - banner `data-busy = true`
+                - pending anchor present
+              - final observed state:
+                - `scrollTop = 140`
+                - summary `Fast Mode loaded latest 64 of 114 turns.`
+                - banner `data-busy = false`
+                - pending anchor cleared
+              - condensed trace reduced to:
+                - `260 -> 140`
+            - repeated manual expansion still succeeds after the change:
+              - `64 -> 104`
+              - final summary `Fast Mode loaded latest 104 of 114 turns.`
+              - pending anchor cleared
+            - thread was restored to the clean `24`-turn baseline after validation
+          - updated best read:
+            - this is materially closer to the familiar "spinner while older rows load above me" UX the user described
+            - the main improvement came from busy-state gating + delayed reveal, not from extra wrapper animation
+          - next best probe:
+            - test whether the busy-state reveal should also hold the final scroll position slightly longer before releasing user control
+            - then validate the same flow on the heavier `Invoice Dispute Justification` thread before doing more motion polish
+        - deeper forum/discussion pass after the "still not low enough" complaint:
+          - live measurement on the lighter thread now makes the core bug unambiguous:
+            - one real `24 -> 64` expansion does increase the real scrollable range a lot:
+              - before:
+                - `scrollHeight = 14063`
+                - `maxScrollTop = 13443`
+              - after:
+                - `scrollHeight = 34899`
+                - `maxScrollTop = 34279`
+            - so the problem is not "it loaded the entire conversation" or "scroll length never changed"
+            - the actual problem is:
+              - the reveal settles far too close to the top of the expanded range
+              - which makes it feel like the whole conversation suddenly loaded and jumped upward
+          - relevant discussion/forum guidance gathered:
+            - Stack Overflow prepend discussion:
+              - measure old height and old scroll position, then restore with:
+                - `scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight)`
+              - same thread also recommends anchoring to the original first visible element's updated position after prepend
+            - React Virtuoso discussion:
+              - accepted working hack is to lock scroll, then on total-list-height change apply:
+                - `delta = newHeight - oldHeight (+ gap)`
+                - `scrollTop += delta`
+            - `virtual-scroller` docs:
+              - explicitly call out that prepending pushes visible content down and feels buggy even if raw `scrollTop` did not "change"
+              - their built-in fix is `preserveScrollPositionOnPrependItems`
+              - they also expose a `readyToStart: false` freeze concept, which matches our busy-state idea
+            - FlashList chat regression issue:
+              - the reported UX failure is exactly "direction and reveal feel wrong even though data loading is technically working"
+              - this reinforces that user perception matters more than the implementation being technically in-place
+          - corrected implementation direction from those sources:
+            - stop using the current top-edge-anchor reveal as the primary same-document prepend strategy
+            - primary strategy should be scroll-height delta compensation:
+              - capture before request:
+                - `oldScrollTop`
+                - `oldScrollHeight`
+                - `oldMaxScrollTop`
+                - optional `distanceFromBottom = oldMaxScrollTop - oldScrollTop`
+              - while busy:
+                - freeze the scroll root
+                - keep the spinner/loading state visible
+              - after the new retained window exists:
+                - compute `heightDelta = newScrollHeight - oldScrollHeight`
+                - set `scrollTop = oldScrollTop + heightDelta`
+                - or equivalently preserve the old distance from bottom
+              - only after that compensation succeeds:
+                - clear busy state
+                - optionally apply a tiny reveal nudge upward (for example `24-48px`) if we want users to notice new history exists above
+            - keep anchor-based math only as:
+              - a secondary fallback
+              - or a verification signal
+              - not the primary reveal mechanism
+          - concrete next pass plan:
+            - add a new busy snapshot object that stores:
+              - `oldScrollTop`
+              - `oldScrollHeight`
+              - `oldMaxScrollTop`
+              - `distanceFromBottom`
+            - on expand success:
+              - compensate with the measured height delta first
+              - then verify the old visible turn is still near its prior viewport location
+            - if that works on the lighter thread:
+              - validate the same path on the heavier thread
+            - only after that:
+              - decide whether any small top loading shim / peek indicator is still needed
+          - live validation result after the distance-lock patch:
+            - the shipped in-place path now keeps a short post-reveal distance lock instead of clearing busy immediately after the first settle
+            - on the lighter `Chess table terminology` thread, one real shipped `Load older natively` click from the clean `24` baseline produced:
+              - baseline `scrollTop = 13225`
+              - baseline `scrollHeight = 14063`
+              - baseline `maxScrollTop = 13443`
+              - baseline `distanceFromBottom = 218`
+            - during the same `24 -> 64` expansion:
+              - busy state stayed frozen while the retained window formed upstream
+              - native DOM expanded to `64`
+              - late layout growth still changed `scrollHeight` after the first reveal
+            - but the new post-reveal lock kept the visible reading position stable through that late growth:
+              - final `scrollHeight = 34899`
+              - final `maxScrollTop = 34279`
+              - final `scrollTop = 34060.7148`
+              - final `distanceFromBottom = 218.2851`
+            - that is the first live proof that the same-document prepend now preserves the original reading position instead of drifting upward toward the top of the expanded window
+            - repeated manual expansion still works after the patch:
+              - `64 -> 104`
+              - clean summary `Fast Mode loaded latest 104 of 114 turns.`
+              - no pending anchor left behind
+            - current read:
+              - the main prepend-position bug is fixed on the lighter thread
+              - remaining UX polish is now about whether to add a small deliberate reveal nudge or other visual affordance, not about correcting a broken settle algorithm
+          - follow-up live validation after extending the same rule into the busy phase:
+            - the shipped path now keeps the same distance-from-bottom during the busy/spinner interval too, instead of pinning absolute `scrollTop`
+            - on the same lighter thread, the earlier bad busy sample:
+              - `scrollTop = 10347.8574`
+              - `distanceFromBottom = 0.1426`
+              - while `scrollHeight` briefly shrank to `10968`
+            - is now replaced by:
+              - `scrollTop = 10130`
+              - `distanceFromBottom = 218`
+              - at the same temporary `scrollHeight = 10968`
+            - that proves the busy phase now preserves the original reading position instead of collapsing upward to the temporary shrunken max
+            - repeated manual expansion still preserves the same reading position:
+              - after `24 -> 64`, final `distanceFromBottom = 218.2851`
+              - after `64 -> 104`, final `distanceFromBottom = 218.2851`
+            - current read after this pass:
+              - the main same-document prepend-position issue is solved on the lighter thread across both the busy interval and the settled state
+              - this is now in “stop unless manual testing finds another UX complaint” territory, not “keep grinding core scroll preservation”
+          - final validation pass after tightening the busy-to-stable handoff:
+            - the remaining one-frame post-busy snap is now gone on both the lighter and heavier threads
+            - implementation change:
+              - the post-reveal distance lock now applies immediately
+              - and `busy` stays active until one animation-frame later, so the spinner is not cleared before the first locked settle frame
+            - lighter thread (`Chess table terminology`) live result:
+              - `24 -> 64`
+                - `firstPostBusyDistance = 218.2851`
+                - `transientAfterBusy = null`
+              - `64 -> 104`
+                - `firstPostBusyDistance = 218.5703`
+                - `transientAfterBusy = null`
+            - heavier thread (`Invoice Dispute Justification`) live result:
+              - `24 -> 64`
+                - `firstPostBusyDistance = 217.7129`
+                - `transientAfterBusy = null`
+              - `64 -> 104`
+                - `firstPostBusyDistance = 217.7148`
+                - `transientAfterBusy = null`
+            - current read after this pass:
+              - the core native prepend UX is in the right place now
+              - there is no longer a measured position-preservation bug to keep grinding in this thread
+
+##### Stop rules
+
+- [ ] Stop and do not patch broader behavior if the current run has not first met the clean `24`-turn baseline gate.
+- [ ] Stop and do not patch auto mode, full-load mode, or recovery mode until an in-place native owner has been identified with live evidence.
+- [ ] Stop and do not treat reload-based manual expansion as the target end behavior; it is now only a reference implementation and bootstrap fallback.
+
+- [ ] Rebuild the manual native expansion controller around ChatGPT's real internal scroll root instead of `window`.
+  - Investigation result: the conversation scrolls inside the `group/scroll-root ... overflow-y-auto` container, while `window.scrollY` stays `0`; top detection, anchor restore, and any future auto mode must use `getScrollableContainer()` as the single scroll source.
+  - Update banner placement, visible-turn detection, stored offset math, and any top-threshold logic to read/write `scrollTop` on that internal scroll root.
+- [ ] Unify retained-window state semantics between `content.js` and the page bridge before changing batch behavior again.
+  - Investigation result: the bridge intentionally ignores stored retained counts unless a matching anchor exists, but `content.js` still reads stale retained counts directly from `sessionStorage`, which caused a `24 -> 104` jump instead of a clean `24 -> 64` step on the slow thread.
+  - Make the content-side retained count derive from the current bridge payload unless a valid pending anchor proves an in-flight expansion reload.
+- [ ] Make manual `Load older natively` deterministic and inspectable before revisiting auto mode.
+  - Add explicit reload-reason/debug state on `window` for the current conversation: requested retained count, anchor id, anchor offset, current scroll-root metrics, and whether a reload is pending.
+  - Ensure the button path always stores the anchor, updates retained count, and triggers reload from the same code path, then verify the expanded bridge payload and mounted turn count after reload.
+- [ ] Add a timeout/backout path for blank expanded reloads.
+  - Investigation result: the pruned `24`-turn route mounts in roughly `12s` on the slow reference conversation, but expanded reloads can sit with `0` rendered turns while bridge history already shows the larger retained window.
+  - If an expansion reload does not remount native turns within a bounded threshold, clear the pending anchor/retained state, fall back to the baseline retained window, and surface a lightweight recovery notice instead of leaving the route blank.
+- [ ] Protect the model-label scrape and model-action pipeline from Fast Mode runtime interference.
+  - Investigation result: model catalog scrape and model-name persistence still run inside the same `/c/*` content-script runtime (`CSP_GET_MODEL_NAMES`, `CSP_SCRAPE_MODEL_CATALOG`, `CSP_TRIGGER_MODEL_ACTION`), so Fast Mode route reloads and retained-state mutations can break a core feature even if the DOM selectors themselves still exist.
+  - Add a shared "model scrape active" guard so Fast Mode does not trigger reloads or mutate retained-window state during model-name collection, configure-modal scraping, or model actions; keep the popup/content label coordination path intact.
+- [ ] Add a temporary popup toggle to disable Fast Mode entirely for A/B validation against core features.
+  - Use it to confirm whether turning Fast Mode off restores model-name scraping and related model actions on the same ChatGPT routes.
+  - Keep the popup toggle out of the critical-path implementation until the inert code path is proven locally.
+- [ ] Re-validate the live slow reference conversation with the manual native proof after those fixes, then only decide whether auto expansion is still necessary.
+  - Success criteria: initial pruned load mounts quickly, scrolling the real chat scroll root to the top exposes the banner, one `Load older natively` action produces the next retained window natively, the same visible turn is restored near the same viewport offset, and model-name scraping still works on the same page.
+
+##### Deferred until the single-click proof passes
+
+- [ ] Keep TanStack and other virtual-list helpers out of the active path until the native scroll-root proof is stable.
+  - Docs/forum guidance: TanStack Virtual can support chat-style reverse/prepend flows, but the official docs still require correct `getScrollElement`, stable `getItemKey`, dynamic `measureElement`, careful `overscan`, and explicit scroll-position adjustment; the maintainers also note the chat-style reversed/prepend recipe is not obvious yet.
+  - Use the helper docs as design constraints, not as a drop-in solution for ChatGPT's native route/hydration behavior.
+- [ ] Decide whether to keep rich-segment preservation in the bridge as debug-only instrumentation or prune it back now that the native renderer owns older-turn fidelity.
+- [ ] Add lightweight in-flight feedback on the buttons only if manual testing shows expansion reloads need clearer status.
+- [ ] Benchmark the revised native-expansion architecture only after manual behavior is stable.
+- [ ] Revisit auto mode later only if needed: default auto native expansion, optional manual-only fallback checkbox.
