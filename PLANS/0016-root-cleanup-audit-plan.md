@@ -49,7 +49,7 @@
 - `popup.css`
 - `popup.html`
 - `popup.js`
-- `docs/policies/Privacy-Policy.md`
+- `Privacy-Policy.md`
 - `PROJECT_SPEC.md`
 - `README.md`
 - `scrub-this-css.css`
@@ -128,7 +128,7 @@
 - `popup.css` - ships in the release zip.
 - `popup.html` - ships in the release zip.
 - `popup.js` - ships in the release zip.
-- `docs/policies/Privacy-Policy.md` - support/policy document.
+- `Privacy-Policy.md` - support/policy document kept at the repo root.
 - `PROJECT_SPEC.md` - durable project overview.
 - `README.md` - project public overview.
 - `settings-schema.js` - ships in the release zip.
