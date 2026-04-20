@@ -72,6 +72,4 @@ tests/playwright/topbar-to-bottom-*.json
 tests/playwright/topbar-to-bottom-*.js
 
 # Temporary scratch/reference artifacts
-_temp-files/**
-!_temp-files/
-!_temp-files/README.md
+_temp-files/

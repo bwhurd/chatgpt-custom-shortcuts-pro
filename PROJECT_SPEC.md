@@ -79,5 +79,5 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 - `AGENTS.md` routes work and owns guardrails.
 - `SPECS/` holds deep subsystem detail that is too specific or volatile for this overview.
 - `PLANS/` holds active, deferred, blocked, and completed plan markdown using status-in-filename protocol.
-- `_temp-files/` holds ignored scratch artifacts, copied inspector captures, reference scripts, and support material that should not be default startup reading.
+- `_temp-files/` is a fully ignored local scratch area for copied inspector captures, reference scripts, and support material that should not be default startup reading.
 - Older Codex plan material now lives under `PLANS/Done-*` as archive-only reference material.

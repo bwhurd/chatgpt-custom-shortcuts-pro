@@ -127,7 +127,6 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
   - `extension/lib/*.min.js`
   - `tools/*.zip`
 - Scratch and copied support artifacts:
-  - `_temp-files/README.md`
   - `_temp-files/**` only when the user explicitly references a file or path there
 - Ignore everything else unless the user explicitly directs otherwise.
 - Explicitly exclude `node_modules`, `netlify`, `css-cleanup`, `_temp-files` contents unless explicitly referenced, and `.git`.
