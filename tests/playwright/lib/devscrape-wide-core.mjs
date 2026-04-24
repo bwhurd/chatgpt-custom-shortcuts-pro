@@ -1,7 +1,7 @@
 import { access, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   buildShortcutValidationInventory,
   parseSettingsSchemaSource,
@@ -2327,6 +2327,12 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function folderPathLinkHtml(folderPath) {
+  if (!folderPath) return '<span class="mono">(unknown)</span>';
+  const href = pathToFileURL(folderPath.endsWith(path.sep) ? folderPath : `${folderPath}${path.sep}`).href;
+  return `<a class="mono" href="${escapeHtml(href)}" title="Open local scrape folder">${escapeHtml(folderPath)}</a>`;
+}
+
 export function renderCheckReportHtml(report) {
   const shortcutRows = Array.isArray(report?.shortcutRows) ? report.shortcutRows : [];
   const targetRows = Array.isArray(report?.targetRows) ? report.targetRows : [];
@@ -2466,7 +2472,7 @@ export function renderCheckReportHtml(report) {
     '<input class="tab-input" id="tab-details" name="report-tab" type="radio">',
     '<div class="tab-labels"><label for="tab-summary">Dashboard</label><label for="tab-details">Details</label></div>',
     '<div class="tab-panels"><section class="tab-panel" id="summary-panel">',
-    `<p><strong>Folder:</strong> <span class="mono">${escapeHtml(report?.folderName || '')}</span></p>`,
+    `<p><strong>Folder:</strong> ${folderPathLinkHtml(report?.folderPath || '')}</p>`,
     '<table class="dashboard-table"><thead><tr><th>Check</th><th>Status</th><th>Good</th><th>Needs Attention</th><th>Meaning</th></tr></thead><tbody>',
     dashboardRows
       .map((row) => {
