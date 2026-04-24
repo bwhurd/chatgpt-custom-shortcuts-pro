@@ -2270,13 +2270,18 @@ export async function buildCheckReport({ folderName = null } = {}) {
     noScrapeCoverage: targetRows.filter((row) => row.status === 'no-scrape-coverage').length,
   };
 
+  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows) ? run.liveProbeReport.rows : [];
+  const livePassedActionIds = new Set(
+    liveProbeRows.filter((row) => row.status === 'pass').map((row) => row.actionId),
+  );
   const failingShortcutRows = shortcutRows.filter((row) => row.status === 'fail');
-  const partialShortcutRows = shortcutRows.filter((row) => row.status === 'partial');
+  const partialShortcutRows = shortcutRows.filter(
+    (row) => row.status === 'partial' && !livePassedActionIds.has(row.actionId),
+  );
   const manualShortcutRows = shortcutRows.filter((row) => row.status === 'manual');
   const needsCoverageShortcutRows = shortcutRows.filter((row) =>
-    ['partial', 'manual'].includes(row.status),
+    ['partial', 'manual'].includes(row.status) && !livePassedActionIds.has(row.actionId),
   );
-  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows) ? run.liveProbeReport.rows : [];
   const liveProbeSummary =
     run.liveProbeReport?.summary || buildLiveProbeSummary([], 'not-run');
   const summary = {
@@ -2343,6 +2348,15 @@ export function renderCheckReportHtml(report) {
     ? report.missingExpectedFiles
     : [];
   const liveProbeRows = Array.isArray(report?.liveProbeRows) ? report.liveProbeRows : [];
+  const livePassedActionIds = new Set(
+    liveProbeRows.filter((row) => row.status === 'pass').map((row) => row.actionId),
+  );
+  const actionablePartialShortcutRows = partialShortcutRows.filter(
+    (row) => !livePassedActionIds.has(row.actionId),
+  );
+  const actionableNeedsCoverageShortcutRows = needsCoverageShortcutRows.filter(
+    (row) => !livePassedActionIds.has(row.actionId),
+  );
   const shortcutSummary = report?.summary?.shortcuts || {};
   const targetSummary = report?.summary?.targets || {};
   const liveProbeSummary = report?.summary?.liveProbes || { runStatus: 'not-run' };
@@ -2378,12 +2392,12 @@ export function renderCheckReportHtml(report) {
       status:
         (shortcutSummary.failed || 0) > 0
           ? 'Needs Fix'
-          : (shortcutSummary.partial || 0) > 0
+          : actionablePartialShortcutRows.length > 0
             ? 'Partial'
             : 'Pass',
       good: shortcutSummary.passed || 0,
-      needs: (shortcutSummary.failed || 0) + (shortcutSummary.partial || 0),
-      meaning: `${shortcutSummary.failed || 0} failed, ${shortcutSummary.partial || 0} partial, ${shortcutSummary.manual || 0} manual follow-up.`,
+      needs: (shortcutSummary.failed || 0) + actionablePartialShortcutRows.length,
+      meaning: `${shortcutSummary.failed || 0} failed, ${actionablePartialShortcutRows.length} unresolved partial, ${shortcutSummary.manual || 0} manual follow-up.`,
     },
     {
       area: 'Live Activation Probes',
@@ -2409,7 +2423,7 @@ export function renderCheckReportHtml(report) {
       item: row.actionId,
       reason: row.statusReason,
     })),
-    ...partialShortcutRows.map((row) => ({
+    ...actionablePartialShortcutRows.map((row) => ({
       kind: 'Needs coverage',
       item: row.actionId,
       reason: row.statusReason,
@@ -2510,11 +2524,11 @@ export function renderCheckReportHtml(report) {
       : '<p>None.</p>',
     '</div>',
     '<div class="section"><strong>Needs Coverage / Manual Follow-Up</strong>',
-    needsCoverageShortcutRows.length
-      ? `<ul>${needsCoverageShortcutRows
+    actionableNeedsCoverageShortcutRows.length
+      ? `<ul>${actionableNeedsCoverageShortcutRows
           .map(
             (row) =>
-              `<li><span class="mono">${escapeHtml(row.actionId)}</span> — ${escapeHtml(row.label)} — ${escapeHtml(row.statusReason)}</li>`,
+              `<li><span class="mono">${escapeHtml(row.actionId)}</span> - ${escapeHtml(row.label)} - ${escapeHtml(row.statusReason)}</li>`,
           )
           .join('')}</ul>`
       : '<p>None.</p>',
