@@ -2,7 +2,7 @@
 
 Changes typically post to the official [ChatGPT Custom Shortcuts Pro chrome web store listing](https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf) a couple days after the date below.
 
-If you don’t want to wait, go to the [CGCSP Git repot](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro) to download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
+If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro) to download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
 ---
 
@@ -41,13 +41,13 @@ If you don’t want to wait, go to the [CGCSP Git repot](https://github.com/bwhu
 #### 03.24.2026
 - Improved: Send Top Bar To Bottom now loads faster and more consistently, with no redraws or movement.
 
-#### 03.22.2026  
+#### 03.22.2026
 - Fixed: Model picker hotkeys and labels now work.
 - Added: Unified model picker labels and shortcuts match across popup and overlay.
 - Added: Button for manual model sync. Shortcuts now open 'Configure Models', pick the model, then close.
 - Changed: Manual model sync reminder now shows once per week (was daily).
 
-#### 03.21.2026  
+#### 03.21.2026
 - Fixed: Select and Copy, Dictation, and Add Files/Photos shortcuts work again.
 - Improved: 'Move top bar to bottom' is faster and doesn't affect page load time.
 - Added: Manual model refresh button in the popup.
@@ -61,30 +61,30 @@ If you don’t want to wait, go to the [CGCSP Git repot](https://github.com/bwhu
 - Improved: Disclaimer hiding works even if the Fade Message Buttons toggle is off.
 - Changed: Popup and overlay now use local and system fonts (no Google fonts).
 
-#### 03.04.2026  
+#### 03.04.2026
 - Improved: Model picker labels now include GPT version numbers (e.g., "GPT-5.3 Instant") to avoid duplicates.
 
-#### 02.13.2026  
+#### 02.13.2026
 - Fixed: Model picker now removes outdated labels so the popup stays accurate.
 
-#### 01.19.2026  
+#### 01.19.2026
 - Improved: Ctrl+/ overlay only shows assigned shortcuts, matches popup labels, and adds actions like Share, Branch In New Chat, Cancel Dictation, and Read Aloud.
 - Added: Highlight Bold Text toggle with color pickers and reset button.
 - Changed: "Select + Copy All" now copies both user and ChatGPT messages by default.
 
-#### 01.02.2026  
+#### 01.02.2026
 - Fixed: Send Edit shortcut works again.
 - Fixed: New GPT Conversation shortcut works again.
 - Fixed: No more duplicate sidebar and new conversation buttons when "Move Top Bar To Bottom" is active.
 
-#### 12.31.2025  
+#### 12.31.2025
 - Fixed: Shortcuts broken by ChatGPT’s icon changes now work again.
 - Fixed: Thinking Standard and Extended shortcuts work again.
 - Fixed: Dictation shortcuts work and no longer trigger Voice Mode.
 - Fixed: Temporary Chat toggle shortcut only shows when available.
 - Fixed: Think Longer shortcut works from the More menu again.
 
-#### 12.28.2025  
+#### 12.28.2025
 - Fixed: Shortcuts now ignore buttons hidden by the composer.
 - Fixed: Copy-lowest always strips markdown but keeps list formatting.
 - Fixed: Rapid Alt+C presses no longer cause copying issues.
@@ -136,12 +136,12 @@ If you don’t want to wait, go to the [CGCSP Git repot](https://github.com/bwhu
   - Under the hood stuff: Changed tooltips to info icons, big updates to duplicate key logic and user dup modal popups
   - Complete update to translations
 + Fixed "Remember Sidebar Scroll Position" so it works properly on reload
-  
+
 
 #### [8.03.2025]
 + Added new shortcut to toggle temporary conversation
 - Fixed model selection for alt+6, alt+7, and alt+8
-- Fixed lowest edit button not being clicked with shortcut. 
+- Fixed lowest edit button not being clicked with shortcut.
 - Fixed Bug: When highlighting text to "reply to ChatGPT", the pop-up button that you click to quote ChatGPT in your response is unintentionally faded. Working on fix with next update.
 
 #### [7.18.2025]
@@ -155,7 +155,7 @@ Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that 
 
 ##### Control+Alt Modifier for Thread Navigation Added
 - By pressing the default alt+j to "Go to Previous Thread", you can activate the lowest visible previous thread button. If none are visible, it will scroll up to the next button and select it.
-- By using the default control+alt+j you can instead preview the next "Go to Previous Thread" selection. Adding control to this shortcut will scroll between available buttons and highlight them, but won't select them.  
+- By using the default control+alt+j you can instead preview the next "Go to Previous Thread" selection. Adding control to this shortcut will scroll between available buttons and highlight them, but won't select them.
 - The same behavior applies to the "Go to Next Thread" shortcut.
 
 
@@ -227,9 +227,9 @@ Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that 
 - Rehid teams junk in sidebar, again.
 
 #### [5.9.2025]
-- Fixed collapse sidebar after changes to underlying page. New method should be more resilient. 
-- Rehid teams junk in sidebar. Rehid "Explore GPTs" item when collapsed. 
-- Fixed sidebar sticky header transparency bug. 
+- Fixed collapse sidebar after changes to underlying page. New method should be more resilient.
+- Rehid teams junk in sidebar. Rehid "Explore GPTs" item when collapsed.
+- Fixed sidebar sticky header transparency bug.
 
 #### [5.5.2025]
 - Applied CSS to constrain table width within chat, preventing horizontal scroll bars. Issue was unrelated to this extension but visually disruptive.
@@ -237,11 +237,11 @@ Known Bug: When highlighting text to "reply to ChatGPT", the pop-up button that 
 
 #### [5.1.2025]
 - Added keybord shortcuts to show the model picker
-- Added keyboard shortcuts using alt or control plus numbers 1-5 to switch between models. 
-- Fonally got the bottom bar opacity to consistently fade to the user set opacity. 
-- 6 languages officially supported including Englisg, Spanish, Hindi, Japanese, Ukrainian and Russian. 
-- Scrolling functions faster and more aggressive.  
-- Fixed bug in settings where the opacity slider for bottom bar was showing even when the feature was disabled. 
+- Added keyboard shortcuts using alt or control plus numbers 1-5 to switch between models.
+- Fonally got the bottom bar opacity to consistently fade to the user set opacity.
+- 6 languages officially supported including Englisg, Spanish, Hindi, Japanese, Ukrainian and Russian.
+- Scrolling functions faster and more aggressive.
+- Fixed bug in settings where the opacity slider for bottom bar was showing even when the feature was disabled.
 
 #### [4.25.2025]
 - Scrolling offset adjusted based on whether TopBarToBottom is active.
