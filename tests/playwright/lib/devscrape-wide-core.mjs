@@ -2004,6 +2004,30 @@ export async function getLatestRunFolder() {
   return sortableDirectories[sortableDirectories.length - 1] || null;
 }
 
+async function getSortedRunFolders() {
+  await ensureInspectorCapturesRoot();
+  const entries = await readdir(inspectorCapturesRoot, { withFileTypes: true });
+  const directories = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const folderPath = path.join(inspectorCapturesRoot, entry.name);
+        const folderSortKey = parseRunFolderSortKey(entry.name);
+        if (folderSortKey) {
+          return { name: entry.name, path: folderPath, sortKey: folderSortKey };
+        }
+        try {
+          const manifest = await loadRunManifest(folderPath);
+          const sortKey = parseManifestSortKey(manifest);
+          return sortKey ? { name: entry.name, path: folderPath, sortKey } : null;
+        } catch {
+          return null;
+        }
+      }),
+  );
+  return directories.filter(Boolean).sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+}
+
 export async function getNamedRunFolder(folderName) {
   const normalized = String(folderName || '').trim();
   if (!normalized) return null;
@@ -2088,9 +2112,10 @@ async function buildCurrentShortcutInventory(scrapeStateRegistry) {
 }
 
 export async function buildCheckReport({ folderName = null } = {}) {
-  const [{ exports }, run] = await Promise.all([
+  const [{ exports }, run, sortedRunFolders] = await Promise.all([
     loadDevScrapeWideContract(),
     loadRunDirectory(folderName),
+    getSortedRunFolders(),
   ]);
   const scrapeStateRegistry = [
     ...(exports.DUMP_REGISTRY || []),
@@ -2284,6 +2309,18 @@ export async function buildCheckReport({ folderName = null } = {}) {
   );
   const liveProbeSummary =
     run.liveProbeReport?.summary || buildLiveProbeSummary([], 'not-run');
+  const currentRunIndex = sortedRunFolders.findIndex((item) => item.name === run.folderName);
+  const latestRun = sortedRunFolders[sortedRunFolders.length - 1] || null;
+  const previousReportLinks = sortedRunFolders
+    .slice(0, currentRunIndex >= 0 ? currentRunIndex : sortedRunFolders.length)
+    .slice(-5)
+    .reverse()
+    .map((item) => ({
+      folderName: item.name,
+      folderPath: item.path,
+      sortKey: item.sortKey,
+      htmlPath: path.join(item.path, 'check-report.html'),
+    }));
   const summary = {
     total: shortcutSummary.total,
     passed: shortcutSummary.passed,
@@ -2303,6 +2340,18 @@ export async function buildCheckReport({ folderName = null } = {}) {
     folderName: run.folderName,
     folderPath: run.folderPath,
     runManifest: run.manifest,
+    reportHistory: {
+      latest:
+        latestRun && latestRun.name !== run.folderName
+          ? {
+              folderName: latestRun.name,
+              folderPath: latestRun.path,
+              sortKey: latestRun.sortKey,
+              htmlPath: path.join(latestRun.path, 'check-report.html'),
+            }
+          : null,
+      previous: previousReportLinks,
+    },
     rows: targetRows,
     shortcutRows,
     targetRows,
@@ -2331,6 +2380,51 @@ function folderPathLinkHtml(folderPath) {
   if (!folderPath) return '<span class="mono">(unknown)</span>';
   const href = pathToFileURL(folderPath.endsWith(path.sep) ? folderPath : `${folderPath}${path.sep}`).href;
   return `<a class="mono" href="${escapeHtml(href)}" title="Open local scrape folder">${escapeHtml(folderPath)}</a>`;
+}
+
+function localDateTimeText(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || '');
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function reportFileLinkHtml(reportLink, label) {
+  if (!reportLink?.htmlPath) return '';
+  const href = pathToFileURL(reportLink.htmlPath).href;
+  return `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+}
+
+function reportHistoryHtml(report) {
+  const history = report?.reportHistory || {};
+  const latest = history.latest || null;
+  const previous = Array.isArray(history.previous) ? history.previous : [];
+  if (!latest && !previous.length) return '';
+
+  const lines = ['<div class="section"><strong>Report History</strong>'];
+  if (latest) {
+    lines.push(
+      `<p>${reportFileLinkHtml(latest, `View latest report from ${localDateTimeText(latest.sortKey)}`)}</p>`,
+    );
+  }
+  if (previous.length) {
+    lines.push('<p class="muted">Previous reports:</p>');
+    lines.push('<ul>');
+    for (const item of previous) {
+      lines.push(
+        `<li>${reportFileLinkHtml(item, `${localDateTimeText(item.sortKey)} - ${item.folderName}`)}</li>`,
+      );
+    }
+    lines.push('</ul>');
+  }
+  lines.push('</div>');
+  return lines.join('');
 }
 
 export function renderCheckReportHtml(report) {
@@ -2444,7 +2538,7 @@ export function renderCheckReportHtml(report) {
   ].slice(0, 8);
   return [
     '<!doctype html>',
-    '<html><head><meta charset="utf-8"><title>DevScrapeWide Report</title>',
+    '<html><head><meta charset="utf-8"><title>ChatGPT Custom Shortcuts Pro Shortcut Audit Report</title>',
     '<style>',
     'body{font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:24px;color:#111827;background:#f8fafc;}',
     'h1{font-size:20px;margin:0 0 12px;}',
@@ -2467,7 +2561,8 @@ export function renderCheckReportHtml(report) {
     '.dashboard-table th,.dashboard-table td{padding:7px 9px;}',
     'ul{margin:8px 0 0 20px;padding:0;}',
     '</style></head><body>',
-    '<h1>DevScrapeWide Shortcut Target Report</h1>',
+    '<h1>ChatGPT Custom Shortcuts Pro Shortcut Audit Report</h1>',
+    `<p><strong>Report run:</strong> ${escapeHtml(localDateTimeText(report?.generatedAt))}</p>`,
     '<input class="tab-input" id="tab-summary" name="report-tab" type="radio" checked>',
     '<input class="tab-input" id="tab-details" name="report-tab" type="radio">',
     '<div class="tab-labels"><label for="tab-summary">Dashboard</label><label for="tab-details">Details</label></div>',
@@ -2650,6 +2745,7 @@ export function renderCheckReportHtml(report) {
           .join('')}</ul>`
       : '<p>None.</p>',
     '</div>',
+    reportHistoryHtml(report),
     '</section></div>',
     '</body></html>',
   ].join('');
