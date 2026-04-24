@@ -688,6 +688,7 @@ const VISIBILITY_DEFAULTS = (() => {
     return shell;
   };
 
+  // biome-ignore lint/correctness/noUnusedVariables: retained virtual-render sizing helper
   const estimateTurnSize = (index) => {
     const turn = getDisplayedOlderTurns()[index];
     if (!turn) return 120;
@@ -1510,6 +1511,7 @@ const VISIBILITY_DEFAULTS = (() => {
     }
   };
 
+  // biome-ignore lint/correctness/noUnusedFunctionParameters: keep conversationId for helper signature parity
   const getRequestedRetainedTurnCount = (conversationId, history) => {
     const historyCount = normalizeRetainedTurnCount(history?.requestedRetainedTurnCount);
     return historyCount;
@@ -2365,10 +2367,14 @@ const VISIBILITY_DEFAULTS = (() => {
       try {
         headers = new Headers();
         if (input && typeof input === 'object' && input.headers) {
-          new Headers(input.headers).forEach((value, key) => headers.set(key, value));
+          new Headers(input.headers).forEach((value, key) => {
+            headers.set(key, value);
+          });
         }
         if (init?.headers) {
-          new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+          new Headers(init.headers).forEach((value, key) => {
+            headers.set(key, value);
+          });
         }
       } catch {
         return;
@@ -3359,6 +3365,14 @@ const normalizeStoredToCode = (stored) => {
   return '';
 };
 
+const getSchemaShortcutDefaultCode = (key, fallback = '') => {
+  const defaults = window.CSP_SETTINGS_SCHEMA?.shortcuts?.defaultCodeByKey;
+  const code = defaults?.[key];
+  return typeof code === 'string' && code.trim() ? code : fallback;
+};
+
+const hasUsableShortcutSetting = (value) => typeof value === 'string';
+
 const coerceNumberFromStorage = (v, fallback) => {
   if (typeof v === 'number') return v;
   if (typeof v === 'string') {
@@ -3372,6 +3386,7 @@ const coerceNumberFromStorage = (v, fallback) => {
 window.ShortcutUtils = {
   ...(window.ShortcutUtils || {}),
   codeEquals,
+  getSchemaShortcutDefaultCode,
   normalizeStoredToCode,
 };
 
@@ -5174,6 +5189,132 @@ const delays = DELAYS;
     }
   }
 
+  const SIDEBAR_TOGGLE_SELECTORS = [
+    'button[data-testid="close-sidebar-button"]',
+    '#stage-sidebar-tiny-bar button[aria-controls="stage-slideover-sidebar"]',
+    'button[data-testid="open-sidebar-button"]',
+  ];
+  const SEARCH_CONVERSATION_SELECTORS = ['button[data-testid="search-conversation-button"]'];
+  const NEW_CHAT_SELECTORS = [
+    'a[data-testid="create-new-chat-button"]',
+    'button[data-testid="create-new-chat-button"]',
+    'button[data-testid="new-chat-button"]',
+  ];
+  const COMPOSER_INPUT_SELECTORS = [
+    'form[data-type="unified-composer"] #prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"]',
+    'form[data-type="unified-composer"] textarea[name="prompt-textarea"]',
+    '#thread-bottom-container #prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"]',
+    '#thread-bottom-container textarea[name="prompt-textarea"]',
+  ];
+  const SEARCH_SPRITE_FRAGMENT = '#ac6d36';
+  const NEW_CHAT_SPRITE_FRAGMENT = '#3a5c87';
+
+  function isDirectActionVisible(el) {
+    if (!(el instanceof Element) || !el.isConnected) return false;
+    if (el instanceof HTMLElement && el.hidden) return false;
+    if (el.getAttribute?.('aria-hidden') === 'true') return false;
+    if (el.getAttribute?.('aria-disabled') === 'true') return false;
+    if ('disabled' in el && el.disabled) return false;
+
+    let current = el;
+    while (current instanceof HTMLElement) {
+      if (current.hidden) return false;
+      if (current.hasAttribute('inert')) return false;
+      if (current.getAttribute('aria-hidden') === 'true') return false;
+
+      const style = window.getComputedStyle(current);
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.pointerEvents === 'none'
+      ) {
+        return false;
+      }
+
+      current = current.parentElement;
+    }
+
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function findFirstVisibleElement(selectors) {
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (isDirectActionVisible(el)) return el;
+      }
+    }
+    return null;
+  }
+
+  function triggerNativeNewConversationButton() {
+    const direct = findFirstVisibleElement(NEW_CHAT_SELECTORS);
+    if (safeClick(direct)) return true;
+
+    const spriteMatch = Array.from(
+      document.querySelectorAll(
+        `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
+      ),
+    )
+      .map((iconUse) => iconUse.closest('[data-testid="create-new-chat-button"], [data-sidebar-item="true"]'))
+      .find((el) => isDirectActionVisible(el));
+
+    return safeClick(spriteMatch);
+  }
+
+  function triggerNativeSidebarToggleButton() {
+    const direct = findFirstVisibleElement(SIDEBAR_TOGGLE_SELECTORS);
+    return safeClick(direct);
+  }
+
+  function triggerNativeSearchConversationButton() {
+    const direct = Array.from(document.querySelectorAll(SEARCH_CONVERSATION_SELECTORS[0])).find(
+      (el) => isDirectActionVisible(el),
+    );
+    if (safeClick(direct)) return true;
+
+    const spriteMatch = Array.from(
+      document.querySelectorAll(
+        `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
+      ),
+    )
+      .map((iconUse) => iconUse.closest('button[data-sidebar-item="true"]'))
+      .find((el) => isDirectActionVisible(el));
+
+    return safeClick(spriteMatch);
+  }
+
+  function triggerDirectComposerActivation() {
+    const input = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
+    if (!(input instanceof HTMLElement)) return false;
+
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
+
+    if (input.isContentEditable) {
+      try {
+        const selection = window.getSelection?.();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } catch {}
+    }
+
+    return document.activeElement === input || input.contains(document.activeElement);
+  }
+
+  Object.assign(window, {
+    triggerNativeNewConversationButton,
+    triggerNativeSidebarToggleButton,
+    triggerNativeSearchConversationButton,
+    triggerDirectComposerActivation,
+  });
+
   // @note Keyboard shortcut defaults
   const shortcutDefaults = {
     shortcutKeyScrollUpOneMessage: 'KeyA',
@@ -5187,7 +5328,7 @@ const delays = DELAYS;
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',
     shortcutKeyScrollToTop: 'KeyT',
     shortcutKeyNewConversation: 'KeyN',
-    shortcutKeySearchConversationHistory: 'KeyK',
+    shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyToggleSidebar: 'KeyS',
     shortcutKeyActivateInput: 'KeyW',
     shortcutKeySearchWeb: 'KeyQ',
@@ -5197,6 +5338,7 @@ const delays = DELAYS;
     shortcutKeyClickSendButton: 'Enter',
     shortcutKeyClickStopButton: 'Backspace',
     shortcutKeyToggleModelSelector: 'Slash',
+    shortcutKeyShowOverlay: getSchemaShortcutDefaultCode('shortcutKeyShowOverlay', 'Period'),
     shortcutKeyRegenerateTryAgain: 'KeyR',
     shortcutKeyRegenerateMoreConcise: '',
     shortcutKeyRegenerateAddDetails: '',
@@ -5222,17 +5364,25 @@ const delays = DELAYS;
     shortcutKeyThinkingHeavy: '',
     shortcutKeyNewGptConversation: '',
   };
+  window.CSP_SHORTCUT_DEFAULTS = {
+    ...(window.CSP_SHORTCUT_DEFAULTS || {}),
+    ...shortcutDefaults,
+  };
  
   chrome.storage.sync.get(Object.keys(shortcutDefaults), (data) => {
     const shortcuts = {};
     for (const key in shortcutDefaults) {
-      if (Object.hasOwn(data, key)) {
-        // Preserve explicit user-provided values, including empty strings
+      if (Object.hasOwn(data, key) && hasUsableShortcutSetting(data[key])) {
+        // Preserve explicit user-provided string values, including NBSP and empty strings.
         shortcuts[key] = data[key];
       } else {
         shortcuts[key] = shortcutDefaults[key];
       }
     }
+    window.CSP_SHORTCUTS_EFFECTIVE = {
+      ...(window.CSP_SHORTCUTS_EFFECTIVE || {}),
+      ...shortcuts,
+    };
 
     const modelToggleSetting = shortcuts.shortcutKeyToggleModelSelector;
 
@@ -5758,68 +5908,10 @@ const delays = DELAYS;
         }
       },
       [shortcuts.shortcutKeyNewConversation]: function newConversation() {
-        // 1) Fire the native “New Chat” shortcut first (Ctrl/Cmd + Shift + O)
-        const isMac = isMacPlatform();
-        const eventInit = {
-          key: 'o',
-          code: 'KeyO',
-          keyCode: 79,
-          which: 79,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          shiftKey: true,
-          ctrlKey: !isMac,
-          metaKey: isMac,
-        };
-        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-
-        // 2) Fallbacks only if nothing clickable is visible
-
-        // 2a) Try the test-id button
-        const newChatBtn = document.querySelector('button[data-testid="new-chat-button"]');
-        if (safeClick(newChatBtn)) return;
-
-        // 2b) Try known SVG-path variants (very old UIs)
-        const selectors = [
-          'button:has(svg > path[d^="M15.6729 3.91287C16.8918"])',
-          'button:has(svg > path[d^="M15.673 3.913a3.121 3.121 0 1 1 4.414 4.414"])',
-        ];
-        for (const sel of selectors) {
-          const btn = document.querySelector(sel);
-          if (safeClick(btn)) return;
-        }
+        triggerNativeNewConversationButton();
       },
       [shortcuts.shortcutKeySearchConversationHistory]: () => {
-        // 1) Fire the native “Search Conversation History” shortcut first (Ctrl/Cmd + K)
-        const isMac = isMacPlatform();
-        const eventInit = {
-          key: 'k',
-          code: 'KeyK',
-          keyCode: 75,
-          which: 75,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          shiftKey: false,
-          ctrlKey: !isMac,
-          metaKey: isMac,
-          altKey: false,
-        };
-        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-
-        // 2a) Try the test-id button
-        const searchBtn = document.querySelector(
-          'button[data-testid="search-conversation-button"]',
-        );
-        if (safeClick(searchBtn)) return;
-
-        // 2b) Very old SVG-path fallback
-        const path = document.querySelector('button svg path[d^="M10.75 4.25C7.16015"]');
-        const btn = path?.closest('button');
-        if (safeClick(btn)) return;
+        triggerNativeSearchConversationButton();
       },
       [shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
         // native scroll to bottom
@@ -5856,103 +5948,16 @@ const delays = DELAYS;
           window.flashSlimSidebarBar();
         }
 
-        // —— Existing toggle logic ——
-        const isMac = isMacPlatform();
-        const eventInit = {
-          key: 's',
-          code: 'KeyS',
-          keyCode: 83,
-          which: 83,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          shiftKey: true,
-          ctrlKey: !isMac,
-          metaKey: isMac,
-        };
-
-        // 1) Try native keyboard toggle
-        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-        if (
-          document.querySelector('button[data-testid="close-sidebar-button"]')?.offsetParent !==
-          null
-        ) {
+        if (triggerNativeSidebarToggleButton()) {
           setTimeout(() => { }, 30);
           return;
         }
 
-        // 2) Fallback: direct open/close button
-        const direct = document.querySelector(
-          'button[data-testid="open-sidebar-button"], button[data-testid="close-sidebar-button"]',
-        );
-        if (safeClick(direct)) {
-          setTimeout(() => { }, 30);
-          return;
-        }
-
-        // 3) Final fallback: legacy SVG-path selectors
-        const selectors = [
-          '#bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
-          '#bottomBarContainer button:has(svg > path[d^="M8.85719 3L13.5"])',
-          '#bottomBarContainer button:has(svg > path[d^="M8.85720 3H15.1428C16.2266"])',
-          '#sidebar-header button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"])',
-          '#conversation-header-actions button:has(svg > path[d^="M8.85719 3H15.1428C16.2266"])',
-          '#sidebar-header button:has(svg > path[d^="M8.85719 3L13.5"])',
-          'div.draggable.h-header-height button[data-testid="open-sidebar-button"]',
-          'div.draggable.h-header-height button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
-          'button:has(svg > path[d^="M3 8C3 7.44772 3.44772"])',
-          'button[data-testid="close-sidebar-button"]',
-          'button[data-testid="open-sidebar-button"]',
-          'button svg path[d^="M13.0187 7C13.0061"]',
-          'button svg path[d^="M8.85719 3L13.5"]',
-          'button svg path[d^="M3 8C3 7.44772"]',
-          'button svg path[d^="M8.85719 3H15.1428C16.2266"]',
-          'button svg path[d^="M3 6h18M3 12h18M3 18h18"]',
-          'button svg path[d^="M6 6h12M6 12h12M6 18h12"]',
-        ];
-        for (const sel of selectors) {
-          const el = document.querySelector(sel);
-          const btn = el?.closest('button');
-          if (safeClick(btn)) {
-            setTimeout(() => { }, 30);
-            return;
-          }
-        }
-
-        // 4) If still nothing, just exit
+        // If still nothing, just exit
         setTimeout(() => { }, 30);
       },
       [shortcuts.shortcutKeyActivateInput]: function activateInput() {
-        const selectors = [
-          '#prompt-textarea[contenteditable="true"]',
-          'div[contenteditable="true"][id="prompt-textarea"]',
-          'div.ProseMirror[contenteditable="true"]',
-        ];
-
-        for (const selector of selectors) {
-          const inputField = document.querySelector(selector);
-          if (inputField) {
-            inputField.focus();
-            return;
-          }
-        }
-
-        // Fallback: trigger the page’s native shortcut (Shift + Escape)
-        const eventInit = {
-          key: 'Escape',
-          code: 'Escape',
-          keyCode: 27,
-          which: 27,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          shiftKey: true,
-          ctrlKey: false,
-          metaKey: false,
-        };
-        document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-        document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+        triggerDirectComposerActivation();
       },
       [shortcuts.shortcutKeySearchWeb]: async () => {
         // Unique config for this action
@@ -7010,8 +7015,7 @@ const delays = DELAYS;
         smartClick(el);
       },
       [shortcuts.shortcutKeyStudy]: async () => {
-        const ICON_PATH_PREFIX = ['M16.3965 5.01128C16.3963', '#1fa93b']; // book icon prefix
-        await runActionByIcon(ICON_PATH_PREFIX);
+        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
       [shortcuts.shortcutKeyCreateImage]: async () => {
         const ICON_PATH_PREFIX = ['M9.38759 8.53403C10.0712', '#266724']; // image icon prefix
@@ -7121,8 +7125,7 @@ const delays = DELAYS;
         await clickButtonByTestId('share-chat-button');
       },
       [shortcuts.shortcutKeyThinkLonger]: async () => {
-        const ICON_PATH_PREFIX = ['M14.3352 10.0257C14.3352', '#e717cc']; // Thinking (sprite id)
-        await runActionByIcon(ICON_PATH_PREFIX);
+        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
       [shortcuts.shortcutKeyNewGptConversation]: () => {
         const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
@@ -7723,25 +7726,27 @@ const delays = DELAYS;
       return event.key && event.key.toLowerCase() === setting.toLowerCase();
     }
 
-    document.addEventListener('keydown', (event) => {
-      if (
-        event.isComposing || // IME active (Hindi, Japanese)
-        event.keyCode === 229 || // Generic composition keyCode
-        ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
-        event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
-        ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
-      ) {
-        return;
-      }
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (
+          event.isComposing || // IME active (Hindi, Japanese)
+          event.keyCode === 229 || // Generic composition keyCode
+          ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
+          event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
+          ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
+        ) {
+          return;
+        }
 
-      const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
-      const isAltPressed = event.altKey;
+        const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
+        const isAltPressed = event.altKey;
 
-      // Canonical key: use layout-aware key for text, keep exact for special keys
-      const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+        // Canonical key: use layout-aware key for text, keep exact for special keys
+        const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
-      // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
-      if (isAltPressed) {
+        // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
+        if (isAltPressed) {
         // Always open menu for Alt+W (or whatever your toggle key is)
         if (!isCtrlPressed && matchesShortcutKey(modelToggleSetting, event)) {
           event.preventDefault();
@@ -7829,10 +7834,10 @@ const delays = DELAYS;
           keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
           return;
         }
-      }
+        }
 
-      // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
-      if (isCtrlPressed && !isAltPressed) {
+        // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
+        if (isCtrlPressed && !isAltPressed) {
         // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
         if (
           window.useControlForModelSwitcherRadio === true &&
@@ -7872,8 +7877,10 @@ const delays = DELAYS;
             ctrlShortcut();
           }
         }
-      }
-    });
+        }
+      },
+      { capture: true },
+    );
 
     // Function to check if the specific Ctrl/Command + Key shortcut is enabled
     function isCtrlShortcutEnabled(key) {
@@ -8002,7 +8009,9 @@ const delays = DELAYS;
     const flush = () => {
       dynamicUiFlushHandle = 0;
       const roots = pendingDynamicUiRoots.splice(0, pendingDynamicUiRoots.length);
-      roots.forEach((queuedRoot) => applyDynamicUiStylingInSubtree(queuedRoot));
+      roots.forEach((queuedRoot) => {
+        applyDynamicUiStylingInSubtree(queuedRoot);
+      });
     };
 
     if (typeof window.requestAnimationFrame === 'function') {
@@ -8315,7 +8324,9 @@ button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-
   };
 
   const clearPendingTimeouts = () => {
-    pendingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    pendingTimeouts.forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
     pendingTimeouts.clear();
   };
 
@@ -8967,6 +8978,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       }
     }
 
+    // biome-ignore lint/correctness/noUnusedFunctionParameters: keep snapshot placeholder for observer call shape
     function resolveObservationRoot(snapshot = null) {
       return document.body || document.documentElement || null;
     }
@@ -9384,6 +9396,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       };
     }
 
+    // biome-ignore lint/correctness/noUnusedFunctionParameters: retain revealDecision in the reveal pipeline signature
     function commitReveal(shell, nextModelButton, nextHeaderActions, revealDecision) {
       if (!shell) return;
 
@@ -9732,14 +9745,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       btnSidebar = createStaticButton({
         label: 'Static Toggle Sidebar',
         svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
-        proxySelector:
-          'button[data-testid="open-sidebar-button"],button[data-testid="close-sidebar-button"]',
-        fallbackShortcut: {
-          ctrl: true,
-          shift: true,
-          key: 's',
-          code: 'KeyS',
-        },
+        activate: () => window.triggerNativeSidebarToggleButton?.(),
       });
       leftContainer.insertBefore(btnSidebar, leftContainer.firstChild);
     }
@@ -9749,19 +9755,13 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       btnNewChat = createStaticButton({
         label: 'Static New Chat',
         svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
-        proxySelector: 'button[data-testid="new-chat-button"]',
-        fallbackShortcut: {
-          ctrl: true,
-          shift: true,
-          key: 'o',
-          code: 'KeyO',
-        },
+        activate: () => window.triggerNativeNewConversationButton?.(),
       });
       leftContainer.insertBefore(btnNewChat, btnSidebar.nextSibling);
     }
   }
 
-  function createStaticButton({ label, svg, proxySelector, fallbackShortcut }) {
+  function createStaticButton({ label, svg, activate }) {
     const btn = document.createElement('button');
     btn.setAttribute('aria-label', label);
     btn.setAttribute(
@@ -9786,39 +9786,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     btn.onclick = (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
-
-      if (fallbackShortcut) {
-        const { key, code, ctrl, shift, alt = false, meta = false } = fallbackShortcut;
-        const isMac =
-          typeof isMacPlatform === 'function'
-            ? !!isMacPlatform()
-            : /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
-
-        const evtInit = {
-          key: key.toUpperCase(),
-          code,
-          keyCode: key.toUpperCase().charCodeAt(0),
-          which: key.toUpperCase().charCodeAt(0),
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          shiftKey: !!shift,
-          ctrlKey: !!ctrl && !isMac,
-          metaKey: !!meta || (isMac && !!ctrl),
-          altKey: !!alt,
-        };
-
-        const shortcutUnhandled = document.dispatchEvent(new KeyboardEvent('keydown', evtInit));
-        document.dispatchEvent(new KeyboardEvent('keyup', evtInit));
-
-        if (shortcutUnhandled) {
-          const target = document.querySelector(proxySelector);
-          if (target?.offsetParent !== null) target.click();
-        }
-      } else {
-        const target = document.querySelector(proxySelector);
-        if (target?.offsetParent !== null) target.click();
-      }
+      if (typeof activate === 'function') activate();
     };
 
     return btn;
@@ -10098,7 +10066,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const roots = pendingRoots.splice(0, pendingRoots.length);
       const containers = new Set();
       roots.forEach((candidateRoot) => {
-        collectTryAgainContainers(candidateRoot).forEach((container) => containers.add(container));
+        collectTryAgainContainers(candidateRoot).forEach((container) => {
+          containers.add(container);
+        });
       });
       containers.forEach((container) => {
         if (!(container instanceof HTMLElement) || !container.isConnected) return;
@@ -10113,7 +10083,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   }
 
   // 3) Initial pass in case it’s already there
-  document.querySelectorAll(containerSel).forEach((node) => queueTryAgainRoot(node));
+  document.querySelectorAll(containerSel).forEach((node) => {
+    queueTryAgainRoot(node);
+  });
 
   // 4) Watch for new ones
   new MutationObserver((muts) => {
@@ -10186,7 +10158,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   function flushOpenLinkRoots() {
     openLinkFlushHandle = 0;
     const roots = pendingOpenLinkRoots.splice(0, pendingOpenLinkRoots.length);
-    roots.forEach((root) => tryClickOpenLink(root));
+    roots.forEach((root) => {
+      tryClickOpenLink(root);
+    });
   }
 
   function queueOpenLinkRoot(root) {
@@ -10245,7 +10219,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
   const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
-  const ACTION_SLOT_COUNT = window.ModelLabels?.ACTION_SLOT_COUNT || 0;
   const MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
   const MODEL_MENU_ITEM_SELECTOR =
@@ -10261,14 +10234,44 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     typeof window.ModelLabels?.getActionSlots === 'function'
       ? window.ModelLabels.getActionSlots()
       : [];
-  const getModelActionBySlot = (slot) =>
-    typeof window.ModelLabels?.getActionBySlot === 'function'
-      ? window.ModelLabels.getActionBySlot(slot)
-      : null;
-  const getModelActionById = (id) =>
-    typeof window.ModelLabels?.getActionById === 'function'
-      ? window.ModelLabels.getActionById(id)
-      : null;
+  const getModelActionBySlot = (slot) => {
+    const staticAction =
+      typeof window.ModelLabels?.getActionBySlot === 'function'
+        ? window.ModelLabels.getActionBySlot(slot)
+        : null;
+    if (staticAction) return staticAction;
+    const catalog = window.__modelCatalog || null;
+    if (!catalog || typeof window.ModelLabels?.getPopupPresentationGroups !== 'function') return null;
+    const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+    const groups = window.ModelLabels.getPopupPresentationGroups(
+      activeModelConfigId,
+      window.MODEL_NAMES || [],
+      catalog,
+    );
+    return (
+      groups
+        .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+        .find((action) => Number(action?.slot) === Number(slot)) || null
+    );
+  };
+  const getModelActionById = (id) => {
+    const action =
+      typeof window.ModelLabels?.getActionById === 'function'
+        ? window.ModelLabels.getActionById(id)
+        : null;
+    if (action) return action;
+    if (/^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(id || '').trim())) {
+      return {
+        id: String(id || '').trim(),
+        slot: -1,
+        group: 'configure',
+        label: '',
+        actionKind: 'configure-option',
+        optionKind: 'dynamic-id',
+      };
+    }
+    return null;
+  };
   const DEFAULT_ACTIVE_MODEL_CONFIG_ID =
     typeof window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID === 'string'
       ? window.ModelLabels.DEFAULT_ACTIVE_CONFIG_ID
@@ -10284,6 +10287,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       ].includes(String(value || '').trim())
         ? String(value || '').trim()
         : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+  // biome-ignore lint/correctness/noUnusedVariables: retain local cache mirror during model-picker cleanup
   let ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   let LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   const getDefaultModelPickerCodes = () =>
@@ -10326,6 +10330,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         }
         return null;
       };
+  // biome-ignore lint/correctness/noUnusedVariables: retain compatibility helper for follow-on model picker work
   const clickButtonByTestIdSafe =
     typeof clickButtonByTestId === 'function'
       ? clickButtonByTestId
@@ -10684,8 +10689,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const ANIM_FLASH_OUT_S = 0.075; // was 0.15
 
   chrome.storage.sync.get(
-    ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes', 'activeModelConfigId'],
-    ({ useControlForModelSwitcherRadio, modelPickerKeyCodes, activeModelConfigId }) => {
+    ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes', 'activeModelConfigId', 'modelCatalog'],
+    ({ useControlForModelSwitcherRadio, modelPickerKeyCodes, activeModelConfigId, modelCatalog }) => {
       // Initialize shared KEY_CODES (mutate the const array to keep references alive)
       const incoming = Array.isArray(modelPickerKeyCodes)
         ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
@@ -10695,6 +10700,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       KEY_CODES.splice(0, KEY_CODES.length, ...effective);
       const initialActiveModelConfigId = setCachedActiveModelConfigId(activeModelConfigId);
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = initialActiveModelConfigId;
+      window.__modelCatalog = modelCatalog && typeof modelCatalog === 'object' ? modelCatalog : null;
 
       // Platform + modifier label
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
@@ -11081,6 +11087,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       } catch (_) { }
 
       // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS.
+      // biome-ignore lint/correctness/noUnusedVariables: preserve menu-order helper during model menu iteration work
       function getOrderedMenuItems() {
         return getVisibleModelMenuState().items.slice(0, MAX_SLOTS);
       }
@@ -11156,7 +11163,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const utils = window.ShortcutUtils || {};
         const cmp = typeof utils.codeEquals === 'function' ? utils.codeEquals : () => false;
         for (let i = 0; i < KEY_CODES.length; i++) {
-          if (i >= ACTION_SLOT_COUNT) break;
           if (cmp(e.code, KEY_CODES[i])) return i;
         }
         return -1;
@@ -11312,23 +11318,26 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const text = (byId?.textContent || option.textContent || '').replace(/\s+/g, ' ').trim();
         return text;
       };
-      const inferActiveConfigFromConfigureOption = (option, listbox) => {
+      const getConfigureActionForOption = (option, listbox, slotHint = -1) => {
         if (!(option instanceof Element) || !(listbox instanceof Element)) return null;
         const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
         const optionIndex = options.indexOf(option);
-        if (optionIndex === 0) return 'configure-latest';
-        switch (getConfigureOptionLabel(option)) {
-          case '5.2':
-            return 'configure-5-2';
-          case '5.0':
-            return 'configure-5-0-thinking-mini';
-          case 'o3':
-            return 'configure-o3';
-          default:
-            return null;
+        const label = getConfigureOptionLabel(option);
+        if (typeof window.ModelLabels?.getConfigureActionForOption === 'function') {
+          return window.ModelLabels.getConfigureActionForOption(label, optionIndex, slotHint);
         }
+        if (optionIndex === 0) return getModelActionById('configure-latest');
+        if (label === '5.2') return getModelActionById('configure-5-2');
+        if (label === '5.0') return getModelActionById('configure-5-0-thinking-mini');
+        if (label === 'o3') return getModelActionById('configure-o3');
+        return null;
+      };
+      const inferActiveConfigFromConfigureOption = (option, listbox) => {
+        if (!(option instanceof Element) || !(listbox instanceof Element)) return null;
+        return getConfigureActionForOption(option, listbox)?.id || null;
       };
 
+      // biome-ignore lint/correctness/noUnusedVariables: preserve configure-option scrape helper for follow-up wiring
       const captureConfigureOptionLabels = (listbox) => {
         if (!(listbox instanceof Element)) return;
         const options = Array.from(listbox.querySelectorAll(':scope [role="option"]')).slice(0, 4);
@@ -11404,6 +11413,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         } catch { }
         await sleepAsync(50);
       };
+      // biome-ignore lint/correctness/noUnusedVariables: preserve thinking-effort scrape helper for follow-up wiring
       const collectThinkingEffortIdsDuringScrape = async () => {
         const buttonSelector = MENU_SELECTORS.buttonPath(THINKING_EFFORT_BUTTON_TOKENS);
         const button = lowestVisibleFromPaths(buttonSelector, 'button');
@@ -11454,17 +11464,26 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const configureOptions = Array.isArray(catalog?.configureOptions)
           ? catalog.configureOptions
           : [];
-        configureOptions.forEach((option) => {
+        configureOptions.forEach((option, optionIndex) => {
           const action =
-            typeof window.ModelLabels?.getActionById === 'function'
-              ? window.ModelLabels.getActionById(option?.id)
-              : null;
-          if (!action || !Number.isInteger(action.slot)) return;
-          names[action.slot] =
+            typeof window.ModelLabels?.getConfigureActionForOption === 'function'
+              ? window.ModelLabels.getConfigureActionForOption(
+                  option?.label || '',
+                  optionIndex,
+                  option?.slot,
+                )
+              : typeof window.ModelLabels?.getActionById === 'function'
+                ? window.ModelLabels.getActionById(option?.id)
+                : null;
+          const slot = Number.isInteger(Number(option?.slot))
+            ? Number(option.slot)
+            : Number(action?.slot);
+          if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return;
+          names[slot] =
             typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
               ? window.ModelLabels.getCanonicalActionLabel(action.id, option.label)
               : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-                ? window.ModelLabels.normalizeStoredActionName(action.slot, option.label)
+                ? window.ModelLabels.normalizeStoredActionName(slot, option.label)
                 : String(option?.label || '').trim();
         });
         const frontendByConfig =
@@ -11529,14 +11548,26 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (!listbox) return { ok: false, error: 'CONFIGURE_LISTBOX_NOT_FOUND' };
           hideConfigureListboxUiForScrape(listbox);
 
+          let nextDynamicConfigureSlot = 8;
+          const usedConfigureSlots = new Set();
           const availableOptions = Array.from(listbox.querySelectorAll(':scope [role="option"]'))
             .map((option) => {
-              const id = inferActiveConfigFromConfigureOption(option, listbox);
-              const action = id ? getModelActionById(id) : null;
-              if (!id || !action) return null;
+              const action = getConfigureActionForOption(option, listbox);
+              if (!action?.id) return null;
+              const isDynamic = action.optionKind === 'value' && action.id.startsWith('configure-dynamic-');
+              const slot = isDynamic
+                ? (() => {
+                    while (usedConfigureSlots.has(nextDynamicConfigureSlot)) {
+                      nextDynamicConfigureSlot += 1;
+                    }
+                    return nextDynamicConfigureSlot++;
+                  })()
+                : Number(action.slot);
+              if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+              usedConfigureSlots.add(slot);
               return {
-                id,
-                slot: action.slot,
+                ...action,
+                slot,
                 label: getConfigureOptionLabel(option),
               };
             })
@@ -11549,7 +11580,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             );
 
           for (const option of scrapeOrder) {
-            await selectConfigureOptionDuringScrape(combobox, getModelActionById(option.id));
+            await selectConfigureOptionDuringScrape(combobox, option);
             hideConfigureDialogUiForScrape();
             frontendByConfig[option.id] = collectConfigureFrontendRows(
               findConfigureDialog(),
@@ -11677,12 +11708,21 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             ) || null
           );
         }
+        if (action.optionKind === 'dynamic-id') {
+          return (
+            options.find((option) => inferActiveConfigFromConfigureOption(option, listbox) === action.id) ||
+            null
+          );
+        }
         return null;
       };
       const inferActiveConfigFromCombobox = (combobox) => {
         const value =
           combobox?.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim() || '';
         if (!value) return DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        if (typeof window.ModelLabels?.getConfigureActionForOption === 'function') {
+          return window.ModelLabels.getConfigureActionForOption(value, -1)?.id || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        }
         if (value === '5.2') return 'configure-5-2';
         if (value === '5.0') return 'configure-5-0-thinking-mini';
         if (value === 'o3') return 'configure-o3';
@@ -12150,6 +12190,12 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       );
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = nextActiveModelConfigId;
     }
+    if (changes.modelCatalog) {
+      window.__modelCatalog =
+        changes.modelCatalog.newValue && typeof changes.modelCatalog.newValue === 'object'
+          ? changes.modelCatalog.newValue
+          : null;
+    }
     if (changes.modelPickerKeyCodes) {
       const val = changes.modelPickerKeyCodes.newValue;
       if (!Array.isArray(val)) return;
@@ -12595,7 +12641,7 @@ setTimeout(() => {
 (() => {
   // ---- 1) Static CSS: Insert your full popup.css below ----
   const FULL_POPUP_CSS = `
-:host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+16){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:inherit;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:108%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
+:host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+16){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:97.2%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
   `;
   // @note Shortcuts Overlay IIFE Code Below
   // ---- 2) Utils ----
@@ -12619,16 +12665,30 @@ setTimeout(() => {
   };
 
   const unwrapSettings = (obj) => {
-    if (obj?.data && typeof obj.data === 'object') {
-      const hasShortcutKeys = Object.keys(obj.data).some(
-        (k) => k.startsWith('shortcutKey') || k.startsWith('selectThenCopy'),
-      );
-      if (hasShortcutKeys) return obj.data;
-    }
-    return obj || {};
+    const topLevel = obj && typeof obj === 'object' ? { ...obj } : {};
+    const nestedData = topLevel.data && typeof topLevel.data === 'object' ? topLevel.data : null;
+    delete topLevel.data;
+    delete topLevel.__meta;
+    if (Object.keys(topLevel).length) return topLevel;
+    if (!nestedData) return topLevel;
+
+    // Support bare imported/export-style payloads only when sync storage does
+    // not already contain live top-level settings. The runtime writes and reads
+    // top-level keys, so a leftover nested `data` blob should not override them.
+    return { ...nestedData };
   };
 
   const isAssigned = (val) => typeof val === 'string' && val.trim() && val !== NBSP;
+  const applyShortcutDefaults = (settings) => {
+    const next = settings && typeof settings === 'object' ? { ...settings } : {};
+    const sharedShortcutDefaults =
+      window.CSP_SHORTCUTS_EFFECTIVE || window.CSP_SHORTCUT_DEFAULTS || {};
+    Object.keys(sharedShortcutDefaults).forEach((key) => {
+      if (hasUsableShortcutSetting(next[key])) return;
+      next[key] = sharedShortcutDefaults[key];
+    });
+    return next;
+  };
 
   // Platform-aware key display
   function displayFromCode(code) {
@@ -12722,10 +12782,6 @@ setTimeout(() => {
       typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
         ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
         : cfg?.activeModelConfigId || 'configure-latest';
-    const actionSlots =
-      typeof window.ModelLabels?.getActionSlots === 'function'
-        ? window.ModelLabels.getActionSlots()
-        : [];
     const names =
       typeof window.ModelLabels?.resolveActionableNames === 'function'
         ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
@@ -12742,13 +12798,13 @@ setTimeout(() => {
           : typeof window.ModelLabels?.getActionGroups === 'function'
             ? window.ModelLabels.getActionGroups()
             : [];
-    let codes =
+    const codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
-        ? window.__modelPickerKeyCodes.slice(0, actionSlots.length)
+        ? window.__modelPickerKeyCodes.slice(0, window.ModelLabels?.MAX_SLOTS || 15)
         : typeof window.ModelLabels?.defaultKeyCodes === 'function'
-          ? window.ModelLabels.defaultKeyCodes().slice(0, actionSlots.length)
+          ? window.ModelLabels.defaultKeyCodes().slice(0, window.ModelLabels?.MAX_SLOTS || 15)
           : [];
-    while (codes.length < actionSlots.length) codes.push('');
+    while (codes.length < (window.ModelLabels?.MAX_SLOTS || 15)) codes.push('');
 
     const esc = (s) =>
       String(s).replace(
@@ -12842,6 +12898,7 @@ ${groupMarkup.join('')}`;
           header: 'Model Picker + UI Tweaks',
           keys: [
             'shortcutKeyToggleModelSelector',
+            'shortcutKeyShowOverlay',
             'shortcutKeyThinkingStandard',
             'shortcutKeyThinkingExtended',
             'shortcutKeyThinkingLight',
@@ -12926,7 +12983,7 @@ ${groupMarkup.join('')}`;
     for (const section of sections) {
       const rows = section.keys
         .filter((k) => isShortcutVisibleInCatalog(k))
-        .filter((k) => isAssigned(cfg[k]))
+        .filter((k) => isAssigned(cfg?.[k]))
         .map((k) => {
           renderedKeys.add(k);
           const val = cfg[k];
@@ -12963,11 +13020,10 @@ ${groupMarkup.join('')}`;
       : ['shortcutKeyRegenerate', 'shortcutKeyCopyAllResponses'];
 
     const catchAllKeys = Object.keys(cfg)
-      .filter((k) => k !== 'shortcutKeyShowShortcuts')
       .filter((k) => k.startsWith(keyPrefix) || extraShortcutKeys.includes(k))
       .filter((k) => !deprecatedShortcutKeys.includes(k))
       .filter((k) => isShortcutVisibleInCatalog(k))
-      .filter((k) => isAssigned(cfg[k]))
+      .filter((k) => isAssigned(cfg?.[k]))
       .filter((k) => !renderedKeys.has(k))
       .sort((a, b) => a.localeCompare(b));
 
@@ -13169,7 +13225,7 @@ ${groupMarkup.join('')}`;
   };
 
   // ====== content.js (NEW SECTION TO PASTE IN) ======
-  // ---- 5) Read settings and open overlay on Ctrl+/ ----
+  // ---- 5) Read settings and open overlay on Alt + configured key ----
   let overlayContextInvalidated = false;
   let overlayContextInvalidatedLogged = false;
 
@@ -13190,10 +13246,14 @@ ${groupMarkup.join('')}`;
     !!chrome.runtime.id &&
     !!chrome.storage?.sync;
 
-  // Configurable Ctrl+/ overlay key (Ctrl/Cmd + <key>)
-  let showShortcutsCode = 'Slash';
+  // Configurable shortcuts overlay key (Alt + <key>)
+  const showOverlayDefaultCode = getSchemaShortcutDefaultCode(
+    'shortcutKeyShowOverlay',
+    'Period',
+  );
+  let showOverlayCode = showOverlayDefaultCode;
 
-  const normalizeShowShortcutsSettingToCode = (stored) => {
+  const normalizeShowOverlaySettingToCode = (stored) => {
     if (stored == null) return '';
     const s = String(stored).trim();
     if (!s || s === '\u00A0') return '';
@@ -13201,15 +13261,50 @@ ${groupMarkup.join('')}`;
     return s;
   };
 
-  const setShowShortcutsCode = (stored) => {
-    const code = normalizeShowShortcutsSettingToCode(stored);
-    showShortcutsCode = code || 'Slash';
+  const usesLegacyShowOverlayTestDefault = (stored) => {
+    if (stored == null) return false;
+    const s = String(stored).trim();
+    return s === 'i' || s === 'I' || s === 'KeyI' || s === 'keyi';
   };
 
-  const hydrateShowShortcutsCode = () => {
+  const persistShowOverlayDefaultCode = () => {
     if (!isExtensionAlive()) return;
     try {
-      chrome.storage.sync.get({ shortcutKeyShowShortcuts: 'Slash' }, (res = {}) => {
+      chrome.storage.sync.set({ shortcutKeyShowOverlay: showOverlayDefaultCode }, () => {
+        if (!chrome.runtime.lastError) return;
+        console.warn(
+          '[CSP] storage.set(shortcutKeyShowOverlay) failed:',
+          chrome.runtime.lastError,
+        );
+      });
+    } catch (err) {
+      if (
+        /context invalidated/i.test(err?.message || '') ||
+        /Extension context invalidated/i.test(err?.message || '')
+      ) {
+        markOverlayContextInvalidated(err);
+      }
+      console.warn('[CSP] storage.set(shortcutKeyShowOverlay) threw:', err);
+    }
+  };
+
+  const setShowOverlayCode = (stored) => {
+    if (stored == null) {
+      showOverlayCode = showOverlayDefaultCode;
+      return;
+    }
+    if (usesLegacyShowOverlayTestDefault(stored)) {
+      showOverlayCode = showOverlayDefaultCode;
+      persistShowOverlayDefaultCode();
+      return;
+    }
+    showOverlayCode = normalizeShowOverlaySettingToCode(stored);
+  };
+
+  const hydrateShowOverlayCode = () => {
+    if (!isExtensionAlive()) return;
+    try {
+      chrome.storage.sync.get({ shortcutKeyShowOverlay: showOverlayDefaultCode }, (res = {}) => {
         if (!isExtensionAlive()) return;
         if (chrome.runtime.lastError) {
           if (
@@ -13219,12 +13314,12 @@ ${groupMarkup.join('')}`;
             markOverlayContextInvalidated(chrome.runtime.lastError);
           }
           console.warn(
-            '[CSP] storage.get(shortcutKeyShowShortcuts) failed:',
+            '[CSP] storage.get(shortcutKeyShowOverlay) failed:',
             chrome.runtime.lastError,
           );
           return;
         }
-        setShowShortcutsCode(res.shortcutKeyShowShortcuts);
+        setShowOverlayCode(res.shortcutKeyShowOverlay);
       });
     } catch (err) {
       if (
@@ -13233,16 +13328,16 @@ ${groupMarkup.join('')}`;
       ) {
         markOverlayContextInvalidated(err);
       }
-      console.warn('[CSP] storage.get(shortcutKeyShowShortcuts) threw:', err);
+      console.warn('[CSP] storage.get(shortcutKeyShowOverlay) threw:', err);
     }
   };
 
-  hydrateShowShortcutsCode();
+  hydrateShowOverlayCode();
   try {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'sync') return;
-      if (!changes || !changes.shortcutKeyShowShortcuts) return;
-      setShowShortcutsCode(changes.shortcutKeyShowShortcuts.newValue);
+      if (!changes || !changes.shortcutKeyShowOverlay) return;
+      setShowOverlayCode(changes.shortcutKeyShowOverlay.newValue);
     });
   } catch (_) { }
 
@@ -13269,7 +13364,8 @@ ${groupMarkup.join('')}`;
             resolve({});
             return;
           }
-          resolve(unwrapSettings(raw));
+          const settings = unwrapSettings(raw);
+          resolve(applyShortcutDefaults(settings));
         });
       } catch (err) {
         if (
@@ -13288,7 +13384,6 @@ ${groupMarkup.join('')}`;
       if (!isExtensionAlive()) return resolve();
 
       const MAX = window.ModelLabels?.MAX_SLOTS || 15;
-      const ACTION_COUNT = window.ModelLabels?.ACTION_SLOT_COUNT || 0;
       const defaultNames = (raw) =>
         typeof window.ModelLabels?.resolveActionableNames === 'function'
           ? window.ModelLabels.resolveActionableNames(raw)
@@ -13299,7 +13394,7 @@ ${groupMarkup.join('')}`;
           : ['Digit1', 'Digit2', 'Digit0', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7'];
 
       try {
-        chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes'], (res = {}) => {
+        chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes', 'modelCatalog'], (res = {}) => {
           if (!isExtensionAlive()) return resolve();
           if (chrome.runtime.lastError) {
             if (
@@ -13313,12 +13408,14 @@ ${groupMarkup.join('')}`;
           }
           try {
             const rawNames = Array.isArray(res.modelNames) ? res.modelNames.slice(0, MAX) : [];
-            const names = defaultNames(rawNames).slice(0, ACTION_COUNT);
-            let codes = Array.isArray(res.modelPickerKeyCodes)
-              ? res.modelPickerKeyCodes.slice(0, ACTION_COUNT)
-              : buildDefaultCodes().slice(0, ACTION_COUNT);
+            const names = defaultNames(rawNames).slice(0, MAX);
+            const codes = Array.isArray(res.modelPickerKeyCodes)
+              ? res.modelPickerKeyCodes.slice(0, MAX)
+              : buildDefaultCodes().slice(0, MAX);
 
-            while (codes.length < ACTION_COUNT) codes.push('');
+            while (codes.length < MAX) codes.push('');
+            window.__modelCatalog =
+              res.modelCatalog && typeof res.modelCatalog === 'object' ? res.modelCatalog : null;
             window.MODEL_NAMES = names;
             window.__modelPickerKeyCodes = codes;
           } catch (err) {
@@ -13354,11 +13451,10 @@ ${groupMarkup.join('')}`;
       .trim();
 
   const onKeyDown = (e) => {
-    const ctrlOrCmdOnly =
-      (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && !(e.ctrlKey && e.metaKey);
-    if (!ctrlOrCmdOnly) return;
+    const altOnly = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+    if (!altOnly) return;
 
-    const desired = showShortcutsCode;
+    const desired = showOverlayCode;
     if (!desired) return;
 
     const isSlashLike = desired === 'Slash' || desired === 'NumpadDivide';
@@ -13617,8 +13713,12 @@ ${groupMarkup.join('')}`;
       state.resultsObserver?.disconnect();
       state.resultsObserver = null;
       state.resultsObservationRoot = null;
-      document.querySelectorAll(`[${CONTROL_ATTR}="true"]`).forEach((el) => el.remove());
-      document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => el.removeAttribute(HIDDEN_ATTR));
+      document.querySelectorAll(`[${CONTROL_ATTR}="true"]`).forEach((el) => {
+        el.remove();
+      });
+      document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
+        el.removeAttribute(HIDDEN_ATTR);
+      });
     } catch {}
   };
 
@@ -13953,7 +14053,9 @@ ${groupMarkup.join('')}`;
   };
 
   const restoreHiddenItems = () => {
-    document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => el.removeAttribute(HIDDEN_ATTR));
+    document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
+      el.removeAttribute(HIDDEN_ATTR);
+    });
   };
 
   const applyLibraryFilter = () => {

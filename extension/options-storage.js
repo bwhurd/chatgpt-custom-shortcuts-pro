@@ -22,7 +22,8 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyNextThread: ';',
   shortcutKeyEdit: 'e',
   shortcutKeySendEdit: 'd',
-  shortcutKeySearchConversationHistory: 'k',
+  shortcutKeySearchConversationHistory: ',',
+  shortcutKeyShowOverlay: '.',
   shortcutKeyTemporaryChat: 'p',
   shortcutKeyToggleDictate: 'y',
   shortcutKeyCancelDictation: '',
@@ -52,7 +53,6 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyThinkingLight: '',
   shortcutKeyThinkingHeavy: '',
   shortcutKeyNewGptConversation: '',
-  shortcutKeyShowShortcuts: 'Slash',
   selectThenCopyAllMessages: '[',
 
   // Legacy naming variants (back-compat; no longer shown in popup.html)
@@ -173,6 +173,40 @@ if (typeof OptionsSync === 'undefined') {
         }
       },
 
+      // 2.5) Move the untouched legacy search shortcut from K to Comma when safe.
+      (stored) => {
+        const value = stored.shortcutKeySearchConversationHistory;
+        const legacyDefault =
+          value === 'k' || value === 'K' || value === 'KeyK' || value === 'keyk';
+        if (!legacyDefault) return;
+
+        const commaTaken = Object.entries(stored).some(([key, current]) => {
+          if (key === 'shortcutKeySearchConversationHistory') return false;
+          return current === ',' || current === 'Comma';
+        });
+
+        if (!commaTaken) {
+          stored.shortcutKeySearchConversationHistory = ',';
+        }
+      },
+
+      // 2.6) Promote Show Shortcut Overlay to the live Alt+. opener and
+      // retire the temporary Alt+I experiment plus the old alias key.
+      (stored, defaults) => {
+        const value =
+          typeof stored.shortcutKeyShowOverlay === 'string'
+            ? stored.shortcutKeyShowOverlay.trim()
+            : '';
+        const usesTemporaryExperimentDefault =
+          value === 'i' || value === 'I' || value === 'KeyI' || value === 'keyi';
+
+        if (usesTemporaryExperimentDefault) {
+          stored.shortcutKeyShowOverlay = defaults.shortcutKeyShowOverlay;
+        }
+
+        delete stored.shortcutKeyShowShortcuts;
+      },
+
       // 3) Sanitize modelPickerKeyCodes to a 15-slot string array (pads from old 10)
       (stored) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes) ? stored.modelPickerKeyCodes : [];
@@ -273,6 +307,7 @@ if (typeof OptionsSync === 'undefined') {
       (stored) => {
         delete stored.shortcutKeyRegenerate;
         delete stored.shortcutKeyCopyAllResponses;
+        delete stored.shortcutKeyShowShortcuts;
       },
 
       // 9) Remove anything truly unused (keep it last)

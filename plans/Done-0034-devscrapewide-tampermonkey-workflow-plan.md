@@ -1,0 +1,6 @@
+- [x] Remove the non-working extension-side in-page dev scrape control cluster from `extension/content.js` so the repo no longer has two competing dev entrypoints.
+- [x] Add a new `tests/` subfolder for the Tampermonkey-based dev scrape workflow and save a generated `.user.js` script there.
+- [x] Reuse the existing `extension/lib/DevScrapeWide.js` logic by generating the userscript from that module plus the current `extension/content.js` source needed by the checker, rather than hand-maintaining a second scrape implementation.
+- [x] Give the userscript a compact bottom-right `Set Path` / `DevScrapeWide` / `Check-Scrape` control cluster and a simple report-tab renderer.
+- [x] Update `specs/0006-runtime-scrape-selector-validator-spec.md` to point the current dev-only runtime scrape entrypoint at the Tampermonkey script under `tests/`.
+- [x] Validate narrowly with `biome check` on the edited extension/spec/build files and by running the userscript generator once.

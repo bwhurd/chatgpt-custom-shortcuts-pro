@@ -1,0 +1,4 @@
+- [x] Remove the giant embedded `content.js` payload from the generated Tampermonkey script by replacing runtime source-file reads with build-time source-presence metadata derived during generation.
+- [x] Rework the generated Tampermonkey controls to use tiny fixed-position bottom-right buttons with per-button offsets, low-opacity fade behavior, and hover tooltips, without adding any hotkeys.
+- [x] Update the userscript README/spec wording only where needed to reflect the lighter build-time source audit and the floating-button control posture.
+- [x] Regenerate `tests/tampermonkey-dev-scrape/chatgpt-devscrape-wide.user.js` and validate with `node --check` plus narrow `biome check` on the edited source files.

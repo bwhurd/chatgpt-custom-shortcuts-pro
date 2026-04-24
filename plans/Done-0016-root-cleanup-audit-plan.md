@@ -25,7 +25,7 @@
 - `CGCSP-Github.code-workspace`
 - `CHANGELOG.md`
 - `Clean-CSS-Interactive.ps1`
-- `PLANS/Done-0019-codexplan-root-pointer-archive.md`
+- `plans/Done-0019-codexplan-root-pointer-archive.md`
 - `content.js`
 - `CONTRIBUTING.md`
 - `css-cleanup/`
@@ -45,7 +45,7 @@
 - `options-storage.js`
 - `package-lock.json`
 - `package.json`
-- `PLANS/`
+- `plans/`
 - `popup.css`
 - `popup.html`
 - `popup.js`
@@ -57,7 +57,7 @@
 - `settings.json`
 - `Setup-And-Clean-CSSv2.ps1`
 - `shared/`
-- `SPECS/`
+- `specs/`
 - `storage.js`
 - `docs/policies/TERMS.md`
 - `test-results/`
@@ -106,7 +106,7 @@
 - `scripts/build-zip.js` - release zip builder and shipping authority.
 - `CGCSP-Github.code-workspace` - ignored local workspace file; keep unless explicitly cleaning local editor state.
 - `CHANGELOG.md` - release/support documentation referenced by root docs and README.
-- `PLANS/Done-0019-codexplan-root-pointer-archive.md` - legacy Codex plan pointer archive kept under `PLANS/`.
+- `plans/Done-0019-codexplan-root-pointer-archive.md` - legacy Codex plan pointer archive kept under `plans/`.
 - `content.js` - ships in the release zip.
 - `CONTRIBUTING.md` - contributor documentation referenced by README and package metadata.
 - `dist/` - release output folder; `.gitignore` preserves `dist/*.zip`.
@@ -124,7 +124,7 @@
 - `options-storage.js` - ships in the release zip.
 - `package-lock.json` - dependency lockfile.
 - `package.json` - script and dependency authority.
-- `PLANS/` - active/deferred/done workstream plans.
+- `plans/` - active/deferred/done workstream plans.
 - `popup.css` - ships in the release zip.
 - `popup.html` - ships in the release zip.
 - `popup.js` - ships in the release zip.
@@ -134,7 +134,7 @@
 - `settings-schema.js` - ships in the release zip.
 - `settings.json` - validation fixture used by `validate-keys.js`; if moved later, move with that helper instead of archiving alone.
 - `shared/` - ships in the release zip.
-- `SPECS/` - durable subsystem specs.
+- `specs/` - durable subsystem specs.
 - `storage.js` - ships in the release zip.
 - `docs/policies/TERMS.md` - support/policy document.
 - `tests/` - active Playwright validation folder referenced by package scripts and routing docs.
@@ -162,7 +162,7 @@
 - [x] Use one new top-level `extension/` folder for the actual Chrome extension source. This keeps the root simple while making the Chrome-loaded source obvious at a glance.
 - [x] Preserve the internal extension layout inside `extension/`; do not add deeper `src/`, `popup/`, `assets/`, or `docs/` folders in this pass.
 - [x] Keep the repo root for project control files and docs: `AGENTS.md`, `PROJECT_SPEC.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, package metadata, `.gitignore`, `.gitattributes`, and provider config like `netlify.toml`.
-- [x] Keep purpose folders at root: `PLANS/`, `SPECS/`, `tests/`, `tools/`, `_temp-files/`, `dist/`, `netlify/`, and generated local folders such as `node_modules/`.
+- [x] Keep purpose folders at root: `plans/`, `specs/`, `tests/`, `tools/`, `_temp-files/`, `dist/`, `netlify/`, and generated local folders such as `node_modules/`.
 - [x] Rewire `scripts/build-zip.js` to read `extension/manifest.json` and archive every `includeItems` entry from `extension/` into the zip root, preserving the Chrome Web Store package layout.
 - [x] Rewire Playwright extension-loading helpers to load the unpacked extension from `extension/` instead of the repo root.
 - [x] Move `settings.json` to `tests/fixtures/settings.json`, update `tests/validate-keys.js`, and add `npm run validate:keys`.
@@ -176,7 +176,7 @@
 - [x] `tests/` - Playwright workflows, validation helpers, and test fixtures.
 - [x] `netlify/` - Netlify support service code.
 - [x] `tools/` - retained local utilities and support archives.
-- [x] `PLANS/` and `SPECS/` - workstream plans and durable subsystem docs.
+- [x] `plans/` and `specs/` - workstream plans and durable subsystem docs.
 - [x] `_temp-files/` - ignored scratch, archived cleanup items, inspector captures, and reference material.
 - [x] `dist/` - generated release zips.
 
@@ -197,4 +197,4 @@
 ## Final Local Clutter Cleanup
 
 - [x] Remove ignored root-local leftovers that were still making the repo look noisy: `.playwright/`, `.vscode/`, `CGCSP-Github.code-workspace`, `node_modules/`, and `test-results/`.
-- [x] Keep intentional root surfaces in place: `extension/`, `tests/`, `dist/`, `PLANS/`, `SPECS/`, `_temp-files/`, project docs, packaging metadata, and `netlify/`.
+- [x] Keep intentional root surfaces in place: `extension/`, `tests/`, `dist/`, `plans/`, `specs/`, `_temp-files/`, project docs, packaging metadata, and `netlify/`.

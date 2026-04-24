@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dev Scrape Report</title>
+    <link rel="stylesheet" href="report.css" />
+  </head>
+  <body>
+    <main class="report-shell">
+      <header class="report-header">
+        <p class="eyebrow">Dev-Only Runtime Selector Validator</p>
+        <h1>DevScrapeWide Report</h1>
+        <p id="report-summary" class="summary">Loading the latest report...</p>
+      </header>
+
+      <section id="report-alerts" class="alerts" hidden></section>
+
+      <section class="table-section">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th scope="col">Canonical Identifier</th>
+              <th scope="col">Dump Files</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody id="report-rows">
+            <tr>
+              <td colspan="3" class="loading">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="report.js"></script>
+  </body>
+</html>

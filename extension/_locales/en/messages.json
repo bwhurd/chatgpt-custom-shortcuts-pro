@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "Refresh Models"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "Click to update the model list.\n\nNote: Model menus on the webpage may briefly flash in the background. This is normal."
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "Restore failed"
 	},
-	"label_showShortcuts": {
-		"message": "Show Shortcuts"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "Displays only assigned shortcuts in chat."
 	},
 	"label_cloud_sync": {

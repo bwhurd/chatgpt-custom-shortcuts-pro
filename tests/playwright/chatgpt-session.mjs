@@ -65,13 +65,18 @@ if (!scenarioConfig[scenario]) {
 const config = scenarioConfig[scenario];
 await mkdir(config.profileDir, { recursive: true });
 
+const browserChannel = getArgValue(
+    '--browser-channel',
+    config.loadExtension ? 'chromium' : 'chrome',
+);
+
 const launchArgs = [];
 if (config.loadExtension) {
     launchArgs.push(`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`);
 }
 
 const context = await chromium.launchPersistentContext(config.profileDir, {
-    channel: 'chromium',
+    channel: browserChannel,
     headless: false,
     viewport: { width: 1440, height: 960 },
     args: launchArgs,
@@ -125,6 +130,7 @@ try {
     console.log(`Scenario: ${config.label}`);
     console.log(`Profile dir: ${config.profileDir}`);
     console.log(`Start URL: ${startUrl}`);
+    console.log(`Browser channel: ${browserChannel}`);
     if (config.loadExtension) {
         console.log(
             `moveTopBarToBottomCheckbox: ${config.moveTopBarToBottom ? 'true' : 'false'}`,

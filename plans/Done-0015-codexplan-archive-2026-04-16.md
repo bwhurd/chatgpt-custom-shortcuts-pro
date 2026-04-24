@@ -6,19 +6,19 @@
 
 - Decision:
   - `AGENTS.md` should stay a routing/guardrails file, not a second architecture manual.
-  - durable cross-file behavior and troubleshooting notes should live in `SPECS/`.
+  - durable cross-file behavior and troubleshooting notes should live in `specs/`.
   - `CodexPlan.md` should keep the live backlog, not absorb durable implementation references.
 - [x] Audit `AGENTS.md` for sections that are too deep or volatile to keep inline.
-- [x] Create root `SPECS/` folder and move the existing settings / Fast Mode reference docs out of `PLANS/`.
-- [x] Add `SPECS/README.md` as the spec index and boundary guide.
+- [x] Create root `specs/` folder and move the existing settings / Fast Mode reference docs out of `plans/`.
+- [x] Establish `specs/` as the durable spec home and boundary guide.
 - [x] Add durable specs for Cloud Sync/settings data flow and model picker/shortcut architecture.
-- [x] Update `AGENTS.md` search/scope guidance to include `SPECS/**`, `CodexPlan.md`, `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, and `scripts/build-zip.js`.
+- [x] Update `AGENTS.md` search/scope guidance to include `specs/**`, `CodexPlan.md`, `lazy-fast-bootstrap.js`, `lazy-fast-bridge.js`, and `scripts/build-zip.js`.
 - [x] Replace redundant AGENTS deep-dive sections with short references to the new spec set.
 
 ### ⚡ Lazy Load Fast Mode
 
 - Goal: make very large ChatGPT conversations reach a native usable state quickly by reducing initial conversation hydration cost, while keeping the composer, send flow, and normal ChatGPT controls native.
-- Durable reference doc: `SPECS/SPEC_LAZY_FAST_MODE.md`
+- Durable reference doc: `specs/0002-lazy-fast-mode-spec.md`
 - Decision:
   - the extension must not own lazy-loaded message DOM as the primary path
   - older messages need to be rendered by ChatGPT itself so styling, actions, dialogs, shared docs, and tool UIs stay exact

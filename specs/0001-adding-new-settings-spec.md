@@ -191,8 +191,20 @@ For new shortcuts, also update:
 - `settings-schema.js`
   - `shortcuts.labelI18nByKey`
   - `shortcuts.overlaySections`
+- `extension/shared/shortcut-action-metadata.js`
+  - add an explicit shortcut action metadata row
+  - declare validation mode, ordered target refs, required scrape states, activation probe mode/setup, and notes for manual-only or not-applicable shortcuts
+  - add or reuse target descriptors for any ChatGPT DOM target the shortcut touches
+
+When changing a shipped shortcut default, also update:
+- `options-storage.js` `OPTIONS_DEFAULTS`
+- `popup.js` popup default preset data
+- any matching `content.js` runtime default map
+- a narrow `options-storage.js` migration only if the old default should move automatically for untouched installs and the new target key is still free
 
 Do not treat shortcut additions like ordinary checkbox settings.
+
+The runtime selector validator is intentionally deterministic. Do not rely on it to infer shortcut targets from handler bodies. A new runtime shortcut should fail validation until its explicit metadata exists.
 
 ## The minimum safe wiring path
 
@@ -206,7 +218,8 @@ If you want the shortest reliable rule set, use this:
 4. Add popup default coverage in `popup.js`
 5. Add schema coverage in `settings-schema.js`
 6. Add the actual runtime behavior in `content.js`
-7. Validate stored value, popup state, and page behavior
+7. For shortcuts, add `extension/shared/shortcut-action-metadata.js` coverage before running validation
+8. Validate stored value, popup state, and page behavior
 
 If any of those are skipped, the setting is likely only partially wired.
 
@@ -339,3 +352,11 @@ Update this reference if:
 - cloud sync stops using `OPTIONS_DEFAULTS`
 - schema-driven content hydration changes
 - early bootstrap gating patterns change
+
+### Settings source of truth and popup settings UI invariants
+
+- `chrome.storage.sync` is the source of truth for user settings.
+- When adding or changing a setting, update `extension/options-storage.js`, the popup wiring that reads or writes that setting, and any content/bootstrap path that reads, enforces, imports, exports, saves, or restores it.
+- When editing popup settings controls, keep existing i18n keys unless the task requires new keys.
+- When adding or changing a tooltip in popup settings UI, match the tooltip presence and structure used by nearby controls unless the task requires a different pattern.
+- Keep shared-label behavior working for popup settings rows that use it.

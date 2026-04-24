@@ -3,7 +3,7 @@
   "name": "__MSG_app_name__",
   "default_locale": "en",
   "description": "__MSG_app_description__",
-  "version": "4.5.1.5",
+  "version": "4.5.2.1",
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -19,29 +19,19 @@
     "48": "icon48.png",
     "128": "icon128.png"
   },
-  "permissions": [
-    "storage"
-  ],
-  "optional_permissions": [
-    "identity"
-  ],
+  "permissions": ["storage"],
+  "optional_permissions": ["identity"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": [
-        "*://*.chatgpt.com/*"
-      ],
-      "js": [
-        "lazy-fast-bootstrap.js"
-      ],
+      "matches": ["*://*.chatgpt.com/*"],
+      "js": ["lazy-fast-bootstrap.js"],
       "run_at": "document_start"
     },
     {
-      "matches": [
-        "*://*.chatgpt.com/*"
-      ],
+      "matches": ["*://*.chatgpt.com/*"],
       "js": [
         "lib/gsap.min.js",
         "lib/ScrollToPlugin.min.js",
@@ -56,12 +46,8 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "lazy-fast-bridge.js"
-      ],
-      "matches": [
-        "*://*.chatgpt.com/*"
-      ]
+      "resources": ["lazy-fast-bridge.js"],
+      "matches": ["*://*.chatgpt.com/*"]
     }
   ],
   "commands": {

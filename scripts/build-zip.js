@@ -52,11 +52,28 @@ while (fs.existsSync(finalZipPath)) {
 
 const output = fs.createWriteStream(finalZipPath);
 const archive = archiver('zip', { zlib: { level: 9 } });
+const excludedArchivePaths = new Set([
+  'lib/DevScrapeWide.js',
+  'lib/DevScrapeNarrow.js',
+  'shared/shortcut-action-metadata.js',
+]);
+
+function addDirectoryRecursive(sourceDir, archivePrefix) {
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+  entries.forEach((entry) => {
+    const entryPath = path.join(sourceDir, entry.name);
+    const archiveName = path.posix.join(archivePrefix, entry.name);
+    if (excludedArchivePaths.has(archiveName)) return;
+    if (entry.isDirectory()) {
+      addDirectoryRecursive(entryPath, archiveName);
+      return;
+    }
+    archive.file(entryPath, { name: archiveName });
+  });
+}
 
 output.on('close', () => {
-  console.log(
-    `Created ${path.basename(finalZipPath)} in dist/ (${archive.pointer()} total bytes)`,
-  );
+  console.log(`Created ${path.basename(finalZipPath)} in dist/ (${archive.pointer()} total bytes)`);
 });
 archive.on('error', (err) => {
   throw err;
@@ -93,7 +110,7 @@ includeItems.forEach((item) => {
   if (fs.existsSync(itemPath)) {
     const stats = fs.statSync(itemPath);
     if (stats.isDirectory()) {
-      archive.directory(itemPath, item);
+      addDirectoryRecursive(itemPath, item);
     } else {
       archive.file(itemPath, { name: item });
     }

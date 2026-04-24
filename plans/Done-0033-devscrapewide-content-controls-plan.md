@@ -1,0 +1,6 @@
+- [x] Remove the dev-only `Set Path`, `DevScrapeWide`, and `Check-Scrape` controls from `extension/popup.html` and the related popup wiring from `extension/popup.js`.
+- [x] Add a dev-only in-page control cluster in `extension/content.js` that appears only when `lib/DevScrapeWide.js` can be imported, so unpacked/dev builds expose the controls on ChatGPT and release zips stay inert.
+- [x] Reuse the existing `extension/lib/DevScrapeWide.js` helpers for capture-root setup, scrape persistence, report generation, and stored last-run handling instead of duplicating popup-side logic.
+- [x] Reuse existing model-menu helpers in `extension/content.js` to visibly prime the model switcher menu before the in-page wide scrape runs, keeping the trigger path close to the working `Refresh Models` interaction.
+- [x] Update `specs/0006-runtime-scrape-selector-validator-spec.md` to move control ownership from popup to in-page content controls and keep shipping rules unchanged.
+- [x] Validate narrowly with `biome check` on the edited popup, content, and dev-scrape files.

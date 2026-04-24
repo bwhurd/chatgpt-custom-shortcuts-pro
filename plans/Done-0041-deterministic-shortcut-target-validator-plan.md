@@ -1,0 +1,153 @@
+- Investigation findings:
+  - The current runtime validator is not systematic yet. `extension/lib/DevScrapeWide.js` still drives checking through a flat hand-maintained `CHECK_RULES` list, and the current report is identifier-centric rather than shortcut-centric.
+  - The actual runtime shortcut universe already exists deterministically in `extension/content.js`: `shortcutDefaults` defines the shipped shortcut keys, and the `keyFunctionMappingAlt` handler map defines the active runtime actions.
+  - `extension/settings-schema.js` already supplies durable label and section metadata for many shortcuts, so the validator can reuse those labels instead of inventing a second naming system.
+  - Multi-step runtime actions already expose stable target clues in code today: direct `data-testid` selectors, ids, input names, sprite/icon tokens, and helper entry points like model-switcher or composer-menu flows.
+  - The current report proves only the shortcuts someone manually added to `CHECK_RULES`, so missing rows today do not mean a shortcut is healthy or intentionally excluded.
+  - Tray-launcher follow-up is straightforward now: AutoHotkey v1 executables exist under `C:\Program Files\AutoHotkey`, and the requested icon asset exists at `tests/ChatGPT Custom Shortcuts Pro.ico`.
+
+- Scope:
+  - Redesign the runtime selector validator so it inventories all runtime shortcuts deterministically and reports coverage by shortcut first, then by target.
+  - Replace the current ad hoc checker shape with a structured shortcut-action inventory plus a structured target inventory.
+  - Keep the scrape path Playwright-first, no-token-spend, and dump-based.
+  - Update the Windows tray/controller surfaces so they reuse the new shortcut-centric report and use the requested tray icon.
+
+- Out of scope:
+  - Proving every shortcut end to end by synthetic keypress in the first pass.
+  - Shipping any validator metadata or tray workflow into the extension’s release surface unless a file is intentionally promoted there.
+  - Broad refactors of unrelated shortcut behavior beyond what is needed to make the validator systematic and deterministic.
+
+- Design decisions to implement:
+  - Do not try to reverse-engineer arbitrary handler bodies into target inventories at report time. That would stay brittle.
+  - Introduce one explicit dev-only shortcut validation inventory module, likely under `tests/playwright/lib/`, and back it with automatic completeness checks against `extension/content.js` and `extension/settings-schema.js`.
+  - Split validation data into two layers:
+    - Shortcut inventory: one row per runtime shortcut action.
+    - Target inventory: one row per canonical click target / selector target / menu target.
+  - Require every runtime shortcut to be explicitly classified into one of a small deterministic validation modes:
+    - `scrape-targets`
+    - `behavioral-playwright`
+    - `manual-only`
+    - `not-applicable`
+  - Fail the inventory build/check if a runtime shortcut from `shortcutDefaults` or the handler map is missing from the inventory and does not have an explicit exclusion row.
+
+- Shortcut inventory contract:
+  - Add one dev-only source-of-truth module, likely `tests/playwright/lib/shortcut-target-inventory.mjs`.
+  - Each shortcut row should declare:
+    - `actionId`
+    - `labelKey` or durable label source reference
+    - `defaultCode`
+    - `validationMode`
+    - ordered `targetIds`
+    - optional `behavioralNotes`
+    - optional explicit exclusion reason when not scrape-validatable
+  - Inventory generation should reuse existing sources where practical:
+    - action ids from `shortcutDefaults`
+    - labels/sections from `settings-schema.js`
+    - runtime handler ownership from `content.js`
+  - Add a narrow completeness guard that compares:
+    - `shortcutDefaults`
+    - runtime handler keys in `keyFunctionMappingAlt`
+    - inventory action ids
+    - user-visible label keys in `settings-schema.js` where relevant
+
+- Target inventory contract:
+  - Add a companion target registry in the same dev-only module or an adjacent file.
+  - Each target row should declare:
+    - `targetId`
+    - `targetKind` such as `selector`, `icon-token`, `menuitem`, `input-name`, `dialog-anchor`, or `helper-surface`
+    - canonical `searchNeedles`
+    - expected scrape artifact ids or filenames
+    - click-path notes for multi-step surfaces when needed
+    - whether the target is a required member of an ordered target chain
+  - Multi-step shortcuts should list target chains deterministically, for example:
+    - menu trigger target
+    - submenu target
+    - focused input or final action target
+  - Shared targets should be reusable across multiple shortcuts instead of duplicated per action.
+
+- Report redesign:
+  - Replace the current flat identifier report with two explicit sections:
+    - Shortcut coverage table
+    - Target coverage table
+  - Shortcut coverage table should show:
+    - shortcut action id
+    - user-facing label
+    - validation mode
+    - ordered target ids
+    - required scrape artifacts
+    - overall status such as `PASS`, `FAIL`, `PARTIAL`, `MANUAL`, or `UNTRACKED`
+  - Target coverage table should show:
+    - target id
+    - canonical identifier searched
+    - target kind
+    - expected dump files
+    - matched dump files
+    - status
+  - The report should pin likely broken shortcuts at the top by deriving them from failed shortcut rows, not from raw identifiers alone.
+  - The report should make uncovered inventory obvious:
+    - shortcuts with no target mapping yet
+    - targets with no dump coverage yet
+    - manual-only shortcuts that still need human verification
+
+- Scrape coverage plan:
+  - Keep the scrape dump family deterministic and no-reload where practical.
+  - Map every `scrape-targets` shortcut to required dump artifacts explicitly.
+  - Add new dump states only when a target inventory row cannot be satisfied by the existing dump family.
+  - Keep the dump family bounded and language-agnostic:
+    - prefer `data-testid`, ids, `aria-controls`, roles, dialog anchors, and stable icon/sprite tokens
+    - avoid localized text except as a clearly marked fallback of last resort
+
+- Runtime validator refactor:
+  - Refactor `check-wide` so it consumes the new shortcut inventory and target inventory rather than the current flat `CHECK_RULES`.
+  - Keep page-side scrape logic ownership in `extension/lib/DevScrapeWide.js`, but move shortcut-target validation ownership to the Playwright-side dev-only validator modules if that yields a cleaner separation.
+  - Update the machine-readable JSON report so the controller and tray can read shortcut rows directly.
+  - Preserve the existing HTML report auto-open behavior after validation completes.
+
+- Tray/controller follow-up:
+  - Update `DevScrapeValidatorTray.ahk` to use `tests/ChatGPT Custom Shortcuts Pro.ico` via `Menu, Tray, Icon`.
+  - Verify the tray using the installed AutoHotkey v1 runtime under `C:\Program Files\AutoHotkey`, preferring `AutoHotkeyU64.exe` or `AutoHotkey.exe`.
+  - Update `StartDevScrapeValidator.ps1` so its launcher summary reads from the new shortcut-centric report structure and highlights failed shortcut rows first.
+
+- Likely owning files:
+  - `tests/playwright/lib/devscrape-wide-core.mjs`
+  - `tests/playwright/devscrape-wide.mjs`
+  - new dev-only inventory module under `tests/playwright/lib/`
+  - `extension/lib/DevScrapeWide.js`
+  - `extension/content.js`
+  - `extension/settings-schema.js`
+  - `specs/0006-runtime-scrape-selector-validator-spec.md`
+  - `specs/0004-model-picker-and-shortcuts-spec.md`
+  - `StartDevScrapeValidator.ps1`
+  - `DevScrapeValidatorTray.ahk`
+
+- Validation:
+  - Add a narrow inventory completeness check that fails if any runtime shortcut action is unclassified.
+  - Run syntax checks on the validator modules and controller scripts.
+  - Run one real `validate-wide` pass against the required fixture.
+  - Confirm the generated HTML report opens automatically and presents:
+    - all runtime shortcuts
+    - their ordered target ids
+    - target coverage results
+    - explicit likely-broken shortcut rows
+  - Launch the tray with the installed AutoHotkey v1 runtime and verify:
+    - start controller
+    - open latest report
+    - shutdown
+    - reload
+    - shutdown and exit
+
+- Done when:
+  - Every runtime shortcut from `shortcutDefaults` and the active handler map has a deterministic inventory row or an explicit exclusion classification.
+  - The report is shortcut-centric first and target-centric second.
+  - The validator can tell the difference between:
+    - validated and healthy
+    - validated and likely broken
+    - covered by scrape but missing dump hit
+    - not yet scrape-covered
+    - intentionally manual or non-applicable
+  - The controller and tray surfaces highlight likely broken shortcuts directly from the new report structure.
+  - The tray uses the requested project icon and is verified against the installed AutoHotkey v1 runtime.
+
+- Related specs:
+  - `specs/0006-runtime-scrape-selector-validator-spec.md`
+  - `specs/0004-model-picker-and-shortcuts-spec.md`

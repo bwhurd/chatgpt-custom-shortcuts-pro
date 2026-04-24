@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "Обновить модели"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "Нажмите, чтобы обновить список моделей.\n\nПримечание: меню моделей на странице могут кратко мигать на фоне. Это нормально."
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "Ошибка восстановления"
 	},
-	"label_showShortcuts": {
-		"message": "Показать сочетания клавиш"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "В чате показываются только назначенные сочетания клавиш."
 	},
 	"label_cloud_sync": {

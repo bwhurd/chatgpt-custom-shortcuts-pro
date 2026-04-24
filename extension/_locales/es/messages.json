@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "Actualizar modelos"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "Haz clic para actualizar la lista de modelos.\n\nNota: Los menús de modelos de la página pueden parpadear brevemente en segundo plano. Esto es normal."
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "Error al restaurar"
 	},
-	"label_showShortcuts": {
-		"message": "Mostrar atajos"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "En el chat se muestran solo los atajos asignados."
 	},
 	"label_cloud_sync": {

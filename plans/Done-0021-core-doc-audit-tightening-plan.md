@@ -1,0 +1,4 @@
+- [x] Ground the current core-doc harness with the smallest read set needed to audit startup routing, document roles, and plan ownership across `AGENTS.md`, `PROJECT_SPEC.md`, `specs/`, and `plans/`.
+- [x] Compare the current root-doc posture against the canonical audit references and identify the smallest viable change set to reduce startup noise, duplicated guidance, misplaced detail, and role confusion.
+- [x] Tighten the owning root docs with minimal churn so the repo aligns more closely to the canonical core names and routing model without introducing a second doctrine.
+- [x] Re-check the edited doc set for routing clarity, ownership boundaries, skill and tool posture, and plan/spec naming consistency before concluding the audit.

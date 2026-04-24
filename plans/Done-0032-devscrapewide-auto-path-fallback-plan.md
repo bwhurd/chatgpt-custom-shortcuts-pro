@@ -1,0 +1,4 @@
+- [x] Make `DevScrapeWide` and `Check-Scrape` auto-fall back to the same directory-picker grant used by `Set Path` when no capture root is configured yet.
+- [x] Keep the stored-handle reuse path as the default so repeat runs still avoid the picker.
+- [x] Update the runtime scrape spec so the auto-fallback behavior matches the implemented dev flow.
+- [x] Validate narrowly with `biome check` on the edited popup and dev-scrape files.

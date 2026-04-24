@@ -12,7 +12,7 @@ Use it when Fast Mode breaks after ChatGPT changes and you need to understand:
 - which runtime invariants matter
 - where to probe first before changing code
 
-This is not the live execution backlog. Keep live Fast Mode sequencing in the relevant file under `PLANS/`, not here.
+This is not the live execution backlog. Keep live Fast Mode sequencing in the relevant file under `plans/`, not here.
 
 ## Purpose
 

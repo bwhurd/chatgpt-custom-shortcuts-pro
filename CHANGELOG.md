@@ -4,6 +4,9 @@ Changes typically post to the chrome web store a couple days after date in chang
 
 If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
 
+#### 04.22.2026
+- Changed: sidebar/search/new-chat/input shortcuts now use direct ChatGPT DOM activation instead of synthetic native shortcut strokes, and `Show Shortcut Overlay` is now the real shortcuts-overlay opener on `Alt/Option + .` through the same popup/schema wiring path as the other overlay rows.
+
 #### 04.13.2026
 - Changed: experimental `Fast Mode` now ships behind a full-disable kill switch, hides its popup toggle, and forces any previously enabled `lazyFastModeEnabled` setting back off.
 - Fixed: model refresh, popup labels, and first-menu model hotkeys now recognize ChatGPT's current top-level `menuitemradio` rows for entries like `Instant` and `Thinking`, instead of assuming only plain `menuitem` rows.

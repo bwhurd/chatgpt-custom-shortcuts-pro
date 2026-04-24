@@ -1,0 +1,4 @@
+- [x] Remove popup-side pre-send confirmation from `DevScrapeWide` so the first interaction with ChatGPT uses the same `sendModelMessageToTab` path shape as `Refresh Models`.
+- [x] Rely on the existing in-page fixture validation instead of any extra popup dialog, keeping the scrape flow dialog-free apart from the explicit `Set Path` directory picker.
+- [x] Keep `Check-Scrape` and `Set Path` on the same routing path while replacing dev-flow status dialogs with console logging.
+- [x] Validate narrowly with `biome check` on the edited popup and dev-scrape files.

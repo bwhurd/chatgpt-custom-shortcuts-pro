@@ -107,6 +107,8 @@
     }, {}),
   );
   const CONFIGURE_ACTION_IDS = Object.freeze(CONFIGURE_ACTIONS.map((action) => action.id));
+  const CONFIGURE_DYNAMIC_SLOT_START =
+    Math.max(...CONFIGURE_ACTIONS.map((action) => action.slot), ...EXTRA_ACTIONS.map((action) => action.slot)) + 1;
   const PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG = Object.freeze({
     'configure-latest': Object.freeze(['instant', 'thinking', 'configure']),
     'configure-5-2': Object.freeze(['instant', 'thinking', 'configure-latest', 'configure']),
@@ -325,23 +327,69 @@
     );
   };
 
-  const normalizeActiveConfigId = (value) =>
-    CONFIGURE_ACTION_IDS.includes(String(value || '').trim())
-      ? String(value || '').trim()
-      : DEFAULT_ACTIVE_CONFIG_ID;
-  const normalizeAvailableConfigId = (value) => {
+  const isDynamicConfigureActionId = (value) =>
+    /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
+  const normalizeConfigureOptionLabel = (value) =>
+    String(value || '').replace(/\s+/g, ' ').trim();
+  const slugifyConfigureOptionLabel = (value) => {
+    const slug = normalizeConfigureOptionLabel(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return slug || 'option';
+  };
+  const normalizeConfigureActionId = (value) => {
     const id = String(value || '').trim();
-    return CONFIGURE_ACTION_IDS.includes(id) ? id : '';
+    if (CONFIGURE_ACTION_IDS.includes(id) || isDynamicConfigureActionId(id)) return id;
+    return '';
+  };
+  const normalizeActiveConfigId = (value) =>
+    normalizeConfigureActionId(value) || DEFAULT_ACTIVE_CONFIG_ID;
+  const normalizeAvailableConfigId = (value) => {
+    return normalizeConfigureActionId(value);
   };
 
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
+  const getStaticConfigureActionForOption = (label, optionIndex) => {
+    const text = normalizeConfigureOptionLabel(label);
+    if (optionIndex === 0 || text.toLowerCase() === 'latest') return getActionById('configure-latest');
+    if (text === '5.2') return getActionById('configure-5-2');
+    if (text === '5.0') return getActionById('configure-5-0-thinking-mini');
+    if (text === 'o3') return getActionById('configure-o3');
+    return null;
+  };
+  const getConfigureActionForOption = (label, optionIndex = -1, slotHint = -1) => {
+    const text = normalizeConfigureOptionLabel(label);
+    const staticAction = getStaticConfigureActionForOption(text, optionIndex);
+    if (staticAction) return { ...staticAction };
+    if (!text) return null;
+    const slot = Number.isInteger(Number(slotHint)) && Number(slotHint) >= 0 && Number(slotHint) < MAX_SLOTS
+      ? Number(slotHint)
+      : Math.min(
+          MAX_SLOTS - 1,
+          CONFIGURE_DYNAMIC_SLOT_START + Math.max(0, (Number(optionIndex) || 0) - CONFIGURE_ACTIONS.length),
+        );
+    return {
+      slot,
+      id: `configure-dynamic-${slugifyConfigureOptionLabel(text)}`,
+      group: 'configure',
+      label: text,
+      actionKind: 'configure-option',
+      optionKind: 'value',
+      optionValue: text,
+      optionIndex: Number(optionIndex),
+    };
+  };
   const getCatalogConfigureActions = (catalog, incomingNames) => {
     const options = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
     const seen = new Set();
     return options
-      .map((option) => {
-        const actionId = normalizeAvailableConfigId(option?.id);
-        const base = getActionById(actionId);
+      .map((option, index) => {
+        const optionId = normalizeAvailableConfigId(option?.id);
+        const base =
+          getActionById(optionId) ||
+          getConfigureActionForOption(option?.label || '', index, option?.slot);
+        const actionId = optionId || base?.id || '';
         if (!base || seen.has(actionId)) return null;
         seen.add(actionId);
         const label =
@@ -718,6 +766,7 @@
     getActionSlots,
     getActionBySlot,
     getActionById,
+    getConfigureActionForOption,
     getPrimaryActionIdsForActiveConfig,
     getPrimaryPresentationActions,
     getPresentationGroups,

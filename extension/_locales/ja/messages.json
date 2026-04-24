@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "モデルを更新"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "クリックしてモデル一覧を更新します。\n\n注意: ページ上のモデルメニューが背景で一瞬点滅する場合があります。これは正常です。"
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "復元に失敗しました"
 	},
-	"label_showShortcuts": {
-		"message": "ショートカットを表示"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "チャットでは割り当て済みのショートカットだけを表示します。"
 	},
 	"label_cloud_sync": {

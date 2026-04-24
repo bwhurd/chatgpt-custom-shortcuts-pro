@@ -1,0 +1,9 @@
+- Integrate direct DOM activation for `shortcutKeySearchConversationHistory` into the main shortcut system instead of the standalone Alt+`,` proof of concept.
+- Change the default search-history shortcut to `Comma` across storage, popup defaults, and content runtime defaults so new installs and reset/default flows align.
+- Add a narrow migration in `extension/options-storage.js` that moves untouched legacy search-history defaults (`k` / `KeyK`) to `Comma` only when `Comma` is not already claimed by another shortcut.
+- Keep `shortcutKeyActivateInput` on direct composer activation only; do not reintroduce synthetic keyboard fallback.
+- Remove the temporary proof-of-concept IIFE from `extension/content.js` once the configured shortcut path owns search activation.
+- Add one concise changelog note and only the minimum shortcut-doc updates needed to point future work at the direct-DOM path and default-key migration rule.
+- Keep the shortcuts overlay opener row (`shortcutKeyShowShortcuts`) rendered through the same assigned-shortcut section path as other Alt shortcuts instead of relying on a parallel overlay-only fallback.
+- Validate with `node --check extension/content.js` and a targeted readback of the changed shortcut/default wiring.
+- Related specs: `specs/0001-adding-new-settings-spec.md`, `specs/0004-model-picker-and-shortcuts-spec.md`

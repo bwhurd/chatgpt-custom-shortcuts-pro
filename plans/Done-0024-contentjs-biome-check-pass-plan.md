@@ -1,0 +1,23 @@
+- [x] Suppress the file-wide `format` diagnostic on `extension/content.js`; risk stayed low while whole-file reformat churn stayed high, so the implemented fix was a `biome.json` override that disables formatting only for this legacy file during the targeted lint pass.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `estimateTurnSize` at `extension/content.js:691`; risk was low but removal/rename could disrupt dormant virtual-render sizing work, so the helper was retained with a scoped suppression.
+- [x] Suppress `lint/correctness/noUnusedFunctionParameters` for `conversationId` in `getRequestedRetainedTurnCount` at `extension/content.js:1513`; risk was low but dropping the parameter would force needless call-site churn, so signature symmetry was preserved and suppressed locally.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:2368`; wrapping `headers.set` in a block preserved the side effect and removed the implicit return.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:2371`; the second header-copy path was fixed the same way.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:8005`; `applyDynamicUiStylingInSubtree` still runs for side effects only.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:8318`; `clearTimeout` side effects stayed identical after bracing the callback.
+- [x] Suppress `lint/correctness/noUnusedFunctionParameters` for `snapshot` in `resolveObservationRoot` at `extension/content.js:8970`; the observer call shape was preserved with a local suppression.
+- [x] Suppress `lint/correctness/noUnusedFunctionParameters` for `revealDecision` in `commitReveal` at `extension/content.js:9387`; the reveal pipeline signature was preserved with a local suppression.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:10101`; `containers.add` remains the only intended effect.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:10116`; the initial queue pass still depends only on `queueTryAgainRoot` side effects.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:10189`; `tryClickOpenLink` is still called only for side effects.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `ACTIVE_MODEL_CONFIG_ID` at `extension/content.js:10287`; the local cache mirror was retained to avoid structural churn in the model-picker block.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `clickButtonByTestIdSafe` at `extension/content.js:10329`; the compatibility helper was retained with a scoped suppression.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `getOrderedMenuItems` at `extension/content.js:11084`; the menu-order helper was preserved with a scoped suppression.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `captureConfigureOptionLabels` at `extension/content.js:11332`; the configure-option scrape helper was preserved with a scoped suppression.
+- [x] Suppress `lint/correctness/noUnusedVariables` for `collectThinkingEffortIdsDuringScrape` at `extension/content.js:11407`; the thinking-effort scrape helper was preserved with a scoped suppression.
+- [x] Fix `lint/style/useConst` at `extension/content.js:12745`; the array contents still mutate but the binding is no longer declared as reassigned.
+- [x] Fix `lint/style/useConst` at `extension/content.js:13316`; the storage bootstrap path now uses `const` for the same non-reassigned binding.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:13618`; DOM removal side effects stayed identical.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:13619`; attribute-removal side effects stayed identical.
+- [x] Fix `lint/suspicious/useIterableCallbackReturn` at `extension/content.js:13954`; the hidden-item restore path still only removes attributes.
+- [x] Re-run `npx biome check extension/content.js --max-diagnostics=100` and confirm the file passes; validation stayed scoped to this file and completed cleanly.

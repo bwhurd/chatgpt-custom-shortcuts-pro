@@ -26,7 +26,7 @@ For the full feature list, install the extension and open the settings panel.
 - `extension/` - unpacked Chrome extension source
 - `dist/` - packaged extension ZIPs kept in-repo intentionally
 - `tests/` - Playwright validation helpers, fixtures, and visual baselines
-- `PLANS/` and `SPECS/` - active work tracking and durable project docs
+- `plans/` and `specs/` - active work tracking and durable project docs
 
 ---
 

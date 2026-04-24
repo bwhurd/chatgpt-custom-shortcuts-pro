@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "मॉडल रीफ़्रेश करें"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "मॉडल सूची अपडेट करने के लिए क्लिक करें.\n\nनोट: वेबपेज पर मॉडल मेनू पृष्ठभूमि में थोड़ी देर के लिए फ्लैश हो सकते हैं. यह सामान्य है."
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "बहाली विफल"
 	},
-	"label_showShortcuts": {
-		"message": "शॉर्टकट दिखाएँ"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "चैट में केवल असाइन किए गए शॉर्टकट दिखते हैं।"
 	},
 	"label_cloud_sync": {

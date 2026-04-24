@@ -1,5 +1,5 @@
 ## Goal
-Fix the `Ctrl + /` shortcuts overlay in `content.js` so that:
+Fix the shortcuts overlay in `content.js` so that:
 - The **model picker grid** stays unchanged (still driven by `modelPickerKeyCodes` + existing model label extraction/hydration).
 - All **non-model** sections show **only currently assigned** shortcuts.
 - Overlay **labels match** the popup’s setting labels (what users see in `popup.html` after i18n).
@@ -23,14 +23,14 @@ Fix the `Ctrl + /` shortcuts overlay in `content.js` so that:
 ## Proposed plan (checklist style; execute 5 items at a time)
 
 ### Phase 0 — Confirm baseline + identify sources of truth
-- [x] Confirm the exact overlay entrypoint(s) (the `Ctrl + /` handler in `content.js`) and verify we can change label/list logic without touching model grid logic.
+- [x] Confirm the exact overlay entrypoint(s) (now the configurable `shortcutKeyShowShortcuts` handler in `content.js`, shipping as `Alt + O`) and verify we can change label/list logic without touching model grid logic.
 - [x] Confirm the overlay is shortcuts-focused (no non-shortcut “state rows” like icon-only items; `label_off` is out of scope).
 - [x] Inventory all `input.key-input[data-sync]` in `popup.html` and capture, per key: section header context + label source (i18n key and/or fallback text).
 - [x] Cross-check the issue list (111): confirm each mismatch/missing item maps to a real popup shortcut input + user-visible label.
-- [x] Validate which popup “shortcut” inputs are actually persisted in `chrome.storage.sync` (exclude read-only/pseudo inputs like `shortcutKeyShowShortcuts` that are not in `OPTIONS_DEFAULTS`).
+- [x] Validate which popup “shortcut” inputs are actually persisted in `chrome.storage.sync` (including `shortcutKeyShowShortcuts`, which now lives in `OPTIONS_DEFAULTS` even though it still stays excluded from overlay rows).
 
 Notes captured during Phase 0 (to guide implementation)
-- Overlay open trigger is hardcoded to `Ctrl + /` in `content.js` and does not depend on `shortcutKeyShowShortcuts`.
+- Overlay open trigger now depends on stored `shortcutKeyShowShortcuts` in `content.js` and ships as `Alt + O` by default.
 - Missing overlay items are primarily caused by `settings-schema.js` `overlaySections` omitting keys that exist in `popup.html` (e.g., Share, New Custom GPT Conversation, Branch In New Chat, Cancel Dictation, Read Aloud).
 - Label mismatches are primarily caused by `keyToLabel(...)` deriving labels from storage key names instead of the popup’s i18n labels.
 
@@ -43,7 +43,7 @@ Notes captured during Phase 0 (to guide implementation)
 
 Notes captured during Phase 1 (superseded by Phase 5 pivot)
 - The popup-fetch metadata approach was implemented but removed because MV3 blocks content-script fetches of extension resources without `web_accessible_resources` (see Phase 5).
-- `shortcutKeyShowShortcuts` remains intentionally excluded from overlay rows because it’s a read-only/pseudo popup control and not a normal stored shortcut key.
+- `shortcutKeyShowShortcuts` remains intentionally excluded from overlay rows even though it is now a normal stored shortcut key, because the overlay should not render its own open-shortcuts binding as a row.
 
 ### Phase 2 — Render non-model sections from metadata (fix labels + missing items)
 - [x] Replace `keyToLabel(...)` usage for non-model rows with popup-aligned labels (prefer i18n keys used by `popup.html`; fallback to popup text; last-resort to `keyToLabel`).
@@ -88,7 +88,7 @@ Path A — Shared schema with i18n keys (authoritative checklist)
 - [x] Render overlay row labels from `labelI18nByKey` via `chrome.i18n.getMessage(...)`, with safe fallback to `keyToLabel(...)`.
 - [x] Keep the existing “assigned only” filtering + catch-all “Other” section (now also using `labelI18nByKey` where possible).
 - [x] Keep the model picker grid logic unchanged (continue using `modelPickerKeyCodes` + existing hydration).
-- [x] Add/keep a defensive “extension reload / stale content script” guard: detect invalidated extension context, log once, and stop intercepting Ctrl+/ until the page is reloaded.
+- [x] Add/keep a defensive “extension reload / stale content script” guard: detect invalidated extension context, log once, and stop intercepting the shortcuts-overlay opener until the page is reloaded.
 
 Quick validation (after implementation)
 - [ ] Reload extension + reload ChatGPT tab, then open overlay: labels match popup (localized) and no “Failed to fetch” errors.

@@ -62,21 +62,28 @@
     window.CSP_SETTINGS_SCHEMA.shortcuts = {
         keyPrefix: 'shortcutKey',
         extraShortcutKeys: ['selectThenCopy', 'selectThenCopyAllMessages'],
-        // Keys kept for legacy/back-compat in storage, but never shown in the Ctrl+/ overlay.
+        // Keys kept for legacy/back-compat in storage, but never shown in the shortcuts overlay.
         deprecatedShortcutKeys: [
             'shortcutKeyRegenerate',
             'shortcutKeyCopyAllResponses',
             'shortcutKeyRegenerateMoreConcise',
             'shortcutKeyRegenerateAddDetails',
+            'shortcutKeyShowShortcuts',
         ],
         // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
         // Used for modifier-aware duplicate detection in popup.js.
-        ctrlShortcutKeys: ['shortcutKeyShowShortcuts'],
+        ctrlShortcutKeys: [],
+
+        // Shared KeyboardEvent.code defaults needed before popup seeding has run.
+        defaultCodeByKey: {
+            shortcutKeyShowOverlay: 'Period',
+        },
 
         // Overlay label source of truth: storage key -> i18n message key.
-        // Keep this aligned with popup.html shortcut labels so Ctrl+/ overlay matches across locales.
+        // Keep this aligned with popup.html shortcut labels so the shortcuts overlay matches across locales.
         labelI18nByKey: {
             shortcutKeyToggleModelSelector: 'label_showModelPicker',
+            shortcutKeyShowOverlay: 'label_showShortcutOverlay',
             shortcutKeyThinkingStandard: 'label_switchToThinkingStandard',
             shortcutKeyThinkingExtended: 'label_switchToThinkingExtended',
             shortcutKeyThinkingLight: 'label_switchToThinkingLight',
@@ -116,20 +123,19 @@
             shortcutKeyRegenerateAskToChangeResponse: 'label_RegenerateAskToChangeResponse',
 
             shortcutKeySearchWeb: 'label_search_web',
-            shortcutKeyStudy: 'label_study',
             shortcutKeyCreateImage: 'label_toggle_create_image',
             shortcutKeyToggleCanvas: 'label_toggle_canvas',
             shortcutKeyAddPhotosFiles: 'label_add_photos_files',
-            shortcutKeyThinkLonger: 'label_think_longer',
         },
 
-        // Used by content.js Ctrl+/ overlay section grouping (model picker grid stays separate).
+        // Used by content.js shortcuts overlay section grouping (model picker grid stays separate).
         overlaySections: [
             {
                 headerI18nKey: 'section_model_picker_tweaks',
                 header: 'Model Picker',
                 keys: [
                     'shortcutKeyToggleModelSelector',
+                    'shortcutKeyShowOverlay',
                     'shortcutKeyThinkingStandard',
                     'shortcutKeyThinkingExtended',
                     'shortcutKeyThinkingLight',
@@ -199,11 +205,9 @@
                 header: 'Message Tools',
                 keys: [
                     'shortcutKeySearchWeb',
-                    'shortcutKeyStudy',
                     'shortcutKeyCreateImage',
                     'shortcutKeyToggleCanvas',
                     'shortcutKeyAddPhotosFiles',
-                    'shortcutKeyThinkLonger',
                 ],
             },
         ],

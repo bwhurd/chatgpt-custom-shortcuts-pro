@@ -1,0 +1,5 @@
+- [x] Add a hidden dev-only `Set Path` popup button to the left of `DevScrapeWide`, shown only when `extension/lib/DevScrapeWide.js` is present, and route it to the runtime scrape module for explicit capture-root setup.
+- [x] Move capture-root selection out of the scrape and check actions so `DevScrapeWide` and `Check-Scrape` reuse the stored root handle without showing the directory picker again; if no root is configured, fail with a clear `Set Path` instruction instead of prompting mid-flow.
+- [x] Update `extension/lib/DevScrapeWide.js` so run-folder collisions use `_01`, `_02`, and so on, persist the last generated scrape folder name for later retrieval, and make `Check-Scrape` prefer that stored folder before falling back to the newest matching scrape folder.
+- [x] Refresh `specs/0006-runtime-scrape-selector-validator-spec.md` to document the explicit `Set Path` grant flow, the stored last-run selection behavior, and the `_01` collision suffix rule.
+- [x] Validate narrowly with `biome check` on the edited popup and dev-scrape files, plus JSON syntax validation for the edited locale files.

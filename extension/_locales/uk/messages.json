@@ -533,6 +533,15 @@
 	"label_modelPickerRefreshModels": {
 		"message": "Оновити моделі"
 	},
+	"label_modelPickerDevScrapeWide": {
+		"message": "DevScrapeWide"
+	},
+	"label_modelPickerSetPath": {
+		"message": "Set Path"
+	},
+	"label_modelPickerCheckScrape": {
+		"message": "Check-Scrape"
+	},
 	"label_modelPickerManualRefreshPrompt": {
 		"message": "Натисніть, щоб оновити список моделей.\n\nПримітка: меню моделей на сторінці можуть коротко блимати у фоні. Це нормально."
 	},
@@ -620,10 +629,10 @@
 	"status_restore_failed": {
 		"message": "Помилка відновлення"
 	},
-	"label_showShortcuts": {
-		"message": "Показати гарячі клавіші"
+	"label_showShortcutOverlay": {
+		"message": "Show Shortcut Overlay"
 	},
-	"tt_showShortcuts_plain": {
+	"tt_showShortcutOverlay_plain": {
 		"message": "У чаті показуються лише призначені гарячі клавіші."
 	},
 	"label_cloud_sync": {

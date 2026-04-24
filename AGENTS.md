@@ -1,26 +1,31 @@
 # ChatGPT Custom Shortcuts Pro agent
 
-This file is the root routing and policy doc for Codex work in this repo. Keep it operational. Put durable project overview and broad architecture in `PROJECT_SPEC.md`, deep subsystem detail in `SPECS/`, non-trivial active/deferred work in `PLANS/`, scratch or copied reference artifacts in `_temp-files/`, and keep old Codex plan history archived under `PLANS/Done-*`.
+- `AGENTS.md` routes work in this repo: startup reads, scope and edit boundaries, doc routing, key tool and skill triggers, and default validation.
+
+Use:
+- `PROJECT_SPEC.md` for repo-wide facts and shared rules: project identity, repo layout, architecture, shared wiring, validation, and subsystem ownership.
+- `specs/*.md` for subsystem rules after routing: behavior, contracts, data flow, integrations, migrations, UI rules, and troubleshooting.
+- `plans/*.md` for non-trivial workstream execution and status. Active plans have no prefix. `Done-`, `Deferred-`, and `Blocked-` in the filename define status.
+- `_temp-files/` for ignored scratch files and copied reference material, not default startup reading.
 
 ## Scope and context discipline
 
-- Treat this section and `<context_budget>` as first-principle instructions for every pass.
-- Use the smallest context needed to complete the task safely.
-- Work inside the repo by default. Read outside the repo only when the task explicitly depends on shared workstation docs, external artifacts, or outside-project lookup.
-- If the user names specific files or folders, treat that as the full scope unless a direct dependency forces expansion.
-- If the task needs new files and the user did not name a location, choose the smallest sensible folder that cleanly owns the work.
+- Apply this section and `<context_budget>` before discovery, reads, edits, or validation.
+- If the user names specific files or folders, treat that as the active scope unless a direct dependency forces expansion.
+- If the task needs a new file use `plans/`, `specs/`, and `_temp-files/` or the nearest folder that directly owns the change.
 - Outside the active scope, read only the minimum routing docs or direct dependencies required. Do not modify outside the active scope unless the user expands it.
-- Do not scan the full repo for ordinary tasks. Expand scope only if the task is ambiguous, blocked, clearly cross-cutting, or the user asked for broader work.
+- Do not scan the full repo for ordinary tasks. Expand only when the task is ambiguous, blocked, or clearly cross-cutting.
+- For validator, audit, or wiring-verification tasks, you may read the smallest authoritative cross-file surface needed to prove the contract end to end. Prefer source-of-truth files over exploratory reads, and stop once you have covered the files that define, render, persist, or consume the contract under test.
 
 <context_budget>
 - Treat context as scarce. Use the smallest context that still supports safe, correct execution.
-- Before any tool call, decide the minimum set of files/resources needed for the next batch.
-- Start with discovery, not broad reads: prefer `rg`, `rg --files`
+- Before any tool call, decide the minimum set of files or resources needed for the next batch.
+- Start with discovery, not broad reads: prefer `rg` and `rg --files`.
 - Read only implicated content: matches before files; ranges, symbols, and diff hunks before whole files; targeted output before full logs.
-- Expand stepwise: scan -> focused read -> exact slice -> act. Expand only when current evidence is insufficient or safety/correctness requires it.
+- Expand stepwise: scan -> focused read -> exact slice -> act. Expand only when current evidence is insufficient or safety or correctness requires it.
 - Keep output bounded: prefer concise summaries, diffs, head/tail, and targeted ranges over full-file or full-log dumps.
 - Batch related searches and reads. Parallelize independent calls. Read one-by-one only when the next read depends on the previous result.
-- Respect ignore boundaries. Do not use `--no-ignore` or inspect ignored/generated/vendor/dist/build artifacts unless required.
+- Respect ignore boundaries. Do not use `--no-ignore` or inspect ignored, generated, vendor, dist, or build artifacts unless required.
 - Do not reread unchanged content unless it changed, became newly relevant, or prior context was compacted away.
 - Read enough context before editing, then batch logical edits and targeted checks. Avoid repeated micro-edits and reread/test loops.
 - If the task shifts, discard stale assumptions and rescope. When enough context exists to proceed safely, stop searching and act.
@@ -28,156 +33,66 @@ This file is the root routing and policy doc for Codex work in this repo. Keep i
 
 ## Start here
 
-- Start from `AGENTS.md` as the routing source.
-- Then read only the task-relevant sections of `PROJECT_SPEC.md`, the relevant `SPECS/` file or files, and the relevant active plan file or files under `PLANS/`.
-- Open `SPECS/README.md` only when the right spec is unclear or when deciding where new durable detail belongs.
-- Treat archived Codex plan files under `PLANS/Done-*` as lookup material, not as the live backlog or default startup payload.
-- Treat `README.md`, `Done-*` plans, `_temp-files/`, audits, and history notes as helpers, not mandatory startup docs.
-- Trust current code and file layout over stale docs, then update the doc that owns the truth if reality changed.
-- Do not default to repo-wide `git status`, `git diff`, `git log`, exhaustive tree scans, package inventories, or environment sweeps unless the user asked, the task is broad enough that wider context materially changes the answer, or validation of your own edits depends on it.
+- Read `AGENTS.md` first.
+- Open `PROJECT_SPEC.md` only for project overview, cross-cutting rules, or area-specific validation/tooling.
+- If the task matches an `active spec trigger` below, open only the mapped `specs/` file.
+- Skip planning for simple, focused tasks.
+- For changes across multiple files, create a $write-plan and implement it in one pass.
+- When done, rename the plan file to Done-.
+- If code and docs conflict, follow current code and file layout, then update `PROJECT_SPEC.md`, the relevant `specs/` file, or the owning `plans/` file.
+- If an update requires multiple troubleshooting steps, add just enough detail to the existing or new spec for a smooth one-pass update next time.
+- Only do repo-wide `git` commands, tree scans, package inventories, or environment sweeps if absolutely necessary.
 
-## Active spec references
+## Active spec triggers
 
-- Open `PROJECT_SPEC.md` when the task touches durable project constraints, architecture, stable conventions, or cross-cutting assumptions that should survive across threads.
-- Open `SPECS/SPEC_ADDING_NEW_SETTINGS.md` when changing storage-backed settings, popup wiring, import/export, Drive sync, or early bootstrap gates.
-- Open `SPECS/SPEC_LAZY_FAST_MODE.md` when touching Fast Mode bootstrap, the page bridge, native expansion behavior, or Fast Mode troubleshooting.
-- Open `SPECS/SPEC_CLOUD_SYNC_AND_SETTINGS_DATA_FLOW.md` when changing Google login, Drive save or restore, or local settings export or import.
-- Open `SPECS/SPEC_MODEL_PICKER_AND_SHORTCUTS.md` when changing shortcut normalization, duplicate detection, model picker rendering, Ctrl+/ overlay behavior, or model-routing automation.
-- Open the relevant active numbered file under `PLANS/` before continuing non-trivial in-progress work. Open `Deferred-*`, `Blocked-*`, or `Done-*` plans only when resuming that workstream or when a current plan or user request points to them.
-
-## Documentation roles
-
-- `AGENTS.md` owns routing, scope, editing discipline, brief tool notes, brief skill notes, repo-default validation posture, and stop-and-ask boundaries.
-- `PROJECT_SPEC.md` owns durable project identity, broad architecture shape, and tricky stable conventions that should remain true across tasks.
-- `SPECS/` owns deep durable subsystem detail, invariants, migration notes, and repair references.
-- `PLANS/` owns non-trivial active work, deferred or blocked work, completed plan archives, and workstream-specific sequencing. It should contain plan markdown, not copied inspector captures or reference scripts.
-- `_temp-files/` owns ignored scratch artifacts, copied inspector captures, reference scripts, and temporary support notes. Do not read or search it unless the current user request explicitly names a file or path there.
-- Archived Codex plan files under `PLANS/Done-*` are compatibility material for older notes and links. Do not move live work back into them.
-- When reality changes, update only the doc that owns that information instead of duplicating it across multiple root docs.
-
-## Project guardrails
-
-- This repo is an MV3 Chrome extension for `chatgpt.com`. The unpacked extension source lives under `extension/`; the repo root is for project docs, tooling, validation, release output, and support services. Ship the smallest correct change that preserves existing shortcut semantics, popup behavior, and extension wiring unless the user explicitly asks for a larger change.
-- Keep `chrome.storage.sync` as the single source of truth for settings. New settings must flow through `options-storage.js`, popup wiring, and any relevant content/bootstrap path.
-- Treat the popup authoring experience as high priority: respect i18n keys, tooltip balance, shared label behavior, and duplicate-shortcut safeguards.
-- Use the existing helpers and shared modules (`ShortcutUtils`, GSAP plugins, `CloudAuth`, `CloudStorage`, `ModelLabels`) instead of reimplementing similar logic.
-- If required DOM details are missing, stop and ask the user for the smallest useful inspector slice instead of guessing from localized or unstable selectors.
-- If you add new shipped files or folders under `extension/`, update `scripts/build-zip.js` `includeItems` so the release zip stays complete.
-- If a version bump or zip build is part of the task, include the generated `dist/*.zip` archive in commits and pushes unless the user explicitly says not to.
-- Respect existing permissions and host matches. Do not add new extension permissions or broader host access without explicit approval.
+- Open `PROJECT_SPEC.md` for repo-wide behavior, shared conventions, or cross-system validation/tooling rules.
+- Open `specs/0001-adding-new-settings-spec.md` for changes to storage-backed settings, popup controls, import/export, Drive sync, early bootstrap gates, or popup UI details (i18n keys, tooltips, shared labels).
+- Open `specs/0002-lazy-fast-mode-spec.md` for Fast Mode bootstrap, page bridge, native expansion, or Fast Mode troubleshooting changes.
+- Open `specs/0003-cloud-sync-and-settings-data-flow-spec.md` for Google login, Drive save/restore, or local settings import/export changes.
+- Open `specs/0004-model-picker-and-shortcuts-spec.md` for shortcut normalization, deduplication, model picker rendering, Ctrl+/ overlay, shortcut safeguards, model routing, or direct DOM replacement of ChatGPT shortcuts (sidebar, new chat, search, composer focus).
+- Open `specs/0005-popup-settings-validator-spec.md` for changes to `tests/validate-keys.js`, `tests/lib/settings-wiring-validator.js`, popup/settings wiring contract validation, or supplemental validator inventory rules.
+- Open `specs/0006-runtime-scrape-selector-validator-spec.md` for dev-only inspector dump collection, popup `DevScrapeWide` / `Check-Scrape` controls, runtime selector presence audits, or the dev report page.
+- If the right spec is unclear after routing, use `$spec-check`.
+- If multiple triggers match, open each relevant spec.
+- For non-trivial work, open the active plan; open `Deferred-`, `Blocked-`, or `Done-` plans only if named by the user or referenced by an active plan.
 
 ## Skills
 
-- Start from this root-doc set, not from a routing skill.
-- Use `$write-plan` when non-trivial work needs a new or updated plan file under `PLANS/`.
-- Use `$spec-check` when the coarse routing is known but the exact deeper spec or support doc is still unclear.
-- Use `$search-everything-outside-project` when a needed file, tool, config, SDK, or log is likely outside this repo root, or when in-repo search already failed.
-- Use `$find-robust-web-app-library` when the task is build-vs-buy or choosing a web-app library.
-- Use any additional local skill only when it has a narrow trigger and a clearer outcome than direct work from the repo docs.
+- Use `$write-plan` when non-trivial work needs a new plan or changes to an active plan. Update the existing active plan if it covers the work; create a new one only if none does.
+- Use `$spec-check` only after root routing identifies a deep-doc area but not the exact file, and opening multiple docs by default would waste context.
+- Use `$search-everything-outside-project` when the needed file, tool, config, SDK, or log is likely outside this repo, or targeted in-repo search did not find it.
+- Use `$find-robust-web-app-library` only for build-vs-buy or web-app library selection.
+- Use another local skill only if it matches the task more specifically than the repo docs.
+
+## Project guardrails
+
+- Repo is an MV3 Chrome extension for `chatgpt.com`. Shipped source: `extension/`. If you add a shipped file or folder under `extension/`, update `scripts/build-zip.js` `includeItems`.
+- Reuse existing helpers before adding new ones: `ShortcutUtils`, GSAP plugins, `CloudAuth`, `CloudStorage`, `ModelLabels`.
+- Do not guess DOM targets from localized text or unstable selectors. If needed, ask for the smallest inspector slice.
+- For DevScrape manual extension repair, launch standard Chrome/CDP with `CodexCleanProfile` and `chrome://extensions`; do not use `--load-extension` or `--disable-extensions-except` on that manual setup path.
+- Do not do destructive git/filesystem actions, broad overwrites, or `extension/manifest.json` permission or host-access changes without explicit approval.
 
 ## Tools
 
-- When a task may benefit from verified shared machine-level tools on this workstation, optionally consult `C:\Users\bwhurd\tools\AGENTS.md` and the relevant section of `C:\Users\bwhurd\tools\PROJECT_SPEC.md`. This repo's docs and direct user instructions win.
-- Open the shared tool-wiring spec for tool choice, install or repair routing, command-resolution checks, or outside-project lookup: `C:\Users\bwhurd\tools\install-with-codex\Specs\0002-codex-tool-wiring-spec.md`
-- When a task needs broad in-scope text search or replacement across many files, consult `C:\Users\bwhurd\tools\TEXT_SEARCH_REPLACE_SPEC.md` and prefer its preview-first `rg` / `sd` workflow over broad file reads or unpreviewed replacements.
-- Use shared tools only when they are the obvious fit: `rg` / `fd` for discovery, previewed `rg` + `sd` for broad plain-text replacement, `sg` for syntax-aware rewrites, `jq` / `yq` for structured data or config work, `uv` for Python tool or venv work, `difft` for noisy structural diffs, and `xh` for deliberate HTTP or API inspection.
+- Open `C:\Users\bwhurd\tools\AGENTS.md` and the relevant section of `C:\Users\bwhurd\tools\PROJECT_SPEC.md` only when the task depends on machine-level tool behavior, command availability, or environment setup. This repo's docs and direct user instructions win.
+- Open `C:\Users\bwhurd\tools\install-with-codex\Specs\0002-codex-tool-wiring-spec.md` when the task depends on tool choice, install or repair routing, command resolution, or outside-project lookup.
+- If the task needs the same in-scope plain-text search or replacement across many files, open `C:\Users\bwhurd\tools\TEXT_SEARCH_REPLACE_SPEC.md` and use its preview-first workflow.
+- Use `rg` or `fd` for discovery, previewed `rg` plus `sd` for broad plain-text replacement, `sg` for syntax-aware rewrites, `jq` or `yq` for structured data, `uv` for Python tooling, `difft` for noisy diffs, and `xh` for deliberate HTTP or API inspection.
 
 ## File boundaries
 
-- Read, edit, and consider only the files relevant to the active task and within this repo surface unless the user explicitly expands scope:
-- Root docs and planning:
-  - `AGENTS.md`
-  - `PROJECT_SPEC.md`
-  - `PLANS/*.md`
-  - `SPECS/**`
-- Core runtime and shared logic:
-  - `extension/content.js`
-  - `extension/lazy-fast-bootstrap.js`
-  - `extension/lazy-fast-bridge.js`
-  - `extension/options-storage.js`
-  - `extension/settings-schema.js`
-  - `extension/storage.js`
-  - `extension/auth.js`
-  - `extension/shared/model-picker-labels.js`
-- Popup and extension shell:
-  - `extension/popup.html`
-  - `extension/popup.js`
-  - `extension/popup.css`
-  - `extension/manifest.json`
-  - `extension/background.js`
-- Config, localization, assets, and release files:
-  - `extension/_locales/**/messages.json`
-  - `extension/icon16.png`
-  - `extension/icon32.png`
-  - `extension/icon48.png`
-  - `extension/icon128.png`
-  - `CHANGELOG.md`
-  - `dist/*.zip`
-- Tooling and preview helpers:
-  - `.gitignore`
-  - `package.json`
-  - `package-lock.json`
-  - `scripts/build-zip.js`
-  - `biome.json`
-  - `tests/fixtures/**`
-  - `tests/playwright/**`
-  - `tests/validate-keys.js`
-- Read-only third-party or archive material:
-  - `extension/vendor/webext-options-sync.js`
-  - `extension/lib/*.min.js`
-  - `tools/*.zip`
-- Scratch and copied support artifacts:
-  - `_temp-files/**` only when the user explicitly references a file or path there
-- Ignore everything else unless the user explicitly directs otherwise.
-- Explicitly exclude `node_modules`, `netlify`, `css-cleanup`, `_temp-files` contents unless explicitly referenced, and `.git`.
+- Default surface: `AGENTS.md`, `PROJECT_SPEC.md`, `plans/*.md`, `specs/*.md`, `extension/**`, `scripts/build-zip.js`, `tests/**`, `package.json`, `package-lock.json`, `.gitignore`, `biome.json`, and `CHANGELOG.md`.
+- High-yield surface: `extension/content.js`, `extension/lazy-fast-bootstrap.js`, `extension/lazy-fast-bridge.js`, `extension/options-storage.js`, `extension/settings-schema.js`, `extension/storage.js`, `extension/auth.js`, `extension/shared/model-picker-labels.js`, `extension/popup.html`, `extension/popup.js`, `extension/popup.css`, `extension/manifest.json`, `extension/background.js`, `tests/playwright/**`, `tests/fixtures/**`, `tests/validate-keys.js`, and `scripts/build-zip.js`.
+- Do not read or edit `extension/vendor/**`, `extension/lib/*.min.js`, `dist/*.zip`, `tools/*.zip`, `node_modules/**`, `netlify/**`, or `.git/**` unless the task explicitly targets them.
+- Do not read or search `_temp-files/` unless the user names a file or path there.
+- If unsure whether a file is generated, archived, secret, or user-owned, ask before editing it.
 
-## Planning posture
+## Validate narrowly
 
-- Skip formal planning only for trivial work.
-- Put non-trivial active work in `PLANS/`, not in root docs.
-- Use `PLANS/0001-short-description-plan.md` for active work, `PLANS/Deferred-0001-short-description-plan.md` for deferred work, `PLANS/Blocked-0001-short-description-plan.md` for blocked work, and `PLANS/Done-0001-short-description-plan.md` for completed or archived plans.
-- Keep durable subsystem detail in `SPECS/`, not in plan files.
-- Keep copied inspector captures, reference scripts, and temporary support files in `_temp-files/`, not in `PLANS/`.
-- Treat deferred and done plans as lookup material only. Open them only when a current plan or user request points to them.
-
-## Validation posture
-
-- Validate the changed area with the smallest useful check.
-- For popup, overlay, tooltip, layout, animation, or other user-facing UI work, prefer the Playwright extension workflow instead of static file inspection alone.
-- After any shipped extension file changes (`extension/content.js`, `extension/popup.*`, `extension/background.js`, `extension/manifest.json`, storage or schema wiring, or other extension-loaded assets), manually reload the unpacked extension from `extension/` in `chrome://extensions` before any Playwright confirmation.
-- Use:
-  - `npm run playwright:install` once per machine to install Chromium
-  - `npm run preview:popup` to inspect the real popup with extension APIs available
-  - `npm run screenshot:popup` to capture `test-results/playwright/popup-preview.png`
-  - `npm run test:popup-visual` for popup visual regression checks
-  - `npm run test:popup-visual:update` only when an intentional UI change should become the new baseline
-  - `npm run playwright:chatgpt:*` and `npm run playwright:chatgpt:benchmark` when a task needs live ChatGPT extension validation
-- For code changes, prefer the smallest relevant test or script first. `npm test` is the default merge gate for shipped behavior changes.
-- For doc-only work, re-read the changed sections and confirm routing, ownership, and scope boundaries still make sense.
-
-## Outcome over suggested path
-
-- Follow explicit user goals and hard constraints.
-- Treat stale plans, old status notes, and previous implementation paths as disposable.
-- If a simpler or safer path clearly reaches the same goal, take it and say so.
-- If a task stalls, a step fails hard, or a better path appears, update the relevant plan and continue on the better path instead of grinding through the old one.
-- In a normal implementation pass, keep doc and process maintenance to the minimum needed for continuity. Expand doc work only when docs are the task or stale docs are blocking correct work.
-
-## Stop and ask
-
-- Stop instead of guessing when:
-  - a fix requires HTML structure, network behavior, or other ChatGPT page detail that is not available from current repo docs or the current prompt
-  - unexpected local changes or a dirty worktree appear and proceeding safely would require deciding whether to preserve, work around, or discard them
-  - a fix would require destructive git or file-system actions such as hard reset, checkout or revert of existing changes, force clean, bulk deletion, or overwriting user-authored work
-  - a change would materially expand scope or restructure the repo
-  - multiple plausible homes or structures would affect future work
-  - a task would delete, rename, move, or overwrite significant user data
-  - a dependency, runtime, integration, or external service would materially change repo expectations
-  - credentials, paid services, external accounts, or machine-specific integrations are involved
-  - docs, runbooks, and current repo reality conflict in a way that needs a real project decision
+- For doc-only changes, reread the edited sections and verify routing targets, ownership, and stated scope.
+- Run `biome check` on changed files, fix only clear behavior-safe issues, suppress style-only items, and write a plan for any risky or complex issues.
 
 ## Response format
 
-- Return a concise summary grouped by file path when useful.
-- Include commands run, validation performed, and any notable risks or assumptions.
+- Return a concise summary with files changed, commands run, validation performed, and notable assumptions or risks.
 - Return full file contents only when the user asks.

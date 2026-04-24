@@ -1,0 +1,6 @@
+- Confirm the popup can detect a packaged `extension/lib/DevScrapeWide.js` file through its own extension URL without adding permissions, host access, or `web_accessible_resources`.
+- Add a hidden `DevScrapeWide` popup button immediately before `Refresh Models`, using the same button styling and a one-em gap from the existing refresh control.
+- Reveal and wire that button only when `lib/DevScrapeWide.js` is present in the unpacked extension package; keep shipped builds unchanged when the file is absent.
+- Exclude `lib/DevScrapeWide.js` from `scripts/build-zip.js` while leaving the rest of `extension/lib/` packaged normally.
+- Validate with a narrow `biome check` on the changed files plus a targeted readback of the popup and packager wiring.
+- Related specs: `specs/0001-adding-new-settings-spec.md`, `specs/0004-model-picker-and-shortcuts-spec.md`

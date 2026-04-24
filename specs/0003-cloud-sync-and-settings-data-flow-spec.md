@@ -7,7 +7,7 @@ Use this when changing or repairing:
 - allowlisting of synced settings
 - `modelNames` handling across local storage, exports, and Drive
 
-This is the durable data-flow reference. Keep live task sequencing in `PLANS/` when a Cloud Sync change needs a plan; do not use this file as a backlog.
+This is the durable data-flow reference. Keep live task sequencing in `plans/` when a Cloud Sync change needs a plan; do not use this file as a backlog.
 
 ## Owning files
 
@@ -139,7 +139,7 @@ Usually means one of:
 - key missing from popup defaults / allowlist
 - popup rehydration does not mirror it back into UI
 
-Use `SPECS/SPEC_ADDING_NEW_SETTINGS.md` for the full wiring path.
+Use `specs/0001-adding-new-settings-spec.md` for the full wiring path.
 
 ### Login button appears to do nothing
 

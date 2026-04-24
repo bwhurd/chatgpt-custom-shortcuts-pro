@@ -202,7 +202,7 @@ Plain language: once the shared catalog and popup exposure are stable, turn `Lig
   - [ ] `Thinking Light` (conditional)
   - [ ] `Thinking Heavy` (conditional)
 - [x] `_locales/*/messages.json`: add labels/tooltips for `Thinking Light` and `Thinking Heavy`.
-- [x] `settings-schema.js`: add `labelI18nByKey` entries for the new keys so Ctrl+/ overlay labels stay aligned with the popup.
+- [x] `settings-schema.js`: add `labelI18nByKey` entries for the new keys so shortcuts-overlay labels stay aligned with the popup.
 - [x] `settings-schema.js`: add the new keys to the model-picker/shortcut overlay section ordering immediately after the current two thinking shortcuts.
 - [x] `content.js`: add the `Light` / `Heavy` shortcut handlers by reusing the same thinking-effort menu-open path as the current Standard/Extended actions.
 - [x] `content.js`: if a user presses `Light` / `Heavy` but the current account/catalog does not expose that option, fail safely instead of clicking the wrong item.
@@ -215,7 +215,7 @@ Plain language: once the shared catalog and popup exposure are stable, turn `Lig
 - [ ] Pro catalog refresh exposes `Light` / `Standard` / `Extended` / `Heavy`; popup shows two extra effort tiles for `Light` and `Heavy`.
 - [ ] The extra `Light` / `Heavy` tiles start blank and are user-assignable.
 - [ ] Existing `Thinking Standard` / `Thinking Extended` behavior does not regress for Plus or Pro users.
-- [ ] Ctrl+/ overlay includes `Light` / `Heavy` only when those shortcuts are assigned.
+- [ ] Shortcuts overlay includes `Light` / `Heavy` only when those shortcuts are assigned.
 - [ ] Runtime clicks target the correct submenu radio option and never silently fall through to the wrong effort level.
 - [ ] The shared catalog remains the only source of truth; no second popup-only scrape path exists.
 
@@ -444,7 +444,7 @@ Manual QA checklist:
 - Shared schema is now in `settings-schema.js` and currently covers popup wiring excludes + a small defaults exclude list. The “content.js key lists” portion is still optional/future.
 - `settings-schema.js` is now also loaded as a content script (before `content.js`) so `content.js` can read small shared config safely.
 - Added a popup-time console warning when `popup.html` contains a `data-sync` key that’s missing from `OPTIONS_DEFAULTS` and `DEFAULT_PRESET_DATA`. This is a low-friction way to catch forgotten wiring.
-- Ctrl+/ overlay section groupings in `content.js` are now schema-driven via `shortcuts.overlaySections` (model picker grid remains separate and unchanged).
+- Shortcuts-overlay section groupings in `content.js` are now schema-driven via `shortcuts.overlaySections` (model picker grid remains separate and unchanged).
 - Popup radio-group definitions are now schema-driven via `popup.radioGroups` to reduce “update this array too” maintenance.
 
 ---

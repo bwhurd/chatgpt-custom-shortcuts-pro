@@ -8,7 +8,7 @@ Stabilize the shipped manual Fast Mode native-expansion path so it grows the ret
 
 - Same-document older-turn insertion is already proven.
 - The remaining work is hardening the manual controller and its guardrails, not re-proving that an in-place path can exist.
-- `SPECS/SPEC_LAZY_FAST_MODE.md` owns the durable architecture and troubleshooting model. This plan owns only the remaining execution sequence.
+- `specs/0002-lazy-fast-mode-spec.md` owns the durable architecture and troubleshooting model. This plan owns only the remaining execution sequence.
 
 ## Scope for the next implementation pass
 

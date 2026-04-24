@@ -47,10 +47,6 @@ const cloneModelActionGroups = (groups) =>
     ...group,
     actions: Array.isArray(group?.actions) ? group.actions.map((action) => ({ ...action })) : [],
   }));
-const getModelActionGroups = () =>
-  typeof window.ModelLabels?.getActionGroups === 'function'
-    ? window.ModelLabels.getActionGroups()
-    : cloneModelActionGroups(FALLBACK_MODEL_ACTION_GROUPS);
 const getModelActionSlots = () =>
   typeof window.ModelLabels?.getActionSlots === 'function'
     ? window.ModelLabels.getActionSlots()
@@ -82,15 +78,21 @@ const getPopupModelPresentationGroups = (activeConfigId, incomingNames, catalog)
   typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
     ? window.ModelLabels.getPopupPresentationGroups(activeConfigId, incomingNames, catalog)
     : getModelPresentationGroups(activeConfigId, incomingNames);
-const buildDefaultModelPickerCodes = ({ useCurrentCatalog = false } = {}) => {
+const buildDefaultModelPickerCodes = ({
+  useCurrentCatalog = false,
+  catalog,
+  activeConfigId = DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+  incomingNames,
+} = {}) => {
   if (
-    useCurrentCatalog &&
+    (useCurrentCatalog || catalog !== undefined) &&
     typeof window.ModelLabels?.buildDefaultKeyCodesFromPresentationGroups === 'function'
   ) {
+    const normalizedActiveConfigId = normalizeActiveModelConfigId(activeConfigId);
     const groups = getPopupModelPresentationGroups(
-      DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-      window.MODEL_NAMES || [],
-      window.__modelCatalog || null,
+      normalizedActiveConfigId,
+      Array.isArray(incomingNames) ? incomingNames : window.MODEL_NAMES || [],
+      catalog === undefined ? window.__modelCatalog || null : catalog,
     );
     const next = window.ModelLabels.buildDefaultKeyCodesFromPresentationGroups(groups);
     if (Array.isArray(next) && next.length) {
@@ -130,8 +132,6 @@ const AUTO_MANAGED_SYNC_KEYS = new Set([
   'modelCatalogRefreshPromptDay',
   'modelCatalogRefreshPromptWeek',
 ]);
-const getActiveModelConfigId = () => normalizeActiveModelConfigId(window.__activeModelConfigId);
-const MODEL_CONFIG_CLICK_DEBOUNCE_MS = 140;
 const MODEL_CONFIG_VISUAL_SETTLE_MS = 1100;
 const MODEL_SCRAPE_OVERLAY_TRANSITION_MS = 180;
 const MODEL_SCRAPE_OVERLAY_TRANSITION_FALLBACK_MS = MODEL_SCRAPE_OVERLAY_TRANSITION_MS + 180;
@@ -371,15 +371,24 @@ const normalizeModelCatalog = (catalog) => {
     scrapedAt: Number(catalog.scrapedAt) || 0,
     configureOptions: Array.isArray(catalog.configureOptions)
       ? catalog.configureOptions
-          .map((option) => {
-            const id = normalizeActiveModelConfigId(option?.id);
+          .map((option, optionIndex) => {
+            const action =
+              typeof window.ModelLabels?.getConfigureActionForOption === 'function'
+                ? window.ModelLabels.getConfigureActionForOption(
+                    option?.label || '',
+                    optionIndex,
+                    option?.slot,
+                  )
+                : null;
+            const id = action?.id || normalizeActiveModelConfigId(option?.id);
             return {
               id,
-              label: String(option?.label || '').trim(),
-              slot:
-                typeof window.ModelLabels?.getActionById === 'function'
-                  ? window.ModelLabels.getActionById(id)?.slot ?? -1
-                  : -1,
+              label: String(option?.label || action?.label || '').trim(),
+              slot: Number.isInteger(Number(option?.slot))
+                ? Number(option.slot)
+                : Number.isInteger(Number(action?.slot))
+                ? Number(action.slot)
+                : -1,
             };
           })
           .filter((option) => option.slot >= 0)
@@ -389,10 +398,47 @@ const normalizeModelCatalog = (catalog) => {
   };
 };
 const setModelCatalogCache = (catalog, source = 'storage') => {
-  window.__modelCatalog = normalizeModelCatalog(catalog);
+  const previousCatalog = window.__modelCatalog || null;
+  const nextCatalog = normalizeModelCatalog(catalog);
+  window.__modelCatalog = nextCatalog;
   window.dispatchEvent(
     new CustomEvent('model-catalog-updated', { detail: { source, catalog: window.__modelCatalog } }),
   );
+  const previousDefaults = normalizeModelPickerCodesForComparison(
+    buildDefaultModelPickerCodes({
+      useCurrentCatalog: true,
+      catalog: previousCatalog,
+    }),
+  );
+  const nextDefaults = normalizeModelPickerCodesForComparison(
+    buildDefaultModelPickerCodes({
+      useCurrentCatalog: true,
+      catalog: nextCatalog,
+    }),
+  );
+  const defaultsChanged = previousDefaults.some((value, index) => value !== nextDefaults[index]);
+  if (!defaultsChanged) return window.__modelCatalog;
+
+  chrome.storage?.sync?.get(['modelPickerKeyCodes'], ({ modelPickerKeyCodes } = {}) => {
+    const currentCodes = normalizeModelPickerCodesForComparison(
+      Array.isArray(modelPickerKeyCodes) && modelPickerKeyCodes.length
+        ? modelPickerKeyCodes
+        : window.__modelPickerKeyCodes,
+    );
+    const matchesPreviousDefaults = previousDefaults.every(
+      (value, index) => value === currentCodes[index],
+    );
+    const alreadyMatchesNextDefaults = nextDefaults.every(
+      (value, index) => value === currentCodes[index],
+    );
+    if (!matchesPreviousDefaults || alreadyMatchesNextDefaults) return;
+
+    // Preserve custom bindings, but reseed untouched sequential defaults when
+    // a refresh scan changes which model actions are visible in the grid.
+    saveModelPickerKeyCodes(nextDefaults.slice(), () => {
+      document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+    });
+  });
   return window.__modelCatalog;
 };
 const getModelCatalogScrapeState = () => String(window.__modelCatalogScrapeState || 'idle').trim() || 'idle';
@@ -2376,7 +2422,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyCopyAllCodeBlocks: 'BracketRight',
     copyCodeUserSeparator: ' \n \n --- --- --- \n \n',
     shortcutKeyNewConversation: 'KeyN',
-    shortcutKeySearchConversationHistory: 'KeyK',
+    shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',
     shortcutKeyToggleSidebar: 'KeyS',
     shortcutKeyActivateInput: 'KeyW',
@@ -2386,6 +2432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyNextThread: 'Semicolon',
     selectThenCopy: 'KeyX',
     shortcutKeyToggleModelSelector: 'Slash',
+    shortcutKeyShowOverlay: 'Period',
     shortcutKeyRegenerateTryAgain: 'KeyR',
     shortcutKeyRegenerateMoreConcise: NBSP,
     shortcutKeyRegenerateAddDetails: NBSP,
@@ -2492,7 +2539,11 @@ document.addEventListener('DOMContentLoaded', () => {
     (function warnOnMissingDataSyncKeys() {
       const allowed = new Set(allKeys);
       const base = globalThis.OPTIONS_DEFAULTS || {};
-      if (base && typeof base === 'object') Object.keys(base).forEach((k) => allowed.add(k));
+      if (base && typeof base === 'object') {
+        Object.keys(base).forEach((k) => {
+          allowed.add(k);
+        });
+      }
 
       const missing = new Set();
       document.querySelectorAll('[data-sync]').forEach((el) => {
@@ -2702,7 +2753,9 @@ document.addEventListener('DOMContentLoaded', () => {
         'fadeSlimSidebarEnabled',
         'moveTopBarToBottomCheckbox',
         'colorBoldTextEnabled',
-      ].forEach((k) => EXCLUDED_STATE_WIRING.add(k));
+      ].forEach((k) => {
+        EXCLUDED_STATE_WIRING.add(k);
+      });
     }
 
     const selector =
@@ -2890,6 +2943,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const DEFAULT_SHORTCUT_CODE_FALLBACKS = {
     // Show Model Picker default "/"
     shortcutKeyToggleModelSelector: 'Slash',
+    // Show Shortcut Overlay default "."
+    shortcutKeyShowOverlay: 'Period',
   };
 
   // Reusable: hydrate all shortcut inputs from storage (or HTML defaults) into value + dataset.keyCode
@@ -4634,9 +4689,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   let tries = 0;
   const MAX_SLOTS = MODEL_PICKER_MAX_SLOTS;
   let lastViewSignature = '';
-  let configureActionDebounceTimer = 0;
   let pendingVisualSettleTimer = 0;
-  let configureActionSerial = 0;
 
   const onReady = (fn) =>
     document.readyState === 'loading'
@@ -4731,12 +4784,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     clearPendingVisualSettle();
     window.__pendingModelConfigTargetId = '';
     return true;
-  };
-  const stagePendingModelConfigTarget = (value) => {
-    const next = normalizeActiveModelConfigId(value);
-    clearPendingVisualSettle();
-    window.__pendingModelConfigTargetId = next;
-    return next;
   };
   const schedulePendingModelConfigSettle = (expected) => {
     const normalizedExpected = normalizeActiveModelConfigId(expected);
@@ -5417,7 +5464,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       e.stopPropagation();
       const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : 1; // Enter => forward
       const inputs = queryVisibleInputs();
-      const currentIdx = inputs.findIndex((input) => input === inp);
+      const currentIdx = inputs.indexOf(inp);
       const maxIdx = Math.max(0, inputs.length - 1);
       let next = currentIdx + dir;
       if (next < 0) next = maxIdx;
@@ -5543,15 +5590,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       el.dataset.wired = '1';
     }
   }
-
-  const sendModelActionToTab = async (actionId) => {
-    return sendModelMessageToTab({
-      type: 'CSP_TRIGGER_MODEL_ACTION',
-      actionId,
-      hideUi: true,
-      preferPreparedSession: true,
-    });
-  };
 
   function wireConfigureGridActions() {
     document.querySelectorAll('#model-picker-grid .mp-configure-item').forEach((item) => {
