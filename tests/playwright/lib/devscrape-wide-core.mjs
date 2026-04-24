@@ -2007,25 +2007,15 @@ export async function getLatestRunFolder() {
 async function getSortedRunFolders() {
   await ensureInspectorCapturesRoot();
   const entries = await readdir(inspectorCapturesRoot, { withFileTypes: true });
-  const directories = await Promise.all(
-    entries
-      .filter((entry) => entry.isDirectory())
-      .map(async (entry) => {
-        const folderPath = path.join(inspectorCapturesRoot, entry.name);
-        const folderSortKey = parseRunFolderSortKey(entry.name);
-        if (folderSortKey) {
-          return { name: entry.name, path: folderPath, sortKey: folderSortKey };
-        }
-        try {
-          const manifest = await loadRunManifest(folderPath);
-          const sortKey = parseManifestSortKey(manifest);
-          return sortKey ? { name: entry.name, path: folderPath, sortKey } : null;
-        } catch {
-          return null;
-        }
-      }),
-  );
-  return directories.filter(Boolean).sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({
+      name: entry.name,
+      path: path.join(inspectorCapturesRoot, entry.name),
+      sortKey: parseRunFolderSortKey(entry.name),
+    }))
+    .filter((entry) => entry.sortKey)
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 }
 
 export async function getNamedRunFolder(folderName) {
@@ -2603,6 +2593,7 @@ export function renderCheckReportHtml(report) {
         ].join('')
       : '<p>No broken shortcuts, missing coverage, or live-probe failures were flagged.</p>',
     '</div>',
+    reportHistoryHtml(report),
     '</section><section class="tab-panel" id="details-panel">',
     `<p><strong>Fixture:</strong> <span class="mono">${escapeHtml(report?.fixtureUrl || '')}</span></p>`,
     `<p><strong>Folder:</strong> <span class="mono">${escapeHtml(report?.folderName || '')}</span></p>`,
