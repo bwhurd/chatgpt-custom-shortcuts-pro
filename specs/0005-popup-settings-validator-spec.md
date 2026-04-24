@@ -372,13 +372,16 @@ Usually means:
 - Keep the validator deterministic and source-driven.
 - Do not broaden it into a browser automation harness or live selector validator.
 
-## Relationship to future selector validation
+## Relationship to runtime selector validation
 
 This validator is the popup/settings wiring validator only.
 
-If the repo later adds a selector-audit or inspector-dump feature for live ChatGPT shortcut click paths, that should be a separate tool/spec with a different contract:
+Runtime selector and shortcut target auditing is owned by `specs/0006-runtime-scrape-selector-validator-spec.md`, not this static settings validator. Keep these contracts separate:
 - live page capture
 - menu/popup traversal
 - selector presence audits against inspector dumps
+- no-token live activation probes for explicitly safe shortcut metadata
 
 Do not merge that runtime selector-audit responsibility into this static popup/settings validator.
+
+When adding a popup-backed shortcut setting, this validator should prove the static settings wiring. The runtime shortcut target metadata and any live probe classification belong in `extension/shared/shortcut-action-metadata.js` under the `0006` contract.

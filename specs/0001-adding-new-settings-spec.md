@@ -206,6 +206,11 @@ Do not treat shortcut additions like ordinary checkbox settings.
 
 The runtime selector validator is intentionally deterministic. Do not rely on it to infer shortcut targets from handler bodies. A new runtime shortcut should fail validation until its explicit metadata exists.
 
+After adding or changing shortcut metadata:
+- run `node tests/playwright/devscrape-wide.mjs --action check-wide` against the latest saved scrape to catch metadata, target-ref, and scrape-state drift without opening the browser
+- run `node tests/playwright/devscrape-wide.mjs --action probe-shortcuts --shortcut-action-id <actionId>` only when the shortcut has a safe live activation probe and the saved report indicates a live behavior needs rechecking
+- reserve full `validate-wide --probe-shortcuts` for a complete audit, not every metadata edit
+
 ## The minimum safe wiring path
 
 If you want the shortest reliable rule set, use this:

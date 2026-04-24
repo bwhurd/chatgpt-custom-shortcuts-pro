@@ -42,6 +42,7 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
   - `scrape-wide`
   - `check-wide`
   - `validate-wide`
+  - `probe-shortcuts`
 - `tests/playwright/chatgpt-local-profile-test-setup.md` owns the standard Chrome/CDP attach posture.
 - `tests/playwright/run-devscrape-validation.ps1` is the simplest manual entrypoint on this machine. It should run the full validation flow and open the generated HTML report automatically.
 - `StartDevScrapeValidator.ps1` is the root Windows controller entrypoint for repeated manual use. It should reuse the real `validate-wide` path, surface the latest validation summary, and list likely broken shortcuts from the latest report for quick manual follow-up.
@@ -59,6 +60,7 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
 - `scrape-wide` and `validate-wide` may auto-launch the standard Chrome/CDP profile when no candidate endpoint is reachable; use `--no-auto-launch` only when deliberately testing attach-only behavior.
 - `validate-wide --require-extension-capture` is the strict full-state mode. It must write the scrape/check reports and then exit non-zero if any scrape artifact failed, including optional extension-backed `1c`.
 - `validate-wide --probe-shortcuts` runs the no-token-safe live shortcut activation probes after scrape collection and writes `live-probes.json` into the scrape folder.
+- `probe-shortcuts` runs only the live activation layer against the attached browser and accepts repeated `--shortcut-action-id` filters. Use it for failure-point iteration after a full report has already shown which shortcut needs attention.
 - Live shortcut probes read the active stored shortcut assignment from the loaded extension profile first, then fall back to `shortcutDefaults`, so blank-default shortcuts can be tested when assigned locally.
 - `--pause-for-extension-setup` may be used with setup/scrape/validate commands to launch or attach Chrome, print the unpacked extension folder, and wait for manual Developer Mode extension setup before continuing. When this flag launches Chrome, it must open `chrome://extensions` without `--load-extension` or `--disable-extensions-except`; the manual profile should own the installed unpacked extension. Do not use it from hidden tray/controller runs unless the caller is intentionally waiting at a console.
 - `setup-login` may launch that browser on `about:blank` with the local unpacked extension loaded for non-manual automation, but manual extension repair should use the normal `chrome://extensions` path above.
@@ -230,6 +232,15 @@ The report must open on a compact Dashboard tab and preserve detailed diagnostic
 - shortcut target audit health
 - live activation probe health
 - a short top-follow-up table for broken shortcuts, missing coverage, live probe failures, or setup issues
+- the full scrape folder path as a local `file:///` link
+- a report history footer built deterministically from timestamped scrape folders, showing the latest report when viewing an older report and up to five previous report links
+
+Report interpretation rules:
+- The Dashboard is the human-facing source of truth for routine pass/fail triage.
+- The Details tab may still show static `PARTIAL` rows for targets that are intentionally absent from the main fixture scrape, such as blank-new-conversation or GPT-specific controls.
+- A `PARTIAL` static shortcut should not appear in Top Follow-Up when the same action has a passing live activation probe.
+- Top Follow-Up should contain only actionable items: metadata guard failures, failed shortcut rows, unresolved coverage gaps, live probe failures, or setup/environment failures.
+- Manual-only rows are expected follow-up only when the behavior cannot be safely automated without drafting text, starting dictation, submitting, stopping generation, or entering another stateful/manual-only context.
 
 The Details tab must keep the full shortcut-first and target-second diagnostic tables.
 
@@ -265,6 +276,8 @@ Prefer narrow validation:
 - syntax-check the new Playwright runner and helper modules
 - run the real `scrape-wide` command only against the required fixture
 - run `check-wide` against an existing scrape folder after a successful capture
+- use `probe-shortcuts --shortcut-action-id <actionId>` for targeted live rechecks instead of rerunning the whole browser workflow
+- avoid repeated full live runs when a saved report plus a targeted probe can prove the fix
 - keep browser-launch troubleshooting in the support doc, not in repeated workflow-specific hacks
 
 Do not reintroduce popup or userscript UI as the primary runtime validator path without a deliberate spec update.
