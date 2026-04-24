@@ -7,5 +7,5 @@ This project includes the following JavaScript libraries from [GSAP (GreenSock A
 - `Observer.min.js`
 - `ScrollToPlugin.min.js`
 
-**Version:** 3.13.0  
+**Version:** 3.13.0
 **License:** [GreenSock Standard License](https://gsap.com/standard-license)

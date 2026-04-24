@@ -1,4 +1,4 @@
-/* 
+/*
 ChatGPT Custom Shortcuts Pro
 - Full Changelog: https://bwhurd.github.io/chatgpt-custom-shortcuts-pro/CHANGELOG.html
 - Privacy Statement: This extension does not collect, monitor, or track user activity.
@@ -5368,7 +5368,7 @@ const delays = DELAYS;
     ...(window.CSP_SHORTCUT_DEFAULTS || {}),
     ...shortcutDefaults,
   };
- 
+
   chrome.storage.sync.get(Object.keys(shortcutDefaults), (data) => {
     const shortcuts = {};
     for (const key in shortcutDefaults) {

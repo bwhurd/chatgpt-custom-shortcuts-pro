@@ -4,18 +4,18 @@ This is the source repo for ChatGPT Custom Shortcuts Pro, a Chrome extension tha
 
 I keep this extension updated as ChatGPT evolves, but maintaining it solo is getting harder. This repo exists in case others are interested in helping maintain or improve it. Contributions are welcome.
 
-- No ads, tracking, or analytics. Everything runs locally  
+- No ads, tracking, or analytics. Everything runs locally
 - [Chrome Web Store](https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf)
 - [Changelog](CHANGELOG.md)
 
 ## Features
 
-- Scroll and navigate conversations  
-- Copy messages, responses, or code cleanly  
-- Send, edit, regenerate, or branch messages  
-- Switch models and Thinking modes  
-- Dictation and Temporary Chat controls  
-- Sidebar, model picker, and layout tweaks  
+- Scroll and navigate conversations
+- Copy messages, responses, or code cleanly
+- Send, edit, regenerate, or branch messages
+- Switch models and Thinking modes
+- Dictation and Temporary Chat controls
+- Sidebar, model picker, and layout tweaks
 - Sync, back up, and restore settings via Google sign-in
 - Import or export settings to .json file
 
@@ -34,10 +34,10 @@ For the full feature list, install the extension and open the settings panel.
 
 If you are just a user, you do not need this repo unless you want to install manually or hack on it.
 
-1. Download the latest ZIP from the `dist/` folder  
-2. Unzip it locally  
-3. Go to `chrome://extensions` and enable Developer Mode  
-4. Click “Load unpacked” and select the unzipped folder  
+1. Download the latest ZIP from the `dist/` folder
+2. Unzip it locally
+3. Go to `chrome://extensions` and enable Developer Mode
+4. Click “Load unpacked” and select the unzipped folder
 
 ## Local Development
 
@@ -61,7 +61,7 @@ If you want to help keep this working or improve it, see `CONTRIBUTING.md` or op
 
 ## License
 
-Mozilla Public License 2.0  
+Mozilla Public License 2.0
 See `LICENSE`.
 
 Extension name and icons © Brian Hurd.
