@@ -2385,6 +2385,29 @@ function localDateTimeText(value) {
   });
 }
 
+function parseRunFolderDate(name) {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})_devscrapewide_c-69ea4723/.exec(
+      String(name || ''),
+    );
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function reportLinkDateTimeText(reportLink) {
+  const folderDate = parseRunFolderDate(reportLink?.folderName);
+  if (folderDate) return localDateTimeText(folderDate);
+  return String(reportLink?.folderName || reportLink?.sortKey || '');
+}
+
 function reportFileLinkHtml(reportLink, label) {
   if (!reportLink?.htmlPath) return '';
   const href = pathToFileURL(reportLink.htmlPath).href;
@@ -2400,7 +2423,7 @@ function reportHistoryHtml(report) {
   const lines = ['<div class="section"><strong>Report History</strong>'];
   if (latest) {
     lines.push(
-      `<p>${reportFileLinkHtml(latest, `View latest report from ${localDateTimeText(latest.sortKey)}`)}</p>`,
+      `<p>${reportFileLinkHtml(latest, `View latest report from ${reportLinkDateTimeText(latest)}`)}</p>`,
     );
   }
   if (previous.length) {
@@ -2408,7 +2431,7 @@ function reportHistoryHtml(report) {
     lines.push('<ul>');
     for (const item of previous) {
       lines.push(
-        `<li>${reportFileLinkHtml(item, `${localDateTimeText(item.sortKey)} - ${item.folderName}`)}</li>`,
+        `<li>${reportFileLinkHtml(item, `${reportLinkDateTimeText(item)} - ${item.folderName}`)}</li>`,
       );
     }
     lines.push('</ul>');
