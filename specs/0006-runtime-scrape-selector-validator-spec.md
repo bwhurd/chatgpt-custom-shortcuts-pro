@@ -169,6 +169,7 @@ Live activation probes may declare bounded setup modes in `extension/shared/shor
 - setup modes must restore the primary fixture before the live probe run exits.
 - live probes must space browser navigations/reloads so repeated validation runs do not look like rapid automated request bursts.
 - live probes must also pause at least 350ms around browser-mutating clicks and keystrokes.
+- extension-page setup/storage tabs must pause at least 1 second around open, storage mutation/read, close, and any following ChatGPT reload.
 - when a probeable shortcut has no stored/default key, the validator may temporarily assign an unused validation-only key, run the probe, and restore the original storage value before exit.
 - `shortcutKeyPreviousThread` requires a `shortcutKeyNextThread` activation first, followed by a 1500ms settle delay, before probing the Previous Thread click.
 - account-unavailable options, such as Pro-only thinking effort levels on a non-Pro profile, must be explicit `not-applicable` metadata instead of reported as broken selectors.

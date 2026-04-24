@@ -38,6 +38,7 @@ const EXECUTABLE_LIVE_PROBE_MODES = Object.freeze([
 ]);
 const MIN_BROWSER_REQUEST_SPACING_MS = 2500;
 const MIN_BROWSER_INTERACTION_SPACING_MS = 350;
+const MIN_EXTENSION_PAGE_SPACING_MS = 1000;
 
 let cachedContract = null;
 let lastBrowserRequestAt = 0;
@@ -52,6 +53,10 @@ async function waitBeforeBrowserRequest() {
 
 async function waitBeforeBrowserInteraction() {
   await new Promise((resolve) => setTimeout(resolve, MIN_BROWSER_INTERACTION_SPACING_MS));
+}
+
+async function waitAroundExtensionPageAction() {
+  await new Promise((resolve) => setTimeout(resolve, MIN_EXTENSION_PAGE_SPACING_MS));
 }
 
 function sanitizeModuleSource(source) {
@@ -256,11 +261,14 @@ async function readExtensionIdFromSecurePreferences(profileDir = null) {
 
 async function configureMoveTopBarToBottomSetting(context, enabled, options = {}) {
   const extensionId = await getExtensionId(context, options);
+  await waitAroundExtensionPageAction();
   const page = await context.newPage();
   try {
+    await waitAroundExtensionPageAction();
     await page.goto(`chrome-extension://${extensionId}/popup.html?playwrightSetup=1`, {
       waitUntil: 'domcontentloaded',
     });
+    await waitAroundExtensionPageAction();
     await page.evaluate(
       async (value) =>
         await new Promise((resolve, reject) => {
@@ -278,8 +286,11 @@ async function configureMoveTopBarToBottomSetting(context, enabled, options = {}
         }),
       enabled,
     );
+    await waitAroundExtensionPageAction();
   } finally {
+    await waitAroundExtensionPageAction();
     await page.close().catch(() => {});
+    await waitAroundExtensionPageAction();
   }
 }
 
@@ -846,6 +857,7 @@ async function captureTopBarMovedThreadBottom(page, context, fixtureUrl, options
 
   try {
     await configureMoveTopBarToBottomSetting(context, true, options);
+    await waitAroundExtensionPageAction();
     await resetFixturePage(page, fixtureUrl);
     const rawHtml = await captureByType(page, definition.capture.type, {
       currentTurnTestId: null,
@@ -876,6 +888,7 @@ async function captureTopBarMovedThreadBottom(page, context, fixtureUrl, options
     );
   } finally {
     await configureMoveTopBarToBottomSetting(context, false, options).catch(() => {});
+    await waitAroundExtensionPageAction();
     await resetFixturePage(page, fixtureUrl).catch(() => {});
   }
 }
@@ -1018,25 +1031,33 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
 
 export async function verifyExtensionRuntimeReachable(context, options = {}) {
   const extensionId = await getExtensionId(context, options);
+  await waitAroundExtensionPageAction();
   const extensionPage = await context.newPage();
   try {
+    await waitAroundExtensionPageAction();
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html?playwrightProbe=1`, {
       waitUntil: 'domcontentloaded',
       timeout: 5000,
     });
+    await waitAroundExtensionPageAction();
     return { extensionId };
   } finally {
+    await waitAroundExtensionPageAction();
     await extensionPage.close().catch(() => {});
+    await waitAroundExtensionPageAction();
   }
 }
 
 async function readExtensionSyncStorage(context, extensionId, keys) {
+  await waitAroundExtensionPageAction();
   const extensionPage = await context.newPage();
   try {
+    await waitAroundExtensionPageAction();
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`, {
       waitUntil: 'domcontentloaded',
       timeout: 5000,
     });
+    await waitAroundExtensionPageAction();
     return await extensionPage.evaluate(
       (storageKeys) =>
         new Promise((resolve, reject) => {
@@ -1056,17 +1077,22 @@ async function readExtensionSyncStorage(context, extensionId, keys) {
       keys,
     );
   } finally {
+    await waitAroundExtensionPageAction();
     await extensionPage.close().catch(() => {});
+    await waitAroundExtensionPageAction();
   }
 }
 
 async function mutateExtensionSyncStorage(context, extensionId, operation) {
+  await waitAroundExtensionPageAction();
   const extensionPage = await context.newPage();
   try {
+    await waitAroundExtensionPageAction();
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`, {
       waitUntil: 'domcontentloaded',
       timeout: 5000,
     });
+    await waitAroundExtensionPageAction();
     return await extensionPage.evaluate(
       ({ op, payload }) =>
         new Promise((resolve, reject) => {
@@ -1095,7 +1121,9 @@ async function mutateExtensionSyncStorage(context, extensionId, operation) {
       operation,
     );
   } finally {
+    await waitAroundExtensionPageAction();
     await extensionPage.close().catch(() => {});
+    await waitAroundExtensionPageAction();
   }
 }
 
