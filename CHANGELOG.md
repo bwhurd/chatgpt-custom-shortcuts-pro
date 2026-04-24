@@ -1,121 +1,111 @@
 # Changelog
 
-Changes typically post to the chrome web store a couple days after date in changelog. 
+Changes typically post to the official [ChatGPT Custom Shortcuts Pro chrome web store listing](https://chromewebstore.google.com/detail/chatgpt-custom-shortcuts/figoaoelbmlhipinligdgmopdakcdkcf) a couple days after the date below.
 
-If you don't want to wait, download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
+If you don’t want to wait, go to the [CGCSP Git repot](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro) to download and load the latest zip from the [dist folder](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/tree/main/dist) in Chrome dev mode for early access (no automatic updates).
+
+---
 
 #### 04.22.2026
-- Changed: sidebar/search/new-chat/input shortcuts now use direct ChatGPT DOM activation instead of synthetic native shortcut strokes, and `Show Shortcut Overlay` is now the real shortcuts-overlay opener on `Alt/Option + .` through the same popup/schema wiring path as the other overlay rows.
+- Fixed: Sidebar, search, new chat, and input shortcuts now work even if you've customized ChatGPT keyboard shortcuts.
+- Changed: Shortcut overlay now opens with `Alt/Option + .` by default instead of Control/Command.
 
 #### 04.13.2026
-- Changed: experimental `Fast Mode` now ships behind a full-disable kill switch, hides its popup toggle, and forces any previously enabled `lazyFastModeEnabled` setting back off.
-- Fixed: model refresh, popup labels, and first-menu model hotkeys now recognize ChatGPT's current top-level `menuitemradio` rows for entries like `Instant` and `Thinking`, instead of assuming only plain `menuitem` rows.
-
-#### 04.10.2026
-- Fixed: with experimental `Fast Mode` enabled, a normal later reload now returns long conversations to the default fast retained window instead of staying fully or partially expanded from an earlier `Load older natively` or `Load full conversation natively` action.
-- Fixed: experimental `Fast Mode` no longer leaves a stale expansion anchor behind after a one-shot full native load, which could make later top-of-thread lazy loading and `Load older natively` appear to stop working.
+- Fixed: Model switcher shortcuts and labels update to match ChatGPT's new menus.
+- In development: "Fast Mode" will soon load and scroll through long chats faster, keep your place after reloads, and use ChatGPT's native controls for older messages. Toggle will be off by default.
 
 #### 04.09.2026
-- Changed: experimental `Fast Mode` is now an opt-in popup setting, disabled by default, and uses smoother native in-place older-history loading with preserved reading position.
-- Fixed: disclaimer hiding now removes ChatGPT's current footer disclaimer container directly instead of recoloring it with a theme token that can still resolve to visible text.
-- Changed: when `Send Top Bar To Bottom` is off, the old fallback composer `margin-bottom: -1em` pull-down is now disabled.
+- Fixed: ChatGPT footer disclaimer stays hidden, even when switching conversations.
+- Changed: Composer bar position adjusted.
 
 #### 04.07.2026
-- Changed: experimental `Fast Mode` for long conversations now uses native progressive expansion instead of extension-rendered lazy message DOM, so older messages continue to load through ChatGPT's own UI and action rows.
-- Improved: `Fast Mode` now keeps a fast initial pruned load, shows a native in-thread summary, and lets you load older history or the full conversation natively while restoring your reading anchor after reload.
-- Changed: the abandoned TanStack/custom-render lazy-history path is no longer active in the main content-script runtime.
-- Fixed: disclaimer hiding now survives same-tab conversation switches when `Send Top Bar To Bottom` is off, by rechecking after ChatGPT route changes instead of watching only the initial thread root.
-- Fixed: `Refresh Models` now resolves the ChatGPT tab more robustly and falls back to the background relay path if direct popup-to-tab messaging fails.
+- Fixed: "Refresh Models" works even if the extension popup can't connect directly to the ChatGPT tab.
 
 #### 03.28.2026
-- Added: `Hide Pasted Files` for ChatGPT Library files, with a popup setting and an on-page Library control that works across English, Spanish, Japanese, Ukrainian, Russian, and Hindi pasted-file names.
-- Added: after `Refresh Models`, Pro users can now get optional `Thinking Light` and `Thinking Heavy` shortcut tiles directly beneath the existing `Thinking Standard` and `Thinking Extended` popup shortcuts when those effort options are available.
-- Fixed: the `Hide Pasted Files` Library control now injects cleanly on `/library` reloads instead of flashing or duplicating during ChatGPT's route hydration.
-- Changed: the popup now keeps `Refresh Models` visible during the weekly model-refresh prompt, and both refresh click targets have a lighter hover/focus affordance.
-- Changed: after the first successful manual `Refresh Models`, the popup can seed `Thinking Standard` / `Thinking Extended` to `Alt + 8` / `Alt + 9` when those keys are still free, while model-key resets/defaults use the shared model-action source of truth and keep `Configure...` on `Alt + 0`.
+- Added: Option to hide pasted files in the Library (works in multiple languages).
+- Added: More "Thinking" shortcut options for Pro users after model refresh.
+- Improved: "Refresh Models" and shortcut assignment are easier to find in the popup.
 
 #### 03.27.2026
-- Fixed: `Send Top Bar To Bottom` now hides the bottom disclaimer text again by recognizing both the explicit disclaimer container and the live centered disclaimer row, with short delayed rechecks instead of the old broad text-node watcher.
-- Adjusted: `Send Top Bar To Bottom` now sits lower by increasing the bottom bar's negative bottom margin, which moves the composer and bottom bar down together without changing the sticky container height.
-- Changed: `Remember Sidebar Scroll Position` is temporarily hidden and hard-disabled pending a rewrite.
-- Changed: The regenerate shortcut grid now removes `More Concise` and `Add Details`, and repurposes the legacy `Regenerate with Different Model` slot to `Don't Search the Web`.
+- Fixed: `Send Top Bar To Bottom` hides the bottom disclaimer again and keeps it hidden after switching conversations.
+- Adjusted: `Send Top Bar To Bottom` moves the composer and bottom bar lower together.
+- Changed: `Remember Sidebar Scroll Position` option is removed for now.
+- Changed: Regenerate shortcut grid now has "Don't Search the Web" instead of "More Concise" and "Add Details".
 
 #### 03.25.2026
-- Fixed: Dictation toggle now prefers the dedicated `Dictate button` over the normal composer send button when both controls are present, so the shortcut no longer fires `Send prompt` in idle composer state.
-- Fixed: `Select and Copy` now uses ChatGPT's current sticky composer boundary when filtering visible turns, so it stops cycling to turns hidden under the bottom composer.
-- Fixed: `Select and Copy` and `Select and Copy All` now copy all assistant/user message blocks inside a turn instead of only the first block, matching ChatGPT's newer multi-block assistant turn markup.
-- Improved: disclaimer hiding now watches only the thread/composer region and targets the actual disclaimer container shape instead of scanning broad `text-token-text-secondary` nodes across the whole page.
+- Fixed: Dictation shortcut now uses the dedicated Dictate button and doesn't trigger "Send prompt" by mistake.
+- Fixed: `Select and Copy` only cycles through turns visible above the composer.
+- Fixed: `Select and Copy` and `Select and Copy All` now copy all message blocks in a turn, not just the first.
+- Improved: Disclaimer hiding now targets only the actual disclaimer container in the thread/composer area.
 
 #### 03.24.2026
-- Improved: Send Top Bar To Bottom now loads much faster and more consistently, with better performance and no redraws or movement.
+- Improved: Send Top Bar To Bottom now loads faster and more consistently, with no redraws or movement.
 
 #### 03.22.2026  
 - Fixed: Model picker hotkeys and labels now work.
-- Added: Unified model picker labels and shortcuts (`Latest`, `5.2`, `5.0 Thinking Mini`, `o3`) match across popup and overlay.
-- Added: Button for manual model sync. Shortcuts now open ‘Configure Models’, pick the model, then close.
+- Added: Unified model picker labels and shortcuts match across popup and overlay.
+- Added: Button for manual model sync. Shortcuts now open 'Configure Models', pick the model, then close.
 - Changed: Manual model sync reminder now shows once per week (was daily).
 
 #### 03.21.2026  
 - Fixed: Select and Copy, Dictation, and Add Files/Photos shortcuts work again.
-- Improved: ‘Move top bar to bottom’ is faster, more reliable, and no longer impacts page load time.
-- Added: Manual model refresh button in popup.
-- Added: Popup model picker shows loading indicator during update.
+- Improved: 'Move top bar to bottom' is faster and doesn't affect page load time.
+- Added: Manual model refresh button in the popup.
+- Added: Popup model picker shows a loading indicator during update.
 
 #### 03.19.2026
-- Fixed: Model-picker labels now update correctly when GPT-5 IDs are reused, so names like `Instant` and `Auto` stay accurate.
+- Fixed: Model-picker labels now update correctly when GPT-5 IDs are reused, so names like 'Instant' and 'Auto' stay accurate.
 
 #### 03.13.2026
-- Added: Fade Message Buttons toggle (off by default) to control message-button fade and hover behavior.
-- Improved: Disclaimer hiding now works even if Fade Message Buttons is off.
-- Changed: Popup and overlay now use local icon and system fonts—no dependency on Google-hosted files.
+- Added: Fade Message Buttons toggle (off by default) to control fade and hover.
+- Improved: Disclaimer hiding works even if the Fade Message Buttons toggle is off.
+- Changed: Popup and overlay now use local and system fonts (no Google fonts).
 
 #### 03.04.2026  
-- Improved: Model Picker labels now include GPT version numbers (e.g., “GPT-5.3 Instant”) to avoid duplicate entries when menus change.
+- Improved: Model picker labels now include GPT version numbers (e.g., "GPT-5.3 Instant") to avoid duplicates.
 
 #### 02.13.2026  
-- Fixed: Model Picker now removes outdated labels when ChatGPT removes models, keeping the popup accurate.
+- Fixed: Model picker now removes outdated labels so the popup stays accurate.
 
 #### 01.19.2026  
-- Improved: Ctrl+/ overlay now only shows assigned shortcuts, matches popup labels, and includes missing actions like Share, Branch In New Chat, Cancel Dictation, and Read Aloud.
+- Improved: Ctrl+/ overlay only shows assigned shortcuts, matches popup labels, and adds actions like Share, Branch In New Chat, Cancel Dictation, and Read Aloud.
 - Added: Highlight Bold Text toggle with color pickers and reset button.
-- Changed: Default “Select + Copy All” now copies both user and ChatGPT messages.
+- Changed: "Select + Copy All" now copies both user and ChatGPT messages by default.
 
 #### 01.02.2026  
-- Send Edit shortcut works again  
-- New GPT Conversation shortcut works again  
-- Fixed duplicate sidebar and new conversation buttons when MoveTopBarToBottom is active
+- Fixed: Send Edit shortcut works again.
+- Fixed: New GPT Conversation shortcut works again.
+- Fixed: No more duplicate sidebar and new conversation buttons when "Move Top Bar To Bottom" is active.
 
 #### 12.31.2025  
-Changes to ChatGPT’s icons broke several of my shortcuts. I have fixed these. Let me know if you notice anything else still broken.
-
-- Thinking Standard and Extended shortcuts work again  
-- Dictation shortcuts (dictate, stop, submit) work again and do not trigger Voice Mode  
-- Temporary Chat toggle shortcut works again and only shows when available  
-- Think Longer shortcut works from the More menu again  
+- Fixed: Shortcuts broken by ChatGPT’s icon changes now work again.
+- Fixed: Thinking Standard and Extended shortcuts work again.
+- Fixed: Dictation shortcuts work and no longer trigger Voice Mode.
+- Fixed: Temporary Chat toggle shortcut only shows when available.
+- Fixed: Think Longer shortcut works from the More menu again.
 
 #### 12.28.2025  
-- Shortcuts now ignore buttons hidden under the composer  
-- Copy-lowest now always strips markdown and keeps list formatting  
-- Rapid Alt+C presses no longer break markdown cleanup or cause inconsistent copying  
+- Fixed: Shortcuts now ignore buttons hidden by the composer.
+- Fixed: Copy-lowest always strips markdown but keeps list formatting.
+- Fixed: Rapid Alt+C presses no longer cause copying issues.
 
 #### 12.25.2025
-- Changed: Model names are now per-profile only; export/import and Google Drive sync no longer overwrite your local labels.
-- Fixed: Settings now refresh correctly after cloud restore, file import, or “clear all shortcuts”—no need to reopen the popup.
+- Changed: Model names are now per-profile; exports/imports and Drive sync don’t overwrite your local labels.
+- Fixed: Settings now refresh after cloud restore, file import, or clearing shortcuts, without reopening the popup.
 
 #### 12.20.2025
-- Fixed: Send Edit shortcut now finds the correct Send button after ChatGPT’s markup update.
+- Fixed: Send Edit shortcut finds the correct Send button after ChatGPT’s markup update.
 
 #### 12.19.2025
-- Added: Toggle to click inline code snippets to copy (off by default), available in settings and popup.
+- Added: Toggle to copy inline code snippets by clicking (off by default), in settings and popup.
 
 #### 12.14.2025
-- Improved: Model picker grid inputs now auto-select contents on focus, so any click or Tab lets you overwrite immediately.
+- Improved: Model picker grid inputs auto-select text on focus for quick editing.
 
 #### 10.15.2025
-- Added: Backup and restore user settings with your Google account—your data stays private.
+- Added: Backup and restore user settings with your Google account (data stays private).
 - Added: Support for all current models (GPT 5.1, 5, 4o, 4.1, 3o).
-- Added: Control+/ shows all assigned shortcuts. (Note: Model picker keys in the overlay may be incorrect until the upcoming fix.)
-
+- Added: Control+/ shows all assigned shortcuts (model picker keys in overlay may still need updating).
 
 #### [10.06.2025]
 + Added: New Custom GPT Conversation shortcut. Start a new conversation that stays with your current custom GPT, instead of switching back to the main ChatGPT model.
