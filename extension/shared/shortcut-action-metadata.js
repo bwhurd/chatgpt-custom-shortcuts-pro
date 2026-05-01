@@ -138,6 +138,9 @@
     byAriaControls('stage-slideover-sidebar-control', 'stage-slideover-sidebar', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
     }),
+    byAriaControls('stage-popover-sidebar-control', 'stage-popover-sidebar', {
+      uiStateRefs: ['topbar-bottom-disabled-header-area'],
+    }),
     byId('page-header', 'page-header', {
       uiStateRefs: ['topbar-bottom-disabled-header-area'],
     }),
@@ -512,8 +515,16 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyToggleSidebar',
-      targetRefs: ['close-sidebar-button', 'stage-slideover-sidebar-control'],
-      uiStateRefs: targetStateRefs('close-sidebar-button', 'stage-slideover-sidebar-control'),
+      targetRefs: [
+        'close-sidebar-button',
+        'stage-slideover-sidebar-control',
+        'stage-popover-sidebar-control',
+      ],
+      uiStateRefs: targetStateRefs(
+        'close-sidebar-button',
+        'stage-slideover-sidebar-control',
+        'stage-popover-sidebar-control',
+      ),
       activationProbe: clickTargetProbe('close-sidebar-button', {
         uiStateRefs: ['sidebar-expanded-body'],
       }),

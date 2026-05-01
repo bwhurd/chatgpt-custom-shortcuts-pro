@@ -344,14 +344,18 @@ const normalizeModelCatalog = (catalog) => {
     const rows = Array.isArray(rawFrontend[configId]) ? rawFrontend[configId] : [];
     frontendByConfig[normalizedConfigId] = rows
       .map((row) => {
+        const storedActionId = String(row?.id || '').trim();
         const actionId =
-          typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
-            ? window.ModelLabels.mapFrontendLabelToActionId(
-                row?.label || '',
-                normalizedConfigId,
-              )
-            : '';
+          storedActionId && typeof window.ModelLabels?.getActionById === 'function'
+            ? window.ModelLabels.getActionById(storedActionId)?.id || ''
+            : typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
+              ? window.ModelLabels.mapFrontendLabelToActionId(
+                  row?.label || '',
+                  normalizedConfigId,
+                )
+              : '';
         if (!actionId) return null;
+        if (actionId === 'pro' && row?.available !== true) return null;
         const base =
           typeof window.ModelLabels?.getActionById === 'function'
             ? window.ModelLabels.getActionById(actionId)
@@ -360,6 +364,7 @@ const normalizeModelCatalog = (catalog) => {
         return {
           id: actionId,
           slot: base.slot,
+          available: row?.available === true,
           label: String(row?.label || base.label || '').trim(),
         };
       })

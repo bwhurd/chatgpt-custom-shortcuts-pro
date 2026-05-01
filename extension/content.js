@@ -5180,7 +5180,7 @@ const delays = DELAYS;
 
   function safeClick(el) {
     if (!el) return false;
-    if (el.offsetParent === null) return false;
+    if (!isDirectActionVisible(el)) return false;
     try {
       el.click();
       return true;
@@ -5192,7 +5192,11 @@ const delays = DELAYS;
   const SIDEBAR_TOGGLE_SELECTORS = [
     'button[data-testid="close-sidebar-button"]',
     '#stage-sidebar-tiny-bar button[aria-controls="stage-slideover-sidebar"]',
+    'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
     'button[data-testid="open-sidebar-button"]',
+  ];
+  const NARROW_SIDEBAR_POPOVER_SELECTORS = [
+    'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
   const SEARCH_CONVERSATION_SELECTORS = ['button[data-testid="search-conversation-button"]'];
   const NEW_CHAT_SELECTORS = [
@@ -5226,7 +5230,7 @@ const delays = DELAYS;
       if (
         style.display === 'none' ||
         style.visibility === 'hidden' ||
-        style.pointerEvents === 'none'
+        (current === el && style.pointerEvents === 'none')
       ) {
         return false;
       }
@@ -5247,6 +5251,81 @@ const delays = DELAYS;
     return null;
   }
 
+  function waitForFirstVisibleElement(selectors, timeoutMs = 800) {
+    const existing = findFirstVisibleElement(selectors);
+    if (existing) return Promise.resolve(existing);
+
+    return new Promise((resolve) => {
+      let observer = null;
+      const timeoutId = setTimeout(() => {
+        observer?.disconnect();
+        resolve(null);
+      }, timeoutMs);
+
+      const finish = (el) => {
+        clearTimeout(timeoutId);
+        observer?.disconnect();
+        resolve(el);
+      };
+
+      observer = new MutationObserver(() => {
+        const el = findFirstVisibleElement(selectors);
+        if (el) finish(el);
+      });
+
+      observer.observe(document.body || document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['aria-expanded', 'aria-hidden', 'data-state', 'hidden', 'style', 'class'],
+      });
+    });
+  }
+
+  async function openNarrowSidebarPopover() {
+    const opener = findFirstVisibleElement(NARROW_SIDEBAR_POPOVER_SELECTORS);
+    if (!(opener instanceof HTMLElement)) return false;
+    if (opener.getAttribute('aria-expanded') !== 'true' && !safeClick(opener)) return false;
+    return true;
+  }
+
+  function navigateToNewConversationFallback() {
+    if (window.location.pathname === '/') return true;
+    window.location.assign('/');
+    return true;
+  }
+
+  async function triggerNativeNewConversationFromNarrowPopover() {
+    if (!(await openNarrowSidebarPopover())) return navigateToNewConversationFallback();
+
+    const direct = await waitForFirstVisibleElement(NEW_CHAT_SELECTORS);
+    if (safeClick(direct)) return true;
+
+    const spriteMatch = await waitForFirstVisibleElement([
+      `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
+      `button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
+    ]);
+    const target = spriteMatch?.closest?.(
+      '[data-testid="create-new-chat-button"], [data-sidebar-item="true"]',
+    );
+    if (safeClick(target)) return true;
+
+    return navigateToNewConversationFallback();
+  }
+
+  async function triggerNativeSearchConversationFromNarrowPopover() {
+    if (!(await openNarrowSidebarPopover())) return false;
+
+    const direct = await waitForFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
+    if (safeClick(direct)) return true;
+
+    const spriteMatch = await waitForFirstVisibleElement([
+      `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
+    ]);
+    const target = spriteMatch?.closest?.('button[data-sidebar-item="true"]');
+    return safeClick(target);
+  }
+
   function triggerNativeNewConversationButton() {
     const direct = findFirstVisibleElement(NEW_CHAT_SELECTORS);
     if (safeClick(direct)) return true;
@@ -5259,7 +5338,10 @@ const delays = DELAYS;
       .map((iconUse) => iconUse.closest('[data-testid="create-new-chat-button"], [data-sidebar-item="true"]'))
       .find((el) => isDirectActionVisible(el));
 
-    return safeClick(spriteMatch);
+    if (safeClick(spriteMatch)) return true;
+
+    void triggerNativeNewConversationFromNarrowPopover();
+    return true;
   }
 
   function triggerNativeSidebarToggleButton() {
@@ -5281,7 +5363,10 @@ const delays = DELAYS;
       .map((iconUse) => iconUse.closest('button[data-sidebar-item="true"]'))
       .find((el) => isDirectActionVisible(el));
 
-    return safeClick(spriteMatch);
+    if (safeClick(spriteMatch)) return true;
+
+    void triggerNativeSearchConversationFromNarrowPopover();
+    return true;
   }
 
   function triggerDirectComposerActivation() {
@@ -6984,22 +7069,26 @@ const delays = DELAYS;
         clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
       },
       [shortcuts.shortcutKeyThinkingExtended]: () => {
+        if (window.__cspRunThinkingEffortAction?.('thinking-extended')) return;
         const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
         const SUB_ITEM_BTN_PATH = '#143e56';
         delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
 
       [shortcuts.shortcutKeyThinkingStandard]: () => {
+        if (window.__cspRunThinkingEffortAction?.('thinking-standard')) return;
         const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
         const SUB_ITEM_BTN_PATH = '#fec800';
         delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
       [shortcuts.shortcutKeyThinkingLight]: () => {
+        if (window.__cspRunThinkingEffortAction?.('thinking-light')) return;
         const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
         const SUB_ITEM_BTN_PATH = '#407870';
         delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
       [shortcuts.shortcutKeyThinkingHeavy]: () => {
+        if (window.__cspRunThinkingEffortAction?.('thinking-heavy')) return;
         const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
         const SUB_ITEM_BTN_PATH = '#3c5754';
         delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
@@ -7726,6 +7815,78 @@ const delays = DELAYS;
       return event.key && event.key.toLowerCase() === setting.toLowerCase();
     }
 
+    const THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
+      {
+        storageKey: 'shortcutKeyThinkingExtended',
+        optionId: 'thinking-extended',
+        fallback: () => {
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#143e56';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+      },
+      {
+        storageKey: 'shortcutKeyThinkingStandard',
+        optionId: 'thinking-standard',
+        fallback: () => {
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#fec800';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+      },
+      {
+        storageKey: 'shortcutKeyThinkingLight',
+        optionId: 'thinking-light',
+        fallback: () => {
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#407870';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+      },
+      {
+        storageKey: 'shortcutKeyThinkingHeavy',
+        optionId: 'thinking-heavy',
+        fallback: () => {
+          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
+          const SUB_ITEM_BTN_PATH = '#3c5754';
+          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
+        },
+      },
+    ];
+
+    const getEffectiveShortcutSetting = (storageKey) => {
+      const effective = window.CSP_SHORTCUTS_EFFECTIVE || {};
+      if (hasUsableShortcutSetting(effective[storageKey])) return effective[storageKey];
+      if (hasUsableShortcutSetting(shortcuts[storageKey])) return shortcuts[storageKey];
+      return shortcutDefaults[storageKey] || '';
+    };
+
+    const runDynamicThinkingEffortShortcut = (event) => {
+      const matched = THINKING_EFFORT_DYNAMIC_SHORTCUTS.find(({ storageKey }) =>
+        matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event),
+      );
+      if (!matched) return false;
+      event.preventDefault();
+      if (window.__cspRunThinkingEffortAction?.(matched.optionId)) return true;
+      matched.fallback();
+      return true;
+    };
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') return;
+      const shortcutPatch = {};
+      for (const key of Object.keys(shortcutDefaults)) {
+        if (!Object.hasOwn(changes, key)) continue;
+        const next = changes[key].newValue;
+        shortcutPatch[key] = hasUsableShortcutSetting(next) ? next : shortcutDefaults[key];
+      }
+      if (!Object.keys(shortcutPatch).length) return;
+      window.CSP_SHORTCUTS_EFFECTIVE = {
+        ...(window.CSP_SHORTCUTS_EFFECTIVE || {}),
+        ...shortcutPatch,
+      };
+    });
+
     document.addEventListener(
       'keydown',
       (event) => {
@@ -7826,6 +7987,8 @@ const delays = DELAYS;
         // Normal Alt+Key shortcut: handle mapped Alt shortcuts.
         // Note: digit keys that *were assigned to models* above were already handled and returned;
         // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
+        if (runDynamicThinkingEffortShortcut(event)) return;
+
         const matchedAltKey = Object.keys(keyFunctionMappingAlt).find((k) =>
           matchesShortcutKey(k, event),
         );
@@ -8645,7 +8808,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     MODEL_SWITCHER_BUTTON:
       'button[data-testid="model-switcher-dropdown-button"], ' +
       'button[data-testid="Model-switCher-dropdown-button"], ' +
-      'button[aria-label^="Model selector" i]',
+      '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]',
     PROFILE_BUTTON: 'button[data-testid="profile-button"]',
     LOGIN_BUTTON: 'button[data-testid="login-button"]',
   };
@@ -10219,10 +10382,25 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
   const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
-  const MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
+  const LEGACY_MODEL_MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
+  const COMPOSER_MODEL_MENU_BTN_SELECTOR =
+    '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]';
+  const MENU_BTN_SELECTOR = [
+    LEGACY_MODEL_MENU_BTN_SELECTOR,
+    COMPOSER_MODEL_MENU_BTN_SELECTOR,
+  ].join(', ');
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
   const MODEL_MENU_ITEM_SELECTOR =
-    ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item]';
+    ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
+    ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
+    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
+    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])';
+  const THINKING_EFFORT_OPTION_IDS = [
+    'thinking-standard',
+    'thinking-extended',
+    'thinking-light',
+    'thinking-heavy',
+  ];
   const escapeSelectorValue = (value) => {
     try {
       return CSS?.escape ? CSS.escape(String(value)) : String(value);
@@ -10234,6 +10412,26 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     typeof window.ModelLabels?.getActionSlots === 'function'
       ? window.ModelLabels.getActionSlots()
       : [];
+  const isUsablyVisibleElement = (el) => {
+    if (!(el instanceof Element) || !el.isConnected) return false;
+    try {
+      const style = window.getComputedStyle?.(el);
+      if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+    } catch { }
+    return Array.from(el.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0);
+  };
+  const getModelMenuButton = () => {
+    const candidates = Array.from(document.querySelectorAll(MENU_BTN_SELECTOR));
+    if (!candidates.length) return null;
+    const visible = candidates.filter(isUsablyVisibleElement);
+    return (
+      visible.find((el) => el.matches(LEGACY_MODEL_MENU_BTN_SELECTOR)) ||
+      visible.find((el) => el.matches(COMPOSER_MODEL_MENU_BTN_SELECTOR)) ||
+      visible[0] ||
+      candidates[0] ||
+      null
+    );
+  };
   const getModelActionBySlot = (slot) => {
     const staticAction =
       typeof window.ModelLabels?.getActionBySlot === 'function'
@@ -10519,10 +10717,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       : Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR));
 
   const hasExpandedModelMenuTrigger = () =>
-    document.querySelector(MENU_BTN_SELECTOR)?.getAttribute('aria-expanded') === 'true';
+    getModelMenuButton()?.getAttribute('aria-expanded') === 'true';
 
   const hasOpenModelMenuCandidate = () => {
-    const triggerId = document.querySelector(MENU_BTN_SELECTOR)?.id || '';
+    const triggerId = getModelMenuButton()?.id || '';
     if (
       triggerId &&
       document.querySelector(
@@ -10569,7 +10767,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     if (!items.length) return false;
 
     const labelledby = menuEl.getAttribute('aria-labelledby') || '';
-    const triggerId = document.querySelector(MENU_BTN_SELECTOR)?.id || '';
+    const triggerId = getModelMenuButton()?.id || '';
     if (triggerId && labelledby === triggerId) return true;
 
     if (
@@ -10629,9 +10827,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       normModelTid(item.getAttribute('data-testid')).includes('legacy'),
     );
     if (byTid) return byTid;
-
-    const byText = candidates.find((item) => /legacy\s*models?/i.test(item.textContent || ''));
-    if (byText) return byText;
 
     if (candidates.length === 1) return candidates[0];
     return null;
@@ -10755,7 +10950,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       };
 
       const ensureMainMenuOpen = () => {
-        const btn = document.querySelector(MENU_BTN_SELECTOR);
+        const btn = getModelMenuButton();
         if (!btn) return false;
         if (btn.getAttribute('aria-expanded') === 'true') return true;
         btn.focus();
@@ -10822,17 +11017,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         (target || el).appendChild(span);
       };
 
-      const getExpectedPrimaryHintTexts = (primaryItems, primaryActions) =>
-        primaryItems.map((_, i) => {
-          const slot = primaryActions[i]?.slot;
+      const getExpectedPrimaryHintTexts = (primaryPairs) =>
+        primaryPairs.map(({ action }) => {
+          const slot = action?.slot;
           return slot == null ? '' : `${MOD_KEY_TEXT}+${displayFromCode(KEY_CODES[slot])}`;
         });
 
-      const primaryHintsAlreadyApplied = (primaryItems, expectedHintTexts) => {
-        const expectedCount = expectedHintTexts.filter(Boolean).length;
-        if (document.querySelectorAll('.alt-hint').length !== expectedCount) return false;
-        for (let i = 0; i < primaryItems.length; ++i) {
-          const actual = primaryItems[i]?.el?.querySelector('.alt-hint')?.textContent?.trim() || '';
+      const primaryHintsAlreadyApplied = (primaryPairs, expectedHintTexts) => {
+        for (let i = 0; i < primaryPairs.length; ++i) {
+          const actual = primaryPairs[i]?.item?.el?.querySelector('.alt-hint')?.textContent?.trim() || '';
           if ((expectedHintTexts[i] || '') !== actual) return false;
         }
         return true;
@@ -10841,7 +11034,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       // --- Ultra-light model-name capture: piggybacks on applyHints ---
 
       function __cspTextNoHint(el) {
-        return window.ModelLabels.textNoHint(el);
+        if (!(el instanceof Element)) return window.ModelLabels.textNoHint(el);
+        const clone = el.cloneNode(true);
+        clone
+          .querySelectorAll('[data-model-picker-thinking-effort-label-extra]')
+          .forEach((node) => {
+            node.remove();
+          });
+        return window.ModelLabels.textNoHint(clone);
       }
 
       const __cspIsSubmenuTrigger = (el) => isModelSubmenuTriggerItem(el);
@@ -10864,13 +11064,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (persist) return persistActiveModelConfigId(inferred);
         return setCachedActiveModelConfigId(inferred);
       };
-      const getPrimaryPresentationActionsForState = (state = getVisibleModelMenuState()) => {
-        const activeModelConfigId = syncActiveConfigFromMenuState(state);
-        return typeof window.ModelLabels?.getPrimaryPresentationActions === 'function'
-          ? window.ModelLabels.getPrimaryPresentationActions(activeModelConfigId, [])
-          : getModelActionSlots().filter((action) => action.group === 'primary');
-      };
-
       // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
       function __cspCollectModelNamesN() {
         const CAP = MAX_SLOTS;
@@ -11092,8 +11285,111 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return getVisibleModelMenuState().items.slice(0, MAX_SLOTS);
       }
 
+      function getModelVersionFromSwitcherTestId(testId) {
+        const tid = normModelTid(testId);
+        const match = tid.match(/^model-switcher-gpt-(\d+)(?:-(\d+))?(?:-(?:instant|thinking))?$/);
+        if (!match) return '';
+        return match[2] ? `${match[1]}.${match[2]}` : match[1];
+      }
+
+      function getModelVersionFromFrontendRow(row) {
+        if (!(row instanceof Element)) return '';
+        const candidates = Array.from(row.querySelectorAll('.text-token-text-tertiary.text-xs'));
+        for (const candidate of candidates) {
+          const value = __cspTextNoHint(candidate).replace(/\s+/g, ' ').trim();
+          if (/^\d+(?:\.\d+)?$/.test(value)) return value;
+        }
+        return '';
+      }
+
+      let latestFrontendActionSignatures = {};
+
+      function getPrimaryActionIdForMenuItem(item, rawItems = []) {
+        if (!(item instanceof Element)) return '';
+        const tid = normModelTid(item.getAttribute('data-testid'));
+        if (tid === 'model-configure-modal') return 'configure';
+        if (
+          item.hasAttribute('data-model-picker-thinking-effort-menu-item') ||
+          /(?:^|-)thinking(?:$|-)/.test(tid)
+        ) {
+          return 'thinking';
+        }
+        if (tid.startsWith('model-switcher-')) {
+          const unassignedModelRows = rawItems.filter((candidate) => {
+            const candidateTid = normModelTid(candidate?.el?.getAttribute('data-testid'));
+            return (
+              candidateTid.startsWith('model-switcher-') &&
+              !candidate?.el?.hasAttribute('data-model-picker-thinking-effort-menu-item') &&
+              !/(?:^|-)thinking(?:$|-)/.test(candidateTid)
+            );
+          });
+          if (unassignedModelRows.length === 1 && unassignedModelRows[0]?.el === item) {
+            return 'instant';
+          }
+        }
+        return '';
+      }
+
+      function collectFrontendActionSignaturesFromPrimaryMenu(rawItems = []) {
+        const signatures = {};
+        rawItems.forEach((item) => {
+          const actionId = getPrimaryActionIdForMenuItem(item.el, rawItems);
+          if (!actionId || actionId === 'configure') return;
+          const modelVersion = getModelVersionFromSwitcherTestId(item.el.getAttribute('data-testid'));
+          if (!modelVersion) return;
+          signatures[actionId] = { modelVersion };
+        });
+        latestFrontendActionSignatures = {
+          ...latestFrontendActionSignatures,
+          ...signatures,
+        };
+        return signatures;
+      }
+
       function getPrimaryMenuItems(state = getVisibleModelMenuState()) {
-        return (state.items || []).filter((item) => item.menu === 'main');
+        return getPrimaryMenuActionPairs(state).map((pair) => pair.item);
+      }
+
+      function getPrimaryMenuActionPairs(state = getVisibleModelMenuState()) {
+        const rawItems = (state.items || []).filter((item) => item.menu === 'main');
+        const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        const primaryActions =
+          typeof window.ModelLabels?.getPrimaryPresentationActions === 'function'
+            ? window.ModelLabels
+                .getPrimaryPresentationActions(activeModelConfigId, [])
+            : getModelActionSlots().filter((action) => action.group === 'primary');
+        const actionSignatures = collectFrontendActionSignaturesFromPrimaryMenu(rawItems);
+        const byActionId = new Map();
+        rawItems.forEach((item) => {
+          const actionId = getPrimaryActionIdForMenuItem(item.el, rawItems);
+          if (!actionId || byActionId.has(actionId)) return;
+          byActionId.set(actionId, item);
+        });
+        const usedItems = new Set();
+        const usedActionIds = new Set();
+        const ordered = [];
+        primaryActions.forEach((action) => {
+          const item = byActionId.get(action.id);
+          if (!item) return;
+          ordered.push({ item, action });
+          usedItems.add(item);
+          usedActionIds.add(action.id);
+        });
+        rawItems.forEach((item, index) => {
+          if (usedItems.has(item)) return;
+          const action = primaryActions[index];
+          if (
+            !action ||
+            usedActionIds.has(action.id) ||
+            (['instant', 'thinking'].includes(action.id) && !actionSignatures[action.id])
+          ) {
+            return;
+          }
+          ordered.push({ item, action });
+          usedItems.add(item);
+          usedActionIds.add(action.id);
+        });
+        return ordered.sort((a, b) => rawItems.indexOf(a.item) - rawItems.indexOf(b.item));
       }
 
       function findMainItemByTestId(testId, state = getVisibleModelMenuState()) {
@@ -11101,6 +11397,18 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return getPrimaryMenuItems(state).find(
           (item) => normModelTid(item.el.getAttribute('data-testid')) === tid,
         );
+      }
+      function findConfigureMenuItem(state = getVisibleModelMenuState()) {
+        const fromState = findMainItemByTestId('model-configure-modal', state)?.el;
+        if (fromState instanceof Element) return fromState;
+        const roots = [state.main, ...getOpenModelMenus(), document].filter(Boolean);
+        for (const root of roots) {
+          const match = Array.from(
+            root.querySelectorAll?.('[data-testid="model-configure-modal"]') || [],
+          ).find(isUsablyVisibleElement);
+          if (match) return match;
+        }
+        return null;
       }
 
       function displayFromCode(code) {
@@ -11241,14 +11549,20 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
       const getTargetMenuItemForAction = (action, state = getVisibleModelMenuState()) => {
         if (!action) return null;
-        const primaryItems = getPrimaryMenuItems(state);
-        const presentationActions = getPrimaryPresentationActionsForState(state);
-        const primaryMatchIndex = presentationActions.findIndex(
-          (candidate) => candidate.id === action.id,
+        const primaryMatch = getPrimaryMenuActionPairs(state).find(
+          (pair) => pair.action?.id === action.id,
         );
-        if (primaryMatchIndex !== -1) return primaryItems[primaryMatchIndex] || null;
-        if (action.actionKind === 'configure-option')
-          return findMainItemByTestId('model-configure-modal', state) || null;
+        if (primaryMatch) return primaryMatch.item;
+        if (action.id === 'configure') {
+          const configureEl = findConfigureMenuItem(state);
+          return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
+        }
+        if (action.actionKind === 'configure-option') {
+          const stateItem = findMainItemByTestId('model-configure-modal', state);
+          if (stateItem) return stateItem;
+          const configureEl = findConfigureMenuItem(state);
+          return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
+        }
         return null;
       };
 
@@ -11256,15 +11570,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         waitForAsync(
           () => {
             const state = getVisibleModelMenuState();
-            if (!state.main) return null;
             const target = getTargetMenuItemForAction(action, state);
             return target ? { state, target } : null;
           },
           { timeout: 2000, interval: 30 },
         );
 
-      const findConfigureCombobox = () => {
-        const label = document.getElementById('model-selection-label');
+      const findComboboxByLabelId = (labelId) => {
+        const label = document.getElementById(labelId);
         if (!(label instanceof Element)) return null;
 
         const roots = [
@@ -11277,11 +11590,20 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         ].filter(Boolean);
 
         for (const root of roots) {
-          const button = root.querySelector('button[role="combobox"][aria-controls]');
+          const controls = Array.from(root.querySelectorAll('button[role="combobox"][aria-controls]'));
+          const button =
+            controls.find((candidate) => candidate.getAttribute('aria-labelledby') === labelId) ||
+            controls.find((candidate) => {
+              const labelledBy = candidate.getAttribute('aria-labelledby') || '';
+              return labelledBy.split(/\s+/).includes(labelId);
+            });
           if (button) return button;
         }
         return null;
       };
+      const findConfigureCombobox = () => findComboboxByLabelId('model-selection-label');
+      const findThinkingEffortCombobox = () =>
+        findComboboxByLabelId('thinking-effort-selection-label');
 
       const waitForConfigureCombobox = async () =>
         waitForAsync(findConfigureCombobox, { timeout: 2500, interval: 30 });
@@ -11289,27 +11611,30 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const waitForConfigureComboboxQuick = async () =>
         waitForAsync(findConfigureCombobox, { timeout: 450, interval: 25 });
 
-      const waitForConfigureListbox = async (combobox) =>
+      const getControlledListboxForCombobox = (combobox) => {
+        const listboxId = combobox?.getAttribute('aria-controls') || '';
+        if (!listboxId) return null;
+        const listbox = document.getElementById(listboxId);
+        return listbox instanceof Element && listbox.getAttribute('role') === 'listbox'
+          ? listbox
+          : null;
+      };
+
+      const waitForControlledListbox = async (combobox, { timeout = 2500, interval = 30 } = {}) =>
         waitForAsync(
           () => {
-            const listboxId = combobox?.getAttribute('aria-controls') || '';
-            if (!listboxId) return null;
-            const listbox = document.getElementById(listboxId);
-            return listbox instanceof Element ? listbox : null;
+            return getControlledListboxForCombobox(combobox);
           },
-          { timeout: 2500, interval: 30 },
+          { timeout, interval },
         );
 
+      const waitForConfigureListbox = async (combobox) => waitForControlledListbox(combobox);
+
       const waitForConfigureListboxQuick = async (combobox) =>
-        waitForAsync(
-          () => {
-            const listboxId = combobox?.getAttribute('aria-controls') || '';
-            if (!listboxId) return null;
-            const listbox = document.getElementById(listboxId);
-            return listbox instanceof Element ? listbox : null;
-          },
-          { timeout: DELAY_CONFIGURE_LISTBOX_QUICK_CHECK_MS, interval: 25 },
-        );
+        waitForControlledListbox(combobox, {
+          timeout: DELAY_CONFIGURE_LISTBOX_QUICK_CHECK_MS,
+          interval: 25,
+        });
 
       const getConfigureOptionLabel = (option) => {
         if (!(option instanceof Element)) return '';
@@ -11367,18 +11692,52 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const wrapper = listbox?.closest('[data-radix-popper-content-wrapper]') || listbox || null;
         hideLiveScrapeElement(wrapper);
       };
-      const collectConfigureFrontendRows = (dialog, activeConfigId) => {
-        if (!(dialog instanceof Element)) return [];
-        const rowButtons = Array.from(
-          dialog.querySelectorAll('button.__menu-item.hoverable.text-start'),
+      const getConfigureFrontendRadioRows = (dialog) =>
+        dialog instanceof Element
+          ? Array.from(dialog.querySelectorAll('button.__menu-item.hoverable[role="radio"]'))
+          : [];
+      const isUnavailableConfigureFrontendRow = (row) =>
+        row instanceof Element &&
+        (row.hasAttribute('data-disabled') ||
+          row.getAttribute('aria-disabled') === 'true' ||
+          row.hasAttribute('disabled') ||
+          row.matches(':disabled'));
+      const findConfigureProRow = (dialog) => {
+        if (!(dialog instanceof Element)) return null;
+        const candidates = Array.from(
+          dialog.querySelectorAll('[data-testid], [data-model-picker-pro-row], [data-model-picker-pro-menu-item]'),
+        )
+          .map((candidate) => candidate.closest('.__menu-item') || candidate)
+          .filter((candidate, index, rows) => rows.indexOf(candidate) === index);
+        return (
+          candidates.find((candidate) => {
+            if (isUnavailableConfigureFrontendRow(candidate)) return false;
+            const stableAttributes = candidate
+              .getAttributeNames()
+              .map((name) => `${name}=${candidate.getAttribute(name) || ''}`)
+              .join(' ');
+            return /(?:^|[-_=\s])pro(?:$|[-_=\s])/i.test(stableAttributes);
+          }) || null
         );
-        return rowButtons
-          .map((button) => {
-            const label = __cspTextNoHint(button);
-            const actionId =
-              typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
-                ? window.ModelLabels.mapFrontendLabelToActionId(label, activeConfigId)
-                : '';
+      };
+      const getConfigureFrontendActionIdForRow = (row, dialog) => {
+        if (!(row instanceof Element) || !(dialog instanceof Element)) return '';
+        const modelVersion = getModelVersionFromFrontendRow(row);
+        if (modelVersion) {
+          const match = Object.entries(latestFrontendActionSignatures).find(
+            ([, signature]) => signature?.modelVersion === modelVersion,
+          );
+          if (match) return match[0];
+        }
+        if (row === findConfigureProRow(dialog)) return 'pro';
+        return '';
+      };
+      const collectConfigureFrontendRows = (dialog) => {
+        if (!(dialog instanceof Element)) return [];
+        const rows = [...getConfigureFrontendRadioRows(dialog), findConfigureProRow(dialog)].filter(Boolean);
+        return rows
+          .map((row) => {
+            const actionId = getConfigureFrontendActionIdForRow(row, dialog);
             const action =
               typeof window.ModelLabels?.getActionById === 'function'
                 ? window.ModelLabels.getActionById(actionId)
@@ -11387,74 +11746,140 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             return {
               id: actionId,
               slot: action.slot,
+              available: true,
               label:
                 typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                  ? window.ModelLabels.getCanonicalActionLabel(actionId, label)
-                  : label,
+                  ? window.ModelLabels.getCanonicalActionLabel(actionId, action.label)
+                  : action.label,
             };
           })
           .filter(Boolean);
       };
-      const THINKING_EFFORT_BUTTON_TOKENS = Object.freeze(['#127a53', '#c9d737']);
-      const findThinkingEffortMenuForButton = (button) => {
-        const buttonId = button?.id || '';
-        if (!buttonId) return null;
-        const menu = document.querySelector(
-          `[role="menu"][aria-labelledby="${safeEsc(buttonId)}"][data-state="open"]`,
-        );
-        return menu instanceof Element ? menu : null;
-      };
-      const closeThinkingEffortMenuAfterScrape = async (button, openedByScrape) => {
-        if (!openedByScrape || !(button instanceof Element)) return;
-        if (button.getAttribute('aria-expanded') !== 'true') return;
-        try {
-          button.focus?.();
-          simulateSpace(button);
-        } catch { }
-        await sleepAsync(50);
-      };
-      // biome-ignore lint/correctness/noUnusedVariables: preserve thinking-effort scrape helper for follow-up wiring
-      const collectThinkingEffortIdsDuringScrape = async () => {
-        const buttonSelector = MENU_SELECTORS.buttonPath(THINKING_EFFORT_BUTTON_TOKENS);
-        const button = lowestVisibleFromPaths(buttonSelector, 'button');
-        if (!(button instanceof Element)) return [];
-
-        const openedByScrape = button.getAttribute('aria-expanded') !== 'true';
-        const waitMs = openRadixMenuIfNeeded(button, DEFAULT_MENU_DELAYS);
-        if (openedByScrape) await sleepAsync(waitMs + 40);
-
-        const menu = await waitForAsync(() => findThinkingEffortMenuForButton(button), {
-          timeout: 1600,
+      const getComboboxDisplayText = (combobox) =>
+        (combobox?.querySelector('span')?.textContent || combobox?.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const openComboboxListbox = async (combobox, { timeout = 2500 } = {}) => {
+        if (!(combobox instanceof Element)) return null;
+        let listbox = await waitForControlledListbox(combobox, {
+          timeout: DELAY_CONFIGURE_LISTBOX_QUICK_CHECK_MS,
           interval: 25,
         });
-        if (!(menu instanceof Element)) {
-          await closeThinkingEffortMenuAfterScrape(button, openedByScrape);
-          return [];
+        if (listbox) return { listbox, opened: false };
+        await clickAfterFlash(combobox, DELAY_CONFIGURE_COMBOBOX_OPEN_MS);
+        listbox = await waitForControlledListbox(combobox, { timeout, interval: 30 });
+        return listbox ? { listbox, opened: true } : null;
+      };
+      const closeComboboxListbox = async (combobox) => {
+        if (!(combobox instanceof Element)) return;
+        try {
+          combobox.focus?.();
+          pressElementKey(combobox, 'Escape', 'Escape');
+        } catch { }
+        await sleepAsync(40);
+      };
+      const mapThinkingEffortLabelToId = (label) =>
+        typeof window.ModelLabels?.mapThinkingEffortLabelToId === 'function'
+          ? window.ModelLabels.mapThinkingEffortLabelToId(label)
+          : '';
+      const getThinkingEffortOptionById = (id) =>
+        typeof window.ModelLabels?.getThinkingEffortOptionById === 'function'
+          ? window.ModelLabels.getThinkingEffortOptionById(id)
+          : null;
+      const getThinkingEffortIdForOption = (option) => {
+        if (!(option instanceof Element)) return '';
+        const listbox = option.closest('[role="listbox"]');
+        const index = listbox
+          ? Array.from(listbox.querySelectorAll(':scope [role="option"]')).indexOf(option)
+          : -1;
+        if (index >= 0 && THINKING_EFFORT_OPTION_IDS[index]) return THINKING_EFFORT_OPTION_IDS[index];
+        return mapThinkingEffortLabelToId(getConfigureOptionLabel(option));
+      };
+      const getThinkingEffortStorageCode = (optionId) => {
+        const option = getThinkingEffortOptionById(optionId);
+        const storageKey = option?.storageKey || '';
+        return storageKey ? window.CSP_SHORTCUTS_EFFECTIVE?.[storageKey] || '' : '';
+      };
+      const findThinkingEffortOption = (listbox, optionId) => {
+        if (!(listbox instanceof Element)) return null;
+        const targetId =
+          typeof window.ModelLabels?.normalizeThinkingEffortId === 'function'
+            ? window.ModelLabels.normalizeThinkingEffortId(optionId)
+            : String(optionId || '').trim();
+        return (
+          Array.from(listbox.querySelectorAll(':scope [role="option"]')).find(
+            (option) => getThinkingEffortIdForOption(option) === targetId,
+          ) || null
+        );
+      };
+      const inferActiveFrontendActionIdFromDialog = (dialog) => {
+        if (!(dialog instanceof Element)) return '';
+        const activeRow =
+          getConfigureFrontendRadioRows(dialog).find(
+            (button) => button.getAttribute('aria-checked') === 'true',
+          ) || null;
+        return activeRow ? getConfigureFrontendActionIdForRow(activeRow, dialog) : '';
+      };
+      const ensureConfigureFrontendRowSelection = async (actionOrId) => {
+        const action =
+          typeof actionOrId === 'string' ? getModelActionById(actionOrId) : actionOrId;
+        const dialog = findConfigureDialog();
+        const row = findConfigureFrontendRowForAction(action, dialog);
+        if (!row) return false;
+        if (row.getAttribute('aria-checked') === 'true') return true;
+        await activateAfterFlash(row, DELAY_CONFIGURE_STEP_MS);
+        await sleepAsync(120);
+        return true;
+      };
+      const ensureThinkingEffortSelection = async (optionId) => {
+        const normalizedOptionId =
+          typeof window.ModelLabels?.normalizeThinkingEffortId === 'function'
+            ? window.ModelLabels.normalizeThinkingEffortId(optionId)
+            : String(optionId || '').trim();
+        if (!normalizedOptionId) return false;
+        const combobox = await waitForAsync(findThinkingEffortCombobox, {
+          timeout: 1600,
+          interval: 30,
+        });
+        if (!combobox) return false;
+        if (mapThinkingEffortLabelToId(getComboboxDisplayText(combobox)) === normalizedOptionId)
+          return true;
+        const opened = await openComboboxListbox(combobox);
+        const listbox = opened?.listbox || null;
+        if (!listbox) return false;
+        const option = findThinkingEffortOption(listbox, normalizedOptionId);
+        if (!option) {
+          await closeComboboxListbox(combobox);
+          return false;
         }
+        await activateAfterFlash(option, DELAY_ACTIVATE_TARGET_MS);
+        await sleepAsync(100);
+        return true;
+      };
+      const collectThinkingEffortIdsDuringScrape = async (combobox) => {
+        if (!(combobox instanceof Element)) return [];
 
-        hideLiveScrapeElement(menu.closest('[data-radix-popper-content-wrapper]') || menu);
-        const ids = Array.from(menu.querySelectorAll(':scope [role="menuitemradio"]'))
-          .map((item) => {
-            const iconToken = item.querySelector('svg use[href*="#"]')?.getAttribute('href') || '';
-            const optionByIcon =
-              typeof window.ModelLabels?.getThinkingEffortOptionByIconToken === 'function'
-                ? window.ModelLabels.getThinkingEffortOptionByIconToken(iconToken)
-                : null;
-            if (optionByIcon?.id) return optionByIcon.id;
-            const label = (
-              item.querySelector('.truncate')?.textContent ||
-              item.textContent ||
-              ''
-            )
-              .replace(/\s+/g, ' ')
-              .trim();
-            return typeof window.ModelLabels?.mapThinkingEffortLabelToId === 'function'
-              ? window.ModelLabels.mapThinkingEffortLabelToId(label)
-              : '';
-          })
+        await ensureConfigureComboboxSelection(combobox, DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+        await sleepAsync(80);
+        await ensureConfigureFrontendRowSelection('thinking');
+
+        const effortCombobox = await waitForAsync(findThinkingEffortCombobox, {
+          timeout: 1600,
+          interval: 30,
+        });
+        if (!(effortCombobox instanceof Element)) return [];
+
+        const opened = await openComboboxListbox(effortCombobox, { timeout: 1600 });
+        const listbox = opened?.listbox || null;
+        if (!(listbox instanceof Element)) return [];
+
+        hideConfigureListboxUiForScrape(listbox);
+        const ids = Array.from(listbox.querySelectorAll(':scope [role="option"]'))
+          .map(getThinkingEffortIdForOption)
           .filter(Boolean);
 
-        await closeThinkingEffortMenuAfterScrape(button, openedByScrape);
+        if (opened.opened) await closeComboboxListbox(effortCombobox);
+
         return typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
           ? window.ModelLabels.sortThinkingEffortIds(ids)
           : Array.from(new Set(ids));
@@ -11530,7 +11955,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           const menuReady = await waitForMainMenuActionTarget(getModelActionById('configure'));
           const state = menuReady?.state || getVisibleModelMenuState();
           hideOpenModelUiForScrape(state);
-          const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+          const configureItem = findConfigureMenuItem(state);
           if (!configureItem) return { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
 
           const combobox = await openConfigureDialogFromMenuItem(configureItem);
@@ -11539,6 +11964,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           hideConfigureDialogUiForScrape();
           const frontendByConfig = {};
           const initialActiveConfigId = inferActiveConfigFromCombobox(combobox);
+          const initialFrontendActionId = inferActiveFrontendActionIdFromDialog(findConfigureDialog());
 
           let listbox = await waitForConfigureListboxQuick(combobox);
           if (!listbox) {
@@ -11582,18 +12008,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           for (const option of scrapeOrder) {
             await selectConfigureOptionDuringScrape(combobox, option);
             hideConfigureDialogUiForScrape();
-            frontendByConfig[option.id] = collectConfigureFrontendRows(
-              findConfigureDialog(),
-              option.id,
-            );
+            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog());
           }
           if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
-            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(
-              findConfigureDialog(),
-              initialActiveConfigId,
-            );
+            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(findConfigureDialog());
           }
+          const thinkingEffortIds = await collectThinkingEffortIdsDuringScrape(combobox);
           await ensureConfigureComboboxSelection(combobox, initialActiveConfigId);
+          if (initialFrontendActionId) {
+            await ensureConfigureFrontendRowSelection(initialFrontendActionId);
+          }
 
           const catalog = {
             version: 2,
@@ -11605,8 +12029,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                   ? window.ModelLabels.getCanonicalActionLabel(option.id, option.label)
                   : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
                   ? window.ModelLabels.normalizeStoredActionName(option.slot, option.label)
-                  : option.label,
+                : option.label,
             })),
+            thinkingEffortIds,
             frontendByConfig,
           };
           const modelNames = deriveFlatModelNamesFromCatalog(catalog);
@@ -11748,15 +12173,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       };
       const findConfigureFrontendRowForAction = (action, dialog) => {
         if (!(dialog instanceof Element) || !action) return null;
-        const expected = String(action.rowLabel || action.label || '')
-          .trim()
-          .toLowerCase();
-        if (!expected) return null;
-        return (
-          Array.from(dialog.querySelectorAll('button.__menu-item.hoverable.text-start')).find(
-            (button) => __cspTextNoHint(button).trim().toLowerCase() === expected,
-          ) || null
-        );
+        const expectedVersion = latestFrontendActionSignatures[action.id]?.modelVersion || '';
+        if (expectedVersion) {
+          const match = getConfigureFrontendRadioRows(dialog).find(
+            (row) => getModelVersionFromFrontendRow(row) === expectedVersion,
+          );
+          if (match) return match;
+        }
+        if (action.id === 'pro') return findConfigureProRow(dialog);
+        return null;
       };
 
       const runConfigureOptionAction = async (
@@ -11793,7 +12218,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             : await waitForMainMenuActionTarget(action);
           const state = ready?.state || getVisibleModelMenuState();
           hideOpenModelUiForScrape(state);
-          const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+          const configureItem = findConfigureMenuItem(state);
           if (!configureItem) return;
 
           const combobox = await openConfigureDialogFromMenuItem(configureItem);
@@ -11827,7 +12252,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const runConfigureFrontendRowAction = async (action) => {
         const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
         const state = ready?.state || getVisibleModelMenuState();
-        const configureItem = findMainItemByTestId('model-configure-modal', state)?.el;
+        const configureItem = findConfigureMenuItem(state);
         if (!configureItem) return;
 
         const combobox = await openConfigureDialogFromMenuItem(configureItem);
@@ -11849,25 +12274,142 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
         flashBottomBar();
       };
+      const runThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
+        const option = getThinkingEffortOptionById(optionId);
+        if (!option?.id) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 120 : 180);
+
+          const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
+          const state = ready?.state || getVisibleModelMenuState();
+          hideOpenModelUiForScrape(state);
+          const configureItem = findConfigureMenuItem(state);
+          if (!configureItem) return false;
+
+          const combobox = await openConfigureDialogFromMenuItem(configureItem);
+          if (!combobox) return false;
+          if (hideUi) hideConfigureDialogUiForScrape();
+
+          const modelSelected = await ensureConfigureComboboxSelection(
+            combobox,
+            DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+          );
+          if (!modelSelected) return false;
+          persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+
+          const thinkingSelected = await ensureConfigureFrontendRowSelection('thinking');
+          if (!thinkingSelected) return false;
+
+          const effortSelected = await ensureThinkingEffortSelection(option.id);
+          if (!effortSelected) return false;
+
+          await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
+          if (hideUi) {
+            hideConfigureDialogUiForScrape();
+            return true;
+          }
+
+          const closeButton = await waitForButtonByTestIdSafe('close-button', {
+            timeout: 1500,
+            interval: 30,
+          });
+          if (closeButton) await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
+          flashBottomBar();
+          return true;
+        });
+      };
+      window.__cspRunThinkingEffortAction = (optionId, options = {}) => {
+        const option = getThinkingEffortOptionById(optionId);
+        if (!option?.id) return false;
+        void runThinkingEffortOptionAction(option.id, options);
+        return true;
+      };
 
       let hintScheduleToken = 0;
 
+      const isOpenVisibleListbox = (listbox) =>
+        listbox instanceof Element &&
+        listbox.getAttribute('role') === 'listbox' &&
+        listbox.getAttribute('data-state') === 'open' &&
+        isUsablyVisibleElement(listbox);
+
+      const applyConfigureListboxHints = () => {
+        const combobox = findConfigureCombobox();
+        const listbox = getControlledListboxForCombobox(combobox);
+        if (!isOpenVisibleListbox(listbox)) return false;
+        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+        let applied = false;
+        options.forEach((option) => {
+          const action = getConfigureActionForOption(option, listbox);
+          const slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+          const label = displayFromCode(KEY_CODES[slot]);
+          if (!label || label === '—') return;
+          addLabel(option, label);
+          applied = true;
+        });
+        return applied;
+      };
+
+      const applyThinkingEffortListboxHints = () => {
+        const combobox = findThinkingEffortCombobox();
+        const listbox = getControlledListboxForCombobox(combobox);
+        if (!isOpenVisibleListbox(listbox)) return false;
+        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+        let applied = false;
+        options.forEach((option) => {
+          const optionId = getThinkingEffortIdForOption(option);
+          const label = displayFromCode(getThinkingEffortStorageCode(optionId));
+          if (!label || label === '—') return;
+          addLabel(option, label);
+          applied = true;
+        });
+        return applied;
+      };
+
+      const applyConfigureFrontendRowHints = () => {
+        const dialog = findConfigureDialog();
+        if (!(dialog instanceof Element) || !isUsablyVisibleElement(dialog)) return false;
+        let applied = false;
+        ['instant', 'thinking', 'pro'].forEach((actionId) => {
+          const action = getModelActionById(actionId);
+          const row = findConfigureFrontendRowForAction(action, dialog);
+          const slot = Number(action?.slot);
+          if (!row || !Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+          const label = displayFromCode(KEY_CODES[slot]);
+          if (!label || label === '—') return;
+          addLabel(row, label);
+          applied = true;
+        });
+        return applied;
+      };
+
+      const applyOpenSelectListboxHints = () => {
+        let applied = false;
+        applied = applyConfigureFrontendRowHints() || applied;
+        applied = applyConfigureListboxHints() || applied;
+        applied = applyThinkingEffortListboxHints() || applied;
+        return applied;
+      };
+
       const applyHints = (state = getVisibleModelMenuState()) => {
-        const primaryItems = getPrimaryMenuItems(state);
-        const primaryActions = getPrimaryPresentationActionsForState(state);
-        if (!primaryItems.length || !primaryActions.length) return false;
-        const expectedHintTexts = getExpectedPrimaryHintTexts(primaryItems, primaryActions);
-        if (primaryHintsAlreadyApplied(primaryItems, expectedHintTexts)) {
+        const primaryPairs = getPrimaryMenuActionPairs(state);
+        const selectHintsApplied = applyOpenSelectListboxHints();
+        if (!primaryPairs.length) return selectHintsApplied;
+        const expectedHintTexts = getExpectedPrimaryHintTexts(primaryPairs);
+        if (primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts)) {
           syncActiveConfigFromMenuState(state, { persist: true });
           __cspMaybePersistModelNames();
           return true;
         }
         removeAllLabels();
-        for (let i = 0; i < primaryItems.length && i < primaryActions.length; ++i) {
-          const slot = primaryActions[i]?.slot;
+        for (const { item, action } of primaryPairs) {
+          const slot = action?.slot;
           if (slot == null) continue;
-          addLabel(primaryItems[i].el, displayFromCode(KEY_CODES[slot]));
+          addLabel(item.el, displayFromCode(KEY_CODES[slot]));
         }
+        applyOpenSelectListboxHints();
         syncActiveConfigFromMenuState(state, { persist: true });
         // Persist labels -> names once menus are present (submenu must be open for full set)
         __cspMaybePersistModelNames();
@@ -11895,7 +12437,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const waitForReadyState = () => {
           const state = getVisibleModelMenuState();
           const target = getTargetMenuItemForAction(nextAction, state);
-          if (!state.main || !target) {
+          if (!target) {
             if (mainPolls++ > 50) return done(null);
             setTimeout(waitForReadyState, 30);
             return;
@@ -11922,7 +12464,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         setTimeout(
           () => {
             openMenuForAction(action, (ready) => {
-              if (!ready) return;
+              if (!ready) {
+                if (action.actionKind === 'main-row') void runConfigureFrontendRowAction(action);
+                return;
+              }
               if (action.actionKind === 'configure-option') {
                 if (!options.hideUi) applyHints();
                 void runConfigureOptionAction(action, {
@@ -11944,11 +12489,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                 activateMenuItem(targetEl);
                 flashBottomBar();
                 const stateAfterClick = getVisibleModelMenuState();
-                const targetIndex = getPrimaryMenuItems(stateAfterClick).findIndex(
-                  (item) => item.el === targetEl,
+                const clickedPair = getPrimaryMenuActionPairs(stateAfterClick).find(
+                  (pair) => pair.item.el === targetEl,
                 );
-                const primaryActions = getPrimaryPresentationActionsForState(ready.state);
-                const clickedAction = targetIndex >= 0 ? primaryActions[targetIndex] : null;
+                const clickedAction = clickedPair?.action || null;
                 if (clickedAction?.id === 'configure') return;
                 if (clickedAction?.actionKind === 'configure-option') {
                   persistActiveModelConfigId(clickedAction.id);
@@ -11990,14 +12534,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         }
         const t = e.target instanceof Element ? e.target : null;
         const clickedPrimaryItem = t?.closest(
-          '[data-radix-menu-content][role="menu"] > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item]',
+          '[data-radix-menu-content][role="menu"] > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
+          '[data-radix-menu-content][role="menu"] > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])',
         );
         if (clickedPrimaryItem) {
           const state = getVisibleModelMenuState();
-          const primaryItems = getPrimaryMenuItems(state);
-          const clickedIndex = primaryItems.findIndex((item) => item.el === clickedPrimaryItem);
-          const primaryActions = getPrimaryPresentationActionsForState(state);
-          const clickedAction = clickedIndex >= 0 ? primaryActions[clickedIndex] : null;
+          const clickedPair = getPrimaryMenuActionPairs(state).find(
+            (pair) => pair.item.el === clickedPrimaryItem,
+          );
+          const clickedAction = clickedPair?.action || null;
           if (clickedAction) {
             setTimeout(() => {
               if (clickedAction.id === 'configure') return;
@@ -12012,15 +12557,25 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const clickedConfigureOption = t?.closest('[role="option"][data-radix-collection-item]');
         if (clickedConfigureOption) {
           const listbox = clickedConfigureOption.closest('[role="listbox"]');
-          const inferredConfigId = inferActiveConfigFromConfigureOption(
-            clickedConfigureOption,
-            listbox,
-          );
-          if (inferredConfigId) {
-            setTimeout(() => {
-              persistActiveModelConfigId(inferredConfigId);
-            }, 0);
+          const configureListbox = getControlledListboxForCombobox(findConfigureCombobox());
+          if (listbox && listbox === configureListbox) {
+            const inferredConfigId = inferActiveConfigFromConfigureOption(
+              clickedConfigureOption,
+              listbox,
+            );
+            if (inferredConfigId) {
+              setTimeout(() => {
+                persistActiveModelConfigId(inferredConfigId);
+              }, 0);
+            }
           }
+        }
+        const clickedCombobox = t?.closest('button[role="combobox"][aria-controls]');
+        if (clickedCombobox) {
+          setTimeout(
+            () => scheduleHints({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }),
+            0,
+          );
         }
         const submenuTriggerClicked = t?.closest(
           '[role="menuitem"][data-has-submenu], ' +
@@ -12038,12 +12593,20 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       // Observe for open Radix menus; when the count of open menus changes, refresh labels
       (() => {
         let lastCount = 0;
+        const getOpenSelectListboxCount = () =>
+          [findConfigureCombobox(), findThinkingEffortCombobox()]
+            .map(getControlledListboxForCombobox)
+            .filter(isOpenVisibleListbox).length;
+        const getConfigureDialogCount = () => (findConfigureDialog() ? 1 : 0);
+        const isConfigureUiLikelyActive = () =>
+          !!findConfigureDialog() || getOpenSelectListboxCount() > 0;
         const obs = new MutationObserver(() => {
-          if (!isModelMenuLikelyActive()) {
+          if (!isModelMenuLikelyActive() && !isConfigureUiLikelyActive()) {
             lastCount = 0;
             return;
           }
-          const count = getOpenModelMenus().length;
+          const count =
+            getOpenModelMenus().length + getConfigureDialogCount() + getOpenSelectListboxCount();
           if (count !== lastCount) {
             lastCount = count;
             setTimeout(
@@ -12066,7 +12629,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
   // Alt+/ opens the menu and forces the “Legacy models” submenu to be visible (robust to current DOM)
   window.toggleModelSelector = () => {
-    const btn = document.querySelector(MENU_BTN_SELECTOR);
+    const btn = getModelMenuButton();
     if (!btn) return;
 
     // Helpers
@@ -12099,15 +12662,21 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
     const waitForMainOpen = (cb) => {
       const currentState = getVisibleModelMenuState();
-      if (btn.getAttribute('aria-expanded') === 'true' && currentState.main)
+      const isExpanded = () => btn.getAttribute('aria-expanded') === 'true';
+      if (isExpanded() && (currentState.main || hasOpenModelMenuCandidate()))
         return cb(currentState);
       btn.focus();
       pressSpace(btn);
 
       let tries = 0;
+      let usedClickFallback = false;
       const poll = () => {
         const state = getVisibleModelMenuState();
-        if (state.main || tries++ > 50) return cb(state);
+        if (state.main || isExpanded() || tries++ > 50) return cb(state);
+        if (!usedClickFallback && tries >= 4) {
+          usedClickFallback = true;
+          safeClick(btn);
+        }
         setTimeout(poll, 30);
       };
       poll();
@@ -12207,7 +12776,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       KEY_CODES.splice(0, KEY_CODES.length, ...next);
 
       // If menu is open, refresh labels to reflect new keys
-      const btn = document.querySelector(MENU_BTN_SELECTOR);
+      const btn = getModelMenuButton();
       if (btn?.getAttribute('aria-expanded') === 'true') {
         setTimeout(() => {
           window.__mp_applyHints?.();

@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.01.2026
+- Fixed: Model picker shortcuts, refresh, and Thinking effort shortcuts work with ChatGPT's updated picker menus.
+
 #### 04.22.2026
 - Fixed: Sidebar, search, new chat, and input shortcuts now work even if you've customized ChatGPT keyboard shortcuts.
 - Changed: Shortcut overlay now opens with `Alt/Option + .` by default instead of Control/Command.

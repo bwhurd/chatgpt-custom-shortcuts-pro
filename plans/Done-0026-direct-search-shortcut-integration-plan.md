@@ -5,5 +5,11 @@
 - Remove the temporary proof-of-concept IIFE from `extension/content.js` once the configured shortcut path owns search activation.
 - Add one concise changelog note and only the minimum shortcut-doc updates needed to point future work at the direct-DOM path and default-key migration rule.
 - Keep the shortcuts overlay opener row (`shortcutKeyShowShortcuts`) rendered through the same assigned-shortcut section path as other Alt shortcuts instead of relying on a parallel overlay-only fallback.
+- Repair narrow viewport direct-DOM activation without weakening the wide viewport path:
+  - keep visible wide/sidebar button activation as the first path for sidebar toggle, new chat, and Search Chats
+  - include the narrow `button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]` toggle target from the 2026-04-26 narrow inspector captures
+  - when new chat or Search Chats has no visible direct button, open the narrow sidebar popover and click the rendered native action if it appears
+  - for new chat only, fall back to same-origin `/` navigation if ChatGPT exposes no clickable control in the narrow closed state
+- Update shortcut action metadata so deterministic validation knows about the narrow popover sidebar control.
 - Validate with `node --check extension/content.js` and a targeted readback of the changed shortcut/default wiring.
 - Related specs: `specs/0001-adding-new-settings-spec.md`, `specs/0004-model-picker-and-shortcuts-spec.md`

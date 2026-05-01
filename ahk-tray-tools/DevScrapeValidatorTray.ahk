@@ -6,11 +6,12 @@ SetWorkingDir, %A_ScriptDir%
 SetTitleMatchMode, 2
 
 psExe := A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
+projectRoot := ParentDirectory(A_ScriptDir)
 startPs := A_ScriptDir "\StartDevScrapeValidator.ps1"
 stopPs := A_ScriptDir "\StopDevScrapeValidator.ps1"
 openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
 launcherTitle := "CGCSP DevScrape Validator"
-trayIconPath := A_ScriptDir "\tests\ChatGPT Custom Shortcuts Pro.ico"
+trayIconPath := A_ScriptDir "\ChatGPT Custom Shortcuts Pro.ico"
 
 if !FileExist(startPs) {
     MsgBox, 16, DevScrape Validator Tray, Could not find StartDevScrapeValidator.ps1 in %A_ScriptDir%.
@@ -112,17 +113,18 @@ SetTrayWorking(tipText) {
 }
 
 RunStartScript() {
-    global psExe, startPs
-    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%startPs%", %A_ScriptDir%, Hide
+    global psExe, startPs, projectRoot
+    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%startPs%", %projectRoot%, Hide
 }
 
 StopValidatorProcesses() {
-    global psExe, stopPs
-    RunWait, "%psExe%" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%stopPs%", %A_ScriptDir%, Hide
+    global psExe, stopPs, projectRoot
+    RunWait, "%psExe%" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%stopPs%", %projectRoot%, Hide
 }
 
 GetValidatorProcessCounts(ByRef launcherCount, ByRef runCount) {
-    root := A_ScriptDir
+    global projectRoot
+    root := projectRoot
     launcherCount := 0
     runCount := 0
     wmi := ComObjGet("winmgmts:")
@@ -150,14 +152,19 @@ IsValidatorRunning() {
 }
 
 RunPowerShellHelper(scriptPath, ByRef output) {
-    global psExe
+    global psExe, projectRoot
     tempFile := A_Temp "\cgcsp-devscrape-tray-" A_TickCount ".txt"
     output := ""
-    RunWait, %ComSpec% /C ""%psExe%" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%scriptPath%" > "%tempFile%" 2>&1", %A_ScriptDir%, Hide UseErrorLevel
+    RunWait, %ComSpec% /C ""%psExe%" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%scriptPath%" > "%tempFile%" 2>&1", %projectRoot%, Hide UseErrorLevel
     exitCode := ErrorLevel
     FileRead, output, %tempFile%
     FileDelete, %tempFile%
     return exitCode
+}
+
+ParentDirectory(path) {
+    SplitPath, path, , parentPath
+    return parentPath
 }
 
 ShowError(output) {
