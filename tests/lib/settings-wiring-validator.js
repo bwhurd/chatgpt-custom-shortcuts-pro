@@ -65,6 +65,24 @@ const SUPPLEMENTAL_SETTINGS = [
       schemaDeprecatedShortcut: true,
     },
   },
+  {
+    key: 'shortcutKeyStudy',
+    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+      schemaDeprecatedShortcut: true,
+    },
+  },
+  {
+    key: 'shortcutKeyThinkLonger',
+    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+      schemaDeprecatedShortcut: true,
+    },
+  },
 ];
 
 const SPECIAL_RULES = {
@@ -416,7 +434,9 @@ function validateSupplementalSettings(context, failures) {
 
 function validateFixtureCoverage(context, failures) {
   const accountedKeys = new Set(context.popupInventory.map((item) => item.key));
-  SUPPLEMENTAL_SETTINGS.forEach((entry) => accountedKeys.add(entry.key));
+  SUPPLEMENTAL_SETTINGS.forEach((entry) => {
+    accountedKeys.add(entry.key);
+  });
 
   const unexpectedFixtureKeys = Array.from(context.fixtureKeys)
     .filter((key) => !accountedKeys.has(key))
@@ -833,7 +853,7 @@ function addFailure(failures, key, message) {
 }
 
 function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object || {}, key);
+  return Object.hasOwn(object || {}, key);
 }
 
 function readUtf8(filePath) {

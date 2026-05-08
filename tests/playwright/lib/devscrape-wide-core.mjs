@@ -2,6 +2,7 @@ import { access, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promi
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import modelPickerSelectors from '../../../extension/shared/model-picker-selectors.js';
 import {
   buildShortcutValidationInventory,
   parseSettingsSchemaSource,
@@ -11,6 +12,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const devScrapeWidePath = path.join(repoRoot, 'extension', 'lib', 'DevScrapeWide.js');
+const modelPickerSelectorsPath = path.join(
+  repoRoot,
+  'extension',
+  'shared',
+  'model-picker-selectors.js',
+);
 const contentSourcePath = path.join(repoRoot, 'extension', 'content.js');
 const settingsSchemaPath = path.join(repoRoot, 'extension', 'settings-schema.js');
 const englishLocaleMessagesPath = path.join(
@@ -123,8 +130,10 @@ async function readEnglishLocaleMessages() {
 
 export async function injectDevScrapeWideIntoPage(page) {
   const { sanitizedSource } = await loadDevScrapeWideContract();
+  const selectorSource = await readFile(modelPickerSelectorsPath, 'utf8');
   await page.evaluate(
-    ({ source, exportNames }) => {
+    ({ selectorSource, source, exportNames }) => {
+      new Function(selectorSource)();
       const factory = new Function(`
 ${source}
 return {
@@ -134,6 +143,7 @@ ${exportNames.map((name) => `  ${name},`).join('\n')}
       window.__CGCSP_DEVSCRAPE_WIDE__ = factory();
     },
     {
+      selectorSource,
       source: sanitizedSource,
       exportNames: PAGE_EXPORT_NAMES,
     },
@@ -547,15 +557,137 @@ async function openTurnMenu(page, turnTestId, menuKind = 'more-actions') {
 
 async function openModelSwitcherMenu(page) {
   await closeTransientUi(page);
-  const button = page.locator('button[data-testid="model-switcher-dropdown-button"]').first();
-  if (!((await button.count()) > 0) || !(await button.isVisible().catch(() => false))) {
+  const selectors = Array.isArray(modelPickerSelectors.MODEL_MENU_BUTTON_SELECTORS)
+    ? modelPickerSelectors.MODEL_MENU_BUTTON_SELECTORS
+    : ['button[data-testid="model-switcher-dropdown-button"]'];
+  let button = null;
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (await candidate.isVisible().catch(() => false)) {
+        button = candidate;
+        break;
+      }
+    }
+    if (button) break;
+  }
+  if (!button) {
     throw new Error('Could not find a visible model switcher button');
   }
-  await button.click({ force: true });
+  const triggerId = (await button.getAttribute('id').catch(() => '')) || '';
+  const readOpenMenuHtml = async () => {
+    const menuHtml = await page.waitForFunction(
+      ({ menuSelector, configureMenuItemSelector, triggerId }) => {
+        const isVisible = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        };
+        const menus = Array.from(document.querySelectorAll(menuSelector)).filter(isVisible);
+        const match =
+          menus.find((menu) => triggerId && menu.getAttribute('aria-labelledby') === triggerId) ||
+          menus.find((menu) => menu.querySelector(configureMenuItemSelector)) ||
+          menus.find((menu) => menu.querySelector('[data-testid^="model-switcher-"]')) ||
+          menus[menus.length - 1] ||
+          null;
+        return match?.outerHTML || '';
+      },
+      {
+        menuSelector: modelPickerSelectors.MODEL_MENU_SELECTOR,
+        configureMenuItemSelector: modelPickerSelectors.MODEL_CONFIGURE_MENU_ITEM_SELECTOR,
+        triggerId,
+      },
+      { timeout: 1400 },
+    );
+    return (await menuHtml.jsonValue().catch(() => '')) || '';
+  };
+
+  const attempts = [
+    async () => button.click({ force: true }),
+    async () => {
+      await button.focus().catch(() => {});
+      await button.press('Space');
+    },
+    async () => {
+      await button.focus().catch(() => {});
+      await button.press('Enter');
+    },
+  ];
+  let lastError = null;
+  for (const attempt of attempts) {
+    await closeOpenMenus(page);
+    await button.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(200);
+    await attempt().catch((error) => {
+      lastError = error;
+    });
+    await page.waitForTimeout(300);
+    try {
+      const html = await readOpenMenuHtml();
+      if (html) return html;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(`Model switcher menu did not open${lastError ? `: ${lastError.message || lastError}` : ''}`);
+}
+
+async function openModelThinkingEffortMenu(page) {
+  await openModelSwitcherMenu(page);
+  const action = page.locator(modelPickerSelectors.MODEL_THINKING_EFFORT_ACTION_SELECTOR).first();
+  if (!((await action.count().catch(() => 0)) > 0)) {
+    throw new Error('Could not find model picker thinking effort action');
+  }
+  const row = page.locator(modelPickerSelectors.MODEL_THINKING_EFFORT_ROW_SELECTOR).first();
+  if ((await row.count().catch(() => 0)) > 0) {
+    await row.hover({ force: true }).catch(() => {});
+  }
+  await action.hover({ force: true }).catch(() => {});
+  const controlledId = (await action.getAttribute('aria-controls').catch(() => '')) || '';
+  await action.click({ force: true }).catch(async () => {
+    await action.focus().catch(() => {});
+    await action.press('Enter');
+  });
   await page.waitForTimeout(300);
-  const menu = page.locator('[data-radix-menu-content][data-state="open"][role="menu"]').last();
-  await menu.waitFor({ state: 'visible', timeout: 2000 });
-  return (await menu.evaluate((node) => node.outerHTML).catch(() => '')) || '';
+  const menuHtml = await page.waitForFunction(
+    ({ menuSelector, controlledId }) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const controlled = controlledId ? document.getElementById(controlledId) : null;
+      if (controlled && isVisible(controlled)) return controlled.outerHTML;
+      const menus = Array.from(document.querySelectorAll(menuSelector)).filter(isVisible);
+      return (
+        menus
+          .filter((menu) => /Standard|Extended/i.test(menu.textContent || ''))
+          .at(-1)?.outerHTML || ''
+      );
+    },
+    {
+      menuSelector: modelPickerSelectors.MODEL_MENU_SELECTOR,
+      controlledId,
+    },
+    { timeout: 1800 },
+  );
+  const html = (await menuHtml.jsonValue().catch(() => '')) || '';
+  if (!html) throw new Error('Model picker thinking effort submenu did not open');
+  return html;
 }
 
 async function openComposerPlusMenu(page) {
@@ -695,20 +827,36 @@ async function openConversationOptionsMenu(page) {
   throw new Error('Could not open conversation options menu');
 }
 
-async function findConfigureCombobox(page) {
-  const locator = page.locator(
-    [
-      '[role="dialog"] button[role="combobox"][aria-controls]',
-      '[role="dialog"] #model-selection-label ~ button[role="combobox"][aria-controls]',
-    ].join(', '),
-  ).first();
+async function findComboboxByLabelId(page, labelId) {
+  const escapedLabelId = String(labelId || '').replace(/"/g, '\\"');
+  const locator = page
+    .locator(
+      [
+        `[role="dialog"] button[role="combobox"][aria-labelledby~="${escapedLabelId}"][aria-controls]`,
+        `[role="dialog"] #${escapedLabelId} ~ button[role="combobox"][aria-controls]`,
+        `[role="dialog"] #${escapedLabelId} + button[role="combobox"][aria-controls]`,
+      ].join(', '),
+    )
+    .first();
   if (!((await locator.count()) > 0)) return null;
   return locator;
 }
 
+async function findConfigureCombobox(page) {
+  return findComboboxByLabelId(page, modelPickerSelectors.MODEL_SELECTION_LABEL_ID);
+}
+
+async function findThinkingEffortCombobox(page) {
+  return findComboboxByLabelId(page, modelPickerSelectors.THINKING_EFFORT_SELECTION_LABEL_ID);
+}
+
 async function openConfigureDialog(page) {
   await openModelSwitcherMenu(page);
-  const configureItem = page.locator('[data-radix-menu-content][data-state="open"][role="menu"] [data-testid="model-configure-modal"]').first();
+  const configureItem = page
+    .locator(
+      `${modelPickerSelectors.MODEL_MENU_SELECTOR} ${modelPickerSelectors.MODEL_CONFIGURE_MENU_ITEM_SELECTOR}`,
+    )
+    .first();
   if (!((await configureItem.count()) > 0) || !(await configureItem.isVisible().catch(() => false))) {
     throw new Error('Could not find visible model-configure-modal item');
   }
@@ -728,6 +876,26 @@ async function openConfigureListbox(page) {
   const listboxId = await combobox.getAttribute('aria-controls');
   if (!listboxId) {
     throw new Error('Configure combobox did not expose aria-controls');
+  }
+  const listbox = page.locator(`#${listboxId}`).first();
+  await listbox.waitFor({ state: 'visible', timeout: 2000 });
+  return listbox;
+}
+
+async function openThinkingEffortListbox(page) {
+  let combobox = await findThinkingEffortCombobox(page);
+  if (!combobox) {
+    await openConfigureDialog(page);
+    combobox = await findThinkingEffortCombobox(page);
+  }
+  if (!combobox) {
+    throw new Error('Could not find thinking effort combobox in Configure dialog');
+  }
+  await combobox.click({ force: true }).catch(() => {});
+  await page.waitForTimeout(300);
+  const listboxId = await combobox.getAttribute('aria-controls');
+  if (!listboxId) {
+    throw new Error('Thinking effort combobox did not expose aria-controls');
   }
   const listbox = page.locator(`#${listboxId}`).first();
   await listbox.waitFor({ state: 'visible', timeout: 2000 });
@@ -814,10 +982,21 @@ async function captureByType(page, captureType, state) {
     );
   }
   if (captureType === 'configure-listbox') {
-    return (
-      (await page.locator('[role="listbox"]').first().evaluate((node) => node.outerHTML).catch(() => '')) ||
-      ''
-    );
+    return page.evaluate(() => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const listbox = Array.from(document.querySelectorAll('[role="listbox"]')).filter(isVisible).at(-1);
+      return listbox?.outerHTML || '';
+    });
   }
   return '';
 }
@@ -940,6 +1119,10 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           state.latestMenuHtml = await openModelSwitcherMenu(page);
           continue;
         }
+        if (step.type === 'open-model-thinking-effort-menu') {
+          state.latestMenuHtml = await openModelThinkingEffortMenu(page);
+          continue;
+        }
         if (step.type === 'open-composer-plus-menu') {
           state.latestMenuHtml = await openComposerPlusMenu(page);
           continue;
@@ -958,6 +1141,10 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
         }
         if (step.type === 'open-configure-listbox') {
           await openConfigureListbox(page);
+          continue;
+        }
+        if (step.type === 'open-thinking-effort-listbox') {
+          await openThinkingEffortListbox(page);
           continue;
         }
         if (step.type === 'select-configure-option') {
@@ -1145,6 +1332,10 @@ async function applyProbeStateStep(page, step, state) {
     state.latestMenuHtml = await openModelSwitcherMenu(page);
     return;
   }
+  if (step.type === 'open-model-thinking-effort-menu') {
+    state.latestMenuHtml = await openModelThinkingEffortMenu(page);
+    return;
+  }
   if (step.type === 'open-composer-plus-menu') {
     state.latestMenuHtml = await openComposerPlusMenu(page);
     return;
@@ -1155,6 +1346,22 @@ async function applyProbeStateStep(page, step, state) {
   }
   if (step.type === 'open-conversation-options-menu') {
     state.latestMenuHtml = await openConversationOptionsMenu(page);
+    return;
+  }
+  if (step.type === 'open-configure-dialog') {
+    await openConfigureDialog(page);
+    return;
+  }
+  if (step.type === 'open-configure-listbox') {
+    await openConfigureListbox(page);
+    return;
+  }
+  if (step.type === 'open-thinking-effort-listbox') {
+    await openThinkingEffortListbox(page);
+    return;
+  }
+  if (step.type === 'select-configure-option') {
+    await selectConfigureOption(page, step.optionId);
     return;
   }
   throw new Error(`Unsupported live probe state step: ${step.type}`);
@@ -1580,6 +1787,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   let originalActiveShortcutCodes = {};
   let extensionId = '';
   let temporaryShortcutAssignments = {};
+  let extensionStorageWarning = '';
   try {
     const reachability = await verifyExtensionRuntimeReachable(context, options);
     extensionId = reachability.extensionId;
@@ -1604,19 +1812,10 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       };
     }
   } catch (error) {
-    const reason = `${error?.message || error} Live shortcut probes require the unpacked extension to be loaded and reachable.`;
-    const rows = inventory.shortcuts.map((shortcut) =>
-      executableProbeShortcuts.some((item) => item.actionId === shortcut.actionId)
-        ? buildSkippedLiveProbeRow(shortcut, 'environment-fail', reason)
-        : buildNonExecutableLiveProbeRow(shortcut),
-    );
-    return {
-      schemaVersion: 1,
-      generatedAt: new Date().toISOString(),
-      fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
-      rows,
-      summary: buildLiveProbeSummary(rows, 'environment-failed'),
-    };
+    extensionStorageWarning = `${error?.message || error} Active extension storage was not reachable; live probes will use shipped defaults only and skip validation-only temporary key assignment.`;
+    activeShortcutCodes = {};
+    originalActiveShortcutCodes = {};
+    temporaryShortcutAssignments = {};
   }
 
   const rows = [];
@@ -1636,11 +1835,14 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       const probeStateId = shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
       try {
       if (!dispatchCode && shortcut.activationProbeMode !== 'direct-menu-target') {
+        const reason = extensionStorageWarning
+          ? `No default shortcut key code is assigned and active extension storage was unavailable for a temporary assignment. ${extensionStorageWarning}`
+          : 'No assigned shortcut key code was found in active storage or defaults.';
         rows.push(
           buildSkippedLiveProbeRow(
             shortcut,
-            'skipped',
-            'No assigned shortcut key code was found in active storage or defaults.',
+            extensionStorageWarning ? 'environment-fail' : 'skipped',
+            reason,
             dispatchCode,
           ),
         );
@@ -1732,7 +1934,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         status: matched ? 'pass' : 'fail',
         reason: matched
           ? 'Shortcut activated the expected target.'
-          : `Shortcut did not activate expected target ${shortcut.activationProbeExpectedTargetRef}.`,
+          : `Shortcut did not activate expected target ${shortcut.activationProbeExpectedTargetRef}.${
+              extensionStorageWarning ? ` ${extensionStorageWarning}` : ''
+            }`,
         observedSelector: observedNode.selector || '',
         observedTextSnippet: observedNode.textSnippet || '',
         durationMs: Date.now() - startedAt,

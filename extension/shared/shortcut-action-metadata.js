@@ -1,10 +1,15 @@
 (function initShortcutActionMetadata(root, factory) {
-  const metadata = factory();
+  const modelPickerSelectors =
+    root.CSPModelPickerSelectors ||
+    (typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./model-picker-selectors.js')
+      : null);
+  const metadata = factory(modelPickerSelectors || {});
   if (typeof module === 'object' && module.exports) {
     module.exports = metadata;
   }
   root.CSPShortcutActionMetadata = metadata;
-})(typeof globalThis !== 'undefined' ? globalThis : this, () => {
+})(typeof globalThis !== 'undefined' ? globalThis : this, (modelPickerSelectors) => {
   const VALIDATION_MODES = Object.freeze(['scrape-targets', 'manual-only', 'not-applicable']);
   const ACTIVATION_PROBE_MODES = Object.freeze([
     'click-target',
@@ -119,6 +124,19 @@
     });
   }
 
+  function bySelectorList(targetId, selectors, options = {}) {
+    const selectorList = unique(selectors);
+    return freezeDescriptor({
+      targetId,
+      kind: 'selector-list',
+      identifier: options.identifier || selectorList.join(' | '),
+      searchNeedles: options.searchNeedles || selectorList,
+      matchGroups: options.matchGroups,
+      uiStateRefs: options.uiStateRefs,
+      notes: options.notes,
+    });
+  }
+
   function manualTarget(targetId, identifier, options = {}) {
     return freezeDescriptor({
       targetId,
@@ -131,6 +149,51 @@
     });
   }
 
+  const modelSwitcherButtonSelectors = Object.freeze(
+    unique(
+      modelPickerSelectors.MODEL_MENU_BUTTON_SELECTORS || [
+        'button[data-testid="model-switcher-dropdown-button"]',
+        'button[data-testid="Model-switCher-dropdown-button"]',
+        '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]',
+      ],
+    ),
+  );
+  const modelSwitcherButtonMatchGroups =
+    typeof modelPickerSelectors.getModelSwitcherButtonMatchGroups === 'function'
+      ? modelPickerSelectors.getModelSwitcherButtonMatchGroups()
+      : [
+          ['data-testid="model-switcher-dropdown-button"'],
+          ['data-testid="Model-switCher-dropdown-button"'],
+          ['__composer-pill', 'aria-haspopup="menu"', 'id="radix-'],
+        ];
+  const modelSwitcherMenuMatchGroups =
+    typeof modelPickerSelectors.getModelSwitcherMenuMatchGroups === 'function'
+      ? modelPickerSelectors.getModelSwitcherMenuMatchGroups()
+      : [['data-radix-menu-content', 'role="menu"', 'data-state="open"']];
+  const configureDialogMatchGroups =
+    typeof modelPickerSelectors.getConfigureDialogMatchGroups === 'function'
+      ? modelPickerSelectors.getConfigureDialogMatchGroups()
+      : [['role="dialog"', 'id="model-selection-label"']];
+  const configureModelListboxMatchGroups =
+    typeof modelPickerSelectors.getConfigureModelListboxMatchGroups === 'function'
+      ? modelPickerSelectors.getConfigureModelListboxMatchGroups()
+      : [['role="listbox"', 'role="option"']];
+  const modelThinkingEffortActionMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortActionMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortActionMatchGroups()
+      : [['data-model-picker-thinking-effort-action="true"', 'aria-haspopup="menu"']];
+  const modelThinkingEffortMenuMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortMenuMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortMenuMatchGroups()
+      : [['role="menu"', 'role="menuitemradio"', 'Standard', 'Extended']];
+  const modelThinkingEffortStandardMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortStandardMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortStandardMatchGroups()
+      : [['role="menuitemradio"', 'Standard']];
+  const modelThinkingEffortExtendedMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
+      : [['role="menuitemradio"', 'Extended']];
   const TARGET_DESCRIPTORS = Object.freeze([
     byTestId('close-sidebar-button', 'close-sidebar-button', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
@@ -207,26 +270,48 @@
       identifier: 'svg-token=#b140e7|aria-label=Next response',
       uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
     }),
-    byTestId('model-switcher-button', 'model-switcher-dropdown-button', {
+    bySelectorList('model-switcher-button', modelSwitcherButtonSelectors, {
+      identifier: 'model-picker-opener',
+      matchGroups: modelSwitcherButtonMatchGroups,
       uiStateRefs: [
         'sidebar-collapsed-body',
         'sidebar-expanded-body',
+        'topbar-bottom-disabled-thread-bottom',
         'topbar-bottom-disabled-header-area',
         'model-switcher-menu',
       ],
     }),
     byMenuChain('model-switcher-menu', 'data-radix-menu-content', {
+      matchGroups: modelSwitcherMenuMatchGroups,
       uiStateRefs: ['model-switcher-menu'],
     }),
-    byTestId('model-switcher-latest-option', 'model-switcher-gpt-5-3', {
-      matchGroups: [['data-testid="model-switcher-gpt-5-3"']],
-      uiStateRefs: ['model-switcher-menu'],
-      notes: 'Current account Latest model entry used before testing Thinking options.',
+    byMenuChain('model-switcher-configure-dialog', 'role=dialog|model-selection-label', {
+      matchGroups: configureDialogMatchGroups,
+      uiStateRefs: ['model-switcher-configure-dialog'],
     }),
-    byTestId('model-switcher-thinking-option', 'model-switcher-gpt-5-5-thinking', {
-      matchGroups: [['data-testid="model-switcher-gpt-5-5-thinking"']],
-      uiStateRefs: ['model-switcher-menu'],
-      notes: 'Current account Thinking model entry used before testing Thinking shortcuts.',
+    byMenuChain('model-switcher-configure-model-listbox', 'role=listbox|model-options', {
+      matchGroups: configureModelListboxMatchGroups,
+      uiStateRefs: ['model-switcher-configure-listbox'],
+    }),
+    byMenuChain(
+      'model-switcher-thinking-effort-action',
+      'data-model-picker-thinking-effort-action',
+      {
+        matchGroups: modelThinkingEffortActionMatchGroups,
+        uiStateRefs: ['model-switcher-menu'],
+      },
+    ),
+    byMenuChain('model-switcher-thinking-effort-menu', 'role=menu|thinking-effort-options', {
+      matchGroups: modelThinkingEffortMenuMatchGroups,
+      uiStateRefs: ['model-switcher-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-thinking-effort-standard', 'thinking-effort-standard', {
+      matchGroups: modelThinkingEffortStandardMatchGroups,
+      uiStateRefs: ['model-switcher-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-thinking-effort-extended', 'thinking-effort-extended', {
+      matchGroups: modelThinkingEffortExtendedMatchGroups,
+      uiStateRefs: ['model-switcher-thinking-effort-menu'],
     }),
     byIconToken('assistant-web-regenerate-trigger', '#ec66f0', {
       identifier: 'svg-token=#ec66f0 (assistant regenerate trigger)',
@@ -589,9 +674,9 @@
       actionId: 'shortcutKeyToggleModelSelector',
       targetRefs: ['model-switcher-button', 'model-switcher-menu'],
       uiStateRefs: targetStateRefs('model-switcher-button', 'model-switcher-menu'),
-      activationProbe: notLiveProbed(
-        'Opens the model menu and needs an open-menu assertion probe.',
-      ),
+      activationProbe: opensTargetProbe('model-switcher-menu', {
+        notes: 'No-token live probe dispatches the shortcut and asserts that the model menu opens.',
+      }),
     }),
     notApplicable('shortcutKeyShowOverlay', {
       requiresHandler: false,
@@ -752,32 +837,40 @@
       actionId: 'shortcutKeyThinkingExtended',
       targetRefs: [
         'model-switcher-button',
-        'model-switcher-latest-option',
-        'model-switcher-thinking-option',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-extended',
       ],
       uiStateRefs: targetStateRefs(
         'model-switcher-button',
-        'model-switcher-latest-option',
-        'model-switcher-thinking-option',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-extended',
       ),
       activationProbe: notLiveProbed(
-        'Requires selecting Latest, then Thinking, then the Extended thinking option.',
+        'Selecting a thinking effort changes the active model state; verify manually from the model selector submenu.',
       ),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyThinkingStandard',
       targetRefs: [
         'model-switcher-button',
-        'model-switcher-latest-option',
-        'model-switcher-thinking-option',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-standard',
       ],
       uiStateRefs: targetStateRefs(
         'model-switcher-button',
-        'model-switcher-latest-option',
-        'model-switcher-thinking-option',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-standard',
       ),
       activationProbe: notLiveProbed(
-        'Requires selecting Latest, then Thinking, then the Standard thinking option.',
+        'Selecting a thinking effort changes the active model state; verify manually from the model selector submenu.',
       ),
     }),
     notApplicable('shortcutKeyThinkingLight', {

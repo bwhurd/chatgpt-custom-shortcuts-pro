@@ -1,4 +1,4 @@
-(function () {
+(() => {
     // Minimal shared schema for wiring/maintenance.
     // Keep this file dependency-free so it can be loaded early (popup + content).
     window.CSP_SETTINGS_SCHEMA = window.CSP_SETTINGS_SCHEMA || {};
@@ -69,6 +69,8 @@
             'shortcutKeyRegenerateMoreConcise',
             'shortcutKeyRegenerateAddDetails',
             'shortcutKeyShowShortcuts',
+            'shortcutKeyStudy',
+            'shortcutKeyThinkLonger',
         ],
         // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
         // Used for modifier-aware duplicate detection in popup.js.

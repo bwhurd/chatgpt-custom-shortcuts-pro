@@ -97,7 +97,9 @@
     }),
   ]);
   const ACTION_SLOTS = Object.freeze(
-    [...PRIMARY_ACTIONS, ...CONFIGURE_ACTIONS, ...EXTRA_ACTIONS].map((action) => Object.freeze({ ...action })),
+    [...PRIMARY_ACTIONS, ...CONFIGURE_ACTIONS, ...EXTRA_ACTIONS].map((action) =>
+      Object.freeze({ ...action }),
+    ),
   );
   const ACTION_SLOT_COUNT = ACTION_SLOTS.length;
   const ACTION_BY_ID = Object.freeze(
@@ -108,7 +110,10 @@
   );
   const CONFIGURE_ACTION_IDS = Object.freeze(CONFIGURE_ACTIONS.map((action) => action.id));
   const CONFIGURE_DYNAMIC_SLOT_START =
-    Math.max(...CONFIGURE_ACTIONS.map((action) => action.slot), ...EXTRA_ACTIONS.map((action) => action.slot)) + 1;
+    Math.max(
+      ...CONFIGURE_ACTIONS.map((action) => action.slot),
+      ...EXTRA_ACTIONS.map((action) => action.slot),
+    ) + 1;
   const PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG = Object.freeze({
     'configure-latest': Object.freeze(['instant', 'thinking', 'configure']),
     'configure-5-2': Object.freeze(['instant', 'thinking', 'configure-latest', 'configure']),
@@ -330,7 +335,9 @@
   const isDynamicConfigureActionId = (value) =>
     /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
   const normalizeConfigureOptionLabel = (value) =>
-    String(value || '').replace(/\s+/g, ' ').trim();
+    String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim();
   const slugifyConfigureOptionLabel = (value) => {
     const slug = normalizeConfigureOptionLabel(value)
       .toLowerCase()
@@ -348,11 +355,24 @@
   const normalizeAvailableConfigId = (value) => {
     return normalizeConfigureActionId(value);
   };
+  const toValidSlot = (value) => {
+    const slot = Number(value);
+    return Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS ? slot : -1;
+  };
+  const toValidDynamicConfigureSlot = (value) => {
+    const slot = toValidSlot(value);
+    return slot >= CONFIGURE_DYNAMIC_SLOT_START ? slot : -1;
+  };
+  const getDynamicConfigureFallbackSlot = (optionIndex) => {
+    const index = Number.isInteger(Number(optionIndex)) ? Number(optionIndex) : 0;
+    return Math.min(MAX_SLOTS - 1, CONFIGURE_DYNAMIC_SLOT_START + Math.max(0, index - 1));
+  };
 
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
   const getStaticConfigureActionForOption = (label, optionIndex) => {
     const text = normalizeConfigureOptionLabel(label);
-    if (optionIndex === 0 || text.toLowerCase() === 'latest') return getActionById('configure-latest');
+    if (optionIndex === 0 || text.toLowerCase() === 'latest')
+      return getActionById('configure-latest');
     if (text === '5.2') return getActionById('configure-5-2');
     if (text === '5.0') return getActionById('configure-5-0-thinking-mini');
     if (text === 'o3') return getActionById('configure-o3');
@@ -363,12 +383,8 @@
     const staticAction = getStaticConfigureActionForOption(text, optionIndex);
     if (staticAction) return { ...staticAction };
     if (!text) return null;
-    const slot = Number.isInteger(Number(slotHint)) && Number(slotHint) >= 0 && Number(slotHint) < MAX_SLOTS
-      ? Number(slotHint)
-      : Math.min(
-          MAX_SLOTS - 1,
-          CONFIGURE_DYNAMIC_SLOT_START + Math.max(0, (Number(optionIndex) || 0) - CONFIGURE_ACTIONS.length),
-        );
+    const hintedSlot = toValidDynamicConfigureSlot(slotHint);
+    const slot = hintedSlot >= 0 ? hintedSlot : getDynamicConfigureFallbackSlot(optionIndex);
     return {
       slot,
       id: `configure-dynamic-${slugifyConfigureOptionLabel(text)}`,
@@ -382,7 +398,18 @@
   };
   const getCatalogConfigureActions = (catalog, incomingNames) => {
     const options = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
-    const seen = new Set();
+    const seenActionIds = new Set();
+    const usedSlots = new Set();
+    let nextDynamicSlot = CONFIGURE_DYNAMIC_SLOT_START;
+    const takeNextDynamicSlot = () => {
+      while (nextDynamicSlot < MAX_SLOTS && usedSlots.has(nextDynamicSlot)) {
+        nextDynamicSlot += 1;
+      }
+      if (nextDynamicSlot >= MAX_SLOTS) return -1;
+      const slot = nextDynamicSlot;
+      nextDynamicSlot += 1;
+      return slot;
+    };
     return options
       .map((option, index) => {
         const optionId = normalizeAvailableConfigId(option?.id);
@@ -390,13 +417,25 @@
           getActionById(optionId) ||
           getConfigureActionForOption(option?.label || '', index, option?.slot);
         const actionId = optionId || base?.id || '';
-        if (!base || seen.has(actionId)) return null;
-        seen.add(actionId);
+        if (!base || seenActionIds.has(actionId)) return null;
+        const isDynamic = isDynamicConfigureActionId(actionId);
+        let slot = toValidSlot(base.slot);
+        if (isDynamic) {
+          if (slot < CONFIGURE_DYNAMIC_SLOT_START || usedSlots.has(slot)) {
+            slot = takeNextDynamicSlot();
+          }
+          if (slot < 0) return null;
+        } else if (slot < 0 || usedSlots.has(slot)) {
+          return null;
+        }
+        seenActionIds.add(actionId);
+        usedSlots.add(slot);
         const label =
           getCanonicalActionLabel(actionId, option?.label || '') ||
           resolveConfigureDisplayLabel(base, incomingNames);
         return {
           ...base,
+          slot,
           label,
         };
       })
@@ -436,12 +475,7 @@
     POPUP_PRIMARY_FALLBACK_IDS_BY_ACTIVE_CONFIG[DEFAULT_ACTIVE_CONFIG_ID];
 
   const normalizeMenuText = (value) =>
-    (value || '')
-      .toString()
-      .normalize('NFKD')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
+    (value || '').toString().normalize('NFKD').replace(/\s+/g, ' ').trim().toLowerCase();
   const normalizeThinkingEffortId = (value) => {
     const text = normalizeMenuText(value).replace(/[_-]+/g, ' ');
     if (!text) return '';
@@ -453,7 +487,9 @@
     return '';
   };
   const normalizeThinkingEffortIconToken = (value) => {
-    const raw = String(value || '').trim().toLowerCase();
+    const raw = String(value || '')
+      .trim()
+      .toLowerCase();
     const match = raw.match(/#([a-z0-9]+)/i);
     return match ? `#${match[1].toLowerCase()}` : '';
   };
@@ -473,7 +509,9 @@
     return THINKING_EFFORT_OPTIONS.map((option) => option.id).filter((id) => uniqueIds.has(id));
   };
   const getAvailableThinkingEffortIds = (catalog) =>
-    sortThinkingEffortIds(Array.isArray(catalog?.thinkingEffortIds) ? catalog.thinkingEffortIds : []);
+    sortThinkingEffortIds(
+      Array.isArray(catalog?.thinkingEffortIds) ? catalog.thinkingEffortIds : [],
+    );
   const hasThinkingEffortOption = (catalog, id) =>
     getAvailableThinkingEffortIds(catalog).includes(normalizeThinkingEffortId(id));
 
@@ -614,7 +652,10 @@
   const getPopupPrimaryActions = (activeConfigId, incomingNames, catalog) => {
     const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
     const frontendByConfig =
-      catalog && typeof catalog === 'object' && catalog.frontendByConfig && typeof catalog.frontendByConfig === 'object'
+      catalog &&
+      typeof catalog === 'object' &&
+      catalog.frontendByConfig &&
+      typeof catalog.frontendByConfig === 'object'
         ? catalog.frontendByConfig
         : null;
     const catalogEntries = Array.isArray(frontendByConfig?.[normalizedActiveConfigId])
@@ -646,9 +687,7 @@
         return {
           ...base,
           label:
-            base.id === 'configure'
-              ? base.label
-              : resolvePrimaryDisplayLabel(base, incomingNames),
+            base.id === 'configure' ? base.label : resolvePrimaryDisplayLabel(base, incomingNames),
           labelI18nKey: alias?.labelI18nKey || '',
           viewGroup: 'primary',
           viewKey: `popup-primary:${normalizedActiveConfigId}:${base.id}`,
@@ -687,7 +726,8 @@
     if (!text) return '';
     if (text === 'instant') return 'instant';
     if (text === 'thinking') return 'thinking';
-    if (text === 'pro') return normalizeActiveConfigId(activeConfigId) === 'configure-latest' ? 'pro' : '';
+    if (text === 'pro')
+      return normalizeActiveConfigId(activeConfigId) === 'configure-latest' ? 'pro' : '';
     if (text === 'thinking mini' || text === 'gpt-5 mini') return 'configure-5-0-thinking-mini';
     if (text === 'o3') return 'configure-o3';
     return '';
@@ -744,7 +784,8 @@
     return out;
   };
 
-  const getActionGroups = () => ACTION_GROUPS.map((group) => ({ ...group, actions: group.actions.slice() }));
+  const getActionGroups = () =>
+    ACTION_GROUPS.map((group) => ({ ...group, actions: group.actions.slice() }));
   const getActionSlots = () => ACTION_SLOTS.slice();
   const getActionBySlot = (slot) =>
     Number.isInteger(slot) && slot >= 0 && slot < ACTION_SLOTS.length ? ACTION_SLOTS[slot] : null;

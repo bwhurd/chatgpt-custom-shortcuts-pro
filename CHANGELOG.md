@@ -6,6 +6,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.08.2026
+- Fixed: Model refresh keeps new model shortcuts separate, including GPT-5.3 and GPT-5.4.
+- Fixed: Thinking Standard and Extended shortcuts work with ChatGPT's updated model selector.
+
 #### 05.01.2026
 - Fixed: Model picker shortcuts, refresh, and Thinking effort shortcuts work with ChatGPT's updated picker menus.
 

@@ -37,6 +37,7 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
 - `tests/playwright/devscrape-wide.mjs` is the primary runtime scrape/check entrypoint.
 - `extension/shared/shortcut-action-metadata.js` owns the explicit shortcut action metadata and target descriptor source of truth used by the checker.
 - `tests/playwright/lib/shortcut-target-inventory.mjs` adapts that metadata to the saved scrape registry, runtime defaults, handler keys, labels, and report rows.
+- `extension/shared/model-picker-selectors.js` owns the shared model-picker opener selector contract used by `content.js`, shortcut target metadata, and the Playwright scrape opener. Do not reintroduce a separate hardcoded model opener list in the validator.
 - Supported actions are:
   - `setup-login`
   - `scrape-wide`
@@ -120,6 +121,7 @@ The first-pass `scrape-wide` inventory is:
 - `2b_AgentOrUserTurn_SubmenuRegenerate_AfterWebSearchResponse_RegenerateSubmenu - Copy.txt`
 - `2c_AgentOrUserTurn_SubmenuRegenerate_AfterWebSearchResponse_RegenerateSubmenu.txt`
 - `2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt`
+- `2d_ModelSwitcher_ThinkingEffort_Submenu.txt`
 - `2e_ModelSwitcher_ConfigureDialog_CurrentSelection.txt`
 - `2f_ModelSwitcher_ConfigureDialog_ModelSelectionListbox.txt`
 - `2g_ModelSwitcher_ConfigureDialog_ConfigureLatest_FrontendRows.txt`
@@ -196,7 +198,7 @@ Live activation probes may declare bounded setup modes in `extension/shared/shor
 The checker should prefer authoritative extraction over a hand-maintained selector list.
 
 Use this order:
-1. derive canonical identifiers from current runtime source where practical
+1. derive canonical identifiers from current runtime/shared source where practical, especially `extension/shared/model-picker-selectors.js` for model-picker opener checks
 2. prefer `data-testid`, ids, `aria-controls`, `name`, role/state markers, and other non-localized anchors
 3. allow a small explicit registry only for action-to-state mapping or icon-token identifiers that cannot be derived mechanically
 

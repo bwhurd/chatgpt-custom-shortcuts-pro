@@ -17,6 +17,21 @@ const CONTENT_SOURCE_PATH = 'content.js';
 const TURN_SELECTOR =
   'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn]';
 const OPEN_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
+const MODEL_PICKER_SELECTORS =
+  typeof globalThis !== 'undefined' ? globalThis.CSPModelPickerSelectors || {} : {};
+const MODEL_MENU_BUTTON_SELECTOR =
+  MODEL_PICKER_SELECTORS.MODEL_MENU_BUTTON_SELECTOR ||
+  [
+    'button[data-testid="model-switcher-dropdown-button"]',
+    'button[data-testid="Model-switCher-dropdown-button"]',
+    '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]',
+  ].join(', ');
+const MODEL_CONFIGURE_MENU_ITEM_SELECTOR =
+  MODEL_PICKER_SELECTORS.MODEL_CONFIGURE_MENU_ITEM_SELECTOR ||
+  '[data-testid="model-configure-modal"]';
+const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
+  MODEL_PICKER_SELECTORS.MODEL_THINKING_EFFORT_ACTION_SELECTOR ||
+  '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
 const DEV_SCRAPE_MIN_STEP_DELAY_MS = 250;
 
 const DUMP_REGISTRY = Object.freeze([
@@ -129,6 +144,16 @@ const DUMP_REGISTRY = Object.freeze([
     stateId: 'model-switcher-menu',
     label: 'Model switcher menu',
     steps: [{ type: 'open-model-switcher-menu', label: 'open model switcher menu' }],
+    capture: { type: 'latest-open-menu' },
+  },
+  {
+    filename: '2d_ModelSwitcher_ThinkingEffort_Submenu.txt',
+    stateId: 'model-switcher-thinking-effort-menu',
+    label: 'Model switcher thinking effort submenu',
+    steps: [
+      { type: 'open-model-switcher-menu', label: 'open model switcher menu' },
+      { type: 'open-model-thinking-effort-menu', label: 'open thinking effort submenu' },
+    ],
     capture: { type: 'latest-open-menu' },
   },
   {
@@ -633,16 +658,30 @@ async function openTurnMenu(documentObj, windowObj, runtime) {
 
 async function openModelSwitcherMenu(documentObj, windowObj, runtime) {
   await closeOpenMenus(documentObj, windowObj);
-  const button = documentObj.querySelector('button[data-testid="model-switcher-dropdown-button"]');
+  const button =
+    (typeof MODEL_PICKER_SELECTORS.getModelMenuButton === 'function'
+      ? MODEL_PICKER_SELECTORS.getModelMenuButton(documentObj, windowObj)
+      : null) || documentObj.querySelector(MODEL_MENU_BUTTON_SELECTOR);
   if (!(button instanceof Element) || !isVisible(button)) {
     throw new Error('Could not find a visible model switcher button');
   }
   smartClick(button, windowObj);
   const menu = await waitForCondition(
-    () =>
-      getOpenMenuWrappers(documentObj).find((candidate) =>
-        candidate.querySelector?.('[data-testid^="model-switcher-"]'),
-      ) || null,
+    () => {
+      const sharedMatches =
+        typeof MODEL_PICKER_SELECTORS.getOpenModelMenuCandidates === 'function'
+          ? MODEL_PICKER_SELECTORS.getOpenModelMenuCandidates(documentObj, windowObj, button)
+          : [];
+      if (sharedMatches.length) return sharedMatches[0];
+      const triggerId = button.id || '';
+      return (
+        getOpenMenuWrappers(documentObj).find((candidate) => {
+          if (triggerId && candidate.getAttribute('aria-labelledby') === triggerId) return true;
+          if (candidate.querySelector?.(MODEL_CONFIGURE_MENU_ITEM_SELECTOR)) return true;
+          return candidate.querySelector?.('[data-testid^="model-switcher-"]');
+        }) || null
+      );
+    },
     {
       timeout: 2000,
       interval: 50,
@@ -650,6 +689,45 @@ async function openModelSwitcherMenu(documentObj, windowObj, runtime) {
   );
   if (!(menu instanceof Element)) {
     throw new Error('Model switcher menu did not open');
+  }
+  runtime.latestMenu = menu;
+  return menu;
+}
+
+async function openModelThinkingEffortMenu(documentObj, windowObj, runtime) {
+  const mainMenu =
+    runtime.latestMenu || (await openModelSwitcherMenu(documentObj, windowObj, runtime));
+  const action = mainMenu.querySelector(MODEL_THINKING_EFFORT_ACTION_SELECTOR);
+  if (!(action instanceof Element)) {
+    throw new Error('Could not find model picker thinking effort action');
+  }
+  const row = action.closest('[data-model-picker-thinking-effort-row="true"]') || action;
+  [row, action].forEach((el) => {
+    el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+    el.focus?.();
+  });
+  smartClick(action, windowObj);
+  const controlledId = action.getAttribute('aria-controls') || '';
+  const menu = await waitForCondition(
+    () => {
+      const controlled = controlledId ? documentObj.getElementById(controlledId) : null;
+      if (controlled instanceof Element && isVisible(controlled)) return controlled;
+      return (
+        getOpenMenuWrappers(documentObj)
+          .filter((candidate) => candidate !== mainMenu)
+          .find((candidate) => /Standard|Extended/i.test(candidate.textContent || '')) || null
+      );
+    },
+    {
+      timeout: 1600,
+      interval: 50,
+    },
+  );
+  if (!(menu instanceof Element)) {
+    throw new Error('Model picker thinking effort submenu did not open');
   }
   runtime.latestMenu = menu;
   return menu;
@@ -670,6 +748,10 @@ async function executeStep(documentObj, windowObj, runtime, step) {
   }
   if (step.type === 'open-model-switcher-menu') {
     await openModelSwitcherMenu(documentObj, windowObj, runtime);
+    return;
+  }
+  if (step.type === 'open-model-thinking-effort-menu') {
+    await openModelThinkingEffortMenu(documentObj, windowObj, runtime);
     return;
   }
   throw new Error(`Unsupported scrape step: ${step.type}`);

@@ -329,6 +329,18 @@ const sendModelMessageToTab = async (message) => {
     return { ok: false, error: error?.message || 'SEND_FAILED' };
   }
 };
+const getDynamicConfigureSlotStart = () => {
+  const slots = getModelActionSlots()
+    .map((action) => Number(action?.slot))
+    .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS);
+  return Math.min(MODEL_PICKER_MAX_SLOTS, Math.max(-1, ...slots) + 1);
+};
+const toValidModelPickerSlot = (value) => {
+  const slot = Number(value);
+  return Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS ? slot : -1;
+};
+const isDynamicConfigureActionId = (value) =>
+  /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
 const normalizeModelCatalog = (catalog) => {
   if (!catalog || typeof catalog !== 'object') return null;
   const frontendByConfig = {};
@@ -370,6 +382,31 @@ const normalizeModelCatalog = (catalog) => {
       })
       .filter(Boolean);
   });
+  const usedConfigureSlots = new Set();
+  let nextDynamicConfigureSlot = getDynamicConfigureSlotStart();
+  const takeConfigureSlot = (action, option) => {
+    const actionId = String(action?.id || option?.id || '').trim();
+    const isDynamic = isDynamicConfigureActionId(actionId);
+    let slot = toValidModelPickerSlot(option?.slot);
+    if (slot < 0) slot = toValidModelPickerSlot(action?.slot);
+    if (isDynamic && slot < nextDynamicConfigureSlot) slot = -1;
+    if (slot >= 0 && !usedConfigureSlots.has(slot)) {
+      usedConfigureSlots.add(slot);
+      return slot;
+    }
+    if (!isDynamic) return -1;
+    while (
+      nextDynamicConfigureSlot < MODEL_PICKER_MAX_SLOTS &&
+      usedConfigureSlots.has(nextDynamicConfigureSlot)
+    ) {
+      nextDynamicConfigureSlot += 1;
+    }
+    if (nextDynamicConfigureSlot >= MODEL_PICKER_MAX_SLOTS) return -1;
+    slot = nextDynamicConfigureSlot;
+    usedConfigureSlots.add(slot);
+    nextDynamicConfigureSlot += 1;
+    return slot;
+  };
 
   return {
     version: Number(catalog.version) || 1,
@@ -386,14 +423,11 @@ const normalizeModelCatalog = (catalog) => {
                   )
                 : null;
             const id = action?.id || normalizeActiveModelConfigId(option?.id);
+            const slot = takeConfigureSlot(action, option);
             return {
               id,
               label: String(option?.label || action?.label || '').trim(),
-              slot: Number.isInteger(Number(option?.slot))
-                ? Number(option.slot)
-                : Number.isInteger(Number(action?.slot))
-                ? Number(action.slot)
-                : -1,
+              slot,
             };
           })
           .filter((option) => option.slot >= 0)

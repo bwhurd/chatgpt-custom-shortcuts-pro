@@ -44,6 +44,9 @@ The model picker has two separate but related state shapes:
 - `modelPickerKeyCodes`
   - flat persisted shortcut array
   - full slot count stays fixed even when popup rows are grouped visually
+- `modelCatalog.configureOptions`
+  - refreshed Configure Models entries must persist their canonical `slot`
+  - dynamic configure entries must never reuse a slot, even when ChatGPT inserts a new model between existing rows
 
 Shared grouped rendering comes from `shared/model-picker-labels.js`, not hardcoded popup rows.
 
@@ -101,6 +104,7 @@ Current direct-DOM pattern:
 
 For dev-only runtime selector validation, the deterministic shortcut inventory should derive from:
 - `extension/shared/shortcut-action-metadata.js` for explicit shortcut validation metadata
+- `extension/shared/model-picker-selectors.js` for the model-picker opener selector contract shared with `content.js`
 - `shortcutDefaults` for the shipped shortcut universe
 - `keyFunctionMappingAlt` for active runtime handler ownership
 - `settings-schema.js` for user-facing labels and overlay sections
@@ -122,6 +126,12 @@ Removed ChatGPT features should stay inert for existing installs while disappear
 - older submenu-based layouts if that path returns
 
 Do not assume the submenu path always exists.
+
+Thinking effort shortcuts must support both current account surfaces:
+- Configure-dialog route: `#thinking-effort-selection-label` plus controlled `role="listbox"` options
+- Model-selector route: `data-model-picker-thinking-effort-action` opens a `role="menu"` with `menuitemradio` Standard/Extended options
+
+Keep the older assistant icon fallback as a last resort for accounts that still expose that route.
 
 The Configure Models path should stay language-agnostic:
 - `data-testid=\"model-configure-modal\"`

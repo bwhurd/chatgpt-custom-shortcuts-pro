@@ -8797,6 +8797,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 (() => {
   const READY_CLASS = 'csp-bottom-bar-ready';
   const STYLE_ID = 'csp-bottom-bar-style';
+  const modelPickerSelectors = window.CSPModelPickerSelectors || {};
 
   const SELECTORS = {
     PAGE_HEADER: '#page-header',
@@ -8806,9 +8807,10 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     COMPOSER_FORM: "form[data-type='unified-composer']",
     COMPOSER_SURFACE: '[data-composer-surface="true"]',
     MODEL_SWITCHER_BUTTON:
+      modelPickerSelectors.MODEL_MENU_BUTTON_SELECTOR ||
       'button[data-testid="model-switcher-dropdown-button"], ' +
-      'button[data-testid="Model-switCher-dropdown-button"], ' +
-      '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]',
+        'button[data-testid="Model-switCher-dropdown-button"], ' +
+        '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]',
     PROFILE_BUTTON: 'button[data-testid="profile-button"]',
     LOGIN_BUTTON: 'button[data-testid="login-button"]',
   };
@@ -8986,11 +8988,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       if (fromHeader) return fromHeader;
     }
 
-    return (
-      Array.from(document.querySelectorAll(SELECTORS.MODEL_SWITCHER_BUTTON)).find(
-        (el) => !el.closest('#bottomBarContainer'),
-      ) || null
-    );
+    return null;
   }
 
   function findHeaderConversationActions() {
@@ -10382,14 +10380,30 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
   const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
-  const LEGACY_MODEL_MENU_BTN_SELECTOR = 'button[data-testid="model-switcher-dropdown-button"]';
+  const ModelPickerSelectors = window.CSPModelPickerSelectors || {};
+  const LEGACY_MODEL_MENU_BTN_SELECTOR =
+    ModelPickerSelectors.LEGACY_MODEL_MENU_BUTTON_SELECTOR ||
+    'button[data-testid="model-switcher-dropdown-button"]';
   const COMPOSER_MODEL_MENU_BTN_SELECTOR =
+    ModelPickerSelectors.COMPOSER_MODEL_MENU_BUTTON_SELECTOR ||
     '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]';
-  const MENU_BTN_SELECTOR = [
-    LEGACY_MODEL_MENU_BTN_SELECTOR,
-    COMPOSER_MODEL_MENU_BTN_SELECTOR,
-  ].join(', ');
-  const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const MENU_BTN_SELECTOR =
+    ModelPickerSelectors.MODEL_MENU_BUTTON_SELECTOR ||
+    [LEGACY_MODEL_MENU_BTN_SELECTOR, COMPOSER_MODEL_MENU_BTN_SELECTOR].join(', ');
+  const MODEL_MENU_SELECTOR =
+    ModelPickerSelectors.MODEL_MENU_SELECTOR ||
+    '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const MODEL_THINKING_EFFORT_ROW_SELECTOR =
+    ModelPickerSelectors.MODEL_THINKING_EFFORT_ROW_SELECTOR ||
+    '[data-model-picker-thinking-effort-row="true"]';
+  const MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR =
+    ModelPickerSelectors.MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR ||
+    '[data-model-picker-thinking-effort-menu-item="true"]';
+  const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
+    ModelPickerSelectors.MODEL_THINKING_EFFORT_ACTION_SELECTOR ||
+    '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
+  const MODEL_THINKING_EFFORT_OPTION_SELECTOR =
+    ModelPickerSelectors.MODEL_THINKING_EFFORT_OPTION_SELECTOR || '[role="menuitemradio"]';
   const MODEL_MENU_ITEM_SELECTOR =
     ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
     ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
@@ -10421,6 +10435,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     return Array.from(el.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0);
   };
   const getModelMenuButton = () => {
+    if (typeof ModelPickerSelectors.getModelMenuButton === 'function') {
+      return ModelPickerSelectors.getModelMenuButton(document, window);
+    }
     const candidates = Array.from(document.querySelectorAll(MENU_BTN_SELECTOR));
     if (!candidates.length) return null;
     const visible = candidates.filter(isUsablyVisibleElement);
@@ -11786,6 +11803,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         typeof window.ModelLabels?.getThinkingEffortOptionById === 'function'
           ? window.ModelLabels.getThinkingEffortOptionById(id)
           : null;
+      const normalizeThinkingEffortId = (id) =>
+        typeof window.ModelLabels?.normalizeThinkingEffortId === 'function'
+          ? window.ModelLabels.normalizeThinkingEffortId(id)
+          : String(id || '').trim();
+      const getThinkingEffortIdForMenuItem = (item) => {
+        if (!(item instanceof Element)) return '';
+        return mapThinkingEffortLabelToId(__cspTextNoHint(item));
+      };
       const getThinkingEffortIdForOption = (option) => {
         if (!(option instanceof Element)) return '';
         const listbox = option.closest('[role="listbox"]');
@@ -11812,6 +11837,81 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           ) || null
         );
       };
+      const getOpenThinkingEffortMenu = (trigger = null) => {
+        const triggerId = trigger?.id || '';
+        return (
+          Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))
+            .filter((menu) => {
+              if (!isUsablyVisibleElement(menu)) return false;
+              if (triggerId && menu.getAttribute('aria-labelledby') === triggerId) return true;
+              return Array.from(
+                menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`),
+              ).some((item) => getThinkingEffortIdForMenuItem(item));
+            })
+            .at(-1) || null
+        );
+      };
+      const findModelThinkingEffortActionButton = (state = getVisibleModelMenuState()) => {
+        const roots = [state.main, ...Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))].filter(
+          (root, index, arr) => root instanceof Element && arr.indexOf(root) === index,
+        );
+        for (const root of roots) {
+          const button = root.querySelector(MODEL_THINKING_EFFORT_ACTION_SELECTOR);
+          if (button instanceof Element) return button;
+        }
+        return null;
+      };
+      const revealModelThinkingEffortActionButton = (button) => {
+        if (!(button instanceof Element)) return;
+        const row =
+          button.closest(MODEL_THINKING_EFFORT_ROW_SELECTOR) ||
+          button.closest(MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR) ||
+          button;
+        [row, button].forEach((el) => {
+          if (!(el instanceof Element)) return;
+          el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+          el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+          el.focus?.();
+        });
+      };
+      const openModelSelectorThinkingEffortMenu = async (state = getVisibleModelMenuState()) => {
+        const existing = getOpenThinkingEffortMenu();
+        if (existing) return { menu: existing, opened: false };
+        const button = findModelThinkingEffortActionButton(state);
+        if (!(button instanceof Element)) return null;
+        revealModelThinkingEffortActionButton(button);
+        await sleepAsync(40);
+        activateMenuItem(button);
+        const menu = await waitForAsync(() => getOpenThinkingEffortMenu(button), {
+          timeout: 1200,
+          interval: 40,
+        });
+        return menu instanceof Element ? { menu, opened: true } : null;
+      };
+      const findThinkingEffortMenuItem = (menu, optionId) => {
+        if (!(menu instanceof Element)) return null;
+        const targetId = normalizeThinkingEffortId(optionId);
+        return (
+          Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`)).find(
+            (item) => getThinkingEffortIdForMenuItem(item) === targetId,
+          ) || null
+        );
+      };
+      const collectThinkingEffortIdsFromModelSelectorMenu = async (
+        state = getVisibleModelMenuState(),
+      ) => {
+        const opened = await openModelSelectorThinkingEffortMenu(state);
+        const menu = opened?.menu || null;
+        if (!(menu instanceof Element)) return [];
+        const ids = Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`))
+          .map(getThinkingEffortIdForMenuItem)
+          .filter(Boolean);
+        return typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
+          ? window.ModelLabels.sortThinkingEffortIds(ids)
+          : Array.from(new Set(ids));
+      };
       const inferActiveFrontendActionIdFromDialog = (dialog) => {
         if (!(dialog instanceof Element)) return '';
         const activeRow =
@@ -11832,10 +11932,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return true;
       };
       const ensureThinkingEffortSelection = async (optionId) => {
-        const normalizedOptionId =
-          typeof window.ModelLabels?.normalizeThinkingEffortId === 'function'
-            ? window.ModelLabels.normalizeThinkingEffortId(optionId)
-            : String(optionId || '').trim();
+        const normalizedOptionId = normalizeThinkingEffortId(optionId);
         if (!normalizedOptionId) return false;
         const combobox = await waitForAsync(findThinkingEffortCombobox, {
           timeout: 1600,
@@ -11954,7 +12051,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           await sleepAsync(alreadyOpen ? 120 : 180);
           const menuReady = await waitForMainMenuActionTarget(getModelActionById('configure'));
           const state = menuReady?.state || getVisibleModelMenuState();
-          hideOpenModelUiForScrape(state);
+          const modelSelectorThinkingEffortIds =
+            await collectThinkingEffortIdsFromModelSelectorMenu(state);
+          hideOpenModelUiForScrape(getVisibleModelMenuState());
           const configureItem = findConfigureMenuItem(state);
           if (!configureItem) return { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
 
@@ -12013,7 +12112,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
             frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(findConfigureDialog());
           }
-          const thinkingEffortIds = await collectThinkingEffortIdsDuringScrape(combobox);
+          const configureThinkingEffortIds = await collectThinkingEffortIdsDuringScrape(combobox);
+          const thinkingEffortIds =
+            typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
+              ? window.ModelLabels.sortThinkingEffortIds([
+                  ...modelSelectorThinkingEffortIds,
+                  ...configureThinkingEffortIds,
+                ])
+              : Array.from(
+                  new Set([...modelSelectorThinkingEffortIds, ...configureThinkingEffortIds]),
+                );
           await ensureConfigureComboboxSelection(combobox, initialActiveConfigId);
           if (initialFrontendActionId) {
             await ensureConfigureFrontendRowSelection(initialFrontendActionId);
@@ -12024,6 +12132,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             scrapedAt: Date.now(),
             configureOptions: availableOptions.map((option) => ({
               id: option.id,
+              slot: option.slot,
               label:
                 typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
                   ? window.ModelLabels.getCanonicalActionLabel(option.id, option.label)
@@ -12274,49 +12383,83 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
         flashBottomBar();
       };
+      const runLegacyThinkingEffortOptionAction = (optionId) => {
+        const iconTokenByOptionId = {
+          'thinking-extended': '#143e56',
+          'thinking-standard': '#fec800',
+          'thinking-light': '#407870',
+          'thinking-heavy': '#3c5754',
+        };
+        const subItemToken = iconTokenByOptionId[normalizeThinkingEffortId(optionId)];
+        if (!subItemToken) return false;
+        const firstButtonPath = ['#127a53', '#c9d737'];
+        delayCall(clickLowestSvgThenSubItemSvg, 350, firstButtonPath, subItemToken);
+        return true;
+      };
+      const runModelSelectorThinkingEffortOptionAction = async (option, { hideUi = false } = {}) => {
+        if (!option?.id) return false;
+        const alreadyOpen = ensureMainMenuOpen();
+        await sleepAsync(alreadyOpen ? 120 : 180);
+        const opened = await openModelSelectorThinkingEffortMenu(getVisibleModelMenuState());
+        const menu = opened?.menu || null;
+        if (!(menu instanceof Element)) return false;
+        if (hideUi) hideOpenModelUiForScrape(getVisibleModelMenuState());
+        const target = findThinkingEffortMenuItem(menu, option.id);
+        if (!target) return false;
+        await activateAfterFlash(target, DELAY_ACTIVATE_TARGET_MS);
+        await sleepAsync(120);
+        if (!hideUi) flashBottomBar();
+        return true;
+      };
+      const runConfigureThinkingEffortOptionAction = async (option, { hideUi = false } = {}) => {
+        if (!option?.id) return false;
+        const alreadyOpen = ensureMainMenuOpen();
+        await sleepAsync(alreadyOpen ? 120 : 180);
+
+        const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
+        const state = ready?.state || getVisibleModelMenuState();
+        hideOpenModelUiForScrape(state);
+        const configureItem = findConfigureMenuItem(state);
+        if (!configureItem) return false;
+
+        const combobox = await openConfigureDialogFromMenuItem(configureItem);
+        if (!combobox) return false;
+        if (hideUi) hideConfigureDialogUiForScrape();
+
+        const modelSelected = await ensureConfigureComboboxSelection(
+          combobox,
+          DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+        );
+        if (!modelSelected) return false;
+        persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+
+        const thinkingSelected = await ensureConfigureFrontendRowSelection('thinking');
+        if (!thinkingSelected) return false;
+
+        const effortSelected = await ensureThinkingEffortSelection(option.id);
+        if (!effortSelected) return false;
+
+        await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
+        if (hideUi) {
+          hideConfigureDialogUiForScrape();
+          return true;
+        }
+
+        const closeButton = await waitForButtonByTestIdSafe('close-button', {
+          timeout: 1500,
+          interval: 30,
+        });
+        if (closeButton) await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
+        flashBottomBar();
+        return true;
+      };
       const runThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
         return withTemporarilyHiddenModelUi(hideUi, async () => {
-          const alreadyOpen = ensureMainMenuOpen();
-          await sleepAsync(alreadyOpen ? 120 : 180);
-
-          const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
-          const state = ready?.state || getVisibleModelMenuState();
-          hideOpenModelUiForScrape(state);
-          const configureItem = findConfigureMenuItem(state);
-          if (!configureItem) return false;
-
-          const combobox = await openConfigureDialogFromMenuItem(configureItem);
-          if (!combobox) return false;
-          if (hideUi) hideConfigureDialogUiForScrape();
-
-          const modelSelected = await ensureConfigureComboboxSelection(
-            combobox,
-            DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-          );
-          if (!modelSelected) return false;
-          persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-
-          const thinkingSelected = await ensureConfigureFrontendRowSelection('thinking');
-          if (!thinkingSelected) return false;
-
-          const effortSelected = await ensureThinkingEffortSelection(option.id);
-          if (!effortSelected) return false;
-
-          await sleepAsync(DELAY_CONFIGURE_CLOSE_MS);
-          if (hideUi) {
-            hideConfigureDialogUiForScrape();
-            return true;
-          }
-
-          const closeButton = await waitForButtonByTestIdSafe('close-button', {
-            timeout: 1500,
-            interval: 30,
-          });
-          if (closeButton) await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
-          flashBottomBar();
-          return true;
+          if (await runModelSelectorThinkingEffortOptionAction(option, { hideUi })) return true;
+          if (await runConfigureThinkingEffortOptionAction(option, { hideUi })) return true;
+          return hideUi ? false : runLegacyThinkingEffortOptionAction(option.id);
         });
       };
       window.__cspRunThinkingEffortAction = (optionId, options = {}) => {
@@ -12368,6 +12511,22 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return applied;
       };
 
+      const applyModelSelectorThinkingEffortMenuHints = () => {
+        const menu = getOpenThinkingEffortMenu();
+        if (!(menu instanceof Element)) return false;
+        let applied = false;
+        Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`)).forEach(
+          (item) => {
+            const optionId = getThinkingEffortIdForMenuItem(item);
+            const label = displayFromCode(getThinkingEffortStorageCode(optionId));
+            if (!label || label === '—') return;
+            addLabel(item, label);
+            applied = true;
+          },
+        );
+        return applied;
+      };
+
       const applyConfigureFrontendRowHints = () => {
         const dialog = findConfigureDialog();
         if (!(dialog instanceof Element) || !isUsablyVisibleElement(dialog)) return false;
@@ -12390,6 +12549,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         applied = applyConfigureFrontendRowHints() || applied;
         applied = applyConfigureListboxHints() || applied;
         applied = applyThinkingEffortListboxHints() || applied;
+        applied = applyModelSelectorThinkingEffortMenuHints() || applied;
         return applied;
       };
 
