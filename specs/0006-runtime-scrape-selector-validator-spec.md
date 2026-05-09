@@ -45,12 +45,11 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
   - `validate-wide`
   - `probe-shortcuts`
 - `tests/playwright/chatgpt-local-profile-test-setup.md` owns the standard Chrome/CDP attach posture.
-- `tests/playwright/run-devscrape-validation.ps1` is the simplest manual entrypoint on this machine. It should run the full validation flow and open the generated HTML report automatically.
-- `StartDevScrapeValidator.ps1` is the root Windows controller entrypoint for repeated manual use. It should reuse the real `validate-wide` path, surface the latest validation summary, and list likely broken shortcuts from the latest report for quick manual follow-up.
-- `DevScrapeValidatorTray.ahk` is the thin AutoHotkey v1 tray surface for starting the controller, opening the latest report, and shutting the validator workflow down.
-- `StopDevScrapeValidator.ps1` should stop only the repo-owned controller and validation processes by project-root-aware command-line matching.
+- `ahk-tray-tools/StartDevScrapeValidator.ps1` is the Windows controller entrypoint for repeated manual use. It should call `tests/playwright/run-devscrape-validation.ps1`, surface the latest validation summary, and list likely broken shortcuts from the latest report for quick manual follow-up.
+- `tests/playwright/run-devscrape-validation.ps1` is the direct Playwright validation entrypoint on this machine. It should run the full validation flow and open the generated HTML report automatically.
+- `ahk-tray-tools/DevScrapeValidatorTray.ahk` is the thin AutoHotkey v1 tray surface for starting the controller, opening the latest report, and shutting the validator workflow down.
+- `ahk-tray-tools/StopDevScrapeValidator.ps1` should stop only the repo-owned controller and validation processes by project-root-aware command-line matching.
 - `extension/lib/DevScrapeWide.js` is currently the page-side scrape logic donor that the Playwright runner injects into the page so the step engine does not drift.
-- The old Tampermonkey path under `tests/tampermonkey-dev-scrape/` is no longer the primary runtime validator path. Treat it as an unsupported experiment unless a future pass deliberately revives it.
 
 ## Browser Posture
 
