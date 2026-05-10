@@ -24,6 +24,14 @@ const ScrollState = {
   finalScrollPosition: 0,
   userInterrupted: false,
 };
+const CONVERSATION_TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
+
+function stabilizeConversationScrollContainer(container) {
+  if (container instanceof HTMLElement) {
+    container.style.overflowAnchor = 'none';
+  }
+  return container;
+}
 
 // Utility functions for scrolling
 function resetScrollState() {
@@ -38,7 +46,7 @@ function resetScrollState() {
 }
 
 function getScrollableContainer() {
-  const firstMessage = document.querySelector('[data-testid^="conversation-turn-"]');
+  const firstMessage = document.querySelector(CONVERSATION_TURN_SELECTOR);
   if (!firstMessage) return null;
 
   let container = firstMessage.parentElement;
@@ -49,11 +57,11 @@ function getScrollableContainer() {
       style.overflowY !== 'visible' &&
       style.overflowY !== 'hidden'
     ) {
-      return container;
+      return stabilizeConversationScrollContainer(container);
     }
     container = container.parentElement;
   }
-  return document.scrollingElement || document.documentElement;
+  return stabilizeConversationScrollContainer(document.scrollingElement || document.documentElement);
 }
 
 function getComposerTopEdge() {
@@ -3950,28 +3958,274 @@ const delays = DELAYS;
     return separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
   }
 
+  function getConversationTurnMessages() {
+    const candidates = Array.from(document.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
+      (message) => message instanceof HTMLElement && message.isConnected,
+    );
+    const renderedMessages = candidates.filter((message) => {
+      if (!message.firstElementChild) return false;
+
+      const rect = message.getBoundingClientRect();
+      return Number.isFinite(rect.height) && rect.height > 1;
+    });
+
+    return renderedMessages.length ? renderedMessages : candidates;
+  }
+
+  function getScrollContainerTopEdge(scrollContainer) {
+    if (
+      scrollContainer === document.scrollingElement ||
+      scrollContainer === document.documentElement ||
+      scrollContainer === document.body
+    ) {
+      return 0;
+    }
+
+    const rect = scrollContainer.getBoundingClientRect();
+    return Number.isFinite(rect.top) ? rect.top : 0;
+  }
+
+  function getMessageTopScrollPosition(message, scrollContainer) {
+    if (!(message instanceof HTMLElement) || !message.isConnected) return NaN;
+
+    const currentScrollTop = Number(scrollContainer.scrollTop) || 0;
+    const rect = message.getBoundingClientRect();
+    const topScroll = currentScrollTop + rect.top - getScrollContainerTopEdge(scrollContainer);
+    return Number.isFinite(topScroll) ? topScroll : NaN;
+  }
+
+  function getMessageTopScrollPositions(messages, scrollContainer) {
+    return messages
+      .map((message) => {
+        const topScroll = getMessageTopScrollPosition(message, scrollContainer);
+        return Number.isFinite(topScroll) ? { message, topScroll } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function clampScrollTop(scrollContainer, scrollTop) {
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+    return Math.max(0, Math.min(maxScrollTop, scrollTop));
+  }
+
+  function getColorAlpha(color) {
+    const value = String(color || '').trim();
+    if (!value || value === 'transparent') return 0;
+
+    const rgbaMatch = value.match(/rgba?\(([^)]+)\)/i);
+    if (rgbaMatch) {
+      const inside = rgbaMatch[1].trim();
+      if (inside.includes('/')) {
+        const alpha = Number.parseFloat(inside.split('/').pop().trim());
+        return Number.isFinite(alpha) ? alpha : 1;
+      }
+
+      const parts = inside.split(',').map((part) => part.trim());
+      if (parts.length >= 4) {
+        const alpha = Number.parseFloat(parts[3]);
+        return Number.isFinite(alpha) ? alpha : 1;
+      }
+      return 1;
+    }
+
+    const slashAlphaMatch = value.match(/\/\s*([0-9.]+%?)/);
+    if (slashAlphaMatch) {
+      const rawAlpha = slashAlphaMatch[1];
+      const alpha = rawAlpha.endsWith('%')
+        ? Number.parseFloat(rawAlpha) / 100
+        : Number.parseFloat(rawAlpha);
+      return Number.isFinite(alpha) ? alpha : 1;
+    }
+
+    return 1;
+  }
+
+  function getTopHeaderScrollOffset(scrollContainer) {
+    if (window.moveTopBarToBottomCheckbox) return 0;
+
+    const header = document.getElementById('page-header');
+    if (!(header instanceof HTMLElement)) return 0;
+
+    const style = getComputedStyle(header);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      Number.parseFloat(style.opacity || '1') <= 0 ||
+      getColorAlpha(style.backgroundColor) <= 0.05
+    ) {
+      return 0;
+    }
+
+    const headerRect = header.getBoundingClientRect();
+    const scrollRect = scrollContainer.getBoundingClientRect();
+    const horizontalOverlap =
+      Math.min(headerRect.right, scrollRect.right) - Math.max(headerRect.left, scrollRect.left);
+    const verticalOverlap =
+      Math.min(headerRect.bottom, scrollRect.bottom) - Math.max(headerRect.top, scrollRect.top);
+
+    if (horizontalOverlap <= 0 || verticalOverlap <= 0 || headerRect.top > scrollRect.top + 1) {
+      return 0;
+    }
+
+    return Math.max(0, Math.round(verticalOverlap));
+  }
+
+  function getMessageScrollOptions() {
+    const isBottom = window.moveTopBarToBottomCheckbox;
+    const baseScrollOffset = isBottom ? 43 : 25;
+    const scrollContainer = getScrollableContainer();
+    const scrollOffset = baseScrollOffset + (scrollContainer ? getTopHeaderScrollOffset(scrollContainer) : 0);
+
+    return {
+      downThreshold: scrollOffset + 5,
+      scrollOffset,
+      upThreshold: scrollOffset - 5,
+    };
+  }
+
+  let activeMessageScrollTween = null;
+  let activeMessageScrollSettleFrame = null;
+  const MESSAGE_SCROLL_SETTLE_MS = 900;
+
+  function killActiveMessageScrollTween() {
+    if (activeMessageScrollSettleFrame) {
+      cancelAnimationFrame(activeMessageScrollSettleFrame);
+      activeMessageScrollSettleFrame = null;
+    }
+
+    if (!activeMessageScrollTween) return;
+
+    activeMessageScrollTween.kill();
+    activeMessageScrollTween = null;
+  }
+
+  function stabilizeMessageScrollContainer(scrollContainer) {
+    stabilizeConversationScrollContainer(scrollContainer);
+  }
+
+  function settleMessageScrollTarget(scrollContainer, message, scrollOffset) {
+    if (!(message instanceof HTMLElement) || !message.isConnected) return;
+
+    const startedAt = performance.now();
+    const tick = () => {
+      if (!(message instanceof HTMLElement) || !message.isConnected) {
+        activeMessageScrollSettleFrame = null;
+        return;
+      }
+
+      const actualTop = message.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
+      const delta = actualTop - scrollOffset;
+      if (Math.abs(delta) > 1) {
+        scrollContainer.scrollTop = clampScrollTop(scrollContainer, scrollContainer.scrollTop + delta);
+      }
+
+      if (performance.now() - startedAt < MESSAGE_SCROLL_SETTLE_MS) {
+        activeMessageScrollSettleFrame = requestAnimationFrame(tick);
+      } else {
+        activeMessageScrollSettleFrame = null;
+      }
+    };
+
+    activeMessageScrollSettleFrame = requestAnimationFrame(tick);
+  }
+
+  function alignMessageToVisualTop(scrollContainer, message, visualTop) {
+    if (!(message instanceof HTMLElement) || !message.isConnected) return;
+
+    const actualTop = message.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
+    if (!Number.isFinite(actualTop)) return;
+
+    const delta = actualTop - visualTop;
+    if (Math.abs(delta) > 0.5) {
+      scrollContainer.scrollTop = clampScrollTop(scrollContainer, scrollContainer.scrollTop + delta);
+    }
+  }
+
+  function animateMessageScrollTo(scrollContainer, targetY, message = null, scrollOffset = 0) {
+    killActiveMessageScrollTween();
+    gsap.killTweensOf(scrollContainer);
+    stabilizeMessageScrollContainer(scrollContainer);
+
+    if (message instanceof HTMLElement && message.isConnected) {
+      const startVisualTop = message.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
+      const tweenState = { visualTop: startVisualTop };
+
+      activeMessageScrollTween = gsap.to(tweenState, {
+        duration: 0.3,
+        visualTop: scrollOffset,
+        ease: 'power4.out',
+        onUpdate: () => {
+          alignMessageToVisualTop(scrollContainer, message, tweenState.visualTop);
+        },
+        onComplete: () => {
+          activeMessageScrollTween = null;
+          alignMessageToVisualTop(scrollContainer, message, scrollOffset);
+          settleMessageScrollTarget(scrollContainer, message, scrollOffset);
+        },
+        onInterrupt: () => {
+          activeMessageScrollTween = null;
+        },
+      });
+      return;
+    }
+
+    activeMessageScrollTween = gsap.to(scrollContainer, {
+      duration: 0.3,
+      overwrite: 'auto',
+      scrollTo: { y: targetY, autoKill: false },
+      ease: 'power4.out',
+      onComplete: () => {
+        activeMessageScrollTween = null;
+        if (message instanceof HTMLElement) {
+          settleMessageScrollTarget(scrollContainer, message, scrollOffset);
+        }
+      },
+      onInterrupt: () => {
+        activeMessageScrollTween = null;
+      },
+    });
+  }
+
+  function scrollToMessageTop(scrollContainer, message, scrollOffset) {
+    if (!(message instanceof HTMLElement) || !message.isConnected) return;
+
+    const targetScrollTop = getMessageTopScrollPosition(message, scrollContainer);
+    if (!Number.isFinite(targetScrollTop)) return;
+
+    animateMessageScrollTo(
+      scrollContainer,
+      clampScrollTop(scrollContainer, targetScrollTop - scrollOffset),
+      message,
+      scrollOffset,
+    );
+  }
+
+  function scrollToMessagePosition(scrollContainer, messagePosition, scrollOffset) {
+    scrollToMessageTop(scrollContainer, messagePosition.message, scrollOffset);
+  }
+
   // Shared helper so "one up" and "two up" use the exact same anchor logic.
   function scrollUpByMessages(steps = 1, feedbackTarget = null) {
     resetScrollState();
 
-    const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
+    const messages = getConversationTurnMessages();
     const scrollContainer = getScrollableContainer();
     if (!scrollContainer || messages.length === 0) return;
 
-    // Offset values based on checkbox state
-    const isBottom = window.moveTopBarToBottomCheckbox;
-    const messageThreshold = isBottom ? -48 : -30; // same as original goUpOne
-    const scrollOffset = isBottom ? 43 : 25;
+    killActiveMessageScrollTween();
+    gsap.killTweensOf(scrollContainer);
+
+    const { scrollOffset, upThreshold } = getMessageScrollOptions();
+    const stepCount = Math.max(1, Math.floor(steps));
 
     let foundCount = 0;
     let targetMessage = null;
 
-    // Scan upward from the bottom, counting matches like original goUpOne
     for (let i = messages.length - 1; i >= 0; i--) {
       const messageTop = messages[i].getBoundingClientRect().top;
-      if (messageTop < messageThreshold) {
+      if (messageTop < upThreshold) {
         foundCount++;
-        if (foundCount === steps) {
+        if (foundCount === stepCount) {
           targetMessage = messages[i];
           break;
         }
@@ -3979,63 +4233,16 @@ const delays = DELAYS;
     }
 
     if (targetMessage) {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: { y: targetMessage.offsetTop - scrollOffset },
-        ease: 'power4.out',
-      });
+      scrollToMessageTop(scrollContainer, targetMessage, scrollOffset);
     } else {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: { y: 0 },
-        ease: 'power4.out',
-      });
+      animateMessageScrollTo(scrollContainer, 0);
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
   }
 
   function goUpOneMessage(feedbackTarget = null) {
-    resetScrollState(); // Reset the shared scroll state
-
-    const messages = document.querySelectorAll('[data-testid^="conversation-turn-"]');
-    let targetMessage = null;
-
-    // Offset values based on checkbox state
-    const isBottom = window.moveTopBarToBottomCheckbox;
-    const messageThreshold = isBottom ? -48 : -30;
-    const scrollOffset = isBottom ? 43 : 25;
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const messageTop = messages[i].getBoundingClientRect().top;
-      if (messageTop < messageThreshold) {
-        targetMessage = messages[i];
-        break;
-      }
-    }
-
-    const scrollContainer = getScrollableContainer();
-    if (!scrollContainer) return;
-
-    if (targetMessage) {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: {
-          y: targetMessage.offsetTop - scrollOffset,
-        },
-        ease: 'power4.out',
-      });
-    } else {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: {
-          y: 0,
-        },
-        ease: 'power4.out',
-      });
-    }
-
-    if (feedbackTarget) feedbackAnimation(feedbackTarget);
+    scrollUpByMessages(1, feedbackTarget);
   }
 
   function goUpTwoMessages(feedbackTarget = null) {
@@ -4100,10 +4307,10 @@ const delays = DELAYS;
     return upButton;
   }
 
-  function getNextMessage(messages, currentScrollTop, messageThreshold) {
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].offsetTop > currentScrollTop + messageThreshold) {
-        return messages[i];
+  function getNextMessagePosition(messagePositions, currentScrollTop, messageThreshold) {
+    for (let i = 0; i < messagePositions.length; i++) {
+      if (messagePositions[i].topScroll > currentScrollTop + messageThreshold) {
+        return messagePositions[i];
       }
     }
     return null;
@@ -4112,36 +4319,24 @@ const delays = DELAYS;
   function goDownOneMessage(feedbackTarget = null) {
     resetScrollState();
 
-    const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
+    const messages = getConversationTurnMessages();
     const scrollContainer = getScrollableContainer();
     if (!scrollContainer || messages.length === 0) return;
 
-    gsap.set(scrollContainer, { scrollTo: '+=0' });
+    killActiveMessageScrollTween();
     gsap.killTweensOf(scrollContainer);
 
     const currentScrollTop = scrollContainer.scrollTop;
 
-    // Offset values based on checkbox state
-    const isBottom = window.moveTopBarToBottomCheckbox;
-    const messageThreshold = isBottom ? 48 : 30;
-    const scrollOffset = isBottom ? 43 : 25;
+    const { downThreshold, scrollOffset } = getMessageScrollOptions();
+    const messagePositions = getMessageTopScrollPositions(messages, scrollContainer);
 
-    const targetMessage = getNextMessage(messages, currentScrollTop, messageThreshold);
+    const targetPosition = getNextMessagePosition(messagePositions, currentScrollTop, downThreshold);
 
-    if (targetMessage) {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: { y: targetMessage.offsetTop - scrollOffset },
-        ease: 'power4.out',
-      });
+    if (targetPosition) {
+      scrollToMessagePosition(scrollContainer, targetPosition, scrollOffset);
     } else {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        scrollTo: {
-          y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
-        },
-        ease: 'power4.out',
-      });
+      animateMessageScrollTo(scrollContainer, scrollContainer.scrollHeight - scrollContainer.clientHeight);
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget);
@@ -4150,49 +4345,36 @@ const delays = DELAYS;
   function scrolldownbymessages(steps = 1, feedbackTarget = null) {
     resetScrollState();
 
-    const messages = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
+    const messages = getConversationTurnMessages();
     const scrollContainer = getScrollableContainer();
     if (!scrollContainer || messages.length === 0) return;
 
-    gsap.set(scrollContainer, { scrollTo: '+=0' });
+    killActiveMessageScrollTween();
     gsap.killTweensOf(scrollContainer);
 
-    const isBottom = window.moveTopBarToBottomCheckbox;
-    const messageThreshold = isBottom ? 48 : 30;
-    const scrollOffset = isBottom ? 43 : 25;
+    const { downThreshold, scrollOffset } = getMessageScrollOptions();
+    const messagePositions = getMessageTopScrollPositions(messages, scrollContainer);
 
     // Use a local variable instead of reassigning the parameter
     const stepCount = Math.max(1, Math.floor(steps));
 
     let virtualTop = scrollContainer.scrollTop;
-    let targetMessage = null;
+    let targetPosition = null;
 
     for (let i = 0; i < stepCount; i++) {
-      const next = getNextMessage(messages, virtualTop, messageThreshold);
+      const next = getNextMessagePosition(messagePositions, virtualTop, downThreshold);
       if (!next) {
-        targetMessage = null;
+        targetPosition = null;
         break;
       }
-      targetMessage = next;
-      virtualTop = Math.max(0, targetMessage.offsetTop - scrollOffset);
+      targetPosition = next;
+      virtualTop = clampScrollTop(scrollContainer, targetPosition.topScroll - scrollOffset);
     }
 
-    if (targetMessage) {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        overwrite: 'auto',
-        scrollTo: { y: virtualTop },
-        ease: 'power4.out',
-      });
+    if (targetPosition) {
+      scrollToMessagePosition(scrollContainer, targetPosition, scrollOffset);
     } else {
-      gsap.to(scrollContainer, {
-        duration: 0.3,
-        overwrite: 'auto',
-        scrollTo: {
-          y: scrollContainer.scrollHeight - scrollContainer.clientHeight,
-        },
-        ease: 'power4.out',
-      });
+      animateMessageScrollTo(scrollContainer, scrollContainer.scrollHeight - scrollContainer.clientHeight);
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
@@ -4811,6 +4993,8 @@ const delays = DELAYS;
 
     return true;
   }
+
+  window.__cspClickLowestSvgThenSubItemSvg = clickLowestSvgThenSubItemSvg;
 
   /* ===== End clickLowestSvgThenSubItemSvg Reusable Radix menu helpers ===== */
 
@@ -6003,8 +6187,12 @@ const delays = DELAYS;
         const el = getScrollableContainer();
         if (!el) return;
 
+        killActiveMessageScrollTween();
+        gsap.killTweensOf(el);
+
         gsap.to(el, {
           duration: 0.3,
+          overwrite: 'auto',
           scrollTo: { y: 'max' },
           ease: 'power4.out',
         });
@@ -6014,8 +6202,12 @@ const delays = DELAYS;
         const el = getScrollableContainer();
         if (!el) return;
 
+        killActiveMessageScrollTween();
+        gsap.killTweensOf(el);
+
         gsap.to(el, {
           duration: 0.3,
+          overwrite: 'auto',
           scrollTo: { y: 0 },
           ease: 'power4.out',
         });
@@ -9523,13 +9715,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     }
 
     function shouldHideTopHeader() {
-      return (
-        state.revealed &&
-        state.left instanceof Element &&
-        !!state.modelButton &&
-        state.left.contains(state.modelButton) &&
-        !findHeaderConversationActions()
-      );
+      return state.revealed;
     }
 
     function getRevealDecision(nextModelButton) {
@@ -11323,6 +11509,20 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
       function getPrimaryActionIdForMenuItem(item, rawItems = []) {
         if (!(item instanceof Element)) return '';
+        const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        const mapFrontendLabel =
+          typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
+            ? window.ModelLabels.mapFrontendLabelToActionId
+            : null;
+        const mapMenuLabelToFrontendActionId = () => {
+          if (!mapFrontendLabel) return '';
+          const label = __cspTextNoHint(item);
+          return (
+            mapFrontendLabel(label, activeModelConfigId) ||
+            mapFrontendLabel(label, DEFAULT_ACTIVE_MODEL_CONFIG_ID) ||
+            ''
+          );
+        };
         const tid = normModelTid(item.getAttribute('data-testid'));
         if (tid === 'model-configure-modal') return 'configure';
         if (
@@ -11344,7 +11544,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             return 'instant';
           }
         }
-        return '';
+        return mapMenuLabelToFrontendActionId();
       }
 
       function collectFrontendActionSignaturesFromPrimaryMenu(rawItems = []) {
@@ -11370,10 +11570,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       function getPrimaryMenuActionPairs(state = getVisibleModelMenuState()) {
         const rawItems = (state.items || []).filter((item) => item.menu === 'main');
         const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
-        const primaryActions =
-          typeof window.ModelLabels?.getPrimaryPresentationActions === 'function'
-            ? window.ModelLabels
-                .getPrimaryPresentationActions(activeModelConfigId, [])
+        const catalog = window.__modelCatalog || null;
+        const catalogPrimaryActions =
+          catalog && typeof window.ModelLabels?.getPopupPrimaryActions === 'function'
+            ? window.ModelLabels.getPopupPrimaryActions(activeModelConfigId, [], catalog)
+            : [];
+        const primaryActions = catalogPrimaryActions.length
+          ? catalogPrimaryActions
+          : typeof window.ModelLabels?.getPrimaryPresentationActions === 'function'
+            ? window.ModelLabels.getPrimaryPresentationActions(activeModelConfigId, [])
             : getModelActionSlots().filter((action) => action.group === 'primary');
         const actionSignatures = collectFrontendActionSignaturesFromPrimaryMenu(rawItems);
         const byActionId = new Map();
@@ -11580,6 +11785,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           const configureEl = findConfigureMenuItem(state);
           return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
         }
+        if (action.actionKind === 'configure-frontend-row') {
+          const configureEl = findConfigureMenuItem(state);
+          return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
+        }
         return null;
       };
 
@@ -11665,6 +11874,13 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
         const optionIndex = options.indexOf(option);
         const label = getConfigureOptionLabel(option);
+        if (typeof window.ModelLabels?.getCatalogConfigureActionForOption === 'function') {
+          return window.ModelLabels.getCatalogConfigureActionForOption(
+            label,
+            optionIndex,
+            window.__modelCatalog || null,
+          );
+        }
         if (typeof window.ModelLabels?.getConfigureActionForOption === 'function') {
           return window.ModelLabels.getConfigureActionForOption(label, optionIndex, slotHint);
         }
@@ -11713,6 +11929,25 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         dialog instanceof Element
           ? Array.from(dialog.querySelectorAll('button.__menu-item.hoverable[role="radio"]'))
           : [];
+      const getConfigureFrontendRowLabel = (row) => {
+        if (!(row instanceof Element)) return '';
+        const primary =
+          row.querySelector('.flex.min-w-0.items-center.gap-1') ||
+          row.querySelector('.flex.items-center.gap-1') ||
+          row.querySelector('.truncate') ||
+          row;
+        return __cspTextNoHint(primary);
+      };
+      const getFrontendActionIdFromRowLabel = (row) => {
+        const label = getConfigureFrontendRowLabel(row);
+        if (!label || typeof window.ModelLabels?.mapFrontendLabelToActionId !== 'function') {
+          return '';
+        }
+        return window.ModelLabels.mapFrontendLabelToActionId(
+          label,
+          DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+        );
+      };
       const isUnavailableConfigureFrontendRow = (row) =>
         row instanceof Element &&
         (row.hasAttribute('data-disabled') ||
@@ -11722,7 +11957,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const findConfigureProRow = (dialog) => {
         if (!(dialog instanceof Element)) return null;
         const candidates = Array.from(
-          dialog.querySelectorAll('[data-testid], [data-model-picker-pro-row], [data-model-picker-pro-menu-item]'),
+          new Set([
+            ...getConfigureFrontendRadioRows(dialog),
+            ...Array.from(
+              dialog.querySelectorAll(
+                '[data-testid], [data-model-picker-pro-row], [data-model-picker-pro-menu-item]',
+              ),
+            ),
+          ]),
         )
           .map((candidate) => candidate.closest('.__menu-item') || candidate)
           .filter((candidate, index, rows) => rows.indexOf(candidate) === index);
@@ -11733,12 +11975,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
               .getAttributeNames()
               .map((name) => `${name}=${candidate.getAttribute(name) || ''}`)
               .join(' ');
-            return /(?:^|[-_=\s])pro(?:$|[-_=\s])/i.test(stableAttributes);
+            return (
+              /(?:^|[-_=\s])pro(?:$|[-_=\s])/i.test(stableAttributes) ||
+              getFrontendActionIdFromRowLabel(candidate) === 'pro'
+            );
           }) || null
         );
       };
       const getConfigureFrontendActionIdForRow = (row, dialog) => {
         if (!(row instanceof Element) || !(dialog instanceof Element)) return '';
+        if (isUnavailableConfigureFrontendRow(row)) return '';
         const modelVersion = getModelVersionFromFrontendRow(row);
         if (modelVersion) {
           const match = Object.entries(latestFrontendActionSignatures).find(
@@ -11746,12 +11992,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           );
           if (match) return match[0];
         }
+        const labelActionId = getFrontendActionIdFromRowLabel(row);
+        if (labelActionId) return labelActionId;
         if (row === findConfigureProRow(dialog)) return 'pro';
         return '';
       };
       const collectConfigureFrontendRows = (dialog) => {
         if (!(dialog instanceof Element)) return [];
-        const rows = [...getConfigureFrontendRadioRows(dialog), findConfigureProRow(dialog)].filter(Boolean);
+        const rows = Array.from(
+          new Set([...getConfigureFrontendRadioRows(dialog), findConfigureProRow(dialog)].filter(Boolean)),
+        );
         return rows
           .map((row) => {
             const actionId = getConfigureFrontendActionIdForRow(row, dialog);
@@ -12073,23 +12323,48 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (!listbox) return { ok: false, error: 'CONFIGURE_LISTBOX_NOT_FOUND' };
           hideConfigureListboxUiForScrape(listbox);
 
+          const optionElements = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+          const optionActions = optionElements.map((option) =>
+            getConfigureActionForOption(option, listbox),
+          );
           let nextDynamicConfigureSlot = 8;
           const usedConfigureSlots = new Set();
-          const availableOptions = Array.from(listbox.querySelectorAll(':scope [role="option"]'))
-            .map((option) => {
-              const action = getConfigureActionForOption(option, listbox);
-              if (!action?.id) return null;
-              const isDynamic = action.optionKind === 'value' && action.id.startsWith('configure-dynamic-');
-              const slot = isDynamic
-                ? (() => {
-                    while (usedConfigureSlots.has(nextDynamicConfigureSlot)) {
-                      nextDynamicConfigureSlot += 1;
-                    }
-                    return nextDynamicConfigureSlot++;
-                  })()
-                : Number(action.slot);
-              if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+          const reservedCatalogSlots = new Set(
+            optionActions
+              .filter((action) => action?.fromCatalog)
+              .map((action) => Number(action.slot))
+              .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+          );
+          const takeConfigureOptionSlot = (action) => {
+            const isDynamic =
+              action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
+            let slot = Number(action?.slot);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
+            if (isDynamic && !action?.fromCatalog) slot = -1;
+            if (slot >= 0 && !usedConfigureSlots.has(slot)) {
               usedConfigureSlots.add(slot);
+              return slot;
+            }
+            if (!isDynamic) return -1;
+            while (
+              nextDynamicConfigureSlot < MAX_SLOTS &&
+              (usedConfigureSlots.has(nextDynamicConfigureSlot) ||
+                reservedCatalogSlots.has(nextDynamicConfigureSlot))
+            ) {
+              nextDynamicConfigureSlot += 1;
+            }
+            if (nextDynamicConfigureSlot >= MAX_SLOTS) return -1;
+            slot = nextDynamicConfigureSlot;
+            usedConfigureSlots.add(slot);
+            nextDynamicConfigureSlot += 1;
+            return slot;
+          };
+          const availableOptions = optionElements
+            .map((option, index) => {
+              const action = optionActions[index];
+              if (!action?.id) return null;
+              const slot = takeConfigureOptionSlot(action);
+              if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
               return {
                 ...action,
                 slot,
@@ -12393,7 +12668,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const subItemToken = iconTokenByOptionId[normalizeThinkingEffortId(optionId)];
         if (!subItemToken) return false;
         const firstButtonPath = ['#127a53', '#c9d737'];
-        delayCall(clickLowestSvgThenSubItemSvg, 350, firstButtonPath, subItemToken);
+        const clickLegacyThinkingMenuItem = window.__cspClickLowestSvgThenSubItemSvg;
+        if (typeof clickLegacyThinkingMenuItem !== 'function') return false;
+        setTimeout(() => {
+          clickLegacyThinkingMenuItem(firstButtonPath, subItemToken);
+        }, 350);
         return true;
       };
       const runModelSelectorThinkingEffortOptionAction = async (option, { hideUi = false } = {}) => {
@@ -12610,6 +12889,20 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
       const executeModelAction = (action, options = {}) => {
         if (!action) return false;
+        const activateDirectModelTarget = (ready) => {
+          const targetEl = ready?.target?.el;
+          if (!targetEl) return false;
+          const directPair = getPrimaryMenuActionPairs(ready?.state || getVisibleModelMenuState()).find(
+            (pair) => pair.action?.id === action.id && pair.item?.el === targetEl,
+          );
+          if (!directPair) return false;
+          if (window.gsap) flashMenuItem(targetEl);
+          setTimeout(() => {
+            activateMenuItem(targetEl);
+            flashBottomBar();
+          }, DELAY_ACTIVATE_TARGET_MS);
+          return true;
+        };
         if (action.actionKind === 'configure-option' && options.preferPreparedSession) {
           const preparedSession = getPreparedModelConfigSession();
           if (preparedSession) {
@@ -12625,7 +12918,12 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           () => {
             openMenuForAction(action, (ready) => {
               if (!ready) {
-                if (action.actionKind === 'main-row') void runConfigureFrontendRowAction(action);
+                if (
+                  action.actionKind === 'main-row' ||
+                  action.actionKind === 'configure-frontend-row'
+                ) {
+                  void runConfigureFrontendRowAction(action);
+                }
                 return;
               }
               if (action.actionKind === 'configure-option') {
@@ -12639,6 +12937,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
               }
               applyHints();
               if (action.actionKind === 'configure-frontend-row') {
+                if (activateDirectModelTarget(ready)) return;
                 void runConfigureFrontendRowAction(action);
                 return;
               }

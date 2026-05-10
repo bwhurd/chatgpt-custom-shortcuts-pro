@@ -338,6 +338,10 @@
     String(value || '')
       .replace(/\s+/g, ' ')
       .trim();
+  const isLatestConfigureOptionLabel = (value) => {
+    const text = normalizeConfigureOptionLabel(value).toLowerCase();
+    return text === 'latest' || /^latest\b/.test(text);
+  };
   const slugifyConfigureOptionLabel = (value) => {
     const slug = normalizeConfigureOptionLabel(value)
       .toLowerCase()
@@ -371,7 +375,7 @@
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
   const getStaticConfigureActionForOption = (label, optionIndex) => {
     const text = normalizeConfigureOptionLabel(label);
-    if (optionIndex === 0 || text.toLowerCase() === 'latest')
+    if (optionIndex === 0 || isLatestConfigureOptionLabel(text))
       return getActionById('configure-latest');
     if (text === '5.2') return getActionById('configure-5-2');
     if (text === '5.0') return getActionById('configure-5-0-thinking-mini');
@@ -400,9 +404,17 @@
     const options = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
     const seenActionIds = new Set();
     const usedSlots = new Set();
+    const reservedDynamicSlots = new Set(
+      options
+        .map((option) => toValidDynamicConfigureSlot(option?.slot))
+        .filter((slot) => slot >= 0),
+    );
     let nextDynamicSlot = CONFIGURE_DYNAMIC_SLOT_START;
     const takeNextDynamicSlot = () => {
-      while (nextDynamicSlot < MAX_SLOTS && usedSlots.has(nextDynamicSlot)) {
+      while (
+        nextDynamicSlot < MAX_SLOTS &&
+        (usedSlots.has(nextDynamicSlot) || reservedDynamicSlots.has(nextDynamicSlot))
+      ) {
         nextDynamicSlot += 1;
       }
       if (nextDynamicSlot >= MAX_SLOTS) return -1;
@@ -421,6 +433,8 @@
         const isDynamic = isDynamicConfigureActionId(actionId);
         let slot = toValidSlot(base.slot);
         if (isDynamic) {
+          const optionSlot = toValidDynamicConfigureSlot(option?.slot);
+          slot = optionSlot >= 0 ? optionSlot : -1;
           if (slot < CONFIGURE_DYNAMIC_SLOT_START || usedSlots.has(slot)) {
             slot = takeNextDynamicSlot();
           }
@@ -440,6 +454,21 @@
         };
       })
       .filter(Boolean);
+  };
+  const getCatalogConfigureActionForOption = (label, optionIndex = -1, catalog = null) => {
+    const text = normalizeConfigureOptionLabel(label);
+    const fallback = getConfigureActionForOption(text, optionIndex);
+    const catalogActions = getCatalogConfigureActions(catalog, []);
+    if (catalogActions.length) {
+      const byId = fallback?.id ? catalogActions.find((action) => action.id === fallback.id) : null;
+      if (byId) return { ...byId, fromCatalog: true };
+
+      const byLabel = text
+        ? catalogActions.find((action) => normalizeConfigureOptionLabel(action.label) === text)
+        : null;
+      if (byLabel) return { ...byLabel, fromCatalog: true };
+    }
+    return fallback ? { ...fallback, fromCatalog: false } : null;
   };
   const resolveCatalogActiveConfigId = (activeConfigId, catalog) => {
     const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
@@ -808,6 +837,7 @@
     getActionBySlot,
     getActionById,
     getConfigureActionForOption,
+    getCatalogConfigureActionForOption,
     getPrimaryActionIdsForActiveConfig,
     getPrimaryPresentationActions,
     getPresentationGroups,
