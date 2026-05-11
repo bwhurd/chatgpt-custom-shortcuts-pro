@@ -201,2125 +201,8 @@ const VISIBILITY_DEFAULTS = (() => {
     selectThenCopyAllMessagesOnlyUser: false,
     doNotIncludeLabelsCheckbox: false,
     clickToCopyInlineCodeEnabled: false,
-    fadeMessageButtonsCheckbox: false,
     hidePastedLibraryFilesEnabled: false,
-    lazyFastModeEnabled: false,
   };
-})();
-
-// =============================================================
-// Lazy Load Fast Mode POC (always active)
-// =============================================================
-(() => {
-  const ENABLE_INLINE_LAZY_FAST_POC = false;
-  if (!ENABLE_INLINE_LAZY_FAST_POC) return;
-})();
-
-// =============================================================
-// Lazy Load Fast Mode history surface (always active POC)
-// =============================================================
-(() => {
-  const ENABLE_LAZY_FAST_HISTORY_SURFACE = false;
-  if (!ENABLE_LAZY_FAST_HISTORY_SURFACE) return;
-
-  const ROUTE_RE = /^\/c\/([^/?#]+)/;
-  const HISTORY_DATA_NODE_ID = 'csp-lazy-fast-history-data';
-  const HISTORY_MESSAGE_SOURCE = 'csp-lazy-fast-history';
-  const ROOT_ID = 'csp-lazy-fast-history-root';
-  const STYLE_ID = 'csp-lazy-fast-history-style';
-  const ROUTE_CHECK_MS = 700;
-  const INITIAL_OLDER_TURN_COUNT = 40;
-  const LOAD_MORE_BATCH_SIZE = 40;
-  const BYPASS_KEY = 'csp_lazy_fast_skip_once';
-  const NATIVE_TURN_SELECTOR =
-    'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn]';
-
-  const state = {
-    currentConversationId: '',
-    history: null,
-    root: null,
-    summary: null,
-    toggleButton: null,
-    loadMoreButton: null,
-    fullButton: null,
-    panel: null,
-    scroller: null,
-    inner: null,
-    routeTimer: 0,
-    virtualizer: null,
-    virtualizerCleanup: null,
-    renderRaf: 0,
-    autoLoadCheckRaf: 0,
-    visibleOlderCount: INITIAL_OLDER_TURN_COUNT,
-    panelOpen: true,
-    autoLoadMoreQueued: false,
-  };
-
-  const getConversationIdFromPath = (pathname = location.pathname || '') =>
-    pathname.match(ROUTE_RE)?.[1] || '';
-
-  const getMessage = (key, substitutions, fallback) => {
-    try {
-      const value = chrome?.i18n?.getMessage?.(key, substitutions);
-      return value || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
-  const getSegmentLabel = (segment) => {
-    if (segment?.type === 'output') {
-      return getMessage('lazy_fast_output_label', undefined, 'Output');
-    }
-    if (typeof segment?.label === 'string' && segment.label.trim()) return segment.label.trim();
-    return getMessage('lazy_fast_rich_content_label', undefined, 'Rich content');
-  };
-
-  const getOlderTurns = () =>
-    Array.isArray(state.history?.turns)
-      ? state.history.turns.slice(0, Math.max(0, Number(state.history.keptStartIndex) || 0))
-      : [];
-
-  const getDisplayedOlderTurns = () => {
-    const olderTurns = getOlderTurns();
-    if (!olderTurns.length) return [];
-    const startIndex = Math.max(0, olderTurns.length - state.visibleOlderCount);
-    return olderTurns.slice(startIndex);
-  };
-
-  const getRemainingOlderTurnCount = () => {
-    const olderTurns = getOlderTurns();
-    return Math.max(0, olderTurns.length - getDisplayedOlderTurns().length);
-  };
-
-  const clearRenderRaf = () => {
-    if (!state.renderRaf) return;
-    cancelAnimationFrame(state.renderRaf);
-    state.renderRaf = 0;
-  };
-
-  const clearAutoLoadCheckRaf = () => {
-    if (!state.autoLoadCheckRaf) return;
-    cancelAnimationFrame(state.autoLoadCheckRaf);
-    state.autoLoadCheckRaf = 0;
-  };
-
-  const queueLoadMoreOlderTurns = () => {
-    if (state.autoLoadMoreQueued) return;
-    if (getRemainingOlderTurnCount() <= 0) return;
-    const previousDisplayed = getDisplayedOlderTurns();
-    const previousLength = previousDisplayed.length;
-    state.autoLoadMoreQueued = true;
-    requestAnimationFrame(() => {
-      state.autoLoadMoreQueued = false;
-      state.visibleOlderCount += LOAD_MORE_BATCH_SIZE;
-      updateSurface();
-      requestAnimationFrame(() => {
-        const displayedTurns = getDisplayedOlderTurns();
-        const addedCount = Math.max(0, displayedTurns.length - previousLength);
-        if (addedCount <= 0) return;
-        const boundaryTurn = displayedTurns[addedCount - 1];
-        if (!boundaryTurn?.id) return;
-        const boundaryNode = state.inner?.querySelector(
-          `.csp-lazy-fast-turn[data-turn-id="${CSS.escape(boundaryTurn.id)}"]`,
-        );
-        if (!(boundaryNode instanceof HTMLElement)) return;
-        boundaryNode.scrollIntoView({ block: 'start' });
-      });
-    });
-  };
-
-  const destroyVirtualizer = () => {
-    clearRenderRaf();
-    if (typeof state.virtualizerCleanup === 'function') {
-      state.virtualizerCleanup();
-    }
-    state.virtualizerCleanup = null;
-    state.virtualizer = null;
-  };
-
-  const removeRoot = () => {
-    destroyVirtualizer();
-    state.root?.remove();
-    state.root = null;
-    state.summary = null;
-    state.toggleButton = null;
-    state.loadMoreButton = null;
-    state.fullButton = null;
-    state.panel = null;
-    state.scroller = null;
-    state.inner = null;
-  };
-
-  const ensureStyle = () => {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
-      #${ROOT_ID} {
-        margin: 0 0 10px;
-        width: 100%;
-      }
-      #${ROOT_ID} .csp-lazy-fast-toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 10px;
-        padding: 0 0 12px;
-      }
-      #${ROOT_ID} .csp-lazy-fast-summary {
-        flex: 1 1 240px;
-        min-width: 0;
-        font: 500 12px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--text-tertiary, rgb(102 102 102));
-      }
-      #${ROOT_ID} .csp-lazy-fast-button {
-        appearance: none;
-        border: 1px solid rgb(0 0 0 / 0.08);
-        background: transparent;
-        color: var(--text-primary, #1f1f1f);
-        border-radius: 999px;
-        padding: 6px 11px;
-        font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        cursor: pointer;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-button {
-        border-color: rgb(255 255 255 / 0.08);
-        background: transparent;
-        color: var(--text-primary, #ececec);
-      }
-      #${ROOT_ID} .csp-lazy-fast-panel {
-        display: block;
-        padding: 0;
-      }
-      #${ROOT_ID} .csp-lazy-fast-scroller {
-        position: relative;
-        height: auto;
-        min-height: 0;
-        max-height: none;
-        overflow: visible;
-        overscroll-behavior: auto;
-        border-radius: 0;
-        background: transparent;
-      }
-      #${ROOT_ID} .csp-lazy-fast-inner {
-        position: static;
-        width: 100%;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn {
-        position: relative;
-        left: 0;
-        width: 100%;
-        padding: 0 0 6px;
-        box-sizing: border-box;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn--assistant {
-        justify-content: flex-start;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn--user {
-        justify-content: flex-end;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn-shell {
-        display: flex;
-        width: 100%;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn-shell--assistant {
-        justify-content: flex-start;
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn-shell--user {
-        justify-content: flex-end;
-      }
-      #${ROOT_ID} .csp-lazy-fast-bubble {
-        max-width: min(100%, 42rem);
-        border-radius: 18px;
-        padding: 12px 14px;
-        border: 1px solid rgb(0 0 0 / 0.04);
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn-shell--assistant .csp-lazy-fast-bubble {
-        background: rgb(255 255 255 / 0.72);
-      }
-      #${ROOT_ID} .csp-lazy-fast-turn-shell--user .csp-lazy-fast-bubble {
-        background: rgb(16 163 127 / 0.09);
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-turn-shell--assistant .csp-lazy-fast-bubble {
-        background: rgb(44 44 44 / 0.72);
-        border-color: rgb(255 255 255 / 0.06);
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-turn-shell--user .csp-lazy-fast-bubble {
-        background: rgb(16 163 127 / 0.18);
-        border-color: rgb(255 255 255 / 0.06);
-      }
-      #${ROOT_ID} .csp-lazy-fast-segment + .csp-lazy-fast-segment {
-        margin-top: 12px;
-      }
-      #${ROOT_ID} .csp-lazy-fast-text {
-        white-space: pre-wrap;
-        word-break: break-word;
-        font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-block + .csp-lazy-fast-native-block {
-        margin-top: 0.75rem;
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-code {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-      #${ROOT_ID} .csp-lazy-fast-rich {
-        border: 1px dashed rgb(0 0 0 / 0.14);
-        border-radius: 14px;
-        padding: 10px 12px;
-        background: rgb(0 0 0 / 0.025);
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-rich {
-        border-color: rgb(255 255 255 / 0.16);
-        background: rgb(255 255 255 / 0.03);
-      }
-      #${ROOT_ID} .csp-lazy-fast-rich-title {
-        font: 600 12px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      #${ROOT_ID} .csp-lazy-fast-rich-summary {
-        margin-top: 4px;
-        color: rgb(90 90 90);
-        font: 400 12px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-rich-summary {
-        color: rgb(180 180 180);
-      }
-      #${ROOT_ID} .csp-lazy-fast-code-label {
-        display: inline-flex;
-        margin-bottom: 8px;
-        padding: 3px 8px;
-        border-radius: 999px;
-        background: rgb(0 0 0 / 0.06);
-        font: 600 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-code-label {
-        background: rgb(255 255 255 / 0.08);
-      }
-      #${ROOT_ID} .csp-lazy-fast-code {
-        margin: 0;
-        padding: 12px 14px;
-        border-radius: 14px;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        background: rgb(0 0 0 / 0.045);
-        font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-code {
-        background: rgb(0 0 0 / 0.24);
-      }
-    `;
-    (document.head || document.documentElement).appendChild(style);
-  };
-
-  const appendParagraphText = (target, value) => {
-    const text = String(value || '').replace(/\r\n?/g, '\n');
-    const paragraphs = text.split(/\n{2,}/).filter(Boolean);
-    const source = paragraphs.length ? paragraphs : [text];
-
-    source.forEach((paragraph) => {
-      const p = document.createElement('p');
-      p.className = 'whitespace-pre-wrap';
-      p.textContent = paragraph;
-      target.appendChild(p);
-    });
-  };
-
-  const createTextSegmentNode = (segment, role) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'csp-lazy-fast-native-block';
-
-    if (role === 'assistant') {
-      appendParagraphText(wrapper, segment.text || '');
-      return wrapper;
-    }
-
-    const text = document.createElement('div');
-    text.className = 'whitespace-pre-wrap';
-    text.textContent = segment.text || '';
-    wrapper.appendChild(text);
-    return wrapper;
-  };
-
-  const createCodeSegmentNode = (segment, role) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'csp-lazy-fast-native-block';
-
-    if (segment.language) {
-      const label = document.createElement('div');
-      label.className = 'csp-lazy-fast-code-label';
-      label.textContent = segment.language;
-      wrapper.appendChild(label);
-    }
-
-    const pre = document.createElement('pre');
-    pre.className =
-      role === 'assistant'
-        ? 'csp-lazy-fast-native-code'
-        : 'csp-lazy-fast-code csp-lazy-fast-native-code';
-    const code = document.createElement('code');
-    code.textContent = segment.text || '';
-    pre.appendChild(code);
-    wrapper.appendChild(pre);
-    return wrapper;
-  };
-
-  const createRichSegmentNode = (segment) => {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'csp-lazy-fast-native-block csp-lazy-fast-rich';
-
-    const title = document.createElement('div');
-    title.className = 'csp-lazy-fast-rich-title';
-    title.textContent = getSegmentLabel(segment);
-    wrapper.appendChild(title);
-
-    const summary = document.createElement('div');
-    summary.className = 'csp-lazy-fast-rich-summary';
-    summary.textContent =
-      typeof segment?.summary === 'string' && segment.summary.trim()
-        ? segment.summary.trim()
-        : getMessage(
-            'lazy_fast_rich_content_summary',
-            getSegmentLabel(segment),
-            `${getSegmentLabel(segment)} is preserved in Fast Mode but not fully rendered yet.`,
-          );
-    wrapper.appendChild(summary);
-
-    return wrapper;
-  };
-
-  const getNativeTurnTemplate = (role) =>
-    Array.from(document.querySelectorAll(NATIVE_TURN_SELECTOR)).find(
-      (node) => node instanceof HTMLElement && !node.closest(`#${ROOT_ID}`) && node.getAttribute('data-turn') === role,
-    ) || null;
-
-  const stripNativeTurnChrome = (shell) => {
-    shell
-      .querySelectorAll('[aria-label="Your message actions"], [aria-label="Response actions"]')
-      .forEach((actions) => {
-        const row = actions.closest('.z-0');
-        if (row) {
-          row.remove();
-          return;
-        }
-        actions.remove();
-      });
-  };
-
-  const populateNativeTurnContent = (container, turn) => {
-    container.replaceChildren();
-    if (turn.role === 'assistant') {
-      for (const segment of turn.segments || []) {
-        if (segment.type === 'text') {
-          appendParagraphText(container, segment.text || '');
-          continue;
-        }
-
-        if (segment.type === 'rich') {
-          container.appendChild(createRichSegmentNode(segment));
-          continue;
-        }
-
-        if (segment.type === 'output' || segment.language) {
-          const label = document.createElement('div');
-          label.className = 'csp-lazy-fast-code-label';
-          label.textContent = segment.type === 'output' ? getSegmentLabel(segment) : segment.language;
-          container.appendChild(label);
-        }
-
-        const pre = document.createElement('pre');
-        pre.className = 'csp-lazy-fast-native-code';
-        const code = document.createElement('code');
-        code.textContent = segment.text || '';
-        pre.appendChild(code);
-        container.appendChild(pre);
-      }
-      return;
-    }
-
-    for (const segment of turn.segments || []) {
-      if (segment.type === 'text') {
-        container.appendChild(createTextSegmentNode(segment, turn.role));
-        continue;
-      }
-      if (segment.type === 'rich') {
-        container.appendChild(createRichSegmentNode(segment));
-        continue;
-      }
-      container.appendChild(createCodeSegmentNode(segment, turn.role));
-    }
-  };
-
-  const createTurnNode = (turn, index, startOffset) => {
-    const template = getNativeTurnTemplate(turn.role);
-    if (template instanceof HTMLElement) {
-      const shell = template.cloneNode(true);
-      shell.classList.add('csp-lazy-fast-turn', `csp-lazy-fast-turn--${turn.role}`);
-      shell.style.transform = `translateY(${Math.round(startOffset)}px)`;
-      shell.setAttribute('data-index', String(index));
-      shell.setAttribute('data-turn', turn.role);
-      shell.removeAttribute('data-testid');
-      if (turn?.id) shell.setAttribute('data-turn-id', turn.id);
-
-      stripNativeTurnChrome(shell);
-
-      const message = shell.querySelector(`[data-message-author-role="${turn.role}"]`);
-      if (message instanceof HTMLElement) {
-        if (turn?.id) message.setAttribute('data-message-id', turn.id);
-        const contentContainer =
-          turn.role === 'assistant'
-            ? message.querySelector('.markdown')
-            : message.querySelector('.user-message-bubble-color');
-
-        if (contentContainer instanceof HTMLElement) {
-          populateNativeTurnContent(contentContainer, turn);
-          return shell;
-        }
-      }
-    }
-
-    const shell = document.createElement('section');
-    shell.className = `csp-lazy-fast-turn csp-lazy-fast-turn--${turn.role}`;
-    shell.style.transform = `translateY(${Math.round(startOffset)}px)`;
-    shell.setAttribute('data-index', String(index));
-    if (turn?.id) shell.setAttribute('data-turn-id', turn.id);
-    shell.setAttribute('dir', 'auto');
-    shell.setAttribute('data-turn', turn.role);
-
-    const content = document.createElement('div');
-    content.className = turn.role === 'assistant' ? 'markdown prose dark:prose-invert w-full wrap-break-word light markdown-new-styling' : 'user-message-bubble-color corner-superellipse/0.98 relative rounded-[22px] px-4 py-2.5 leading-6 max-w-(--user-chat-width,70%)';
-    populateNativeTurnContent(content, turn);
-    shell.appendChild(content);
-    return shell;
-  };
-
-  // biome-ignore lint/correctness/noUnusedVariables: retained virtual-render sizing helper
-  const estimateTurnSize = (index) => {
-    const turn = getDisplayedOlderTurns()[index];
-    if (!turn) return 120;
-
-    let score = 72;
-    for (const segment of turn.segments || []) {
-      const textLength = (segment.text || '').length;
-      score += Math.min(180, Math.ceil(textLength / 110) * 16);
-      if (segment.type !== 'text') score += 32;
-    }
-    return Math.max(92, Math.min(360, score));
-  };
-
-  const scheduleVirtualRender = () => {
-    if (state.renderRaf) return;
-    state.renderRaf = requestAnimationFrame(() => {
-      state.renderRaf = 0;
-      renderHistoryItems();
-    });
-  };
-
-  const ensureVirtualizer = () => {
-    destroyVirtualizer();
-  };
-
-  const renderFallbackItems = (displayedTurns) => {
-    if (!state.inner) return;
-    state.inner.replaceChildren();
-    state.inner.style.height = 'auto';
-
-    const fragment = document.createDocumentFragment();
-    displayedTurns.forEach((turn, index) => {
-      const node = createTurnNode(turn, index, 0);
-      node.style.position = 'relative';
-      node.style.transform = 'none';
-      fragment.appendChild(node);
-    });
-
-    state.inner.appendChild(fragment);
-  };
-
-  function renderHistoryItems() {
-    if (!state.inner || !state.panelOpen) return;
-    const displayedTurns = getDisplayedOlderTurns();
-    if (!displayedTurns.length) {
-      state.inner.replaceChildren();
-      state.inner.style.height = '0px';
-      return;
-    }
-    renderFallbackItems(displayedTurns);
-  }
-
-  const maybeAutoLoadOlderTurns = () => {
-    if (!state.root || !state.inner || !state.panelOpen) return;
-    if (state.autoLoadMoreQueued) return;
-    if (getRemainingOlderTurnCount() <= 0) return;
-
-    const firstTurn = state.inner.querySelector('.csp-lazy-fast-turn');
-    if (!(firstTurn instanceof HTMLElement)) return;
-
-    const rect = firstTurn.getBoundingClientRect();
-    if (rect.bottom < 0) return;
-    if (rect.top > Math.min(window.innerHeight * 0.55, 220)) return;
-
-    queueLoadMoreOlderTurns();
-  };
-
-  const scheduleAutoLoadCheck = () => {
-    if (state.autoLoadCheckRaf) return;
-    state.autoLoadCheckRaf = requestAnimationFrame(() => {
-      state.autoLoadCheckRaf = 0;
-      maybeAutoLoadOlderTurns();
-    });
-  };
-
-  const updateButtons = () => {
-    if (!state.history || !state.root) return;
-
-    const olderTurns = getOlderTurns();
-    const olderCount = olderTurns.length;
-    const visibleCount = getDisplayedOlderTurns().length;
-    const remainingCount = getRemainingOlderTurnCount();
-    const hiddenCount = olderCount.toLocaleString();
-
-    state.summary.textContent = getMessage(
-      'lazy_fast_history_summary',
-      hiddenCount,
-      `Fast Mode hid ${hiddenCount} earlier turns.`,
-    );
-
-    state.toggleButton.textContent = state.panelOpen
-      ? getMessage('lazy_fast_hide_older', undefined, 'Hide older history')
-      : getMessage(
-          'lazy_fast_show_older',
-          visibleCount.toLocaleString(),
-          `Show older history (${visibleCount})`,
-        );
-    state.toggleButton.style.display = 'none';
-
-    state.loadMoreButton.style.display = state.panelOpen && remainingCount > 0 ? '' : 'none';
-    if (remainingCount > 0) {
-      const batchCount = Math.min(LOAD_MORE_BATCH_SIZE, remainingCount).toLocaleString();
-      state.loadMoreButton.textContent = getMessage(
-        'lazy_fast_load_more',
-        batchCount,
-        `Load ${batchCount} more older turns`,
-      );
-    }
-
-    state.fullButton.textContent = getMessage(
-      'lazy_fast_load_full',
-      undefined,
-      'Load full conversation natively',
-    );
-  };
-
-  const refreshRootPlacement = () => {
-    if (!state.history || !getOlderTurns().length) {
-      removeRoot();
-      return;
-    }
-
-    ensureStyle();
-
-    const firstNativeTurn = document.querySelector(NATIVE_TURN_SELECTOR);
-    const anchorParent = firstNativeTurn?.parentElement;
-    if (!anchorParent || !firstNativeTurn) return;
-
-    if (!state.root) {
-      const root = document.createElement('section');
-      root.id = ROOT_ID;
-
-      const toolbar = document.createElement('div');
-      toolbar.className = 'csp-lazy-fast-toolbar';
-
-      const summary = document.createElement('div');
-      summary.className = 'csp-lazy-fast-summary';
-
-      const toggleButton = document.createElement('button');
-      toggleButton.type = 'button';
-      toggleButton.className = 'csp-lazy-fast-button';
-      toggleButton.addEventListener('click', () => {
-        state.panelOpen = !state.panelOpen;
-        if (state.panelOpen) {
-          state.visibleOlderCount = Math.max(INITIAL_OLDER_TURN_COUNT, state.visibleOlderCount);
-        }
-        updateSurface();
-        if (state.panelOpen && state.scroller) {
-          requestAnimationFrame(() => {
-            if (!state.scroller) return;
-            state.scroller.scrollTop = state.scroller.scrollHeight;
-          });
-        }
-      });
-
-      const loadMoreButton = document.createElement('button');
-      loadMoreButton.type = 'button';
-      loadMoreButton.className = 'csp-lazy-fast-button';
-      loadMoreButton.addEventListener('click', () => {
-        queueLoadMoreOlderTurns();
-      });
-
-      const fullButton = document.createElement('button');
-      fullButton.type = 'button';
-      fullButton.className = 'csp-lazy-fast-button';
-      fullButton.addEventListener('click', () => {
-        try {
-          localStorage.setItem(BYPASS_KEY, 'true');
-        } catch { }
-        location.reload();
-      });
-
-      const panel = document.createElement('div');
-      panel.className = 'csp-lazy-fast-panel';
-
-      const scroller = document.createElement('div');
-      scroller.className = 'csp-lazy-fast-scroller';
-
-      const inner = document.createElement('div');
-      inner.className = 'csp-lazy-fast-inner';
-
-      scroller.appendChild(inner);
-      panel.appendChild(scroller);
-
-      toolbar.appendChild(summary);
-      toolbar.appendChild(toggleButton);
-      toolbar.appendChild(loadMoreButton);
-      toolbar.appendChild(fullButton);
-      root.appendChild(toolbar);
-      root.appendChild(panel);
-
-      state.root = root;
-      state.summary = summary;
-      state.toggleButton = toggleButton;
-      state.loadMoreButton = loadMoreButton;
-      state.fullButton = fullButton;
-      state.panel = panel;
-      state.scroller = scroller;
-      state.inner = inner;
-    }
-
-    if (state.root.parentElement !== anchorParent || state.root.nextElementSibling !== firstNativeTurn) {
-      anchorParent.insertBefore(state.root, firstNativeTurn);
-    }
-  };
-
-  const updateSurface = () => {
-    refreshRootPlacement();
-
-    if (!state.root) return;
-
-    state.root.classList.toggle('is-open', !!state.panelOpen);
-    updateButtons();
-    ensureVirtualizer();
-    scheduleVirtualRender();
-    scheduleAutoLoadCheck();
-  };
-
-  const clearHistoryState = () => {
-    state.history = null;
-    state.visibleOlderCount = INITIAL_OLDER_TURN_COUNT;
-    state.panelOpen = false;
-    clearAutoLoadCheckRaf();
-    removeRoot();
-  };
-
-  const readStoredHistoryPayload = () => {
-    const node = document.getElementById(HISTORY_DATA_NODE_ID);
-    const text = node?.textContent?.trim();
-    if (!text) return null;
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  };
-
-  const applyHistoryPayload = (payload) => {
-    const conversationId = getConversationIdFromPath();
-    if (!payload?.conversationId || payload.conversationId !== conversationId) return;
-    if (!Array.isArray(payload.turns) || !payload.turns.length) return;
-    if ((payload.keptStartIndex || 0) <= 0) {
-      clearHistoryState();
-      return;
-    }
-
-    state.currentConversationId = conversationId;
-    state.history = payload;
-    state.visibleOlderCount = Math.max(INITIAL_OLDER_TURN_COUNT, state.visibleOlderCount);
-    state.panelOpen = true;
-    updateSurface();
-  };
-
-  const syncCurrentRoute = () => {
-    const conversationId = getConversationIdFromPath();
-    if (!conversationId) {
-      if (state.currentConversationId) {
-        state.currentConversationId = '';
-        clearHistoryState();
-      }
-      return;
-    }
-
-    if (state.currentConversationId && state.currentConversationId !== conversationId) {
-      state.currentConversationId = conversationId;
-      clearHistoryState();
-    } else if (!state.currentConversationId) {
-      state.currentConversationId = conversationId;
-    }
-
-    if (!state.history || state.history.conversationId !== conversationId) {
-      const stored = readStoredHistoryPayload();
-      if (stored?.conversationId === conversationId) {
-        applyHistoryPayload(stored);
-      } else {
-        removeRoot();
-      }
-    } else {
-      updateSurface();
-    }
-  };
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.source !== HISTORY_MESSAGE_SOURCE) return;
-    applyHistoryPayload(event.data.payload);
-  });
-
-  window.addEventListener(
-    'scroll',
-    () => {
-      scheduleAutoLoadCheck();
-    },
-    { passive: true },
-  );
-
-  state.routeTimer = window.setInterval(syncCurrentRoute, ROUTE_CHECK_MS);
-  syncCurrentRoute();
-})();
-
-// =============================================================
-// Lazy Load Fast Mode native manual expansion proof
-// =============================================================
-(() => {
-  const LAZY_FAST_MODE_SETTING_KEY = 'lazyFastModeEnabled';
-  const LAZY_FAST_MODE_FORCE_INERT = false;
-  const LAZY_FAST_MODE_FULL_DISABLE = true;
-
-  const forceStoredLazyFastModeOff = () => {
-    try {
-      chrome.storage.sync.get({ [LAZY_FAST_MODE_SETTING_KEY]: false }, (items) => {
-        if (chrome.runtime?.lastError) return;
-        if (items?.[LAZY_FAST_MODE_SETTING_KEY] !== true) return;
-        chrome.storage.sync.set({ [LAZY_FAST_MODE_SETTING_KEY]: false });
-      });
-    } catch {}
-  };
-
-  if (LAZY_FAST_MODE_FULL_DISABLE) {
-    globalThis.__CSP_ENABLE_LAZY_FAST_MODE = false;
-    forceStoredLazyFastModeOff();
-    return;
-  }
-
-  if (LAZY_FAST_MODE_FORCE_INERT) {
-    globalThis.__CSP_ENABLE_LAZY_FAST_MODE = false;
-    return;
-  }
-
-  const initLazyFastModeNative = () => {
-    if (window.__cspLazyFastModeNativeInstalled) return;
-    window.__cspLazyFastModeNativeInstalled = true;
-
-  const ROUTE_RE = /^\/c\/([^/?#]+)/;
-  const HISTORY_DATA_NODE_ID = 'csp-lazy-fast-history-data';
-  const HISTORY_MESSAGE_SOURCE = 'csp-lazy-fast-history';
-  const EXPAND_REQUEST_SOURCE = 'csp-lazy-fast-expand-request';
-  const EXPAND_RESULT_SOURCE = 'csp-lazy-fast-expand-result';
-  const AUTO_EXPAND_INTENT_SOURCE = 'csp-lazy-fast-auto-expand-intent';
-  const RETAINED_COUNT_KEY_PREFIX = 'csp_lazy_fast_retained_turn_count:';
-  const ANCHOR_KEY_PREFIX = 'csp_lazy_fast_restore_anchor:';
-  const CONSUMED_ANCHOR_KEY_PREFIX = 'csp_lazy_fast_consumed_anchor:';
-  const DEBUG_KEY_PREFIX = 'csp_lazy_fast_debug:';
-  const DEBUG_WINDOW_KEY = '__cspLazyFastNativeDebug';
-  const DEFAULT_RETAINED_TURN_COUNT = 24;
-  const LOAD_MORE_BATCH_SIZE = 40;
-  const ROUTE_CHECK_MS = 700;
-  const RESTORE_MAX_AGE_MS = 2 * 60 * 1000;
-  const RELOAD_COOLDOWN_MS = 1500;
-  const ANCHOR_TWEEN_MIN_DURATION_S = 0.14;
-  const ANCHOR_TWEEN_MAX_DURATION_S = 0.3;
-  const ANCHOR_TWEEN_MAX_DISTANCE_PX = 2200;
-  const ANCHOR_TWEEN_MIN_DISTANCE_PX = 18;
-  const IN_PLACE_REVEAL_MAX_ATTEMPTS = 16;
-  const POST_REVEAL_DISTANCE_LOCK_MS = 1600;
-  const EXPANSION_FLIP_MAX_TARGETS = 12;
-  const EXPANSION_FLIP_MARGIN_PX = 140;
-  const EXPANSION_FLIP_MAX_AGE_MS = 4000;
-  const MAX_DEBUG_EVENTS = 12;
-  const ROOT_ID = 'csp-lazy-fast-native-banner';
-  const STYLE_ID = 'csp-lazy-fast-native-banner-style';
-  const NATIVE_TURN_SELECTOR =
-    'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn]';
-
-  const state = {
-    currentConversationId: '',
-    history: null,
-    routeTimer: 0,
-    root: null,
-    summary: null,
-    summaryText: null,
-    summarySpinner: null,
-    loadMoreButton: null,
-    fullButton: null,
-    reloadScheduled: false,
-    lastReloadAt: 0,
-    restoredConversationId: '',
-    cooldownTimer: 0,
-    anchorRestoreTween: null,
-    anchorRestoreConversationId: '',
-    anchorRestoreTurnId: '',
-    anchorRestoreTargetScrollTop: NaN,
-    anchorRestoreScrollRoot: null,
-    anchorRestorePrevOverflowAnchor: '',
-    anchorRestorePrevScrollBehavior: '',
-    pendingExpansionFlip: null,
-    inPlaceBusy: null,
-    inPlaceBusyDistanceLockRaf: 0,
-    postRevealDistanceLock: null,
-    postRevealDistanceLockRaf: 0,
-  };
-
-  const getConversationIdFromPath = (pathname = location.pathname || '') =>
-    pathname.match(ROUTE_RE)?.[1] || '';
-
-  const getRetainedCountKey = (conversationId) =>
-    `${RETAINED_COUNT_KEY_PREFIX}${String(conversationId || '')}`;
-
-  const getAnchorKey = (conversationId) =>
-    `${ANCHOR_KEY_PREFIX}${String(conversationId || '')}`;
-
-  const getConsumedAnchorKey = (conversationId) =>
-    `${CONSUMED_ANCHOR_KEY_PREFIX}${String(conversationId || '')}`;
-
-  const getDebugKey = (conversationId) =>
-    `${DEBUG_KEY_PREFIX}${String(conversationId || '')}`;
-
-  const normalizeRetainedTurnCount = (value) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return DEFAULT_RETAINED_TURN_COUNT;
-    return Math.max(DEFAULT_RETAINED_TURN_COUNT, Math.floor(parsed));
-  };
-
-  const syncDebugWindow = (snapshot) => {
-    try {
-      window[DEBUG_WINDOW_KEY] = snapshot || null;
-    } catch { }
-  };
-
-  const readDebugSnapshot = (conversationId) => {
-    if (!conversationId) return null;
-    try {
-      const raw = sessionStorage.getItem(getDebugKey(conversationId));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const writeDebugSnapshot = (conversationId, snapshot) => {
-    if (!conversationId) return;
-    try {
-      sessionStorage.setItem(getDebugKey(conversationId), JSON.stringify(snapshot));
-    } catch { }
-    syncDebugWindow(snapshot);
-  };
-
-  const syncDebugSnapshot = (conversationId) => {
-    syncDebugWindow(readDebugSnapshot(conversationId));
-  };
-
-  const recordDebugEvent = (conversationId, details = {}) => {
-    if (!conversationId) return;
-
-    const previous = readDebugSnapshot(conversationId) || {
-      conversationId,
-      events: [],
-    };
-    const event = {
-      action: String(details.action || '').trim(),
-      source: String(details.source || '').trim(),
-      requestedRetainedTurnCount: Number.isFinite(Number(details.requestedRetainedTurnCount))
-        ? normalizeRetainedTurnCount(details.requestedRetainedTurnCount)
-        : null,
-      anchorTurnId:
-        typeof details.anchorTurnId === 'string' && details.anchorTurnId.trim()
-          ? details.anchorTurnId.trim()
-          : null,
-      anchorOffsetWithinScrollRoot: Number.isFinite(Number(details.anchorOffsetWithinScrollRoot))
-        ? Math.round(Number(details.anchorOffsetWithinScrollRoot))
-        : null,
-      at: Date.now(),
-    };
-
-    const events = Array.isArray(previous.events)
-      ? [...previous.events, event].slice(-MAX_DEBUG_EVENTS)
-      : [event];
-
-    const next = {
-      conversationId,
-      lastAction: event.action || null,
-      lastActionSource: event.source || null,
-      requestedRetainedTurnCount: event.requestedRetainedTurnCount,
-      lastRequestSource:
-        event.action === 'request_native_expansion'
-          ? event.source || null
-          : previous.lastRequestSource || null,
-      lastRequestRetainedTurnCount:
-        event.action === 'request_native_expansion'
-          ? event.requestedRetainedTurnCount
-          : previous.lastRequestRetainedTurnCount ?? null,
-      lastRequestAt:
-        event.action === 'request_native_expansion'
-          ? event.at
-          : previous.lastRequestAt ?? null,
-      anchorTurnId: event.anchorTurnId,
-      anchorOffsetWithinScrollRoot: event.anchorOffsetWithinScrollRoot,
-      lastActionAt: event.at,
-      events,
-    };
-    writeDebugSnapshot(conversationId, next);
-  };
-
-  const readPendingAnchor = (conversationId) => {
-    if (!conversationId) return null;
-    try {
-      const raw = sessionStorage.getItem(getAnchorKey(conversationId));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const clearPendingAnchor = (conversationId, source = '') => {
-    if (!conversationId) return;
-    try {
-      sessionStorage.removeItem(getAnchorKey(conversationId));
-      sessionStorage.removeItem(getConsumedAnchorKey(conversationId));
-    } catch { }
-    recordDebugEvent(conversationId, {
-      action: 'clear_anchor',
-      source: source || 'clearPendingAnchor',
-    });
-  };
-
-  const getScrollRoot = () =>
-    typeof getScrollableContainer === 'function'
-      ? getScrollableContainer()
-      : document.scrollingElement || document.documentElement;
-
-  const getScrollRootMetrics = () => {
-    const scrollRoot = getScrollRoot();
-    if (!(scrollRoot instanceof Element)) return null;
-
-    const rect = scrollRoot.getBoundingClientRect?.() || {
-      top: 0,
-      bottom: window.innerHeight,
-    };
-    const top = Number.isFinite(rect.top) ? rect.top : 0;
-    const bottom = Number.isFinite(rect.bottom) ? rect.bottom : window.innerHeight;
-
-    return {
-      scrollRoot,
-      top,
-      bottom,
-    };
-  };
-
-  const clearCooldownRefreshTimer = () => {
-    if (!state.cooldownTimer) return;
-    window.clearTimeout(state.cooldownTimer);
-    state.cooldownTimer = 0;
-  };
-
-  const getInPlaceBusyState = (conversationId = state.currentConversationId) =>
-    state.inPlaceBusy?.conversationId === conversationId ? state.inPlaceBusy : null;
-
-  const syncScrollRootDistanceFromBottom = (scrollRoot, distanceFromBottom) => {
-    if (!(scrollRoot instanceof HTMLElement)) return;
-    const maxScrollTop = Math.max(
-      0,
-      (Number(scrollRoot.scrollHeight) || 0) - (Number(scrollRoot.clientHeight) || 0),
-    );
-    const targetScrollTop = Math.max(
-      0,
-      Math.min(maxScrollTop, maxScrollTop - Math.max(0, Number(distanceFromBottom) || 0)),
-    );
-    if (Math.abs((Number(scrollRoot.scrollTop) || 0) - targetScrollTop) > 1) {
-      scrollRoot.scrollTop = targetScrollTop;
-    }
-  };
-
-  const clearInPlaceBusyDistanceLock = () => {
-    if (state.inPlaceBusyDistanceLockRaf) {
-      cancelAnimationFrame(state.inPlaceBusyDistanceLockRaf);
-    }
-    state.inPlaceBusyDistanceLockRaf = 0;
-  };
-
-  const startInPlaceBusyDistanceLock = (conversationId) => {
-    clearInPlaceBusyDistanceLock();
-
-    const tick = () => {
-      const busyState = getInPlaceBusyState(conversationId);
-      if (!busyState || busyState.revealStarted || conversationId !== state.currentConversationId) {
-        clearInPlaceBusyDistanceLock();
-        return;
-      }
-
-      syncScrollRootDistanceFromBottom(getScrollRootMetrics()?.scrollRoot, busyState.distanceFromBottom);
-      state.inPlaceBusyDistanceLockRaf = requestAnimationFrame(tick);
-    };
-
-    state.inPlaceBusyDistanceLockRaf = requestAnimationFrame(tick);
-  };
-
-  const clearInPlaceBusyState = (conversationId = '') => {
-    if (conversationId && state.inPlaceBusy?.conversationId !== conversationId) return;
-    clearInPlaceBusyDistanceLock();
-    state.inPlaceBusy = null;
-  };
-
-  const clearPostRevealDistanceLock = () => {
-    if (state.postRevealDistanceLockRaf) {
-      cancelAnimationFrame(state.postRevealDistanceLockRaf);
-    }
-    state.postRevealDistanceLockRaf = 0;
-    state.postRevealDistanceLock = null;
-  };
-
-  const startPostRevealDistanceLock = (conversationId, distanceFromBottom) => {
-    clearPostRevealDistanceLock();
-
-    const normalizedDistanceFromBottom = Math.max(0, Number(distanceFromBottom) || 0);
-    state.postRevealDistanceLock = {
-      conversationId: String(conversationId || ''),
-      distanceFromBottom: normalizedDistanceFromBottom,
-      startedAt: Date.now(),
-    };
-
-    syncScrollRootDistanceFromBottom(
-      getScrollRootMetrics()?.scrollRoot,
-      normalizedDistanceFromBottom,
-    );
-
-    const tick = () => {
-      const lockState = state.postRevealDistanceLock;
-      if (!lockState || lockState.conversationId !== conversationId) {
-        state.postRevealDistanceLockRaf = 0;
-        return;
-      }
-      if (
-        conversationId !== state.currentConversationId ||
-        Date.now() - Number(lockState.startedAt || 0) >= POST_REVEAL_DISTANCE_LOCK_MS
-      ) {
-        clearPostRevealDistanceLock();
-        return;
-      }
-
-      syncScrollRootDistanceFromBottom(
-        getScrollRootMetrics()?.scrollRoot,
-        lockState.distanceFromBottom,
-      );
-
-      state.postRevealDistanceLockRaf = requestAnimationFrame(tick);
-    };
-
-    state.postRevealDistanceLockRaf = requestAnimationFrame(tick);
-  };
-
-  const startInPlaceBusyState = (conversationId, requestedRetainedTurnCount, source = '') => {
-    clearInPlaceBusyDistanceLock();
-    clearPostRevealDistanceLock();
-    const scrollMetrics = getScrollRootMetrics();
-    const scrollRoot = scrollMetrics?.scrollRoot;
-    const oldScrollTop = Number(scrollRoot?.scrollTop) || 0;
-    const oldScrollHeight = Number(scrollRoot?.scrollHeight) || 0;
-    const oldClientHeight = Number(scrollRoot?.clientHeight) || 0;
-    const oldMaxScrollTop = Math.max(0, oldScrollHeight - oldClientHeight);
-    state.inPlaceBusy = {
-      conversationId,
-      requestedRetainedTurnCount: normalizeRetainedTurnCount(requestedRetainedTurnCount),
-      source: String(source || '').trim(),
-      startedAt: Date.now(),
-      frozenScrollTop: oldScrollTop,
-      oldScrollTop,
-      oldScrollHeight,
-      oldClientHeight,
-      oldMaxScrollTop,
-      distanceFromBottom: Math.max(0, oldMaxScrollTop - oldScrollTop),
-      revealStarted: false,
-    };
-    startInPlaceBusyDistanceLock(conversationId);
-  };
-
-  const clearAnchorRestoreTween = () => {
-    state.anchorRestoreTween?.kill?.();
-    state.anchorRestoreTween = null;
-    state.anchorRestoreConversationId = '';
-    state.anchorRestoreTurnId = '';
-    state.anchorRestoreTargetScrollTop = NaN;
-  };
-
-  const setAnchorRestoreScrollGuard = (enabled) => {
-    const scrollRoot = getScrollRootMetrics()?.scrollRoot || null;
-    if (!(scrollRoot instanceof HTMLElement)) return;
-
-    if (enabled) {
-      if (state.anchorRestoreScrollRoot !== scrollRoot) {
-        if (state.anchorRestoreScrollRoot instanceof HTMLElement) {
-          state.anchorRestoreScrollRoot.style.overflowAnchor = state.anchorRestorePrevOverflowAnchor;
-          state.anchorRestoreScrollRoot.style.scrollBehavior = state.anchorRestorePrevScrollBehavior;
-        }
-        state.anchorRestoreScrollRoot = scrollRoot;
-        state.anchorRestorePrevOverflowAnchor = scrollRoot.style.overflowAnchor || '';
-        state.anchorRestorePrevScrollBehavior = scrollRoot.style.scrollBehavior || '';
-      }
-      scrollRoot.style.overflowAnchor = 'none';
-      scrollRoot.style.scrollBehavior = 'auto';
-      return;
-    }
-
-    if (!(state.anchorRestoreScrollRoot instanceof HTMLElement)) return;
-    state.anchorRestoreScrollRoot.style.overflowAnchor = state.anchorRestorePrevOverflowAnchor;
-    state.anchorRestoreScrollRoot.style.scrollBehavior = state.anchorRestorePrevScrollBehavior;
-    state.anchorRestoreScrollRoot = null;
-    state.anchorRestorePrevOverflowAnchor = '';
-    state.anchorRestorePrevScrollBehavior = '';
-  };
-
-  const getAnchorTweenDuration = (distance) => {
-    const normalizedDistance = Math.max(0, Math.min(ANCHOR_TWEEN_MAX_DISTANCE_PX, Number(distance) || 0));
-    const progress = normalizedDistance / ANCHOR_TWEEN_MAX_DISTANCE_PX;
-    return ANCHOR_TWEEN_MIN_DURATION_S +
-      (ANCHOR_TWEEN_MAX_DURATION_S - ANCHOR_TWEEN_MIN_DURATION_S) * progress;
-  };
-
-  const getExpansionCooldownRemainingMs = () =>
-    Math.max(0, RELOAD_COOLDOWN_MS - (Date.now() - state.lastReloadAt));
-
-  const isExpansionCoolingDown = () => getExpansionCooldownRemainingMs() > 0;
-
-  const getMessage = (key, substitutions, fallback) => {
-    try {
-      const value = chrome?.i18n?.getMessage?.(key, substitutions);
-      return value || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
-  const ensureStyle = () => {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
-      #${ROOT_ID} {
-        margin: 0 auto 12px;
-        width: min(100%, 52rem);
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-banner-inner {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 10px;
-        border: 1px solid rgb(0 0 0 / 0.08);
-        border-radius: 16px;
-        background: rgb(255 255 255 / 0.82);
-        backdrop-filter: blur(10px);
-        padding: 10px 12px;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-native-banner-inner {
-        border-color: rgb(255 255 255 / 0.08);
-        background: rgb(36 36 36 / 0.82);
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-summary {
-        flex: 1 1 260px;
-        min-width: 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font: 500 12px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--text-secondary, rgb(90 90 90));
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-native-summary {
-        color: var(--text-secondary, rgb(185 185 185));
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-summary-text {
-        min-width: 0;
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-spinner {
-        display: none;
-        inline-size: 14px;
-        block-size: 14px;
-        flex: 0 0 auto;
-        border-radius: 999px;
-        border: 2px solid rgb(0 0 0 / 0.14);
-        border-top-color: rgb(0 0 0 / 0.46);
-        animation: csp-lazy-fast-native-spin 0.8s linear infinite;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-native-spinner {
-        border-color: rgb(255 255 255 / 0.16);
-        border-top-color: rgb(255 255 255 / 0.58);
-      }
-      #${ROOT_ID}[data-busy="true"] .csp-lazy-fast-native-spinner {
-        display: inline-block;
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-button {
-        appearance: none;
-        border: 1px solid rgb(0 0 0 / 0.08);
-        background: transparent;
-        color: var(--text-primary, #1f1f1f);
-        border-radius: 999px;
-        padding: 6px 11px;
-        font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        cursor: pointer;
-      }
-      .dark #${ROOT_ID} .csp-lazy-fast-native-button {
-        border-color: rgb(255 255 255 / 0.08);
-        color: var(--text-primary, #ececec);
-      }
-      #${ROOT_ID} .csp-lazy-fast-native-button[disabled] {
-        opacity: 0.6;
-        cursor: default;
-      }
-      @keyframes csp-lazy-fast-native-spin {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-    `;
-    (document.head || document.documentElement).appendChild(style);
-  };
-
-  const readStoredHistoryPayload = () => {
-    const node = document.getElementById(HISTORY_DATA_NODE_ID);
-    const text = node?.textContent?.trim();
-    if (!text) return null;
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  };
-
-  // biome-ignore lint/correctness/noUnusedFunctionParameters: keep conversationId for helper signature parity
-  const getRequestedRetainedTurnCount = (conversationId, history) => {
-    const historyCount = normalizeRetainedTurnCount(history?.requestedRetainedTurnCount);
-    return historyCount;
-  };
-
-  const setRequestedRetainedTurnCount = (conversationId, count, source = '') => {
-    const normalizedCount = normalizeRetainedTurnCount(count);
-    try {
-      sessionStorage.setItem(
-        getRetainedCountKey(conversationId),
-        String(normalizedCount),
-      );
-    } catch { }
-    recordDebugEvent(conversationId, {
-      action: 'set_retained_count',
-      source: source || 'setRequestedRetainedTurnCount',
-      requestedRetainedTurnCount: normalizedCount,
-    });
-  };
-
-  const getTotalTurnCount = (history) =>
-    Math.max(0, Number(history?.totalTurnCount) || history?.turns?.length || 0);
-
-  const getLoadedTurnCount = (history) => {
-    const fromStats = Number(history?.stats?.keptTurns);
-    if (Number.isFinite(fromStats) && fromStats >= 0) return fromStats;
-    const totalTurnCount = getTotalTurnCount(history);
-    return Math.max(0, totalTurnCount - Math.max(0, Number(history?.keptStartIndex) || 0));
-  };
-
-  const getRemainingTurnCount = (history) =>
-    Math.max(0, getTotalTurnCount(history) - getLoadedTurnCount(history));
-
-  const getNativeTurns = () =>
-    Array.from(document.querySelectorAll(NATIVE_TURN_SELECTOR)).filter(
-      (node) => node instanceof HTMLElement,
-    );
-
-  const clearPendingExpansionFlip = () => {
-    state.pendingExpansionFlip = null;
-  };
-
-  const completeAnchorRestoreFinalize = (conversationId, source = 'anchor_restored') => {
-    clearInPlaceBusyState(conversationId);
-    playPendingExpansionFlip(conversationId);
-    clearPendingAnchor(conversationId, source);
-    updateBanner();
-  };
-
-  const finalizeAnchorRestore = (conversationId, source = 'anchor_restored') => {
-    const busyState = getInPlaceBusyState(conversationId);
-    clearAnchorRestoreTween();
-    setAnchorRestoreScrollGuard(false);
-    state.lastReloadAt = Date.now();
-    state.restoredConversationId = conversationId;
-    state.reloadScheduled = false;
-    if (busyState?.revealStarted) {
-      startPostRevealDistanceLock(conversationId, busyState.distanceFromBottom);
-      requestAnimationFrame(() => {
-        if (conversationId !== state.currentConversationId) return;
-        completeAnchorRestoreFinalize(conversationId, source);
-      });
-      return;
-    }
-    completeAnchorRestoreFinalize(conversationId, source);
-  };
-
-  const failInPlaceBusyState = (conversationId, source = 'in_place_busy_failed') => {
-    clearAnchorRestoreTween();
-    setAnchorRestoreScrollGuard(false);
-    clearPostRevealDistanceLock();
-    clearPendingExpansionFlip();
-    clearInPlaceBusyState(conversationId);
-    state.reloadScheduled = false;
-    clearPendingAnchor(conversationId, source);
-    updateBanner();
-  };
-
-  const getExpansionFlipTargets = () => {
-    const scrollMetrics = getScrollRootMetrics();
-    const viewportTop = scrollMetrics?.top ?? 0;
-    const viewportBottom = scrollMetrics?.bottom ?? window.innerHeight;
-
-    return getNativeTurns()
-      .filter((turn) => {
-        const rect = turn.getBoundingClientRect();
-        return rect.bottom > viewportTop - EXPANSION_FLIP_MARGIN_PX &&
-          rect.top < viewportBottom + EXPANSION_FLIP_MARGIN_PX;
-      })
-      .slice(0, EXPANSION_FLIP_MAX_TARGETS);
-  };
-
-  const getFlipApi = () => {
-    try {
-      if (typeof Flip !== 'undefined') return Flip;
-    } catch { }
-    return window.Flip || null;
-  };
-
-  const capturePendingExpansionFlip = (conversationId, requestedRetainedTurnCount) => {
-    const flipApi = getFlipApi();
-    if (!flipApi?.getState || !conversationId) {
-      clearPendingExpansionFlip();
-      return;
-    }
-
-    const targets = getExpansionFlipTargets();
-    if (!targets.length) {
-      clearPendingExpansionFlip();
-      return;
-    }
-
-    try {
-      state.pendingExpansionFlip = {
-        conversationId,
-        requestedRetainedTurnCount: normalizeRetainedTurnCount(requestedRetainedTurnCount),
-        capturedAt: Date.now(),
-        flipState: flipApi.getState(targets),
-      };
-    } catch {
-      clearPendingExpansionFlip();
-    }
-  };
-
-  const playPendingExpansionFlip = (conversationId) => {
-    const pending = state.pendingExpansionFlip;
-    clearPendingExpansionFlip();
-    if (!pending || pending.conversationId !== conversationId) return;
-    if (Date.now() - Number(pending.capturedAt || 0) > EXPANSION_FLIP_MAX_AGE_MS) return;
-    const flipApi = getFlipApi();
-    if (!flipApi?.from || !pending.flipState) return;
-
-    try {
-      flipApi.from(pending.flipState, {
-        duration: 0.24,
-        ease: 'power2.out',
-        absolute: true,
-        nested: true,
-        prune: true,
-        simple: true,
-      });
-    } catch { }
-  };
-
-  const getBestVisibleAnchorTurn = () => {
-    const scrollMetrics = getScrollRootMetrics();
-    const viewportTop = scrollMetrics?.top ?? 0;
-    const viewportBottom = scrollMetrics?.bottom ?? window.innerHeight;
-    const nativeTurns = getNativeTurns();
-    let firstVisible = null;
-    let bestNonNegative = null;
-    let bestNonNegativeOffset = Number.POSITIVE_INFINITY;
-    let closestToViewportTop = null;
-    let closestDistance = Number.POSITIVE_INFINITY;
-
-    for (const turn of nativeTurns) {
-      const rect = turn.getBoundingClientRect();
-      if (rect.bottom <= viewportTop || rect.top >= viewportBottom) continue;
-      if (!firstVisible) firstVisible = turn;
-
-      const offset = rect.top - viewportTop;
-      if (offset >= -1 && offset < bestNonNegativeOffset) {
-        bestNonNegative = turn;
-        bestNonNegativeOffset = offset;
-      }
-
-      const distance = Math.abs(offset);
-      if (distance < closestDistance) {
-        closestToViewportTop = turn;
-        closestDistance = distance;
-      }
-    }
-    return closestToViewportTop || bestNonNegative || firstVisible || nativeTurns[0] || null;
-  };
-
-  const tweenAnchorRestoreScroll = (conversationId, turnId, scrollRoot, targetScrollTop) => {
-    if (!(scrollRoot instanceof HTMLElement) || !window.gsap?.to) return false;
-
-    const normalizedTarget = Math.max(0, Number(targetScrollTop) || 0);
-    if (
-      state.anchorRestoreTween &&
-      state.anchorRestoreConversationId === conversationId &&
-      state.anchorRestoreTurnId === turnId &&
-      Math.abs((Number(state.anchorRestoreTargetScrollTop) || 0) - normalizedTarget) <= 1
-    ) {
-      return true;
-    }
-
-    clearAnchorRestoreTween();
-    state.anchorRestoreConversationId = conversationId;
-    state.anchorRestoreTurnId = turnId;
-    state.anchorRestoreTargetScrollTop = normalizedTarget;
-    state.anchorRestoreTween = window.gsap.to(scrollRoot, {
-      scrollTop: normalizedTarget,
-      duration: getAnchorTweenDuration(
-        Math.abs((Number(scrollRoot.scrollTop) || 0) - normalizedTarget),
-      ),
-      ease: 'power2.out',
-      overwrite: 'auto',
-      onComplete: () => {
-        state.anchorRestoreTween = null;
-        state.anchorRestoreConversationId = '';
-        state.anchorRestoreTurnId = '';
-        state.anchorRestoreTargetScrollTop = NaN;
-        requestAnimationFrame(() => {
-          maybeRestoreAnchor(conversationId);
-        });
-      },
-      onInterrupt: () => {
-        state.anchorRestoreTween = null;
-        state.anchorRestoreConversationId = '';
-        state.anchorRestoreTurnId = '';
-        state.anchorRestoreTargetScrollTop = NaN;
-      },
-    });
-    return true;
-  };
-
-  const storeAnchorForReload = (conversationId, requestedRetainedTurnCount, source = '') => {
-    const anchor = getBestVisibleAnchorTurn();
-    const scrollMetrics = getScrollRootMetrics();
-    if (!(anchor instanceof HTMLElement) || !scrollMetrics) return false;
-
-    const turnId = anchor.getAttribute('data-turn-id') || '';
-    if (!turnId) return false;
-    const offsetWithinScrollRoot = anchor.getBoundingClientRect().top - scrollMetrics.top;
-
-    try {
-      sessionStorage.setItem(
-        getAnchorKey(conversationId),
-        JSON.stringify({
-          turnId,
-          offsetWithinScrollRoot,
-          requestedRetainedTurnCount: normalizeRetainedTurnCount(requestedRetainedTurnCount),
-          createdAt: Date.now(),
-        }),
-      );
-      recordDebugEvent(conversationId, {
-        action: 'store_anchor',
-        source: source || 'storeAnchorForReload',
-        requestedRetainedTurnCount,
-        anchorTurnId: turnId,
-        anchorOffsetWithinScrollRoot: offsetWithinScrollRoot,
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const removeBanner = () => {
-    clearCooldownRefreshTimer();
-    state.root?.remove();
-    state.root = null;
-    state.summary = null;
-    state.summaryText = null;
-    state.summarySpinner = null;
-    state.loadMoreButton = null;
-    state.fullButton = null;
-  };
-
-  const maybeRestoreAnchor = (conversationId) => {
-    if (!conversationId || state.restoredConversationId === conversationId) return;
-
-    const payload = readPendingAnchor(conversationId);
-    if (!payload?.turnId) {
-      clearAnchorRestoreTween();
-      setAnchorRestoreScrollGuard(false);
-      clearPostRevealDistanceLock();
-      clearPendingExpansionFlip();
-      return;
-    }
-    if (Date.now() - Number(payload.createdAt || 0) > RESTORE_MAX_AGE_MS) {
-      clearAnchorRestoreTween();
-      setAnchorRestoreScrollGuard(false);
-      clearPostRevealDistanceLock();
-      clearPendingExpansionFlip();
-      clearPendingAnchor(conversationId, 'anchor_expired');
-      return;
-    }
-
-    const pendingRetainedTurnCount = normalizeRetainedTurnCount(payload.requestedRetainedTurnCount);
-    const currentRetainedTurnCount = Number(state.history?.requestedRetainedTurnCount);
-    if (!Number.isFinite(currentRetainedTurnCount)) return;
-    if (normalizeRetainedTurnCount(currentRetainedTurnCount) < pendingRetainedTurnCount) {
-      if (!getInPlaceBusyState(conversationId)) {
-        clearPendingAnchor(conversationId, 'stale_anchor_after_reset');
-      }
-      return;
-    }
-
-    const anchor = document.querySelector(
-      `${NATIVE_TURN_SELECTOR}[data-turn-id="${CSS.escape(payload.turnId)}"]`,
-    );
-    if (!(anchor instanceof HTMLElement)) return;
-
-    const scrollMetrics = getScrollRootMetrics();
-    if (!scrollMetrics) return;
-
-    const desiredOffset = Number(payload.offsetWithinScrollRoot);
-    if (!Number.isFinite(desiredOffset)) return;
-
-    setAnchorRestoreScrollGuard(true);
-    const currentOffset = anchor.getBoundingClientRect().top - scrollMetrics.top;
-    const delta = currentOffset - desiredOffset;
-    if (Math.abs(delta) > 1) {
-      const targetScrollTop = Math.max(0, (Number(scrollMetrics.scrollRoot.scrollTop) || 0) + delta);
-      if (
-        Math.abs(delta) > ANCHOR_TWEEN_MIN_DISTANCE_PX &&
-        tweenAnchorRestoreScroll(conversationId, payload.turnId, scrollMetrics.scrollRoot, targetScrollTop)
-      ) {
-        return;
-      }
-      clearAnchorRestoreTween();
-      scrollMetrics.scrollRoot.scrollTop = targetScrollTop;
-      return;
-    }
-
-    finalizeAnchorRestore(conversationId, 'anchor_restored');
-  };
-
-  const settleInPlaceExpansionAtAnchor = (conversationId, attempt = 0) => {
-    const busyState = getInPlaceBusyState(conversationId);
-    if (!busyState) return;
-
-    const payload = readPendingAnchor(conversationId);
-    if (!payload?.turnId) {
-      failInPlaceBusyState(conversationId, 'in_place_anchor_missing');
-      return;
-    }
-    if (Date.now() - Number(payload.createdAt || 0) > RESTORE_MAX_AGE_MS) {
-      failInPlaceBusyState(conversationId, 'in_place_anchor_expired');
-      return;
-    }
-
-    const pendingRetainedTurnCount = normalizeRetainedTurnCount(payload.requestedRetainedTurnCount);
-    const currentRetainedTurnCount = Number(state.history?.requestedRetainedTurnCount);
-    if (
-      !Number.isFinite(currentRetainedTurnCount) ||
-      normalizeRetainedTurnCount(currentRetainedTurnCount) < pendingRetainedTurnCount
-    ) {
-      if (attempt >= IN_PLACE_REVEAL_MAX_ATTEMPTS) {
-        failInPlaceBusyState(conversationId, 'in_place_history_not_ready');
-        return;
-      }
-      requestAnimationFrame(() => {
-        settleInPlaceExpansionAtAnchor(conversationId, attempt + 1);
-      });
-      return;
-    }
-
-    const scrollMetrics = getScrollRootMetrics();
-    const scrollRoot = scrollMetrics?.scrollRoot;
-    const newScrollHeight = Number(scrollRoot?.scrollHeight) || 0;
-    const newClientHeight = Number(scrollRoot?.clientHeight) || 0;
-    const newMaxScrollTop = Math.max(0, newScrollHeight - newClientHeight);
-    const heightDelta = newScrollHeight - Number(busyState.oldScrollHeight || 0);
-    const hasMeaningfulHeightDelta =
-      Number.isFinite(heightDelta) &&
-      Number.isFinite(newScrollHeight) &&
-      newScrollHeight > 0 &&
-      heightDelta > 0;
-
-    if (!(scrollRoot instanceof HTMLElement) || !hasMeaningfulHeightDelta) {
-      const anchor = document.querySelector(
-        `${NATIVE_TURN_SELECTOR}[data-turn-id="${CSS.escape(payload.turnId)}"]`,
-      );
-      const desiredOffset = Number(payload.offsetWithinScrollRoot);
-      if (!(anchor instanceof HTMLElement) || !scrollMetrics || !Number.isFinite(desiredOffset)) {
-        if (attempt >= IN_PLACE_REVEAL_MAX_ATTEMPTS) {
-          failInPlaceBusyState(conversationId, 'in_place_anchor_not_ready');
-          return;
-        }
-        requestAnimationFrame(() => {
-          settleInPlaceExpansionAtAnchor(conversationId, attempt + 1);
-        });
-        return;
-      }
-
-      busyState.revealStarted = true;
-      const currentOffset = anchor.getBoundingClientRect().top - scrollMetrics.top;
-      const delta = currentOffset - desiredOffset;
-      if (Math.abs(delta) <= 1) {
-        finalizeAnchorRestore(conversationId, 'in_place_anchor_restored');
-        return;
-      }
-
-      const targetScrollTop = Math.max(0, (Number(scrollRoot.scrollTop) || 0) + delta);
-      if (
-        Math.abs(delta) > ANCHOR_TWEEN_MIN_DISTANCE_PX &&
-        tweenAnchorRestoreScroll(conversationId, payload.turnId, scrollRoot, targetScrollTop)
-      ) {
-        return;
-      }
-
-      clearAnchorRestoreTween();
-      scrollRoot.scrollTop = targetScrollTop;
-      finalizeAnchorRestore(conversationId, 'in_place_anchor_restored');
-      return;
-    }
-
-    busyState.revealStarted = true;
-    const targetScrollTop = Math.max(
-      0,
-      Math.min(
-        newMaxScrollTop,
-        newMaxScrollTop - Math.max(0, Number(busyState.distanceFromBottom) || 0),
-      ),
-    );
-    scrollRoot.scrollTop = targetScrollTop;
-
-    if (Math.abs((Number(scrollRoot.scrollTop) || 0) - targetScrollTop) > 1 && attempt < IN_PLACE_REVEAL_MAX_ATTEMPTS) {
-      requestAnimationFrame(() => {
-        settleInPlaceExpansionAtAnchor(conversationId, attempt + 1);
-      });
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      finalizeAnchorRestore(conversationId, 'in_place_height_delta_restored');
-    });
-  };
-
-  const requestNativeExpansionByReload = (
-    conversationId,
-    nextRetainedTurnCount,
-    mode = 'older',
-    source = '',
-  ) => {
-    if (!storeAnchorForReload(conversationId, nextRetainedTurnCount, source || `requestNativeExpansion:${mode}`)) {
-      return false;
-    }
-
-    state.restoredConversationId = '';
-    setRequestedRetainedTurnCount(
-      conversationId,
-      nextRetainedTurnCount,
-      source || `requestNativeExpansion:${mode}`,
-    );
-    state.reloadScheduled = true;
-    state.lastReloadAt = Date.now();
-    updateBanner();
-    location.reload();
-    return true;
-  };
-
-  const requestNativeExpansion = (mode = 'older', source = '') => {
-    const conversationId = state.currentConversationId;
-    const history = state.history;
-    if (!conversationId || !history) return;
-    if ((history.keptStartIndex || 0) <= 0) return;
-    if (state.reloadScheduled) return;
-    if (Date.now() - state.lastReloadAt < RELOAD_COOLDOWN_MS) return;
-
-    const totalTurnCount = getTotalTurnCount(history);
-    const currentRetainedTurnCount = getRequestedRetainedTurnCount(conversationId, history);
-    const nextRetainedTurnCount =
-      mode === 'full'
-        ? totalTurnCount
-        : Math.min(totalTurnCount, currentRetainedTurnCount + LOAD_MORE_BATCH_SIZE);
-    if (!totalTurnCount || nextRetainedTurnCount <= currentRetainedTurnCount) return;
-    recordDebugEvent(conversationId, {
-      action: 'request_native_expansion',
-      source: source || `requestNativeExpansion:${mode}`,
-      requestedRetainedTurnCount: nextRetainedTurnCount,
-    });
-    if (mode !== 'older') {
-      requestNativeExpansionByReload(conversationId, nextRetainedTurnCount, mode, source);
-      return;
-    }
-
-    capturePendingExpansionFlip(conversationId, nextRetainedTurnCount);
-    if (!storeAnchorForReload(conversationId, nextRetainedTurnCount, source || `requestNativeExpansion:${mode}`)) return;
-    startInPlaceBusyState(conversationId, nextRetainedTurnCount, source || `requestNativeExpansion:${mode}`);
-    setAnchorRestoreScrollGuard(true);
-
-    state.restoredConversationId = '';
-    setRequestedRetainedTurnCount(
-      conversationId,
-      nextRetainedTurnCount,
-      source || `requestNativeExpansion:${mode}`,
-    );
-    state.reloadScheduled = true;
-    state.lastReloadAt = Date.now();
-    updateBanner();
-    window.postMessage(
-      {
-        source: EXPAND_REQUEST_SOURCE,
-        conversationId,
-        requestedRetainedTurnCount: nextRetainedTurnCount,
-      },
-      location.origin,
-    );
-  };
-
-  const ensureBanner = () => {
-    if (state.root) return;
-
-    const root = document.createElement('section');
-    root.id = ROOT_ID;
-
-    const inner = document.createElement('div');
-    inner.className = 'csp-lazy-fast-native-banner-inner';
-
-    const summary = document.createElement('div');
-    summary.className = 'csp-lazy-fast-native-summary';
-
-    const summarySpinner = document.createElement('span');
-    summarySpinner.className = 'csp-lazy-fast-native-spinner';
-    summarySpinner.setAttribute('aria-hidden', 'true');
-
-    const summaryText = document.createElement('span');
-    summaryText.className = 'csp-lazy-fast-native-summary-text';
-
-    const loadMoreButton = document.createElement('button');
-    loadMoreButton.type = 'button';
-    loadMoreButton.className = 'csp-lazy-fast-native-button';
-    loadMoreButton.addEventListener('click', () => {
-      recordDebugEvent(state.currentConversationId, {
-        action: 'button_click',
-        source: 'load_older_button',
-        requestedRetainedTurnCount: getRequestedRetainedTurnCount(
-          state.currentConversationId,
-          state.history,
-        ),
-      });
-      requestNativeExpansion('older', 'load_older_button');
-    });
-
-    const fullButton = document.createElement('button');
-    fullButton.type = 'button';
-    fullButton.className = 'csp-lazy-fast-native-button';
-    fullButton.addEventListener('click', () => {
-      recordDebugEvent(state.currentConversationId, {
-        action: 'button_click',
-        source: 'load_full_button',
-        requestedRetainedTurnCount: getRequestedRetainedTurnCount(
-          state.currentConversationId,
-          state.history,
-        ),
-      });
-      requestNativeExpansion('full', 'load_full_button');
-    });
-
-    summary.appendChild(summarySpinner);
-    summary.appendChild(summaryText);
-    inner.appendChild(summary);
-    inner.appendChild(loadMoreButton);
-    inner.appendChild(fullButton);
-    root.appendChild(inner);
-
-    state.root = root;
-    state.summary = summary;
-    state.summaryText = summaryText;
-    state.summarySpinner = summarySpinner;
-    state.loadMoreButton = loadMoreButton;
-    state.fullButton = fullButton;
-  };
-
-  const refreshBannerPlacement = () => {
-    const history = state.history;
-    if (!history || !state.currentConversationId) {
-      removeBanner();
-      return;
-    }
-
-    const firstNativeTurn = document.querySelector(NATIVE_TURN_SELECTOR);
-    const anchorParent = firstNativeTurn?.parentElement;
-    if (!anchorParent || !firstNativeTurn) return;
-
-    ensureStyle();
-    ensureBanner();
-
-    if (state.root.parentElement !== anchorParent || state.root.nextElementSibling !== firstNativeTurn) {
-      anchorParent.insertBefore(state.root, firstNativeTurn);
-    }
-  };
-
-  const updateBanner = () => {
-    const history = state.history;
-    if (!history) {
-      removeBanner();
-      return;
-    }
-
-    refreshBannerPlacement();
-    if (!state.root) return;
-
-    const totalTurnCount = getTotalTurnCount(history);
-    const loadedTurnCount = getLoadedTurnCount(history);
-    const remainingTurnCount = getRemainingTurnCount(history);
-    const busyState = getInPlaceBusyState();
-
-    const loadedLabel = loadedTurnCount.toLocaleString();
-    const totalLabel = totalTurnCount.toLocaleString();
-
-    state.root.dataset.busy = busyState ? 'true' : 'false';
-    state.summaryText.textContent = busyState
-      ? getMessage(
-          'lazy_fast_loading_older_native',
-          undefined,
-          'Loading older turns...',
-        )
-      : remainingTurnCount > 0
-        ? getMessage(
-            'lazy_fast_native_summary',
-            [loadedLabel, totalLabel],
-            `Fast Mode loaded latest ${loadedLabel} of ${totalLabel} turns.`,
-          )
-        : getMessage(
-            'lazy_fast_native_summary_full',
-            totalLabel,
-            `Fast Mode loaded all ${totalLabel} turns natively.`,
-          );
-
-    const batchCount = Math.min(LOAD_MORE_BATCH_SIZE, remainingTurnCount).toLocaleString();
-    state.loadMoreButton.textContent = getMessage(
-      'lazy_fast_load_older_native',
-      batchCount,
-      `Load ${batchCount} older natively`,
-    );
-    state.fullButton.textContent = getMessage(
-      'lazy_fast_load_full',
-      undefined,
-      'Load full conversation natively',
-    );
-
-    const hideButtons = remainingTurnCount <= 0;
-    const disableForCooldown = isExpansionCoolingDown();
-    state.loadMoreButton.hidden = hideButtons;
-    state.fullButton.hidden = hideButtons;
-    state.loadMoreButton.disabled = !!state.reloadScheduled || disableForCooldown || !!busyState;
-    state.fullButton.disabled = !!state.reloadScheduled || disableForCooldown || !!busyState;
-
-    clearCooldownRefreshTimer();
-    if (!hideButtons && disableForCooldown) {
-      state.cooldownTimer = window.setTimeout(() => {
-        state.cooldownTimer = 0;
-        updateBanner();
-      }, Math.max(40, getExpansionCooldownRemainingMs() + 25));
-    }
-  };
-
-  const applyHistoryPayload = (payload, source = '') => {
-    const conversationId = getConversationIdFromPath();
-    if (!conversationId || payload?.conversationId !== conversationId) return;
-    state.currentConversationId = conversationId;
-    state.history = payload;
-    recordDebugEvent(conversationId, {
-      action: 'apply_history_payload',
-      source: source || 'applyHistoryPayload',
-      requestedRetainedTurnCount: payload?.requestedRetainedTurnCount,
-    });
-    const busyState = getInPlaceBusyState(conversationId);
-    if (busyState && !busyState.revealStarted) {
-      syncScrollRootDistanceFromBottom(
-        getScrollRootMetrics()?.scrollRoot,
-        busyState.distanceFromBottom,
-      );
-      requestAnimationFrame(updateBanner);
-      return;
-    }
-    maybeRestoreAnchor(conversationId);
-    requestAnimationFrame(updateBanner);
-  };
-
-  const syncCurrentRoute = () => {
-    const conversationId = getConversationIdFromPath();
-    if (!conversationId) {
-      clearAnchorRestoreTween();
-      setAnchorRestoreScrollGuard(false);
-      clearPostRevealDistanceLock();
-      clearPendingExpansionFlip();
-      clearInPlaceBusyState();
-      state.currentConversationId = '';
-      state.history = null;
-      state.reloadScheduled = false;
-      state.restoredConversationId = '';
-      syncDebugWindow(null);
-      removeBanner();
-      return;
-    }
-
-    if (state.currentConversationId !== conversationId) {
-      clearAnchorRestoreTween();
-      setAnchorRestoreScrollGuard(false);
-      clearPostRevealDistanceLock();
-      clearPendingExpansionFlip();
-      clearInPlaceBusyState();
-      state.currentConversationId = conversationId;
-      state.history = null;
-      state.reloadScheduled = false;
-      state.restoredConversationId = '';
-      removeBanner();
-    }
-    syncDebugSnapshot(conversationId);
-
-    const stored = readStoredHistoryPayload();
-    if (stored?.conversationId === conversationId) {
-      applyHistoryPayload(stored, 'stored_history_payload');
-      return;
-    }
-
-    if (getInPlaceBusyState(conversationId)) {
-      requestAnimationFrame(updateBanner);
-      return;
-    }
-    maybeRestoreAnchor(conversationId);
-    if (state.history?.conversationId === conversationId) {
-      requestAnimationFrame(updateBanner);
-    }
-  };
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.source !== HISTORY_MESSAGE_SOURCE) return;
-    applyHistoryPayload(event.data.payload, 'history_message');
-  });
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.source !== EXPAND_RESULT_SOURCE) return;
-
-    const payload = event.data?.payload;
-    if (!payload || payload.conversationId !== state.currentConversationId) return;
-
-    if (payload.ok) {
-      if (getInPlaceBusyState(payload.conversationId)) {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            settleInPlaceExpansionAtAnchor(payload.conversationId);
-          });
-        });
-        return;
-      }
-      requestAnimationFrame(() => {
-        maybeRestoreAnchor(payload.conversationId);
-      });
-      return;
-    }
-
-    state.reloadScheduled = false;
-    clearAnchorRestoreTween();
-    setAnchorRestoreScrollGuard(false);
-    clearPostRevealDistanceLock();
-    clearPendingExpansionFlip();
-    clearInPlaceBusyState(payload.conversationId);
-    clearPendingAnchor(payload.conversationId, 'expand_failed');
-    setRequestedRetainedTurnCount(
-      payload.conversationId,
-      state.history?.requestedRetainedTurnCount,
-      'expand_failed_reset',
-    );
-    updateBanner();
-  });
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.source !== AUTO_EXPAND_INTENT_SOURCE) return;
-
-    const payload = event.data?.payload;
-    if (!payload || payload.conversationId !== state.currentConversationId) return;
-
-    const source =
-      typeof payload.source === 'string' && payload.source.trim()
-        ? payload.source.trim()
-        : 'auto_expand_intent';
-    requestNativeExpansion('older', source);
-  });
-
-  state.routeTimer = window.setInterval(syncCurrentRoute, ROUTE_CHECK_MS);
-  syncCurrentRoute();
-
-  };
-
-  const maybeInitLazyFastModeNative = (enabled) => {
-    if (!enabled) {
-      globalThis.__CSP_ENABLE_LAZY_FAST_MODE = false;
-      return;
-    }
-    globalThis.__CSP_ENABLE_LAZY_FAST_MODE = true;
-    initLazyFastModeNative();
-  };
-
-  if (globalThis.__CSP_ENABLE_LAZY_FAST_MODE === true) {
-    maybeInitLazyFastModeNative(true);
-    return;
-  }
-
-  try {
-    chrome.storage.sync.get({ [LAZY_FAST_MODE_SETTING_KEY]: false }, (items) => {
-      if (chrome.runtime?.lastError) {
-        globalThis.__CSP_ENABLE_LAZY_FAST_MODE = false;
-        return;
-      }
-      maybeInitLazyFastModeNative(Boolean(items?.[LAZY_FAST_MODE_SETTING_KEY]));
-    });
-  } catch {
-    globalThis.__CSP_ENABLE_LAZY_FAST_MODE = false;
-  }
 })();
 
 // =============================================================
@@ -5631,6 +3514,8 @@ const delays = DELAYS;
     shortcutKeyThinkingStandard: '',
     shortcutKeyThinkingLight: '',
     shortcutKeyThinkingHeavy: '',
+    shortcutKeyProStandard: '',
+    shortcutKeyProExtended: '',
     shortcutKeyNewGptConversation: '',
   };
   window.CSP_SHORTCUT_DEFAULTS = {
@@ -7285,6 +5170,12 @@ const delays = DELAYS;
         const SUB_ITEM_BTN_PATH = '#3c5754';
         delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
       },
+      [shortcuts.shortcutKeyProStandard]: () => {
+        window.__cspRunProThinkingEffortAction?.('thinking-standard');
+      },
+      [shortcuts.shortcutKeyProExtended]: () => {
+        window.__cspRunProThinkingEffortAction?.('thinking-extended');
+      },
       [shortcuts.shortcutKeyTemporaryChat]: () => {
         const root = document.querySelector('#conversation-header-actions') || document;
         const el =
@@ -8045,6 +5936,16 @@ const delays = DELAYS;
         },
       },
     ];
+    const PRO_THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
+      {
+        storageKey: 'shortcutKeyProStandard',
+        optionId: 'thinking-standard',
+      },
+      {
+        storageKey: 'shortcutKeyProExtended',
+        optionId: 'thinking-extended',
+      },
+    ];
 
     const getEffectiveShortcutSetting = (storageKey) => {
       const effective = window.CSP_SHORTCUTS_EFFECTIVE || {};
@@ -8061,6 +5962,15 @@ const delays = DELAYS;
       event.preventDefault();
       if (window.__cspRunThinkingEffortAction?.(matched.optionId)) return true;
       matched.fallback();
+      return true;
+    };
+    const runDynamicProThinkingEffortShortcut = (event) => {
+      const matched = PRO_THINKING_EFFORT_DYNAMIC_SHORTCUTS.find(({ storageKey }) =>
+        matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event),
+      );
+      if (!matched) return false;
+      event.preventDefault();
+      window.__cspRunProThinkingEffortAction?.(matched.optionId);
       return true;
     };
 
@@ -8180,6 +6090,7 @@ const delays = DELAYS;
         // Note: digit keys that *were assigned to models* above were already handled and returned;
         // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
         if (runDynamicThinkingEffortShortcut(event)) return;
+        if (runDynamicProThinkingEffortShortcut(event)) return;
 
         const matchedAltKey = Object.keys(keyFunctionMappingAlt).find((k) =>
           matchesShortcutKey(k, event),
@@ -8536,242 +6447,6 @@ const delays = DELAYS;
   }
 
   initializePageUpDownTakeover();
-})();
-
-// ==================================================
-// @note expose edit buttons with simulated mouse hover
-// ==================================================
-(function injectAlwaysVisibleStyle() {
-  const STYLE_ID = 'csp-fade-message-buttons-style';
-  let styleEl = null;
-  let hoverAbort = null;
-  const pendingTimeouts = new Set();
-
-  const ensureStyle = () => {
-    if (styleEl) return;
-    styleEl = document.createElement('style');
-    styleEl.id = STYLE_ID;
-    styleEl.textContent = `
-
-/* Ensure parents can receive hover events */
-div.flex.justify-start,
-div.flex.justify-end {
-    pointer-events: auto !important;
-}
-
-/* Force group-hover/turn-messages always visible, pointer-events always on */
-div[class*="group-hover/turn-messages"] {
-    opacity: 0.2 !important;
-    pointer-events: auto !important;
-    transition: opacity 0.5s !important;
-}
-
-/* Dark mode override for opacity */
-.dark div[class*="group-hover/turn-messages"] {
-    opacity: 0.08 !important;
-}
-
-/* Hover or JS-forced state: fully visible */
-div[class*="group-hover/turn-messages"]:hover,
-div[class*="group-hover/turn-messages"].force-full-opacity {
-    opacity: 1 !important;
-}
-
-/* Make sure we also override any tailwind transitions that might re-add pointer-events */
-div[class*="group-hover/turn-messages"] * {
-    pointer-events: auto !important;
-}
-
-/* Pointer events and mask for custom group-hover utilities */
-.group-hover\\/turn-messages\\:pointer-events-auto,
-.group-hover\\/turn-messages\\:\\[mask-position\\:0_0\\] {
-    pointer-events: auto !important;
-    mask-position: 0% 0% !important;
-}
-
-/* Hide upgrade button in sidebar Robust selector. Hide upgrade ad but not profile menu. Reference 101 */
-/* Hide the first .__menu-item with data-fill, but not the profile menu */
-
-
-/* Make the sidebar header shorter */
-div.bg-token-bg-elevated-secondary.sticky.top-0 {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
-    margin-top: 2px !important;
-    margin-bottom: 2px !important;
-    min-height: 44px !important;
-}
-
-/* Reduce height of the inner header container */
-#sidebar-header {
-    min-height: 40px !important;
-    height: 40px !important;
-}
-
-/* Reduce padding of bottom sticky sidebar (user settings button container) */
-/* ReferenceLocation 101 = location for the logic to hide the user settings button when the moveTop bar to bottom enable is enabled */
-.bg-token-bg-elevated-secondary.sticky.bottom-0 {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
-}
-
-/* Hide the upgrade ad in sidebar */
-
-/* accounts-profile-button to make it smaller */
-div[data-testid="accounts-profile-button"] {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
-}
-
-div[data-testid="accounts-profile-button"] div.truncate {
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    max-width: 100% !important;
-}
-
-/* Fix sidebar showing horizontal scroll bars  */
-nav.group\\/scrollport {
-overflow-x: hidden !important;
-}
-
-// Remove horizontal scrolling from sidebar
-nav.group/scrollport.relative.flex.h-full.w-full.flex-1.flex-col.overflow-y-auto.transition-opacity.duration-500 {
-overflow-x:hidden!important;
-}
-
-aside {
-    padding-top: 0 !important;
-    top: 40px;
-    padding-bottom: 11px;
-}
-
-// fix some issue some people have where they can't scroll while in a project
-
-.composer-parent.flex.flex-col.overflow-hidden.focus-visible:outline-0.h-full {
-    overflow: auto;
-}
-
-button.btn.btn-secondary.shadow-long.flex.rounded-xl.border-none.active:opacity-1 {
-  opacity: 1 !important;
-}
-
-
-`;
-    document.head.appendChild(styleEl);
-  };
-
-  const removeStyle = () => {
-    styleEl?.remove();
-    styleEl = null;
-  };
-
-  // Decide how faded the buttons are in light/dark mode
-  const getFadeOpacity = () => {
-    if (
-      document.documentElement.classList.contains('dark') ||
-      document.body.classList.contains('dark') ||
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    ) {
-      return 0.08;
-    }
-    return 0.2;
-  };
-
-  const clearPendingTimeouts = () => {
-    pendingTimeouts.forEach((timeoutId) => {
-      clearTimeout(timeoutId);
-    });
-    pendingTimeouts.clear();
-  };
-
-  const resetManagedRows = () => {
-    document.querySelectorAll('div[class*="group-hover/turn-messages"]').forEach((child) => {
-      child.classList.remove('force-full-opacity');
-      child.style.removeProperty('opacity');
-    });
-  };
-
-  const detachHoverHandlers = () => {
-    hoverAbort?.abort();
-    hoverAbort = null;
-    clearPendingTimeouts();
-    resetManagedRows();
-  };
-
-  const attachHoverHandlers = () => {
-    detachHoverHandlers();
-    hoverAbort = new AbortController();
-    const { signal } = hoverAbort;
-
-    document.querySelectorAll('div.flex.justify-start, div.flex.justify-end').forEach((parent) => {
-      const child = parent.querySelector('div[class*="group-hover/turn-messages"]');
-      if (!child) return;
-
-      let fadeTimeout = null;
-      const clearFadeTimeout = () => {
-        if (fadeTimeout == null) return;
-        clearTimeout(fadeTimeout);
-        pendingTimeouts.delete(fadeTimeout);
-        fadeTimeout = null;
-      };
-
-      parent.addEventListener(
-        'mouseenter',
-        () => {
-          clearFadeTimeout();
-          child.classList.add('force-full-opacity');
-          child.style.opacity = '1';
-        },
-        { signal },
-      );
-
-      parent.addEventListener(
-        'mouseleave',
-        () => {
-          clearFadeTimeout();
-          fadeTimeout = window.setTimeout(() => {
-            pendingTimeouts.delete(fadeTimeout);
-            fadeTimeout = null;
-            child.classList.remove('force-full-opacity');
-            child.style.opacity = String(getFadeOpacity());
-          }, 2000);
-          pendingTimeouts.add(fadeTimeout);
-        },
-        { signal },
-      );
-
-      signal.addEventListener('abort', clearFadeTimeout, { once: true });
-      child.style.opacity = String(getFadeOpacity());
-    });
-  };
-
-  const applySetting = (enabled) => {
-    const isOn = Boolean(enabled);
-    window._fadeMessageButtonsCheckbox = isOn;
-    window.fadeMessageButtonsCheckbox = isOn;
-
-    if (!isOn) {
-      detachHoverHandlers();
-      removeStyle();
-      return;
-    }
-
-    ensureStyle();
-    attachHoverHandlers();
-  };
-
-  chrome.storage.sync.get(
-    { fadeMessageButtonsCheckbox: false },
-    ({ fadeMessageButtonsCheckbox }) => {
-      applySetting(fadeMessageButtonsCheckbox);
-    },
-  );
-
-  chrome.storage.onChanged.addListener((chg, area) => {
-    if (area !== 'sync' || !('fadeMessageButtonsCheckbox' in chg)) return;
-    applySetting(chg.fadeMessageButtonsCheckbox.newValue);
-  });
 })();
 
 // ==================================================
@@ -10656,6 +8331,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     );
   };
   const getModelActionById = (id) => {
+    const catalogAction =
+      typeof window.ModelLabels?.getCatalogActionById === 'function'
+        ? window.ModelLabels.getCatalogActionById(id, window.__modelCatalog || null, window.MODEL_NAMES || [])
+        : null;
+    if (catalogAction) return catalogAction;
     const action =
       typeof window.ModelLabels?.getActionById === 'function'
         ? window.ModelLabels.getActionById(id)
@@ -11504,6 +9184,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         }
         return '';
       }
+      const getModelVersionFromText = (value) => {
+        const match = String(value || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .match(/\b(?:gpt[-\s]*)?(\d+(?:\.\d+)?)\b/i);
+        return match?.[1] || '';
+      };
+      const isDynamicConfigureAction = (action) =>
+        /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(action?.id || '').trim());
 
       let latestFrontendActionSignatures = {};
 
@@ -11982,9 +9671,25 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           }) || null
         );
       };
-      const getConfigureFrontendActionIdForRow = (row, dialog) => {
+      const getDynamicSelfActionIdForRow = (row, activeConfigAction) => {
+        if (!(row instanceof Element) || !isDynamicConfigureAction(activeConfigAction)) return '';
+        if (getFrontendActionIdFromRowLabel(row)) return '';
+        const expectedVersion = getModelVersionFromText(
+          activeConfigAction.optionValue || activeConfigAction.label,
+        );
+        if (!expectedVersion) return '';
+        const rowVersion =
+          getModelVersionFromFrontendRow(row) ||
+          getModelVersionFromText(getConfigureFrontendRowLabel(row));
+        return rowVersion === expectedVersion ? activeConfigAction.id : '';
+      };
+      const getConfigureFrontendActionIdForRow = (row, dialog, activeConfigAction = null) => {
         if (!(row instanceof Element) || !(dialog instanceof Element)) return '';
         if (isUnavailableConfigureFrontendRow(row)) return '';
+        const labelActionId = getFrontendActionIdFromRowLabel(row);
+        if (labelActionId) return labelActionId;
+        const dynamicSelfActionId = getDynamicSelfActionIdForRow(row, activeConfigAction);
+        if (dynamicSelfActionId) return dynamicSelfActionId;
         const modelVersion = getModelVersionFromFrontendRow(row);
         if (modelVersion) {
           const match = Object.entries(latestFrontendActionSignatures).find(
@@ -11992,32 +9697,41 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           );
           if (match) return match[0];
         }
-        const labelActionId = getFrontendActionIdFromRowLabel(row);
-        if (labelActionId) return labelActionId;
         if (row === findConfigureProRow(dialog)) return 'pro';
         return '';
       };
-      const collectConfigureFrontendRows = (dialog) => {
+      const collectConfigureFrontendRows = (dialog, activeConfigAction = null) => {
         if (!(dialog instanceof Element)) return [];
         const rows = Array.from(
           new Set([...getConfigureFrontendRadioRows(dialog), findConfigureProRow(dialog)].filter(Boolean)),
         );
         return rows
           .map((row) => {
-            const actionId = getConfigureFrontendActionIdForRow(row, dialog);
+            const actionId = getConfigureFrontendActionIdForRow(row, dialog, activeConfigAction);
             const action =
               typeof window.ModelLabels?.getActionById === 'function'
                 ? window.ModelLabels.getActionById(actionId)
                 : null;
-            if (!actionId || !action) return null;
+            const catalogAction =
+              !action &&
+              activeConfigAction &&
+              actionId === activeConfigAction.id
+                ? activeConfigAction
+                : null;
+            const resolvedAction = action || catalogAction;
+            if (!actionId || !resolvedAction) return null;
+            const rowLabel = getConfigureFrontendRowLabel(row);
+            const label =
+              catalogAction && rowLabel
+                ? rowLabel
+                : typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                  ? window.ModelLabels.getCanonicalActionLabel(actionId, resolvedAction.label)
+                  : resolvedAction.label;
             return {
               id: actionId,
-              slot: action.slot,
+              slot: resolvedAction.slot,
               available: true,
-              label:
-                typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                  ? window.ModelLabels.getCanonicalActionLabel(actionId, action.label)
-                  : action.label,
+              label,
             };
           })
           .filter(Boolean);
@@ -12382,10 +10096,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           for (const option of scrapeOrder) {
             await selectConfigureOptionDuringScrape(combobox, option);
             hideConfigureDialogUiForScrape();
-            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog());
+            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog(), option);
           }
           if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
-            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(findConfigureDialog());
+            const initialOption =
+              availableOptions.find((option) => option.id === initialActiveConfigId) ||
+              getModelActionById(initialActiveConfigId);
+            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(
+              findConfigureDialog(),
+              initialOption,
+            );
           }
           const configureThinkingEffortIds = await collectThinkingEffortIdsDuringScrape(combobox);
           const thinkingEffortIds =
@@ -12690,8 +10410,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (!hideUi) flashBottomBar();
         return true;
       };
-      const runConfigureThinkingEffortOptionAction = async (option, { hideUi = false } = {}) => {
+      const runConfigureFrontendThinkingEffortOptionAction = async (
+        option,
+        frontendActionId,
+        { hideUi = false } = {},
+      ) => {
         if (!option?.id) return false;
+        const normalizedFrontendActionId = String(frontendActionId || '').trim();
+        if (!normalizedFrontendActionId) return false;
         const alreadyOpen = ensureMainMenuOpen();
         await sleepAsync(alreadyOpen ? 120 : 180);
 
@@ -12712,8 +10438,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (!modelSelected) return false;
         persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
 
-        const thinkingSelected = await ensureConfigureFrontendRowSelection('thinking');
-        if (!thinkingSelected) return false;
+        const frontendSelected =
+          await ensureConfigureFrontendRowSelection(normalizedFrontendActionId);
+        if (!frontendSelected) return false;
 
         const effortSelected = await ensureThinkingEffortSelection(option.id);
         if (!effortSelected) return false;
@@ -12732,6 +10459,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         flashBottomBar();
         return true;
       };
+      const runConfigureThinkingEffortOptionAction = async (option, { hideUi = false } = {}) =>
+        runConfigureFrontendThinkingEffortOptionAction(option, 'thinking', { hideUi });
+      const runConfigureProThinkingEffortOptionAction = async (option, { hideUi = false } = {}) =>
+        runConfigureFrontendThinkingEffortOptionAction(option, 'pro', { hideUi });
       const runThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
@@ -12745,6 +10476,19 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
         void runThinkingEffortOptionAction(option.id, options);
+        return true;
+      };
+      const runProThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
+        const option = getThinkingEffortOptionById(optionId);
+        if (!option?.id) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () =>
+          runConfigureProThinkingEffortOptionAction(option, { hideUi }),
+        );
+      };
+      window.__cspRunProThinkingEffortAction = (optionId, options = {}) => {
+        const option = getThinkingEffortOptionById(optionId);
+        if (!option?.id) return false;
+        void runProThinkingEffortOptionAction(option.id, options);
         return true;
       };
 
@@ -13718,17 +11462,28 @@ setTimeout(() => {
     return next;
   };
 
+  const isMacPlatform = () => {
+    const ua = navigator.userAgent || '';
+    const plat = navigator.platform || '';
+    const uaDataPlat = navigator.userAgentData?.platform ?? '';
+    return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
+  };
+
+  const CONTROL_MODIFIER_SHORTCUT_KEYS = new Set([
+    'shortcutKeyClickSendButton',
+    'shortcutKeyClickStopButton',
+  ]);
+
+  const shortcutModifierLabel = (key) =>
+    CONTROL_MODIFIER_SHORTCUT_KEYS.has(key)
+      ? `${isMacPlatform() ? 'Command' : 'Control'} + `
+      : 'Alt + ';
+
   // Platform-aware key display
   function displayFromCode(code) {
     if (!code || code === '' || code === '\u00A0') return '\u00A0';
 
-    // Robust Mac detection (works in Chrome extensions)
-    const isMac = (() => {
-      const ua = navigator.userAgent || '';
-      const plat = navigator.platform || '';
-      const uaDataPlat = navigator.userAgentData?.platform ?? '';
-      return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
-    })();
+    const isMac = isMacPlatform();
 
     if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
     if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
@@ -13841,12 +11596,7 @@ setTimeout(() => {
       );
 
     // Platform-aware modifier label for the model picker (Alt vs Control/Command)
-    const isMac = (() => {
-      const ua = navigator.userAgent || '';
-      const plat = navigator.platform || '';
-      const uaDataPlat = navigator.userAgentData?.platform ?? '';
-      return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
-    })();
+    const isMac = isMacPlatform();
     const useCtrl = !!cfg?.useControlForModelSwitcherRadio;
     const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Ctrl + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
 
@@ -13884,7 +11634,7 @@ setTimeout(() => {
 
         const heading =
           group.compactLabel && resolveGroupLabel(group)
-            ? `<div class="mp-subsection-label" role="heading" aria-level="3">${escapeHtml(resolveGroupLabel(group))}</div>`
+            ? `<div class="blank-row section-header" role="heading" aria-level="2">${escapeHtml(resolveGroupLabel(group))}</div>`
             : '';
 
         return `
@@ -13914,10 +11664,21 @@ ${groupMarkup.join('')}`;
         typeof window.ModelLabels?.getThinkingShortcutByStorageKey === 'function'
           ? window.ModelLabels.getThinkingShortcutByStorageKey(key)
           : null;
-      if (!option?.optional) return true;
-      return typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
-        ? window.ModelLabels.hasThinkingEffortOption(cfg?.modelCatalog || null, option.id)
-        : false;
+      if (option?.optional) {
+        return typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
+          ? window.ModelLabels.hasThinkingEffortOption(cfg?.modelCatalog || null, option.id)
+          : false;
+      }
+      const proOption =
+        typeof window.ModelLabels?.getProThinkingShortcutByStorageKey === 'function'
+          ? window.ModelLabels.getProThinkingShortcutByStorageKey(key)
+          : null;
+      if (proOption?.optional) {
+        return typeof window.ModelLabels?.hasProFrontendOption === 'function'
+          ? window.ModelLabels.hasProFrontendOption(cfg?.modelCatalog || null)
+          : false;
+      }
+      return true;
     };
     const sections = Array.isArray(schemaSections)
       ? schemaSections
@@ -13931,6 +11692,8 @@ ${groupMarkup.join('')}`;
             'shortcutKeyThinkingExtended',
             'shortcutKeyThinkingLight',
             'shortcutKeyThinkingHeavy',
+            'shortcutKeyProStandard',
+            'shortcutKeyProExtended',
           ],
         },
         {
@@ -14019,7 +11782,7 @@ ${groupMarkup.join('')}`;
           <div class="shortcut-item">
             <div class="shortcut-label"><span>${escapeHtml(labelForKey(k))}</span></div>
             <div class="shortcut-keys">
-              <span class="key-text platform-alt-label"> Alt + </span>
+              <span class="key-text platform-alt-label">${shortcutModifierLabel(k)}</span>
               <input class="key-input" disabled id="${k}" maxlength="12" value="${displayFromCode(val)}" />
             </div>
           </div>
@@ -14066,7 +11829,7 @@ ${groupMarkup.join('')}`;
             <div class="shortcut-item">
               <div class="shortcut-label"><span>${escapeHtml(labelForKey(k))}</span></div>
               <div class="shortcut-keys">
-                <span class="key-text platform-alt-label"> Alt + </span>
+                <span class="key-text platform-alt-label">${shortcutModifierLabel(k)}</span>
                 <input class="key-input" disabled id="${k}" maxlength="12" value="${displayFromCode(val)}" />
               </div>
             </div>
@@ -15047,6 +12810,9 @@ ${groupMarkup.join('')}`;
 
   const readText = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
 
+  const getBridgeFileRoot = (bridgeButton) =>
+    bridgeButton.closest('[data-page-table-selectable-row="true"]') || bridgeButton.closest('[role="button"]');
+
   const collectLibraryItems = () => {
     const root = getPageRoot();
     if (!(root instanceof Element)) return [];
@@ -15067,7 +12833,7 @@ ${groupMarkup.join('')}`;
     });
 
     root.querySelectorAll('button[data-testid^="artifact-checkbox-bridge-file_"]').forEach((bridgeButton) => {
-      const itemRoot = bridgeButton.closest('[role="button"]');
+      const itemRoot = getBridgeFileRoot(bridgeButton);
       if (!(itemRoot instanceof HTMLElement) || seen.has(itemRoot)) return;
 
       seen.add(itemRoot);

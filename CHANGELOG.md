@@ -6,9 +6,16 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.11.2026
+- Removed: Fade Message Buttons setting.
+- Fixed: Hide Pasted Files works in Library list view again.
+- Fixed: Model refresh handles Pro shortcuts and GPT-4.5 rows.
+- Fixed: Overlay Control labels and Configure Models headings display correctly.
+
 #### 05.10.2026
 - Fixed: Message scrolling shortcuts land reliably again.
 - Fixed: Send Top Bar To Bottom hides the narrow sticky header.
+- Removed: Retired the inert experimental Fast Mode lazy-loading prototype before release.
 
 #### 05.08.2026
 - Fixed: Model refresh keeps new model shortcuts separate, including GPT-5.3 and GPT-5.4.
@@ -23,7 +30,6 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 #### 04.13.2026
 - Fixed: Model switcher shortcuts and labels update to match ChatGPT's new menus.
-- In development: "Fast Mode" will soon load and scroll through long chats faster, keep your place after reloads, and use ChatGPT's native controls for older messages. Toggle will be off by default.
 
 #### 04.09.2026
 - Fixed: ChatGPT footer disclaimer stays hidden, even when switching conversations.
@@ -68,8 +74,8 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 - Fixed: Model-picker labels now update correctly when GPT-5 IDs are reused, so names like 'Instant' and 'Auto' stay accurate.
 
 #### 03.13.2026
-- Added: Fade Message Buttons toggle (off by default) to control fade and hover.
-- Improved: Disclaimer hiding works even if the Fade Message Buttons toggle is off.
+- Removed later: Fade Message Buttons toggle had been added here, but was retired on 05.11.2026.
+- Historical note: Disclaimer hiding was decoupled from the later-retired message-button fade setting.
 - Changed: Popup and overlay now use local and system fonts (no Google fonts).
 
 #### 03.04.2026

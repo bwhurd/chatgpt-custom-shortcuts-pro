@@ -90,8 +90,6 @@ const includeItems = [
   'shared',
   'background.js',
   'content.js',
-  'lazy-fast-bootstrap.js',
-  'lazy-fast-bridge.js',
   'popup.js',
   'popup.html',
   'popup.css',

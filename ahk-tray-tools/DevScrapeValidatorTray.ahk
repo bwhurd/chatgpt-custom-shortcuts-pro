@@ -10,6 +10,7 @@ projectRoot := ParentDirectory(A_ScriptDir)
 startPs := A_ScriptDir "\StartDevScrapeValidator.ps1"
 stopPs := A_ScriptDir "\StopDevScrapeValidator.ps1"
 openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
+buildZipPy := A_ScriptDir "\RunBuildZipWithVersionBump.py"
 launcherTitle := "CGCSP DevScrape Validator"
 trayIconPath := A_ScriptDir "\ChatGPT Custom Shortcuts Pro.ico"
 
@@ -28,9 +29,15 @@ if !FileExist(psExe) {
     ExitApp
 }
 
+if !FileExist(buildZipPy) {
+    MsgBox, 16, DevScrape Validator Tray, Could not find RunBuildZipWithVersionBump.py in %A_ScriptDir%.
+    ExitApp
+}
+
 Menu, Tray, NoStandard
 Menu, Tray, Add, Start DevScrape Validator, StartValidator
 Menu, Tray, Add, Open Latest Report, OpenLatestReport
+Menu, Tray, Add, Run build-zip.js, RunBuildZip
 Menu, Tray, Add, Shutdown DevScrape Validator, ShutdownValidator
 Menu, Tray, Add
 Menu, Tray, Add, Reload Tray, ReloadTray
@@ -70,6 +77,18 @@ OpenLatestReport:
     exitCode := RunPowerShellHelper(openLatestPs, output)
     if (exitCode != 0) {
         ShowError(output)
+    }
+    Gosub, UpdateState
+return
+
+RunBuildZip:
+    SetTrayWorking("DevScrape Validator: running build-zip.js...")
+    TrayTip, CGCSP Build Zip, Incrementing version and running build-zip.js..., 5, 1
+    exitCode := RunPythonHelper(buildZipPy, output)
+    if (exitCode != 0) {
+        ShowError(output)
+    } else {
+        ShowToast("CGCSP Build Zip", output)
     }
     Gosub, UpdateState
 return
@@ -162,6 +181,17 @@ RunPowerShellHelper(scriptPath, ByRef output) {
     return exitCode
 }
 
+RunPythonHelper(scriptPath, ByRef output) {
+    global projectRoot
+    tempFile := A_Temp "\cgcsp-devscrape-tray-python-" A_TickCount ".txt"
+    output := ""
+    RunWait, %ComSpec% /C py -3 "%scriptPath%" > "%tempFile%" 2>&1, %projectRoot%, Hide UseErrorLevel
+    exitCode := ErrorLevel
+    FileRead, output, %tempFile%
+    FileDelete, %tempFile%
+    return exitCode
+}
+
 ParentDirectory(path) {
     SplitPath, path, , parentPath
     return parentPath
@@ -172,4 +202,11 @@ ShowError(output) {
     if (message = "")
         message := "The requested helper failed."
     MsgBox, 16, DevScrape Validator Tray, %message%
+}
+
+ShowToast(title, output) {
+    message := Trim(output, "`r`n`t ")
+    if (message = "")
+        message := "Command completed."
+    TrayTip, %title%, %message%, 20, 1
 }

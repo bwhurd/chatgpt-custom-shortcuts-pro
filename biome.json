@@ -10,7 +10,8 @@
       "!node_modules",
       "!.git",
       "!.playwright",
-      "!test-results"
+      "!test-results",
+      "!extension/lib/*.min.js"
     ],
     "ignoreUnknown": false
   },

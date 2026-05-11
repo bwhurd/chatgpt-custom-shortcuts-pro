@@ -1,6 +1,4 @@
 const MODEL_PICKER_MAX_SLOTS = window.ModelLabels?.MAX_SLOTS || 15;
-const POPUP_LAZY_FAST_MODE_FORCE_INERT = false;
-const POPUP_LAZY_FAST_MODE_FULL_DISABLE = true;
 const FALLBACK_MODEL_ACTION_GROUPS = [
   {
     id: 'primary',
@@ -357,20 +355,24 @@ const normalizeModelCatalog = (catalog) => {
     frontendByConfig[normalizedConfigId] = rows
       .map((row) => {
         const storedActionId = String(row?.id || '').trim();
+        const baseFromStoredId =
+          storedActionId && typeof window.ModelLabels?.getCatalogActionById === 'function'
+            ? window.ModelLabels.getCatalogActionById(storedActionId, catalog, [])
+            : storedActionId && typeof window.ModelLabels?.getActionById === 'function'
+              ? window.ModelLabels.getActionById(storedActionId)
+              : null;
         const actionId =
-          storedActionId && typeof window.ModelLabels?.getActionById === 'function'
-            ? window.ModelLabels.getActionById(storedActionId)?.id || ''
-            : typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
-              ? window.ModelLabels.mapFrontendLabelToActionId(
-                  row?.label || '',
-                  normalizedConfigId,
-                )
-              : '';
+          baseFromStoredId?.id ||
+          (typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function'
+            ? window.ModelLabels.mapFrontendLabelToActionId(row?.label || '', normalizedConfigId)
+            : '');
         if (!actionId) return null;
         if (actionId === 'pro' && row?.available !== true) return null;
         const base =
-          typeof window.ModelLabels?.getActionById === 'function'
-            ? window.ModelLabels.getActionById(actionId)
+          typeof window.ModelLabels?.getCatalogActionById === 'function'
+            ? window.ModelLabels.getCatalogActionById(actionId, catalog, [])
+            : typeof window.ModelLabels?.getActionById === 'function'
+              ? window.ModelLabels.getActionById(actionId)
             : null;
         if (!base) return null;
         return {
@@ -1298,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2) Popup inputs (read actual saved codes from dataset; fallback to char→code)
     const compareMod = ownerType === 'model' ? modelMod : ownerType === 'shortcut' ? selfMod : null;
     shortcutKeys.forEach((id) => {
-      if (!isOptionalThinkingShortcutAvailable(id)) return;
+      if (!isCatalogGatedShortcutAvailable(id)) return;
       if (compareMod && getPopupShortcutModifier(id) !== compareMod) return;
 
       const el = document.getElementById(id);
@@ -2422,9 +2424,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showLegacyArrowButtonsCheckbox: false,
     removeMarkdownOnCopyCheckbox: true,
     clickToCopyInlineCodeEnabled: false,
-    fadeMessageButtonsCheckbox: false,
     moveTopBarToBottomCheckbox: false,
-    lazyFastModeEnabled: false,
     pageUpDownTakeover: true,
     selectMessagesSentByUserOrChatGptCheckbox: true,
     onlySelectUserCheckbox: false,
@@ -2493,6 +2493,8 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyThinkingStandard: NBSP,
     shortcutKeyThinkingLight: NBSP,
     shortcutKeyThinkingHeavy: NBSP,
+    shortcutKeyProStandard: NBSP,
+    shortcutKeyProExtended: NBSP,
     shortcutKeyNewGptConversation: NBSP,
 
     // Other options
@@ -2899,23 +2901,45 @@ document.addEventListener('DOMContentLoaded', () => {
     .map((el) => el.getAttribute('data-sync') || el.id)
     .filter(Boolean);
   const shortcutKeyValues = {};
-  const isOptionalThinkingShortcutAvailable = (storageKey) => {
+  const isCatalogGatedShortcutAvailable = (storageKey) => {
     const option =
       typeof window.ModelLabels?.getThinkingShortcutByStorageKey === 'function'
         ? window.ModelLabels.getThinkingShortcutByStorageKey(storageKey)
         : null;
-    if (!option?.optional) return true;
-    return typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
-      ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, option.id)
-      : false;
+    if (option?.optional) {
+      return typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
+        ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, option.id)
+        : false;
+    }
+    const proOption =
+      typeof window.ModelLabels?.getProThinkingShortcutByStorageKey === 'function'
+        ? window.ModelLabels.getProThinkingShortcutByStorageKey(storageKey)
+        : null;
+    if (proOption?.optional) {
+      return typeof window.ModelLabels?.hasProFrontendOption === 'function'
+        ? window.ModelLabels.hasProFrontendOption(window.__modelCatalog || null)
+        : false;
+    }
+    return true;
   };
-  const syncThinkingEffortShortcutVisibility = () => {
-    document.querySelectorAll('.shortcut-item[data-thinking-option-id]').forEach((item) => {
+  const syncCatalogGatedShortcutVisibility = () => {
+    document
+      .querySelectorAll('.shortcut-item[data-thinking-option-id], .shortcut-item[data-pro-option-id]')
+      .forEach((item) => {
       const optionId = item.getAttribute('data-thinking-option-id') || '';
-      const shouldShow =
-        typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
-          ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, optionId)
-          : false;
+      const proOptionId = item.getAttribute('data-pro-option-id') || '';
+      let shouldShow = false;
+      if (optionId) {
+        shouldShow =
+          typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
+            ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, optionId)
+            : false;
+      } else if (proOptionId) {
+        shouldShow =
+          typeof window.ModelLabels?.hasProFrontendOption === 'function'
+            ? window.ModelLabels.hasProFrontendOption(window.__modelCatalog || null)
+            : false;
+      }
       const input = item.querySelector('input.key-input');
       item.style.display = shouldShow ? '' : 'none';
       item.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
@@ -2939,29 +2963,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch {}
     }
   };
-  window.addEventListener('model-catalog-updated', syncThinkingEffortShortcutVisibility);
-  syncThinkingEffortShortcutVisibility();
-
-  const syncLazyFastModeAvailability = () => {
-    const row = document.getElementById('lazyFastModeToggleRow');
-    const input = document.getElementById('lazyFastModeEnabled');
-    if (!(row instanceof HTMLElement) || !(input instanceof HTMLInputElement)) return;
-
-    const shouldShow = !POPUP_LAZY_FAST_MODE_FULL_DISABLE;
-    row.style.display = shouldShow ? '' : 'none';
-    row.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
-    if (shouldShow) row.removeAttribute('data-filter-locked');
-    else row.setAttribute('data-filter-locked', '1');
-    input.disabled = !shouldShow || POPUP_LAZY_FAST_MODE_FORCE_INERT;
-
-    if (POPUP_LAZY_FAST_MODE_FORCE_INERT || POPUP_LAZY_FAST_MODE_FULL_DISABLE) {
-      input.checked = false;
-      try {
-        chrome.storage.sync.set({ lazyFastModeEnabled: false });
-      } catch {}
-    }
-  };
-  syncLazyFastModeAvailability();
+  window.addEventListener('model-catalog-updated', syncCatalogGatedShortcutVisibility);
+  syncCatalogGatedShortcutVisibility();
 
   // Helper: convert KeyboardEvent.code to display label for popup input (reuses chip helper)
   function codeToDisplayChar(code) {

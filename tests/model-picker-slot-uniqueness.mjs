@@ -96,6 +96,38 @@ for (const [label, catalog] of [
   );
 }
 
+const dynamicSelfPrimaryCatalog = {
+  configureOptions: [
+    { id: 'configure-latest', slot: 3, label: 'Latest • 5.5' },
+    { id: 'configure-dynamic-4-5', slot: 10, label: '4.5' },
+  ],
+  frontendByConfig: {
+    'configure-dynamic-4-5': [
+      { id: 'configure-dynamic-4-5', slot: 10, label: 'GPT-4.5', available: true },
+    ],
+  },
+};
+const dynamicSelfPrimaryActions = ModelLabels.getPopupPrimaryActions(
+  'configure-dynamic-4-5',
+  [],
+  dynamicSelfPrimaryCatalog,
+);
+assert.deepEqual(
+  dynamicSelfPrimaryActions.map((action) => action.label),
+  ['GPT-4.5', 'Configure...'],
+  'dynamic no-variant models should render their scraped self row plus Configure',
+);
+assert.equal(
+  dynamicSelfPrimaryActions[0]?.slot,
+  dynamicSelfPrimaryCatalog.configureOptions[1].slot,
+  'dynamic no-variant primary row should share the second-row configure slot',
+);
+assert.equal(
+  ModelLabels.getCatalogActionById('configure-dynamic-4-5', dynamicSelfPrimaryCatalog)?.slot,
+  10,
+  'dynamic catalog actions should resolve by id with their persisted slot',
+);
+
 assert.equal(
   ModelLabels.mapFrontendLabelToActionId('Pro', ModelLabels.DEFAULT_ACTIVE_CONFIG_ID),
   'pro',
@@ -121,6 +153,30 @@ assert.equal(
   proPrimaryActions.find((action) => action.id === 'pro')?.slot,
   7,
   'catalog-backed primary actions should keep Pro in its shortcut slot',
+);
+assert.equal(
+  ModelLabels.hasProFrontendOption(proPrimaryCatalog),
+  true,
+  'catalog-backed Pro shortcut rows should show when refresh captured an available Pro row',
+);
+assert.equal(
+  ModelLabels.hasProFrontendOption({
+    frontendByConfig: {
+      'configure-latest': [{ id: 'pro', slot: 7, label: 'Pro', available: false }],
+    },
+  }),
+  false,
+  'catalog-backed Pro shortcut rows should stay hidden when the Pro row is unavailable',
+);
+assert.equal(
+  ModelLabels.getProThinkingShortcutByStorageKey('shortcutKeyProStandard')?.optionId,
+  'thinking-standard',
+  'Pro Standard shortcut should target the Standard thinking effort',
+);
+assert.equal(
+  ModelLabels.getProThinkingShortcutByStorageKey('shortcutKeyProExtended')?.optionId,
+  'thinking-extended',
+  'Pro Extended shortcut should target the Extended thinking effort',
 );
 
 console.log('model picker configure slots are unique');

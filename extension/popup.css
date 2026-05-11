@@ -1402,6 +1402,10 @@ span.dup-key {
   white-space: nowrap;
 }
 
+.mp-grid-group[data-group="configure"] .mp-subsection-label {
+  margin-top: 1.5em;
+}
+
 .shortcut-container.filtering-active .mp-subsection-label {
   display: none !important;
 }
@@ -1941,7 +1945,9 @@ span.dup-key {
   display: block;
 }
 
-#model-picker-grid .mp-grid-loading-overlay.mp-grid-loading-overlay-loading .mp-grid-refresh-prompt {
+#model-picker-grid
+  .mp-grid-loading-overlay.mp-grid-loading-overlay-loading
+  .mp-grid-refresh-prompt {
   display: none;
 }
 

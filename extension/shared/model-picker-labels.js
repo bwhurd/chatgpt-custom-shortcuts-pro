@@ -190,6 +190,30 @@
       return acc;
     }, {}),
   );
+  const PRO_THINKING_EFFORT_SHORTCUTS = Object.freeze([
+    Object.freeze({
+      id: 'pro-standard',
+      storageKey: 'shortcutKeyProStandard',
+      optionId: 'thinking-standard',
+      label: 'Pro Standard',
+      optional: true,
+      order: 0,
+    }),
+    Object.freeze({
+      id: 'pro-extended',
+      storageKey: 'shortcutKeyProExtended',
+      optionId: 'thinking-extended',
+      label: 'Pro Extended',
+      optional: true,
+      order: 1,
+    }),
+  ]);
+  const PRO_THINKING_EFFORT_BY_STORAGE_KEY = Object.freeze(
+    PRO_THINKING_EFFORT_SHORTCUTS.reduce((acc, option) => {
+      acc[option.storageKey] = option;
+      return acc;
+    }, {}),
+  );
 
   // Canonical mapping based on current HTML (use sparingly; prefer parsing testids)
   const TESTID_CANON = Object.freeze({
@@ -455,6 +479,13 @@
       })
       .filter(Boolean);
   };
+  const getCatalogActionById = (id, catalog, incomingNames = []) => {
+    const actionId = String(id || '').trim();
+    if (!actionId) return null;
+    const staticAction = getActionById(actionId);
+    if (staticAction) return { ...staticAction };
+    return getCatalogConfigureActions(catalog, incomingNames).find((action) => action.id === actionId) || null;
+  };
   const getCatalogConfigureActionForOption = (label, optionIndex = -1, catalog = null) => {
     const text = normalizeConfigureOptionLabel(label);
     const fallback = getConfigureActionForOption(text, optionIndex);
@@ -531,6 +562,8 @@
     ) || null;
   const getThinkingShortcutByStorageKey = (storageKey) =>
     THINKING_EFFORT_BY_STORAGE_KEY[String(storageKey || '').trim()] || null;
+  const getProThinkingShortcutByStorageKey = (storageKey) =>
+    PRO_THINKING_EFFORT_BY_STORAGE_KEY[String(storageKey || '').trim()] || null;
   const sortThinkingEffortIds = (ids) => {
     const uniqueIds = new Set(
       (Array.isArray(ids) ? ids : []).map((id) => normalizeThinkingEffortId(id)).filter(Boolean),
@@ -543,6 +576,20 @@
     );
   const hasThinkingEffortOption = (catalog, id) =>
     getAvailableThinkingEffortIds(catalog).includes(normalizeThinkingEffortId(id));
+  const hasFrontendAction = (catalog, actionId) => {
+    const targetId = String(actionId || '').trim();
+    if (!targetId || !catalog || typeof catalog !== 'object') return false;
+    const frontendByConfig =
+      catalog.frontendByConfig && typeof catalog.frontendByConfig === 'object'
+        ? catalog.frontendByConfig
+        : {};
+    return Object.values(frontendByConfig).some((rows) =>
+      (Array.isArray(rows) ? rows : []).some(
+        (row) => String(row?.id || '').trim() === targetId && row?.available === true,
+      ),
+    );
+  };
+  const hasProFrontendOption = (catalog) => hasFrontendAction(catalog, 'pro');
 
   const inferActiveConfigFromMenuState = ({ header = '', items = [] } = {}) => {
     const headerText = normalizeMenuText(header);
@@ -612,11 +659,12 @@
     if (fromStorage && !isLegacyArrow(fromStorage)) return fromStorage;
     return action?.label || '';
   };
-  const normalizeFrontendCatalogEntry = (entry, activeConfigId, incomingNames) => {
+  const normalizeFrontendCatalogEntry = (entry, activeConfigId, incomingNames, catalog) => {
     const names = Array.isArray(incomingNames) ? incomingNames : [];
-    const base = getActionById(entry?.id);
+    const base = getCatalogActionById(entry?.id, catalog, incomingNames);
     if (!base) return null;
-    const slot = Number(base.slot);
+    const entrySlot = toValidSlot(entry?.slot);
+    const slot = entrySlot >= 0 ? entrySlot : Number(base.slot);
     const fallbackName =
       Number.isInteger(slot) && slot >= 0 && slot < names.length
         ? normalizeStoredActionName(slot, names[slot])
@@ -692,7 +740,9 @@
       : [];
 
     const fromCatalog = catalogEntries
-      .map((entry) => normalizeFrontendCatalogEntry(entry, normalizedActiveConfigId, incomingNames))
+      .map((entry) =>
+        normalizeFrontendCatalogEntry(entry, normalizedActiveConfigId, incomingNames, catalog),
+      )
       .filter(Boolean);
     if (fromCatalog.length) {
       const configureAction = getActionById('configure');
@@ -836,6 +886,7 @@
     getActionSlots,
     getActionBySlot,
     getActionById,
+    getCatalogActionById,
     getConfigureActionForOption,
     getCatalogConfigureActionForOption,
     getPrimaryActionIdsForActiveConfig,
@@ -851,9 +902,12 @@
     getThinkingEffortOptionById,
     getThinkingEffortOptionByIconToken,
     getThinkingShortcutByStorageKey,
+    getProThinkingShortcutByStorageKey,
     sortThinkingEffortIds,
     getAvailableThinkingEffortIds,
     hasThinkingEffortOption,
+    hasFrontendAction,
+    hasProFrontendOption,
     getCanonicalActionLabel,
     defaultKeyCodes,
     normalizeStoredActionName,

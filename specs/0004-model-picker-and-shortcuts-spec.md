@@ -47,6 +47,9 @@ The model picker has two separate but related state shapes:
 - `modelCatalog.configureOptions`
   - refreshed Configure Models entries must persist their canonical `slot`
   - dynamic configure entries must never reuse a slot, even when ChatGPT inserts a new model between existing rows
+- `modelCatalog.frontendByConfig`
+  - dynamic configure entries with no frontend variants, such as a scraped `4.5` row, must preserve their self row as a catalog-backed primary action
+  - the self row shares the same slot as its second-row Configure Models entry, so one assigned key activates the same model from either visual position
 
 Shared grouped rendering comes from `shared/model-picker-labels.js`, not hardcoded popup rows.
 

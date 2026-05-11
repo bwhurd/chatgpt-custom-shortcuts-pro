@@ -6,7 +6,7 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 
 - ChatGPT Custom Shortcuts Pro is an MV3 Chrome extension for `chatgpt.com`.
 - It adds configurable keyboard shortcuts, popup-controlled UI tweaks, model-switcher hotkeys, copy helpers, and optional Google Drive settings sync.
-- The unpacked extension source lives under `extension/`. The extension shell is defined by `extension/manifest.json`, `extension/background.js`, and the popup files; runtime behavior on ChatGPT pages is driven primarily by `extension/content.js` plus the Fast Mode bootstrap and bridge files.
+- The unpacked extension source lives under `extension/`. The extension shell is defined by `extension/manifest.json`, `extension/background.js`, and the popup files; runtime behavior on ChatGPT pages is driven primarily by `extension/content.js`.
 
 ## User-facing capabilities
 
@@ -15,7 +15,6 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 - model switching and Configure Models actions through popup-assigned hotkeys and the configurable shortcuts overlay
 - copy flows that preserve code fences and Word-friendly spacing
 - optional Google login plus Drive save or restore for settings
-- experimental Fast Mode wiring for very long conversations
 
 ## Architecture at a glance
 
@@ -30,10 +29,10 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 
 - `extension/content.js`
   - main content-world runtime for shortcuts, DOM automation, overlays, copy helpers, UI tweaks, and model actions
-- `extension/lazy-fast-bootstrap.js`
-  - `document_start` gate for Fast Mode enablement and bridge injection
-- `extension/lazy-fast-bridge.js`
-  - page-world Fast Mode interception and native conversation mutation path
+
+### Retired experiments
+
+- Experimental Fast Mode / lazy-loading code was removed after shipping inert. There is no live setting, manifest entry, bootstrap script, page bridge, or content runtime for it.
 
 ### Popup and shared settings surface
 

@@ -194,6 +194,18 @@
     typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
       ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
       : [['role="menuitemradio"', 'Extended']];
+  const configureThinkingEffortListboxMatchGroups =
+    typeof modelPickerSelectors.getThinkingEffortListboxMatchGroups === 'function'
+      ? modelPickerSelectors.getThinkingEffortListboxMatchGroups()
+      : [['role="listbox"', 'role="option"']];
+  const configureThinkingEffortStandardMatchGroups = [['role="option"', 'Standard']];
+  const configureThinkingEffortExtendedMatchGroups = [['role="option"', 'Extended']];
+  const configureProRowMatchGroups = [
+    ['role="radio"', 'Pro'],
+    ['__menu-item', 'Pro'],
+    ['data-model-picker-pro-row'],
+    ['data-model-picker-pro-menu-item'],
+  ];
   const TARGET_DESCRIPTORS = Object.freeze([
     byTestId('close-sidebar-button', 'close-sidebar-button', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
@@ -292,6 +304,26 @@
     byMenuChain('model-switcher-configure-model-listbox', 'role=listbox|model-options', {
       matchGroups: configureModelListboxMatchGroups,
       uiStateRefs: ['model-switcher-configure-listbox'],
+    }),
+    byMenuChain('model-switcher-configure-pro-row', 'role=radio|Pro', {
+      matchGroups: configureProRowMatchGroups,
+      uiStateRefs: ['model-switcher-configure-dialog'],
+    }),
+    byMenuChain(
+      'model-switcher-configure-thinking-effort-listbox',
+      'role=listbox|thinking-effort-options',
+      {
+        matchGroups: configureThinkingEffortListboxMatchGroups,
+        uiStateRefs: ['model-switcher-configure-dialog'],
+      },
+    ),
+    byMenuChain('model-switcher-configure-thinking-effort-standard', 'role=option|Standard', {
+      matchGroups: configureThinkingEffortStandardMatchGroups,
+      uiStateRefs: ['model-switcher-configure-dialog'],
+    }),
+    byMenuChain('model-switcher-configure-thinking-effort-extended', 'role=option|Extended', {
+      matchGroups: configureThinkingEffortExtendedMatchGroups,
+      uiStateRefs: ['model-switcher-configure-dialog'],
     }),
     byMenuChain(
       'model-switcher-thinking-effort-action',
@@ -871,6 +903,50 @@
       ),
       activationProbe: notLiveProbed(
         'Selecting a thinking effort changes the active model state; verify manually from the model selector submenu.',
+      ),
+    }),
+    defineShortcutAction({
+      actionId: 'shortcutKeyProStandard',
+      targetRefs: [
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-configure-dialog',
+        'model-switcher-configure-pro-row',
+        'model-switcher-configure-thinking-effort-listbox',
+        'model-switcher-configure-thinking-effort-standard',
+      ],
+      uiStateRefs: targetStateRefs(
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-configure-dialog',
+        'model-switcher-configure-pro-row',
+        'model-switcher-configure-thinking-effort-listbox',
+        'model-switcher-configure-thinking-effort-standard',
+      ),
+      activationProbe: notLiveProbed(
+        'Selecting Pro Standard changes the active model state; verify manually from the Configure dialog on a Pro account.',
+      ),
+    }),
+    defineShortcutAction({
+      actionId: 'shortcutKeyProExtended',
+      targetRefs: [
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-configure-dialog',
+        'model-switcher-configure-pro-row',
+        'model-switcher-configure-thinking-effort-listbox',
+        'model-switcher-configure-thinking-effort-extended',
+      ],
+      uiStateRefs: targetStateRefs(
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-configure-dialog',
+        'model-switcher-configure-pro-row',
+        'model-switcher-configure-thinking-effort-listbox',
+        'model-switcher-configure-thinking-effort-extended',
+      ),
+      activationProbe: notLiveProbed(
+        'Selecting Pro Extended changes the active model state; verify manually from the Configure dialog on a Pro account.',
       ),
     }),
     notApplicable('shortcutKeyThinkingLight', {

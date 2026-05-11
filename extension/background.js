@@ -94,14 +94,21 @@
   };
   const getPopupBounds = async () => {
     const display = await getTargetDisplay();
-    const area = display?.workArea || display?.bounds || {
-      left: 0,
-      top: 0,
-      width: DEFAULT_POPUP_WIDTH,
-      height: DEFAULT_POPUP_HEIGHT,
-    };
-    const width = Math.max(420, Math.min(DEFAULT_POPUP_WIDTH, Number(area.width) - 32 || DEFAULT_POPUP_WIDTH));
-    const height = Math.max(420, Math.min(DEFAULT_POPUP_HEIGHT, Number(area.height) - 32 || DEFAULT_POPUP_HEIGHT));
+    const area = display?.workArea ||
+      display?.bounds || {
+        left: 0,
+        top: 0,
+        width: DEFAULT_POPUP_WIDTH,
+        height: DEFAULT_POPUP_HEIGHT,
+      };
+    const width = Math.max(
+      420,
+      Math.min(DEFAULT_POPUP_WIDTH, Number(area.width) - 32 || DEFAULT_POPUP_WIDTH),
+    );
+    const height = Math.max(
+      420,
+      Math.min(DEFAULT_POPUP_HEIGHT, Number(area.height) - 32 || DEFAULT_POPUP_HEIGHT),
+    );
     const left = Math.max(area.left, Math.round(area.left + (area.width - width) / 2));
     const top = Math.max(area.top, Math.round(area.top + (area.height - height) / 2));
     return { width, height, left, top };
@@ -111,7 +118,9 @@
     if (clickedTab?.id && isChatGptUrl(clickedTab.url)) return clickedTab;
     try {
       const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      const active = (Array.isArray(tabs) ? tabs : []).find((tab) => tab?.id && isChatGptUrl(tab.url));
+      const active = (Array.isArray(tabs) ? tabs : []).find(
+        (tab) => tab?.id && isChatGptUrl(tab.url),
+      );
       if (active) return active;
     } catch {}
     const rememberedTabId = await getRememberedActionTabId();
@@ -139,18 +148,26 @@
     }
   };
   const resolveChatGptTabId = async (preferredTabId = 0) => {
-    const candidates = [Number(preferredTabId) || 0, await getRememberedActionTabId()].filter((id) => id > 0);
+    const candidates = [Number(preferredTabId) || 0, await getRememberedActionTabId()].filter(
+      (id) => id > 0,
+    );
     for (const tabId of candidates) {
       try {
         const tab = await chrome.tabs.get(tabId);
-        if (tab?.id && /^https?:\/\/([^.]+\.)?chatgpt\.com\//i.test(String(tab.url || ''))) return tab.id;
+        if (tab?.id && /^https?:\/\/([^.]+\.)?chatgpt\.com\//i.test(String(tab.url || '')))
+          return tab.id;
       } catch {}
     }
     try {
       const tabs = await chrome.tabs.query({ url: ['*://chatgpt.com/*', '*://*.chatgpt.com/*'] });
       const list = Array.isArray(tabs) ? tabs.filter(Boolean) : [];
       const active = list.find((tab) => tab.active);
-      return (active?.id || list.slice().sort((a, b) => Number(b?.lastAccessed || 0) - Number(a?.lastAccessed || 0))[0]?.id || 0);
+      return (
+        active?.id ||
+        list.slice().sort((a, b) => Number(b?.lastAccessed || 0) - Number(a?.lastAccessed || 0))[0]
+          ?.id ||
+        0
+      );
     } catch {
       return 0;
     }
@@ -177,7 +194,9 @@
   const findExistingActionPopupWindowId = async () => {
     try {
       const tabs = await chrome.tabs.query({ url: POPUP_URL_MATCH });
-      const existing = (Array.isArray(tabs) ? tabs : []).find((tab) => Number.isInteger(tab?.windowId));
+      const existing = (Array.isArray(tabs) ? tabs : []).find((tab) =>
+        Number.isInteger(tab?.windowId),
+      );
       return existing?.windowId ?? null;
     } catch {
       return null;

@@ -88,9 +88,6 @@ Important split:
 
 ### Early bootstrap files
 
-Examples:
-- `lazy-fast-bootstrap.js`
-
 These run before normal content hydration.
 
 Important rule:
@@ -148,8 +145,6 @@ Examples:
 
 Use this when the feature must be stopped before page-world injection or other early work.
 
-This is the category that `lazyFastModeEnabled` falls into.
-
 ### Required checklist
 
 - do all normal toggle steps above
@@ -165,9 +160,7 @@ If a feature is supposed to be fully inert when disabled, it is not enough to hi
 
 You must gate the earliest entry point that injects or installs the feature.
 
-For Fast Mode that meant:
-- gate `lazy-fast-bootstrap.js`
-- gate the active native controller in `content.js`
+The removed experimental Fast Mode setting used this pattern while it existed because it had both early page-world injection and content-world runtime paths.
 
 ## 4. Radio-group settings
 
@@ -288,37 +281,12 @@ Usually caused by:
 - only gating later UI
 - forgetting an earlier bootstrap or page-world entry point
 
-## Worked example: `lazyFastModeEnabled`
+## Removed worked example: `lazyFastModeEnabled`
 
-This is the full pattern for a risky opt-in feature.
+The experimental Fast Mode setting and its lazy-loading runtime were removed from shipped code after shipping inert.
 
-### Files touched
-
-- `options-storage.js`
-  - `lazyFastModeEnabled: false`
-- `popup.js`
-  - `DEFAULT_PRESET_DATA` / `EXPLICIT_PRESET_OVERRIDES` coverage
-- `popup.html`
-  - switch inserted between:
-    - `moveTopBarToBottomCheckbox`
-    - `fadeSlimSidebarEnabled`
-- `settings-schema.js`
-  - `content.visibilityDefaults.lazyFastModeEnabled = false`
-- `_locales/*/messages.json`
-  - label + tooltip keys
-- `lazy-fast-bootstrap.js`
-  - direct storage read at `document_start`
-  - no bridge injection unless enabled
-- `content.js`
-  - no native Fast Mode controller install unless enabled
-
-### Why this was more than a normal toggle
-
-Fast Mode has two independent entry points:
-- bootstrap/page-world injection
-- content-world native controller
-
-If only one was gated, the feature would not be truly inert.
+- Do not use `lazyFastModeEnabled`, `lazy-fast-bootstrap.js`, or `lazy-fast-bridge.js` as templates for new settings.
+- For a future risky opt-in feature, follow the early bootstrap checklist above and add a dedicated live spec only while the feature exists.
 
 ## Validation checklist
 

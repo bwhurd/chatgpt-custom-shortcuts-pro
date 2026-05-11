@@ -63,7 +63,6 @@ const loadProbeScript = `
   };
   const hasExtensionMarker = () => !!(
     document.getElementById('csp-hide-disclaimer-style') ||
-    document.getElementById('csp-fade-message-buttons-style') ||
     document.documentElement.classList.contains('csp-bottom-bar-ready') ||
     document.body.classList.contains('csp-bottom-bar-ready')
   );

@@ -2,8 +2,6 @@
 /* global OptionsSync */
 
 // Single source of truth for ALL defaults used across SW, popup, and content.
-const LAZY_FAST_MODE_FULL_DISABLE = true;
-
 const OPTIONS_DEFAULTS = {
   // === Shortcuts (text inputs) ===
   shortcutKeyScrollUpOneMessage: 'a',
@@ -52,6 +50,8 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyThinkingStandard: '',
   shortcutKeyThinkingLight: '',
   shortcutKeyThinkingHeavy: '',
+  shortcutKeyProStandard: '',
+  shortcutKeyProExtended: '',
   shortcutKeyNewGptConversation: '',
   selectThenCopyAllMessages: '[',
 
@@ -63,15 +63,7 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyAssistant: false,
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
-  modelNames: [
-    'Instant',
-    'Thinking',
-    'Configure...',
-    'Latest',
-    '5.2',
-    '5.0 Thinking Mini',
-    'o3',
-  ],
+  modelNames: ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'],
   activeModelConfigId: 'configure-latest',
   showLegacyArrowButtonsCheckbox: false,
 
@@ -79,10 +71,8 @@ const OPTIONS_DEFAULTS = {
   pageUpDownTakeover: true,
   popupBottomBarOpacityValue: '0.6', // range -> string
   moveTopBarToBottomCheckbox: false,
-  lazyFastModeEnabled: false,
   removeMarkdownOnCopyCheckbox: true,
   clickToCopyInlineCodeEnabled: false,
-  fadeMessageButtonsCheckbox: false,
   hidePastedLibraryFilesEnabled: false,
   colorBoldTextEnabled: false,
   colorBoldTextLightColor: '#2037e6',
@@ -223,12 +213,6 @@ if (typeof OptionsSync === 'undefined') {
         stored.rememberSidebarScrollPositionCheckbox = false;
       },
 
-      // 3.6) While the Fast Mode kill switch ships enabled, force prior opt-ins back off.
-      (stored) => {
-        if (!LAZY_FAST_MODE_FULL_DISABLE) return;
-        stored.lazyFastModeEnabled = false;
-      },
-
       // 4) Blank inherited hidden digit defaults for newly visible configure actions.
       (stored) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes) ? stored.modelPickerKeyCodes : [];
@@ -299,7 +283,8 @@ if (typeof OptionsSync === 'undefined') {
           'configure-5-0-thinking-mini',
           'configure-o3',
         ]);
-        const value = typeof stored.activeModelConfigId === 'string' ? stored.activeModelConfigId : '';
+        const value =
+          typeof stored.activeModelConfigId === 'string' ? stored.activeModelConfigId : '';
         stored.activeModelConfigId = validIds.has(value) ? value : 'configure-latest';
       },
 

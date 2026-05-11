@@ -47,7 +47,7 @@ Use:
 
 - Open `PROJECT_SPEC.md` for repo-wide behavior, shared conventions, or cross-system validation/tooling rules.
 - Open `specs/0001-adding-new-settings-spec.md` for changes to storage-backed settings, popup controls, import/export, Drive sync, early bootstrap gates, or popup UI details (i18n keys, tooltips, shared labels).
-- Open `specs/0002-lazy-fast-mode-spec.md` for Fast Mode bootstrap, page bridge, native expansion, or Fast Mode troubleshooting changes.
+- Open `specs/0002-lazy-fast-mode-spec.md` only for historical Fast Mode cleanup context. The experimental feature was removed and has no shipped runtime.
 - Open `specs/0003-cloud-sync-and-settings-data-flow-spec.md` for Google login, Drive save/restore, or local settings import/export changes.
 - Open `specs/0004-model-picker-and-shortcuts-spec.md` for shortcut normalization, deduplication, model picker rendering, Ctrl+/ overlay, shortcut safeguards, model routing, or direct DOM replacement of ChatGPT shortcuts (sidebar, new chat, search, composer focus).
 - Open `specs/0005-popup-settings-validator-spec.md` for changes to `tests/validate-keys.js`, `tests/lib/settings-wiring-validator.js`, popup/settings wiring contract validation, or supplemental validator inventory rules.
@@ -82,7 +82,7 @@ Use:
 ## File boundaries
 
 - Default surface: `AGENTS.md`, `PROJECT_SPEC.md`, `plans/*.md`, `specs/*.md`, `extension/**`, `scripts/build-zip.js`, `tests/**`, `package.json`, `package-lock.json`, `.gitignore`, `biome.json`, and `CHANGELOG.md`.
-- High-yield surface: `extension/content.js`, `extension/lazy-fast-bootstrap.js`, `extension/lazy-fast-bridge.js`, `extension/options-storage.js`, `extension/settings-schema.js`, `extension/storage.js`, `extension/auth.js`, `extension/shared/model-picker-labels.js`, `extension/popup.html`, `extension/popup.js`, `extension/popup.css`, `extension/manifest.json`, `extension/background.js`, `tests/playwright/**`, `tests/fixtures/**`, `tests/validate-keys.js`, and `scripts/build-zip.js`.
+- High-yield surface: `extension/content.js`, `extension/options-storage.js`, `extension/settings-schema.js`, `extension/storage.js`, `extension/auth.js`, `extension/shared/model-picker-labels.js`, `extension/popup.html`, `extension/popup.js`, `extension/popup.css`, `extension/manifest.json`, `extension/background.js`, `tests/playwright/**`, `tests/fixtures/**`, `tests/validate-keys.js`, and `scripts/build-zip.js`.
 - Do not read or edit `extension/vendor/**`, `extension/lib/*.min.js`, `dist/*.zip`, `tools/*.zip`, `node_modules/**`, `netlify/**`, or `.git/**` unless the task explicitly targets them.
 - Do not read or search `_temp-files/` unless the user names a file or path there.
 - If unsure whether a file is generated, archived, secret, or user-owned, ask before editing it.
