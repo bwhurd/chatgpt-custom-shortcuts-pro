@@ -98,6 +98,9 @@
   "label_code_separator": {
     "message": "Separador de bloques de código"
   },
+  "label_toggle_codebox_wrap": {
+    "message": "Toggle Word Wrap in Codeboxes"
+  },
   "tt_scroll_up_one": {
     "message": "Desplaza arriba un mensaje."
   },
@@ -175,6 +178,9 @@
   },
   "tt_code_separator": {
     "message": "Personaliza el separador entre bloques de código. Usa un espacio + \\n para saltos de línea."
+  },
+  "tt_toggle_codebox_wrap": {
+    "message": "Toggle line wrapping inside ChatGPT code boxes."
   },
   "label_showModelPicker": {
     "message": "Mostrar selector de modelo"

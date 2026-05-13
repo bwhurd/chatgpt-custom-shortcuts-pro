@@ -25,6 +25,7 @@
     "selectThenCopy": "KeyX",
     "shortcutKeyToggleModelSelector": "Slash",
     "shortcutKeyShowOverlay": "Period",
+    "shortcutKeyToggleCodeboxWrap": " ",
     "shortcutKeyRegenerateTryAgain": " ",
     "shortcutKeyRegenerateMoreConcise": " ",
     "shortcutKeyRegenerateAddDetails": " ",
@@ -75,18 +76,7 @@
     "useAltForModelSwitcherRadio": true,
     "useControlForModelSwitcherRadio": false,
     "copyCodeUserSeparator": " \n \n --- --- --- \n \n",
-    "modelPickerKeyCodes": [
-      "Digit0",
-      "Digit1",
-      "KeyM",
-      "",
-      "",
-      "",
-      "KeyO",
-      "Digit4",
-      "Digit3",
-      ""
-    ],
+    "modelPickerKeyCodes": ["Digit0", "Digit1", "KeyM", "", "", "", "KeyO", "Digit4", "Digit3", ""],
     "modelNames": [
       "GPT-5 Auto",
       "GPT-5 Instant",

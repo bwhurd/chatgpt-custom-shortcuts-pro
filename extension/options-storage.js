@@ -22,6 +22,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeySendEdit: 'd',
   shortcutKeySearchConversationHistory: ',',
   shortcutKeyShowOverlay: '.',
+  shortcutKeyToggleCodeboxWrap: '',
   shortcutKeyTemporaryChat: 'p',
   shortcutKeyToggleDictate: 'y',
   shortcutKeyCancelDictation: '',

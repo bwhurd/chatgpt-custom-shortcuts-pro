@@ -86,6 +86,7 @@
     labelI18nByKey: {
       shortcutKeyToggleModelSelector: 'label_showModelPicker',
       shortcutKeyShowOverlay: 'label_showShortcutOverlay',
+      shortcutKeyToggleCodeboxWrap: 'label_toggle_codebox_wrap',
       shortcutKeyThinkingStandard: 'label_switchToThinkingStandard',
       shortcutKeyThinkingExtended: 'label_switchToThinkingExtended',
       shortcutKeyThinkingLight: 'label_switchToThinkingLight',
@@ -147,6 +148,11 @@
           'shortcutKeyProStandard',
           'shortcutKeyProExtended',
         ],
+      },
+      {
+        headerI18nKey: 'section_ui_tweaks',
+        header: 'UI Tweaks',
+        keys: ['shortcutKeyToggleCodeboxWrap'],
       },
       {
         headerI18nKey: 'section_quick_clicks',

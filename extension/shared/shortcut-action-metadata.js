@@ -597,6 +597,9 @@
     notApplicable('shortcutKeyCopyAllCodeBlocks', {
       notes: 'Clipboard transformation helper with no ChatGPT click target.',
     }),
+    notApplicable('shortcutKeyToggleCodeboxWrap', {
+      notes: 'Internal extension CSS word-wrap helper for code boxes with no ChatGPT click target.',
+    }),
     defineShortcutAction({
       actionId: 'shortcutKeyClickNativeScrollToBottom',
       targetRefs: ['thread-bottom', 'composer-plus-button'],

@@ -2472,6 +2472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectThenCopy: 'KeyX',
     shortcutKeyToggleModelSelector: 'Slash',
     shortcutKeyShowOverlay: 'Period',
+    shortcutKeyToggleCodeboxWrap: NBSP,
     shortcutKeyRegenerateTryAgain: 'KeyR',
     shortcutKeyRegenerateMoreConcise: NBSP,
     shortcutKeyRegenerateAddDetails: NBSP,

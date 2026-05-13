@@ -98,6 +98,9 @@
   "label_code_separator": {
     "message": "कोड ब्लॉक विभाजक"
   },
+  "label_toggle_codebox_wrap": {
+    "message": "Toggle Word Wrap in Codeboxes"
+  },
   "tt_scroll_up_one": {
     "message": "हर बार एक संदेश ऊपर स्क्रॉल करता है।"
   },
@@ -175,6 +178,9 @@
   },
   "tt_code_separator": {
     "message": "कोड ब्लॉकों के बीच का सेपरेटर बदलें. लाइन ब्रेक के लिए स्पेस + \\n इस्तेमाल करें."
+  },
+  "tt_toggle_codebox_wrap": {
+    "message": "Toggle line wrapping inside ChatGPT code boxes."
   },
   "label_showModelPicker": {
     "message": "मॉडल पिकर दिखाएँ"

@@ -98,6 +98,9 @@
   "label_code_separator": {
     "message": "Code Box Separator"
   },
+  "label_toggle_codebox_wrap": {
+    "message": "Toggle Word Wrap in Codeboxes"
+  },
   "label_hide_arrows": {
     "message": "Show Message Navigation Arrows"
   },
@@ -181,6 +184,9 @@
   },
   "tt_code_separator": {
     "message": "When using the `Join + Copy All Code Boxes` shortcut, you can add a custom separator between each code box. To insert line breaks, place a space before each \\n."
+  },
+  "tt_toggle_codebox_wrap": {
+    "message": "Toggle line wrapping inside ChatGPT code boxes."
   },
   "label_showModelPicker": {
     "message": "Show Model Picker"

@@ -1448,6 +1448,204 @@ const delays = DELAYS;
 })();
 
 // ==================================================
+// @note Code box line-wrap toggle implementation
+// ==================================================
+(() => {
+  const ROOT_CLASS = 'csp-codebox-wrap-enabled';
+  const STYLE_ID = 'csp-codebox-wrap-style';
+  const CODEMIRROR_LINE_SELECTOR =
+    'div[id="code-block-viewer"].cm-editor .cm-content code > span';
+  const INDENT_ATTR = 'data-csp-codebox-wrap-indent';
+
+  const ensureStyle = () => {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-scroller,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code,
+      html.${ROOT_CLASS} pre:not(.cm-content) {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+      }
+
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-scroller,
+      html.${ROOT_CLASS} pre:not(.cm-content) {
+        overflow-x: hidden !important;
+      }
+
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-line,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code,
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content span,
+      html.${ROOT_CLASS} pre:not(.cm-content),
+      html.${ROOT_CLASS} pre:not(.cm-content) > code {
+        white-space: pre-wrap !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+      }
+
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content {
+        flex-shrink: 1 !important;
+      }
+
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${INDENT_ATTR}] {
+        box-sizing: border-box !important;
+        display: block !important;
+        max-width: 100% !important;
+        padding-inline-start: var(--csp-codebox-wrap-indent, 0ch) !important;
+        text-indent: calc(-1 * var(--csp-codebox-wrap-indent, 0ch)) !important;
+      }
+
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${INDENT_ATTR}] + br {
+        display: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  };
+
+  const measureIndentCh = (text) => {
+    let width = 0;
+    for (const ch of text) {
+      if (ch === ' ') {
+        width += 1;
+      } else if (ch === '\t') {
+        width += 4;
+      }
+    }
+    return width;
+  };
+
+  const getHangingIndentCh = (text) => {
+    const raw = String(text || '');
+    const leadingWhitespace = raw.match(/^[ \t]*/)?.[0] || '';
+    const afterWhitespace = raw.slice(leadingWhitespace.length);
+    const listMarker = afterWhitespace.match(/^(?:[-*+]|(?:\d+|[a-zA-Z])[.)])\s+/)?.[0] || '';
+    const dashedBulletOffset = /^-\s+/.test(afterWhitespace) ? 1 : 0;
+    const indent = measureIndentCh(leadingWhitespace) + measureIndentCh(listMarker) + dashedBulletOffset;
+    return Math.max(0, Math.min(indent, 40));
+  };
+
+  const applyCodeboxWrapIndents = () => {
+    document.querySelectorAll(CODEMIRROR_LINE_SELECTOR).forEach((line) => {
+      const indent = getHangingIndentCh(line.textContent || '');
+      line.setAttribute(INDENT_ATTR, 'true');
+      line.style.setProperty('--csp-codebox-wrap-indent', `${indent}ch`);
+    });
+  };
+
+  const getCodeboxScrollRoot = () => {
+    if (typeof getScrollableContainer === 'function') {
+      const scrollRoot = getScrollableContainer();
+      if (scrollRoot instanceof Element) return scrollRoot;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+
+  const getViewportRect = (scrollRoot) => {
+    if (
+      scrollRoot === document.scrollingElement ||
+      scrollRoot === document.documentElement ||
+      scrollRoot === document.body
+    ) {
+      return { top: 0, bottom: window.innerHeight };
+    }
+
+    const rect = scrollRoot.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom };
+  };
+
+  const findVisibleAnchor = (scrollRoot) => {
+    const viewport = getViewportRect(scrollRoot);
+    const targetY = viewport.top + Math.min(120, Math.max(24, (viewport.bottom - viewport.top) / 5));
+    const selectors = [
+      'div[id="code-block-viewer"].cm-editor .cm-content span',
+      'div[id="code-block-viewer"].cm-editor .cm-line',
+      'div[id="code-block-viewer"].cm-editor .cm-content code',
+      'pre:not(.cm-content) > code',
+      'div[id="code-block-viewer"].cm-editor',
+      'pre:not(.cm-content)',
+      '[data-testid^="conversation-turn-"]',
+      'section[data-turn-id]',
+    ];
+
+    for (const selector of selectors) {
+      let best = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      for (const el of document.querySelectorAll(selector)) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        if (rect.bottom <= viewport.top || rect.top >= viewport.bottom) continue;
+
+        const distance =
+          rect.top <= targetY && rect.bottom >= targetY
+            ? 0
+            : Math.min(Math.abs(rect.top - targetY), Math.abs(rect.bottom - targetY));
+        if (distance < bestDistance) {
+          best = el;
+          bestDistance = distance;
+        }
+      }
+
+      if (best) return best;
+    }
+
+    return null;
+  };
+
+  const captureScrollSnapshot = () => {
+    const scrollRoot = getCodeboxScrollRoot();
+    const anchor = findVisibleAnchor(scrollRoot);
+    return {
+      anchor,
+      scrollRoot,
+      scrollTop: scrollRoot.scrollTop,
+      top: anchor?.getBoundingClientRect().top,
+    };
+  };
+
+  const restoreScrollSnapshot = (snapshot) => {
+    if (!snapshot?.scrollRoot) return;
+
+    if (snapshot.anchor?.isConnected && Number.isFinite(snapshot.top)) {
+      const delta = snapshot.anchor.getBoundingClientRect().top - snapshot.top;
+      if (Number.isFinite(delta) && Math.abs(delta) > 0.5) {
+        snapshot.scrollRoot.scrollTop += delta;
+      }
+      return;
+    }
+
+    snapshot.scrollRoot.scrollTop = snapshot.scrollTop;
+  };
+
+  const toggleCodeboxWrap = () => {
+    ensureStyle();
+    const snapshot = captureScrollSnapshot();
+    const enabled = document.documentElement.classList.toggle(ROOT_CLASS);
+    if (enabled) applyCodeboxWrapIndents();
+
+    restoreScrollSnapshot(snapshot);
+    requestAnimationFrame(() => {
+      if (enabled) applyCodeboxWrapIndents();
+      restoreScrollSnapshot(snapshot);
+    });
+    window.setTimeout(() => {
+      if (enabled) applyCodeboxWrapIndents();
+      restoreScrollSnapshot(snapshot);
+    }, 50);
+
+    return enabled;
+  };
+
+  window.toggleCodeboxWrap = toggleCodeboxWrap;
+})();
+
+// ==================================================
 // Custom GPT Menu Utilities
 // Detects and interacts with GPT-specific menu buttons and submenu items,
 // working for both header and bottom bar locations. Exposes helpers for
@@ -2339,20 +2537,55 @@ const delays = DELAYS;
     }, delays.feedbackDelay); // Start fading and scaling after a brief delay
   }
 
-  // Helper to (re)inject arrow buttons in the DOM based on current settings
-  function injectOrToggleArrowButtons() {
-    // Remove any previous buttons (or comments)
+  function removeExistingArrowButtons() {
     document.getElementById('upButton')?.remove();
     document.getElementById('downButton')?.remove();
+  }
 
+  function getArrowButtonsParent(preferredParent = null) {
+    if (preferredParent instanceof HTMLElement) {
+      return preferredParent;
+    }
+
+    if (window.moveTopBarToBottomCheckbox) {
+      const bottomBar = document.getElementById('bottomBarContainer');
+      return bottomBar instanceof HTMLElement ? bottomBar : null;
+    }
+
+    return document.body || null;
+  }
+
+  function arrowButtonsAreMountedIn(parent) {
+    const upButton = document.getElementById('upButton');
+    const downButton = document.getElementById('downButton');
+    return upButton?.parentElement === parent && downButton?.parentElement === parent;
+  }
+
+  // Helper to (re)inject arrow buttons in the DOM based on current settings
+  function injectOrToggleArrowButtons(preferredParent = null) {
     // New logic: if unchecked (false), do nothing (keep hidden)
-    if (!window.showLegacyArrowButtonsCheckbox) return;
+    if (!window.showLegacyArrowButtonsCheckbox) {
+      removeExistingArrowButtons();
+      return;
+    }
+
+    const parent = getArrowButtonsParent(preferredParent);
+    if (!parent) {
+      if (window.moveTopBarToBottomCheckbox) removeExistingArrowButtons();
+      return;
+    }
+    if (arrowButtonsAreMountedIn(parent)) return;
+
+    // Remove any previous buttons (or comments)
+    removeExistingArrowButtons();
 
     // Add fresh buttons (will only show when the checkbox is checked)
     const upButton = createScrollUpButton();
     const downButton = createScrollDownButton();
-    appendWithFragment(document.body, upButton, downButton);
+    appendWithFragment(parent, upButton, downButton);
   }
+
+  window.__cspInjectOrToggleArrowButtons = injectOrToggleArrowButtons;
 
   // Wrap applyVisibilitySettings so every time it's called, it also (re)injects
   const _applyVisibilitySettings = window.applyVisibilitySettings;
@@ -2365,10 +2598,14 @@ const delays = DELAYS;
   if (typeof window.showLegacyArrowButtonsCheckbox === 'boolean') {
     injectOrToggleArrowButtons();
   } else {
-    chrome.storage.sync.get({ showLegacyArrowButtonsCheckbox: false }, (data) => {
-      window.showLegacyArrowButtonsCheckbox = !!data.showLegacyArrowButtonsCheckbox;
-      injectOrToggleArrowButtons();
-    });
+    chrome.storage.sync.get(
+      { moveTopBarToBottomCheckbox: false, showLegacyArrowButtonsCheckbox: false },
+      (data) => {
+        window.moveTopBarToBottomCheckbox = !!data.moveTopBarToBottomCheckbox;
+        window.showLegacyArrowButtonsCheckbox = !!data.showLegacyArrowButtonsCheckbox;
+        injectOrToggleArrowButtons();
+      },
+    );
   }
 
   const PLUS_BTN_SEL = '[data-testid="composer-plus-btn"]';
@@ -3486,6 +3723,7 @@ const delays = DELAYS;
     shortcutKeySearchWeb: 'KeyQ',
     shortcutKeyPreviousThread: 'KeyJ',
     shortcutKeyNextThread: 'Semicolon',
+    shortcutKeyToggleCodeboxWrap: '',
     selectThenCopy: 'KeyX',
     shortcutKeyClickSendButton: 'Enter',
     shortcutKeyClickStopButton: 'Backspace',
@@ -3794,6 +4032,9 @@ const delays = DELAYS;
         goDownTwoMessages(downButton || null);
       },
       [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
+      [shortcuts.shortcutKeyToggleCodeboxWrap]: () => {
+        window.toggleCodeboxWrap?.();
+      },
       [shortcuts.shortcutKeyCopyLowest]: () => {
         const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
         copyFromLowestButton(copyPath, {
@@ -7311,6 +7552,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         state.mountedAnchor = mountAfterEl;
         state.composerContainer = snapshot.composerContainer;
       }
+
+      window.__cspInjectOrToggleArrowButtons?.(root);
 
       return {
         bottomBar: root,

@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.13.2026
+- Added: Optional shortcut to wrap long lines in ChatGPT code boxes.
+
 #### 05.11.2026
 - Removed: Fade Message Buttons setting.
 - Fixed: Hide Pasted Files works in Library list view again.
