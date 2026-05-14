@@ -29,24 +29,19 @@
           style="margin-left: 0; position: relative; top: 6px;">Switch Models</span>
 
         <div class="mp-refresh-controls">
-          <button id="mp-refresh-models-button" type="button" class="mp-refresh-models-button custom-tooltip"
-            data-tooltip="__MSG_label_modelPickerManualRefreshTooltip__">
-            <span class="i18n" data-i18n="label_modelPickerRefreshModels">Refresh Models</span>
-          </button>
-
-        <div class="p-segmented-controls p-segmented-radius" style="height: 18px; width: auto; display: inline-flex; align-items: center;
+          <div class="p-segmented-controls p-segmented-radius" style="height: 18px; width: auto; display: inline-flex; align-items: center;
   transform: translate(8px, 0px); white-space: nowrap;">
 
-          <a href="#" class="active" data-target="useAltForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
+            <a href="#" class="active" data-target="useAltForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
     padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
-            <span class="i18n" data-i18n="label_use_alt">Use Alt</span>
-          </a>
+              <span class="i18n" data-i18n="label_use_alt">Use Alt</span>
+            </a>
 
-          <a href="#" data-target="useControlForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
+            <a href="#" data-target="useControlForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
     padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
-            <span class="i18n" data-i18n="label_use_control">Use Control</span>
-          </a>
-        </div>
+              <span class="i18n" data-i18n="label_use_control">Use Control</span>
+            </a>
+          </div>
         </div>
 
 
@@ -57,8 +52,105 @@
       <input type="radio" id="useControlForModelSwitcherRadio" data-sync="useControlForModelSwitcherRadio"
         name="modelSwitcher" style="display: none;">
 
-      <!-- Model Picker 5×2 or more grid is injected by popup.js (see modelPickerGridInit IIFE) -->
+      <!-- Model Picker six-column rows are injected by popup.js (see modelPickerInputsGridInitV2 IIFE) -->
       <div id="mp-grid-anchor"></div>
+
+      <section id="mp-effort-grid" class="mp-effort-grid" aria-labelledby="mp-effort-heading">
+        <div class="mp-effort-label-row">
+          <div id="mp-effort-heading" class="mp-subsection-label mp-effort-label" role="heading" aria-level="3">
+            <span class="i18n" data-i18n="label_popupEffort">Effort</span>
+          </div>
+          <div id="mp-pro-effort-heading" class="mp-subsection-label mp-pro-effort-label" role="heading"
+            aria-level="3" hidden>
+            <span class="i18n" data-i18n="label_popupProEffort">Pro Effort</span>
+          </div>
+        </div>
+
+        <div class="shortcut-grid mp-effort-shortcut-grid" aria-label="Thinking effort shortcuts">
+          <!-- ### Switch to Thinking Light ### -->
+          <div class="shortcut-item mp-effort-item" data-thinking-option-id="thinking-light" data-filter-locked="1"
+            style="display: none">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToThinkingLight" hidden>Switch model to
+                Thinking Light</span>
+              <span class="mp-effort-display-label">Thinking<br>Light</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label"> Alt + </span>
+              <input class="key-input" id="shortcutKeyThinkingLight" data-sync="shortcutKeyThinkingLight"
+                maxlength="12" name="shortcutKeyThinkingLight" type="text" value="" />
+            </div>
+          </div>
+          <!-- ### Switch to Thinking Standard ### -->
+          <div class="shortcut-item mp-effort-item">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToThinkingStandard" hidden>Switch model to
+                Thinking Standard</span>
+              <span class="mp-effort-display-label">Thinking<br>Standard</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label"> Alt + </span>
+              <input class="key-input" id="shortcutKeyThinkingStandard" data-sync="shortcutKeyThinkingStandard"
+                maxlength="12" name="shortcutKeyThinkingStandard" type="text" value="" />
+            </div>
+          </div>
+          <!-- ### Switch to Thinking Extended ### -->
+          <div class="shortcut-item mp-effort-item">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToThinkingExtended" hidden>Switch model to
+                Thinking Extended</span>
+              <span class="mp-effort-display-label">Thinking<br>Extended</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label">Alt +</span>
+              <input class="key-input" id="shortcutKeyThinkingExtended" data-sync="shortcutKeyThinkingExtended"
+                maxlength="12" name="shortcutKeyThinkingExtended" type="text" value="" />
+            </div>
+          </div>
+          <!-- ### Switch to Thinking Heavy ### -->
+          <div class="shortcut-item mp-effort-item" data-thinking-option-id="thinking-heavy" data-filter-locked="1"
+            style="display: none">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToThinkingHeavy" hidden>Switch model to
+                Thinking Heavy</span>
+              <span class="mp-effort-display-label">Thinking<br>Heavy</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label">Alt +</span>
+              <input class="key-input" id="shortcutKeyThinkingHeavy" data-sync="shortcutKeyThinkingHeavy"
+                maxlength="12" name="shortcutKeyThinkingHeavy" type="text" value="" />
+            </div>
+          </div>
+          <!-- ### Switch to Pro Standard ### -->
+          <div class="shortcut-item mp-effort-item mp-pro-effort-item" data-pro-option-id="pro-standard"
+            data-filter-locked="1" style="display: none">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToProStandard" hidden>Switch model to Pro
+                Standard</span>
+              <span class="mp-effort-display-label">Pro<br>Standard</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label"> Alt + </span>
+              <input class="key-input" id="shortcutKeyProStandard" data-sync="shortcutKeyProStandard" maxlength="12"
+                name="shortcutKeyProStandard" type="text" value="" />
+            </div>
+          </div>
+          <!-- ### Switch to Pro Extended ### -->
+          <div class="shortcut-item mp-effort-item mp-pro-effort-item" data-pro-option-id="pro-extended"
+            data-filter-locked="1" style="display: none">
+            <div class="shortcut-label">
+              <span class="i18n mp-label-contract" data-i18n="label_switchToProExtended" hidden>Switch model to Pro
+                Extended</span>
+              <span class="mp-effort-display-label">Pro<br>Extended</span>
+            </div>
+            <div class="shortcut-keys">
+              <span class="key-text platform-alt-label">Alt +</span>
+              <input class="key-input" id="shortcutKeyProExtended" data-sync="shortcutKeyProExtended" maxlength="12"
+                name="shortcutKeyProExtended" type="text" value="" />
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- ((( Models + UI Tweaks Group ))) -->
 
@@ -92,99 +184,6 @@
             name="shortcutKeyShowOverlay" type="text" value="." />
         </div>
       </div>
-      <!-- ### Switch to Thinking Standard ### -->
-      <div class="shortcut-item">
-        <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_switchToThinkingStandard">
-            Switch model to Thinking Standard
-          </span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToThinkingStandard__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" id="shortcutKeyThinkingStandard" data-sync="shortcutKeyThinkingStandard"
-            maxlength="12" name="shortcutKeyThinkingStandard" type="text" value="" />
-        </div>
-      </div>
-      <!-- ### Switch to Thinking Extended ### -->
-      <div class="shortcut-item class-13">
-        <div class="shortcut-label class-25">
-          <span class="i18n force-balance-break" data-i18n="label_switchToThinkingExtended">Switch model to
-            Thinking Extended</span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToThinkingExtended__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label">Alt +</span>
-          <input class="key-input" id="shortcutKeyThinkingExtended" data-sync="shortcutKeyThinkingExtended"
-            maxlength="12" name="shortcutKeyThinkingExtended" type="text" value="" />
-        </div>
-      </div>
-      <!-- ### Switch to Thinking Light ### -->
-      <div class="shortcut-item" data-thinking-option-id="thinking-light" data-filter-locked="1"
-        style="display: none">
-        <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_switchToThinkingLight">
-            Switch model to Thinking Light
-          </span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToThinkingLight__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" id="shortcutKeyThinkingLight" data-sync="shortcutKeyThinkingLight"
-            maxlength="12" name="shortcutKeyThinkingLight" type="text" value="" />
-        </div>
-      </div>
-      <!-- ### Switch to Thinking Heavy ### -->
-      <div class="shortcut-item class-13" data-thinking-option-id="thinking-heavy" data-filter-locked="1"
-        style="display: none">
-        <div class="shortcut-label class-25">
-          <span class="i18n force-balance-break" data-i18n="label_switchToThinkingHeavy">
-            Switch model to Thinking Heavy
-          </span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToThinkingHeavy__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label">Alt +</span>
-          <input class="key-input" id="shortcutKeyThinkingHeavy" data-sync="shortcutKeyThinkingHeavy"
-            maxlength="12" name="shortcutKeyThinkingHeavy" type="text" value="" />
-        </div>
-      </div>
-      <!-- ### Switch to Pro Standard ### -->
-      <div class="shortcut-item" data-pro-option-id="pro-standard" data-filter-locked="1" style="display: none">
-        <div class="shortcut-label">
-          <span class="i18n force-balance-break" data-i18n="label_switchToProStandard">
-            Switch model to Pro Standard
-          </span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToProStandard__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label"> Alt + </span>
-          <input class="key-input" id="shortcutKeyProStandard" data-sync="shortcutKeyProStandard" maxlength="12"
-            name="shortcutKeyProStandard" type="text" value="" />
-        </div>
-      </div>
-      <!-- ### Switch to Pro Extended ### -->
-      <div class="shortcut-item class-13" data-pro-option-id="pro-extended" data-filter-locked="1"
-        style="display: none">
-        <div class="shortcut-label class-25">
-          <span class="i18n force-balance-break" data-i18n="label_switchToProExtended">
-            Switch model to Pro Extended
-          </span>
-          <span class="material-symbols-outlined info-icon info-icon-tooltip" tabindex="0"
-            data-tooltip="__MSG_tt_switchToProExtended__">info</span>
-        </div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label">Alt +</span>
-          <input class="key-input" id="shortcutKeyProExtended" data-sync="shortcutKeyProExtended" maxlength="12"
-            name="shortcutKeyProExtended" type="text" value="" />
-        </div>
-      </div>
-
       <!-- ((( UI Tweaks ))) -->
       <div class="blank-row section-header" role="heading" aria-level="2">
         <span class="i18n" data-i18n="section_ui_tweaks">UI Tweaks</span>
@@ -1108,6 +1107,12 @@
       </div>
 
 
+    </div>
+
+    <div class="popup-changelog-link-row">
+      <a class="shortcut-label popup-changelog-link"
+        href="https://bwhurd.github.io/chatgpt-custom-shortcuts-pro/CHANGELOG.html" target="_blank"
+        rel="noopener noreferrer">View Changelog</a>
     </div>
 
 

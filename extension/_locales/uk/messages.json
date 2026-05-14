@@ -485,6 +485,12 @@
   "section_model_picker_tweaks": {
     "message": "Вибір моделі"
   },
+  "label_popupEffort": {
+    "message": "Effort"
+  },
+  "label_popupProEffort": {
+    "message": "Pro Effort"
+  },
   "label_configureModelsCompact": {
     "message": "Налаштувати моделі"
   },

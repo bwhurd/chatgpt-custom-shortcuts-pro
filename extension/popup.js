@@ -2873,13 +2873,13 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             alt.checked = false;
             ctrl.checked = true;
-            // Ensure segmented UI + 5×2 labels resync immediately
+            // Ensure segmented UI + compact model-grid labels resync immediately
             ctrl.dispatchEvent(new Event('change', { bubbles: true }));
           }
         },
         { lines, proceedText: 'Proceed with changes?' },
       );
-    });
+      });
 
     // Switching to Control never collides with Alt-based popup shortcuts; just save.
     ctrl.addEventListener('change', () => {
@@ -2898,7 +2898,7 @@ document.addEventListener('DOMContentLoaded', () => {
       : 'input.key-input';
 
   const shortcutKeys = Array.from(document.querySelectorAll(shortcutInputSelector))
-    .filter((el) => !el.classList.contains('mp-input') && !el.closest('#model-picker-grid'))
+    .filter((el) => !el.classList.contains('mp-input'))
     .map((el) => el.getAttribute('data-sync') || el.id)
     .filter(Boolean);
   const shortcutKeyValues = {};
@@ -2927,27 +2927,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document
       .querySelectorAll('.shortcut-item[data-thinking-option-id], .shortcut-item[data-pro-option-id]')
       .forEach((item) => {
-      const optionId = item.getAttribute('data-thinking-option-id') || '';
-      const proOptionId = item.getAttribute('data-pro-option-id') || '';
-      let shouldShow = false;
-      if (optionId) {
-        shouldShow =
-          typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
-            ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, optionId)
-            : false;
-      } else if (proOptionId) {
-        shouldShow =
-          typeof window.ModelLabels?.hasProFrontendOption === 'function'
-            ? window.ModelLabels.hasProFrontendOption(window.__modelCatalog || null)
-            : false;
-      }
-      const input = item.querySelector('input.key-input');
-      item.style.display = shouldShow ? '' : 'none';
-      item.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
-      if (shouldShow) item.removeAttribute('data-filter-locked');
-      else item.setAttribute('data-filter-locked', '1');
-      if (input instanceof HTMLInputElement) input.disabled = !shouldShow;
-    });
+        const optionId = item.getAttribute('data-thinking-option-id') || '';
+        const proOptionId = item.getAttribute('data-pro-option-id') || '';
+        let shouldShow = false;
+        if (optionId) {
+          shouldShow =
+            typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
+              ? window.ModelLabels.hasThinkingEffortOption(window.__modelCatalog || null, optionId)
+              : false;
+        } else if (proOptionId) {
+          shouldShow =
+            typeof window.ModelLabels?.hasProFrontendOption === 'function'
+              ? window.ModelLabels.hasProFrontendOption(window.__modelCatalog || null)
+              : false;
+        }
+        const input = item.querySelector('input.key-input');
+        item.style.display = shouldShow ? '' : 'none';
+        item.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+        if (shouldShow) item.removeAttribute('data-filter-locked');
+        else item.setAttribute('data-filter-locked', '1');
+        if (input instanceof HTMLInputElement) input.disabled = !shouldShow;
+      });
+
+    const proEffortHeading = document.getElementById('mp-pro-effort-heading');
+    const effortGrid = document.getElementById('mp-effort-grid');
+    if (proEffortHeading) {
+      const hasVisibleProEffort = Array.from(
+        document.querySelectorAll('.shortcut-item[data-pro-option-id]'),
+      ).some((item) => item.dataset.filterLocked !== '1' && item.style.display !== 'none');
+      proEffortHeading.hidden = !hasVisibleProEffort;
+      proEffortHeading.setAttribute('aria-hidden', hasVisibleProEffort ? 'false' : 'true');
+      effortGrid?.classList.toggle('mp-pro-effort-visible', hasVisibleProEffort);
+    }
 
     const searchInput = document.querySelector('.ios-search-input');
     if (searchInput instanceof HTMLInputElement) {
@@ -4791,8 +4802,8 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   const getModelCatalogRefreshTooltipText = () =>
     chrome?.i18n?.getMessage?.('label_modelPickerManualRefreshTooltip') ||
     'Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected.';
-  const getModelCatalogRefreshButtonText = () =>
-    chrome?.i18n?.getMessage?.('label_modelPickerRefreshModels') || 'Refresh Models';
+  const getModelCatalogGridRefreshButtonText = () => 'Click to Refresh\nModel List';
+  const getModelCatalogGridRefreshAriaLabel = () => 'Click to Refresh Model List';
   const getCurrentWeekKey = () => {
     const d = new Date();
     const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -4868,13 +4879,13 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
     const label = document.createElement('div');
     label.className = 'shortcut-label';
-    label.style.cssText = 'margin:0 0 14px 0;';
+    label.style.cssText = 'margin:0 0 10px 0;';
     label.innerHTML = `<span class="mp-label" style="font-weight:400;" data-view-key="${viewKey}"></span>`;
     label.querySelector('.mp-label').textContent = labelText;
 
     const keys = document.createElement('div');
     keys.className = 'shortcut-keys';
-    keys.style.cssText = 'justify-content:center;gap:6px;';
+    keys.style.cssText = 'justify-content:center;gap:4px;';
 
     const mod = document.createElement('span');
     mod.className = 'key-text mp-modifier-text';
@@ -4890,11 +4901,116 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     input.autocomplete = 'off';
     input.autocapitalize = 'off';
     input.spellcheck = false;
-    input.style.cssText = 'width:3rem;text-align:center;';
+    input.style.cssText = 'width:2.55rem;text-align:center;';
 
     keys.append(mod, input);
     item.append(label, keys);
     return item;
+  };
+
+  const createRefreshModelsButton = () => {
+    const button = document.createElement('button');
+    button.id = 'mp-refresh-models-button';
+    button.type = 'button';
+    button.className = 'shortcut-item mp-model-shortcut-item mp-refresh-models-button';
+    button.setAttribute('data-tooltip', getModelCatalogRefreshTooltipText());
+    button.setAttribute('aria-label', getModelCatalogGridRefreshAriaLabel());
+
+    const label = document.createElement('span');
+    label.className = 'mp-refresh-models-button-label';
+    label.textContent = getModelCatalogGridRefreshButtonText();
+    button.appendChild(label);
+    return button;
+  };
+
+  let refreshButtonTooltip = null;
+  const getRefreshButtonTooltip = () => {
+    if (refreshButtonTooltip?.isConnected) return refreshButtonTooltip;
+    refreshButtonTooltip = document.createElement('div');
+    refreshButtonTooltip.className = 'mp-refresh-models-tooltip';
+    refreshButtonTooltip.setAttribute('role', 'tooltip');
+    refreshButtonTooltip.hidden = true;
+    document.body.appendChild(refreshButtonTooltip);
+    return refreshButtonTooltip;
+  };
+
+  const positionRefreshButtonTooltip = (button) => {
+    const tooltip = getRefreshButtonTooltip();
+    const tooltipText = button.getAttribute('data-tooltip') || '';
+    if (!tooltipText) return;
+    tooltip.textContent = tooltipText;
+    tooltip.hidden = false;
+
+    const gap = 6;
+    const minEdge = 8;
+    const buttonRect = button.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+
+    const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+    const left = Math.min(
+      Math.max(minEdge, buttonRect.left - tooltipRect.width - gap),
+      Math.max(minEdge, viewportWidth - tooltipRect.width - minEdge),
+    );
+    const top = Math.min(
+      Math.max(minEdge, buttonCenterY - tooltipRect.height / 2),
+      Math.max(minEdge, viewportHeight - tooltipRect.height - minEdge),
+    );
+    const caretY = Math.min(
+      Math.max(12, buttonCenterY - top),
+      Math.max(12, tooltipRect.height - 12),
+    );
+
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.style.setProperty('--mp-refresh-tooltip-caret-y', `${Math.round(caretY)}px`);
+  };
+
+  const hideRefreshButtonTooltip = () => {
+    if (!refreshButtonTooltip) return;
+    refreshButtonTooltip.hidden = true;
+  };
+
+  const wireRefreshButtonTooltip = (button) => {
+    if (!(button instanceof HTMLElement) || button.dataset.tooltipWired === '1') return;
+    button.dataset.tooltipWired = '1';
+
+    const show = () => {
+      requestAnimationFrame(() => positionRefreshButtonTooltip(button));
+    };
+    button.addEventListener('mouseenter', show);
+    button.addEventListener('focus', show);
+    button.addEventListener('mouseleave', hideRefreshButtonTooltip);
+    button.addEventListener('blur', hideRefreshButtonTooltip);
+    window.addEventListener('resize', hideRefreshButtonTooltip, { passive: true });
+    window.addEventListener('scroll', hideRefreshButtonTooltip, { passive: true });
+  };
+
+  const appendGroupActions = (grid, group) => {
+    const actions = Array.isArray(group?.actions) ? group.actions : [];
+    const shouldIncludeRefreshButton = group?.id === 'primary';
+    let refreshButtonAppended = false;
+
+    actions.forEach((action, index) => {
+      if (shouldIncludeRefreshButton && index === 5) {
+        grid.appendChild(createRefreshModelsButton());
+        refreshButtonAppended = true;
+      }
+      grid.appendChild(createShortcutItem(action, group.id || ''));
+    });
+
+    if (shouldIncludeRefreshButton && !refreshButtonAppended) {
+      grid.appendChild(createRefreshModelsButton());
+    }
+  };
+
+  const attachEffortGrid = (section, effortGrid = document.getElementById('mp-effort-grid')) => {
+    if (!(section instanceof Element) || !(effortGrid instanceof Element)) return;
+    const overlay = Array.from(section.children).find((child) =>
+      child.classList?.contains('mp-grid-loading-overlay'),
+    );
+    section.insertBefore(effortGrid, overlay || null);
   };
 
   const buildGroupWrapper = (group) => {
@@ -4914,11 +5030,9 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
     const grid = document.createElement('div');
     grid.className = 'shortcut-grid mp-shortcut-grid-row';
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;';
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;';
 
-    (group.actions || []).forEach((action) => {
-      grid.appendChild(createShortcutItem(action, group.id || ''));
-    });
+    appendGroupActions(grid, group);
 
     wrapper.appendChild(grid);
     return wrapper;
@@ -5077,7 +5191,13 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     const viewSignature = getViewSignature(actionGroups);
     const existing = querySection();
 
-    if (existing && existing.dataset.viewSignature === viewSignature) return existing;
+    if (existing && existing.dataset.viewSignature === viewSignature) {
+      attachEffortGrid(existing);
+      wireManualRefreshButton();
+      return existing;
+    }
+
+    const effortGrid = existing?.querySelector('#mp-effort-grid') || document.getElementById('mp-effort-grid');
     if (existing) existing.remove();
 
     const section = document.createElement('section');
@@ -5092,9 +5212,11 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       section.appendChild(buildGroupWrapper(group));
     });
 
+    attachEffortGrid(section, effortGrid);
     anchor.parentNode.insertBefore(section, anchor);
     if (anchor.id === 'mp-grid-anchor') anchor.style.display = 'none';
     syncCatalogLoadingUi();
+    wireManualRefreshButton();
     return section;
   }
 
@@ -5201,6 +5323,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       section.dataset.viewSignature = signature;
       lastViewSignature = signature;
       wireInputsAndReset();
+      wireManualRefreshButton();
       syncModifierText();
       renderInputs();
 
@@ -5298,11 +5421,13 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       buildGridSection();
       lastViewSignature = signature;
       wireInputsAndReset();
+      wireManualRefreshButton();
       wireConfigureGridActions();
     }
     syncModifierText();
     syncActiveState();
     renderInputs();
+    wireManualRefreshButton();
     syncCatalogLoadingUi();
   }
 
@@ -5707,17 +5832,19 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     });
   }
 
-  const wireManualRefreshButton = () => {
+  function wireManualRefreshButton() {
     const button = document.getElementById('mp-refresh-models-button');
     if (!button || button.dataset.wired === '1') return;
     button.dataset.wired = '1';
     button.setAttribute('data-tooltip', getModelCatalogRefreshTooltipText());
-    const label = button.querySelector('.i18n') || button;
-    label.textContent = getModelCatalogRefreshButtonText();
+    button.setAttribute('aria-label', getModelCatalogGridRefreshAriaLabel());
+    const label = button.querySelector('.mp-refresh-models-button-label') || button;
+    label.textContent = getModelCatalogGridRefreshButtonText();
+    wireRefreshButtonTooltip(button);
     button.addEventListener('click', () => {
       void triggerManualCatalogRefresh('header-button');
     });
-  };
+  }
 
   const primeManualCatalogRefreshPrompt = () => {
     try {

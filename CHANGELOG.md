@@ -6,6 +6,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.14.2026
+- Changed: Popup and shortcut overlay model grids now fit six items per row with a separate Effort row.
+- Fixed: Pro Effort shortcuts now update the current model when available, then fall back to the latest model.
+
 #### 05.13.2026
 - Added: Optional shortcut to wrap long lines in ChatGPT code boxes.
 

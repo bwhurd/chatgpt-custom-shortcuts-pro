@@ -10044,13 +10044,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           ) || null
         );
       };
-      const getOpenThinkingEffortMenu = (trigger = null) => {
+      const getOpenThinkingEffortMenu = (trigger = null, { strictTrigger = false } = {}) => {
         const triggerId = trigger?.id || '';
         return (
           Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))
             .filter((menu) => {
               if (!isUsablyVisibleElement(menu)) return false;
               if (triggerId && menu.getAttribute('aria-labelledby') === triggerId) return true;
+              if (triggerId && strictTrigger) return false;
               return Array.from(
                 menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`),
               ).some((item) => getThinkingEffortIdForMenuItem(item));
@@ -10058,16 +10059,65 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             .at(-1) || null
         );
       };
-      const findModelThinkingEffortActionButton = (state = getVisibleModelMenuState()) => {
+      const getModelThinkingEffortRowForButton = (button) =>
+        button instanceof Element ? button.closest(MODEL_THINKING_EFFORT_ROW_SELECTOR) : null;
+      const getModelThinkingEffortMenuItemForButton = (button) => {
+        const row = getModelThinkingEffortRowForButton(button);
+        return (
+          row?.querySelector(MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR) ||
+          button?.closest?.(MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR) ||
+          null
+        );
+      };
+      const isDisabledModelThinkingEffortButton = (button) =>
+        button instanceof Element &&
+        (button.hasAttribute('disabled') ||
+          button.matches(':disabled') ||
+          button.hasAttribute('data-disabled') ||
+          button.getAttribute('aria-disabled') === 'true');
+      const isProModelThinkingEffortMenuItem = (menuItem) => {
+        if (!(menuItem instanceof Element)) return false;
+        const tid = normModelTid(menuItem.getAttribute('data-testid'));
+        if (/(?:^|-)pro(?:$|-)/.test(tid)) return true;
+        return (
+          typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function' &&
+          window.ModelLabels.mapFrontendLabelToActionId(
+            __cspTextNoHint(menuItem),
+            DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+          ) === 'pro'
+        );
+      };
+      const isProModelThinkingEffortActionButton = (button) => {
+        if (!(button instanceof Element)) return false;
+        if (isDisabledModelThinkingEffortButton(button)) return false;
+        const row = getModelThinkingEffortRowForButton(button);
+        if (!(row instanceof Element)) return false;
+        const menuItem = getModelThinkingEffortMenuItemForButton(button);
+        if (isDisabledModelThinkingEffortButton(menuItem)) return false;
+        const buttonTid = normModelTid(button.getAttribute('data-testid'));
+        return (
+          /(?:^|-)pro(?:$|-)/.test(buttonTid) ||
+          isProModelThinkingEffortMenuItem(menuItem)
+        );
+      };
+      const findModelThinkingEffortActionButton = (
+        state = getVisibleModelMenuState(),
+        predicate = null,
+      ) => {
         const roots = [state.main, ...Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))].filter(
           (root, index, arr) => root instanceof Element && arr.indexOf(root) === index,
         );
         for (const root of roots) {
-          const button = root.querySelector(MODEL_THINKING_EFFORT_ACTION_SELECTOR);
+          const buttons = Array.from(root.querySelectorAll(MODEL_THINKING_EFFORT_ACTION_SELECTOR));
+          const button = buttons.find(
+            (candidate) => candidate instanceof Element && (!predicate || predicate(candidate)),
+          );
           if (button instanceof Element) return button;
         }
         return null;
       };
+      const findProModelThinkingEffortActionButton = (state = getVisibleModelMenuState()) =>
+        findModelThinkingEffortActionButton(state, isProModelThinkingEffortActionButton);
       const revealModelThinkingEffortActionButton = (button) => {
         if (!(button instanceof Element)) return;
         const row =
@@ -10083,19 +10133,27 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           el.focus?.();
         });
       };
+      const openModelSelectorThinkingEffortMenuForButton = async (button) => {
+        if (!(button instanceof Element)) return null;
+        const existing = getOpenThinkingEffortMenu(button, { strictTrigger: true });
+        if (existing) return { menu: existing, opened: false };
+        revealModelThinkingEffortActionButton(button);
+        await sleepAsync(40);
+        activateMenuItem(button);
+        const menu = await waitForAsync(
+          () => getOpenThinkingEffortMenu(button, { strictTrigger: true }),
+          {
+            timeout: 1200,
+            interval: 40,
+          },
+        );
+        return menu instanceof Element ? { menu, opened: true } : null;
+      };
       const openModelSelectorThinkingEffortMenu = async (state = getVisibleModelMenuState()) => {
         const existing = getOpenThinkingEffortMenu();
         if (existing) return { menu: existing, opened: false };
         const button = findModelThinkingEffortActionButton(state);
-        if (!(button instanceof Element)) return null;
-        revealModelThinkingEffortActionButton(button);
-        await sleepAsync(40);
-        activateMenuItem(button);
-        const menu = await waitForAsync(() => getOpenThinkingEffortMenu(button), {
-          timeout: 1200,
-          interval: 40,
-        });
-        return menu instanceof Element ? { menu, opened: true } : null;
+        return openModelSelectorThinkingEffortMenuForButton(button);
       };
       const findThinkingEffortMenuItem = (menu, optionId) => {
         if (!(menu instanceof Element)) return null;
@@ -10531,6 +10589,25 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return null;
       };
 
+      const runConfigureOpenAction = async ({ initialState = null } = {}) => {
+        const ready = initialState
+          ? { state: initialState }
+          : await waitForMainMenuActionTarget(getModelActionById('configure'));
+        const state = ready?.state || getVisibleModelMenuState();
+        const configureItem = findConfigureMenuItem(state);
+        if (!configureItem) return false;
+
+        const combobox = await openConfigureDialogFromMenuItem(configureItem);
+        if (!combobox) return false;
+
+        const opened = await openComboboxListbox(combobox);
+        if (!opened?.listbox) return false;
+
+        applyOpenSelectListboxHints();
+        flashBottomBar();
+        return true;
+      };
+
       const runConfigureOptionAction = async (
         action,
         { hideUi = false, initialState = null, preferPreparedSession = false } = {},
@@ -10649,6 +10726,27 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const target = findThinkingEffortMenuItem(menu, option.id);
         if (!target) return false;
         await activateAfterFlash(target, DELAY_ACTIVATE_TARGET_MS);
+        persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+        await sleepAsync(120);
+        if (!hideUi) flashBottomBar();
+        return true;
+      };
+      const runModelSelectorProThinkingEffortOptionAction = async (
+        option,
+        { hideUi = false } = {},
+      ) => {
+        if (!option?.id) return false;
+        const alreadyOpen = ensureMainMenuOpen();
+        await sleepAsync(alreadyOpen ? 120 : 180);
+        const button = findProModelThinkingEffortActionButton(getVisibleModelMenuState());
+        if (!(button instanceof Element)) return false;
+        const opened = await openModelSelectorThinkingEffortMenuForButton(button);
+        const menu = opened?.menu || null;
+        if (!(menu instanceof Element)) return false;
+        if (hideUi) hideOpenModelUiForScrape(getVisibleModelMenuState());
+        const target = findThinkingEffortMenuItem(menu, option.id);
+        if (!target) return false;
+        await activateAfterFlash(target, DELAY_ACTIVATE_TARGET_MS);
         await sleepAsync(120);
         if (!hideUi) flashBottomBar();
         return true;
@@ -10724,9 +10822,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const runProThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
-        return withTemporarilyHiddenModelUi(hideUi, async () =>
-          runConfigureProThinkingEffortOptionAction(option, { hideUi }),
-        );
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          if (await runModelSelectorProThinkingEffortOptionAction(option, { hideUi })) return true;
+          return runConfigureProThinkingEffortOptionAction(option, { hideUi });
+        });
       };
       window.__cspRunProThinkingEffortAction = (optionId, options = {}) => {
         const option = getThinkingEffortOptionById(optionId);
@@ -10920,6 +11019,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                   initialState: ready.state,
                   preferPreparedSession: options.preferPreparedSession === true,
                 });
+                return;
+              }
+              if (action.actionKind === 'configure-open') {
+                if (!options.hideUi) applyHints();
+                void runConfigureOpenAction({ initialState: ready.state });
                 return;
               }
               applyHints();
@@ -11658,6 +11762,134 @@ setTimeout(() => {
   const FULL_POPUP_CSS = `
 :host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+16){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:97.2%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
   `;
+  const OVERLAY_MODEL_GRID_CSS = `
+.model-picker-shortcut-grid,
+.model-picker-effort-shortcut-grid,
+.model-picker-effort-label-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+.model-picker-shortcut-grid {
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  margin-bottom: 0;
+  overflow: hidden;
+  padding: 8px 0 0;
+  font-size: 80%;
+  box-sizing: border-box;
+  background: transparent;
+}
+.model-picker-shortcut-grid > .shortcut-item:nth-child(n+16) {
+  display: none;
+}
+.model-picker-shortcut-grid .shortcut-item,
+.model-picker-effort-shortcut-grid > .shortcut-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: box-shadow 0.12s;
+  padding: 0.55rem 0.35rem;
+  min-width: 0;
+  min-height: 3.35rem;
+  text-align: center;
+}
+.model-picker-shortcut-grid .shortcut-label,
+.model-picker-effort-shortcut-grid .shortcut-label {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.15;
+  text-align: center;
+}
+.model-picker-shortcut-grid .mp-label,
+.model-picker-effort-shortcut-grid .mp-effort-display-label {
+  display: block;
+  overflow-wrap: anywhere;
+  text-align: center;
+  text-wrap: balance;
+}
+.model-picker-shortcut-grid .mp-label {
+  font-size: 0.9em;
+}
+.model-picker-shortcut-grid .shortcut-keys,
+.model-picker-effort-shortcut-grid .shortcut-keys {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 0;
+  color: var(--text-secondary);
+}
+.model-picker-shortcut-grid .key-text,
+.model-picker-shortcut-grid .platform-alt-label,
+.model-picker-effort-shortcut-grid .key-text,
+.model-picker-effort-shortcut-grid .platform-alt-label {
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.model-picker-shortcut-grid .key-input,
+.model-picker-effort-shortcut-grid .key-input {
+  width: 2.55rem;
+  min-width: 0;
+  height: 1.8rem;
+  border: 1px solid var(--border-light);
+  border-radius: 9999px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  pointer-events: none;
+  margin-left: 2px;
+  margin-right: 2px;
+}
+.model-picker-effort-label-row {
+  margin: 1.5em 0 0.5em;
+}
+.model-picker-effort-label-row .mp-subsection-label {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0 0 2px;
+  color: rgba(60, 60, 67, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.model-picker-effort-label {
+  grid-column: 1 / 5;
+}
+.model-picker-pro-effort-label {
+  grid-column: 5 / 7;
+}
+.model-picker-pro-effort-label[hidden] {
+  display: none !important;
+}
+.model-picker-effort-label-row .model-picker-effort-label,
+.model-picker-effort-label-row .model-picker-pro-effort-label {
+  margin-left: 1em;
+}
+  `;
   // @note Shortcuts Overlay IIFE Code Below
   // ---- 2) Utils ----
   const NBSP = '\u00A0';
@@ -11721,6 +11953,52 @@ setTimeout(() => {
     CONTROL_MODIFIER_SHORTCUT_KEYS.has(key)
       ? `${isMacPlatform() ? 'Command' : 'Control'} + `
       : 'Alt + ';
+
+  const EFFORT_SHORTCUT_LAYOUT = [
+    {
+      key: 'shortcutKeyThinkingLight',
+      labelHtml: 'Thinking<br>Light',
+      optionKind: 'thinking',
+      optionId: 'thinking-light',
+      column: 1,
+    },
+    {
+      key: 'shortcutKeyThinkingStandard',
+      labelHtml: 'Thinking<br>Standard',
+      optionKind: 'thinking',
+      optionId: 'thinking-standard',
+      column: 2,
+    },
+    {
+      key: 'shortcutKeyThinkingExtended',
+      labelHtml: 'Thinking<br>Extended',
+      optionKind: 'thinking',
+      optionId: 'thinking-extended',
+      column: 3,
+    },
+    {
+      key: 'shortcutKeyThinkingHeavy',
+      labelHtml: 'Thinking<br>Heavy',
+      optionKind: 'thinking',
+      optionId: 'thinking-heavy',
+      column: 4,
+    },
+    {
+      key: 'shortcutKeyProStandard',
+      labelHtml: 'Pro<br>Standard',
+      optionKind: 'pro',
+      optionId: 'pro-standard',
+      column: 5,
+    },
+    {
+      key: 'shortcutKeyProExtended',
+      labelHtml: 'Pro<br>Extended',
+      optionKind: 'pro',
+      optionId: 'pro-extended',
+      column: 6,
+    },
+  ];
+  const EFFORT_SHORTCUT_KEY_SET = new Set(EFFORT_SHORTCUT_LAYOUT.map((item) => item.key));
 
   // Platform-aware key display
   function displayFromCode(code) {
@@ -11801,6 +12079,24 @@ setTimeout(() => {
     return code.replace(/([a-z])([A-Z])/g, '$1 $2');
   }
 
+  const isEffortShortcutVisibleInCatalog = (key, catalog) => {
+    const effort = EFFORT_SHORTCUT_LAYOUT.find((item) => item.key === key);
+    if (!effort) return true;
+    if (effort.optionKind === 'pro') {
+      return typeof window.ModelLabels?.hasProFrontendOption === 'function'
+        ? window.ModelLabels.hasProFrontendOption(catalog || null)
+        : false;
+    }
+    const option =
+      typeof window.ModelLabels?.getThinkingShortcutByStorageKey === 'function'
+        ? window.ModelLabels.getThinkingShortcutByStorageKey(key)
+        : null;
+    if (!option?.optional) return true;
+    return typeof window.ModelLabels?.hasThinkingEffortOption === 'function'
+      ? window.ModelLabels.hasThinkingEffortOption(catalog || null, option.id || effort.optionId)
+      : false;
+  };
+
   // ====== content.js (NEW SECTION TO PASTE IN) ======
   // Build model switcher shortcut grid (top of overlay)
   function buildModelSwitcherGrid(cfg) {
@@ -11864,7 +12160,7 @@ setTimeout(() => {
                   : '';
             return `
       <div class="shortcut-item${activeClass}">
-        <div class="shortcut-label"><span>${label}</span></div>
+        <div class="shortcut-label"><span class="mp-label">${label}</span></div>
         <div class="shortcut-keys">
           <span class="key-text platform-alt-label">${modLabel}</span>
           <input class="key-input" disabled maxlength="12" value="${val}" />
@@ -11903,6 +12199,9 @@ ${groupMarkup.join('')}`;
   const buildOverlayHtml = (cfg) => {
     const schemaSections = window.CSP_SETTINGS_SCHEMA?.shortcuts?.overlaySections;
     const isShortcutVisibleInCatalog = (key) => {
+      if (EFFORT_SHORTCUT_KEY_SET.has(key)) {
+        return isEffortShortcutVisibleInCatalog(key, cfg?.modelCatalog || null);
+      }
       const option =
         typeof window.ModelLabels?.getThinkingShortcutByStorageKey === 'function'
           ? window.ModelLabels.getThinkingShortcutByStorageKey(key)
@@ -11922,6 +12221,60 @@ ${groupMarkup.join('')}`;
           : false;
       }
       return true;
+    };
+    const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
+    const renderedKeys = new Set();
+    const labelForKey = (k) => {
+      const i18nKey = labelI18nByKey[k];
+      const msg = getMessage(i18nKey, '');
+      return msg || keyToLabel(k);
+    };
+    const buildEffortShortcutGrid = () => {
+      const visibleEffortRows = EFFORT_SHORTCUT_LAYOUT.filter((item) =>
+        isShortcutVisibleInCatalog(item.key),
+      ).filter((item) => isAssigned(cfg?.[item.key]));
+
+      if (!visibleEffortRows.length) return '';
+
+      visibleEffortRows.forEach((item) => {
+        renderedKeys.add(item.key);
+      });
+      const thinkingEffortRows = visibleEffortRows
+        .filter((item) => item.optionKind === 'thinking')
+        .map((item, index) => ({ ...item, column: index + 1 }));
+      const proEffortRows = visibleEffortRows
+        .filter((item) => item.optionKind === 'pro')
+        .map((item, index) => ({ ...item, column: index + 5 }));
+      const hasProEffort = proEffortRows.length > 0;
+      const rowMarkup = [...thinkingEffortRows, ...proEffortRows].map((item) => {
+        const itemClass =
+          item.optionKind === 'pro' ? ' mp-pro-effort-item' : ' mp-thinking-effort-item';
+        const dataAttr =
+          item.optionKind === 'pro'
+            ? ` data-pro-option-id="${escapeHtml(item.optionId)}"`
+            : ` data-thinking-option-id="${escapeHtml(item.optionId)}"`;
+        return `
+      <div class="shortcut-item${itemClass}"${dataAttr} style="grid-column:${item.column};">
+        <div class="shortcut-label">
+          <span class="mp-effort-display-label">${item.labelHtml}</span>
+        </div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label">${shortcutModifierLabel(item.key)}</span>
+          <input class="key-input" disabled id="${item.key}" maxlength="12" value="${displayFromCode(cfg[item.key])}" />
+        </div>
+      </div>`;
+      });
+
+      return `
+<section class="model-picker-effort-grid" aria-labelledby="model-picker-effort-heading">
+  <div class="model-picker-effort-label-row">
+    <div id="model-picker-effort-heading" class="mp-subsection-label model-picker-effort-label" role="heading" aria-level="2">${escapeHtml(getMessage('label_popupEffort', 'Effort'))}</div>
+    <div class="mp-subsection-label model-picker-pro-effort-label" role="heading" aria-level="2"${hasProEffort ? '' : ' hidden'}>${escapeHtml(getMessage('label_popupProEffort', 'Pro Effort'))}</div>
+  </div>
+  <div class="model-picker-effort-shortcut-grid" aria-label="Thinking effort shortcuts">
+    ${rowMarkup.join('')}
+  </div>
+</section>`;
     };
     const sections = Array.isArray(schemaSections)
       ? schemaSections
@@ -12004,18 +12357,12 @@ ${groupMarkup.join('')}`;
     out.push(`<div class="shortcut-container">
     <h1 class="i18n" data-i18n="popup_title">ChatGPT Custom Shortcuts Pro</h1>
     ${buildModelSwitcherGrid(cfg)}
+    ${buildEffortShortcutGrid()}
     <div class="shortcut-grid">`);
-
-    const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
-    const renderedKeys = new Set();
-    const labelForKey = (k) => {
-      const i18nKey = labelI18nByKey[k];
-      const msg = getMessage(i18nKey, '');
-      return msg || keyToLabel(k);
-    };
 
     for (const section of sections) {
       const rows = section.keys
+        .filter((k) => !EFFORT_SHORTCUT_KEY_SET.has(k))
         .filter((k) => isShortcutVisibleInCatalog(k))
         .filter((k) => isAssigned(cfg?.[k]))
         .map((k) => {
@@ -12055,6 +12402,7 @@ ${groupMarkup.join('')}`;
 
     const catchAllKeys = Object.keys(cfg)
       .filter((k) => k.startsWith(keyPrefix) || extraShortcutKeys.includes(k))
+      .filter((k) => !EFFORT_SHORTCUT_KEY_SET.has(k))
       .filter((k) => !deprecatedShortcutKeys.includes(k))
       .filter((k) => isShortcutVisibleInCatalog(k))
       .filter((k) => isAssigned(cfg?.[k]))
@@ -12117,7 +12465,7 @@ ${groupMarkup.join('')}`;
 
     shadow.innerHTML = `
     <link rel="stylesheet" href="${chrome.runtime.getURL('popup.css')}">
-    <style>${FULL_POPUP_CSS}</style>
+    <style>${FULL_POPUP_CSS}${OVERLAY_MODEL_GRID_CSS}</style>
     <style>
       .material-symbols-outlined,
       .material-icons-outlined,
