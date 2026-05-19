@@ -1,5 +1,7 @@
 export const DEV_SCRAPE_WIDE_FIXTURE_URL =
   'https://chatgpt.com/c/69ea4723-7070-83ea-a069-89aaa4e6f9a1';
+export const DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL =
+  'https://chatgpt.com/c/6a0618aa-6bc4-832a-9d75-6500d0a40890';
 export const DEV_SCRAPE_WIDE_REPORT_PATH = 'dev-scrape/report.html';
 export const DEV_SCRAPE_WIDE_LAST_REPORT_KEY = 'devScrapeWideLastReport';
 export const DEV_SCRAPE_WIDE_LAST_FOLDER_KEY = 'devScrapeWideLastFolder';
@@ -14,6 +16,10 @@ const RUN_FOLDER_SUFFIX = 'devscrapewide_c-69ea4723';
 const RUN_MANIFEST_NAME = 'run-manifest.json';
 const DEFERRED_FILENAME = '1c_TopbarToBottomEnabled_ThreadBottom.txt';
 const CONTENT_SOURCE_PATH = 'content.js';
+const DEV_SCRAPE_WIDE_ALLOWED_FIXTURE_URLS = Object.freeze([
+  DEV_SCRAPE_WIDE_FIXTURE_URL,
+  DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL,
+]);
 const TURN_SELECTOR =
   'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn]';
 const OPEN_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
@@ -61,6 +67,20 @@ const DUMP_REGISTRY = Object.freeze([
     stateId: 'topbar-bottom-disabled-header-area',
     label: 'Header area',
     steps: [],
+    capture: { type: 'header-area' },
+  },
+  {
+    filename: '1e2_NarrowViewport_HeaderArea_StagePopoverSidebarControl.txt',
+    stateId: 'narrow-header-sidebar-popover-control',
+    label: 'Narrow header sidebar popover control',
+    steps: [
+      {
+        type: 'set-viewport-size',
+        width: 500,
+        height: 900,
+        label: 'switch to narrow viewport',
+      },
+    ],
     capture: { type: 'header-area' },
   },
   {
@@ -153,6 +173,16 @@ const DUMP_REGISTRY = Object.freeze([
     steps: [
       { type: 'open-model-switcher-menu', label: 'open model switcher menu' },
       { type: 'open-model-thinking-effort-menu', label: 'open thinking effort submenu' },
+    ],
+    capture: { type: 'latest-open-menu' },
+  },
+  {
+    filename: '2d2_ModelSwitcher_ProThinkingEffort_Submenu.txt',
+    stateId: 'model-switcher-pro-thinking-effort-menu',
+    label: 'Model switcher Pro thinking effort submenu',
+    steps: [
+      { type: 'open-model-switcher-menu', label: 'open model switcher menu' },
+      { type: 'open-model-pro-thinking-effort-menu', label: 'open Pro thinking effort submenu' },
     ],
     capture: { type: 'latest-open-menu' },
   },
@@ -694,12 +724,36 @@ async function openModelSwitcherMenu(documentObj, windowObj, runtime) {
   return menu;
 }
 
-async function openModelThinkingEffortMenu(documentObj, windowObj, runtime) {
+function isProModelThinkingEffortAction(action) {
+  if (!(action instanceof Element)) return false;
+  const actionTestId = action.getAttribute('data-testid') || '';
+  const row = action.closest(MODEL_THINKING_EFFORT_ROW_SELECTOR);
+  const menuItem =
+    row?.querySelector(MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR) ||
+    action.closest(MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR);
+  const itemTestId = menuItem?.getAttribute?.('data-testid') || '';
+  const itemText = menuItem?.textContent || row?.textContent || '';
+  return (
+    /(?:^|-)pro(?:$|-)/i.test(actionTestId) ||
+    /(?:^|-)pro(?:$|-)/i.test(itemTestId) ||
+    /\bPro\b/i.test(itemText)
+  );
+}
+
+async function openModelThinkingEffortMenu(documentObj, windowObj, runtime, options = {}) {
   const mainMenu =
     runtime.latestMenu || (await openModelSwitcherMenu(documentObj, windowObj, runtime));
-  const action = mainMenu.querySelector(MODEL_THINKING_EFFORT_ACTION_SELECTOR);
+  const actions = Array.from(mainMenu.querySelectorAll(MODEL_THINKING_EFFORT_ACTION_SELECTOR));
+  const action =
+    options.kind === 'pro'
+      ? actions.find((candidate) => isProModelThinkingEffortAction(candidate))
+      : actions.find((candidate) => !isProModelThinkingEffortAction(candidate)) || actions[0];
   if (!(action instanceof Element)) {
-    throw new Error('Could not find model picker thinking effort action');
+    throw new Error(
+      options.kind === 'pro'
+        ? 'Could not find model picker Pro thinking effort action'
+        : 'Could not find model picker thinking effort action',
+    );
   }
   const row = action.closest('[data-model-picker-thinking-effort-row="true"]') || action;
   [row, action].forEach((el) => {
@@ -727,7 +781,11 @@ async function openModelThinkingEffortMenu(documentObj, windowObj, runtime) {
     },
   );
   if (!(menu instanceof Element)) {
-    throw new Error('Model picker thinking effort submenu did not open');
+    throw new Error(
+      options.kind === 'pro'
+        ? 'Model picker Pro thinking effort submenu did not open'
+        : 'Model picker thinking effort submenu did not open',
+    );
   }
   runtime.latestMenu = menu;
   return menu;
@@ -752,6 +810,13 @@ async function executeStep(documentObj, windowObj, runtime, step) {
   }
   if (step.type === 'open-model-thinking-effort-menu') {
     await openModelThinkingEffortMenu(documentObj, windowObj, runtime);
+    return;
+  }
+  if (step.type === 'open-model-pro-thinking-effort-menu') {
+    await openModelThinkingEffortMenu(documentObj, windowObj, runtime, { kind: 'pro' });
+    return;
+  }
+  if (step.type === 'set-viewport-size') {
     return;
   }
   throw new Error(`Unsupported scrape step: ${step.type}`);
@@ -1037,13 +1102,25 @@ async function fetchPackagedText(relativePath) {
   return response.text();
 }
 
-export function getWideScrapePageInfo({ windowObj, documentObj }) {
+function resolveWideScrapeFixtureUrl(fixtureUrl) {
+  const candidate = String(fixtureUrl || '').trim();
+  return DEV_SCRAPE_WIDE_ALLOWED_FIXTURE_URLS.includes(candidate)
+    ? candidate
+    : DEV_SCRAPE_WIDE_FIXTURE_URL;
+}
+
+export function getWideScrapePageInfo({
+  windowObj,
+  documentObj,
+  fixtureUrl = DEV_SCRAPE_WIDE_FIXTURE_URL,
+}) {
+  const expectedFixtureUrl = resolveWideScrapeFixtureUrl(fixtureUrl);
   const turns = getTurnElements(documentObj);
   return {
     url: windowObj.location.href,
     title: documentObj.title || '',
-    fixtureUrl: DEV_SCRAPE_WIDE_FIXTURE_URL,
-    fixtureOk: windowObj.location.href === DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl: expectedFixtureUrl,
+    fixtureOk: windowObj.location.href === expectedFixtureUrl,
     turnCount: turns.length,
     assistantTurnCount: turns.filter((turn) => isAssistantTurn(turn)).length,
     userTurnCount: turns.filter((turn) => isUserTurn(turn)).length,
@@ -1051,14 +1128,23 @@ export function getWideScrapePageInfo({ windowObj, documentObj }) {
   };
 }
 
-export async function runWideScrapeInPage({ windowObj, documentObj }) {
-  const pageInfo = getWideScrapePageInfo({ windowObj, documentObj });
+export async function runWideScrapeInPage({
+  windowObj,
+  documentObj,
+  fixtureUrl = DEV_SCRAPE_WIDE_FIXTURE_URL,
+}) {
+  const expectedFixtureUrl = resolveWideScrapeFixtureUrl(fixtureUrl);
+  const pageInfo = getWideScrapePageInfo({
+    windowObj,
+    documentObj,
+    fixtureUrl: expectedFixtureUrl,
+  });
   if (!pageInfo.fixtureOk) {
     return {
       ok: false,
-      error: `Active tab does not match the required fixture.\n\nExpected:\n${DEV_SCRAPE_WIDE_FIXTURE_URL}\n\nActual:\n${pageInfo.url || '(unknown)'}`,
+      error: `Active tab does not match the required fixture.\n\nExpected:\n${expectedFixtureUrl}\n\nActual:\n${pageInfo.url || '(unknown)'}`,
       runKind: 'devscrapewide',
-      fixtureUrl: DEV_SCRAPE_WIDE_FIXTURE_URL,
+      fixtureUrl: expectedFixtureUrl,
       pageInfo,
       startedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
@@ -1156,7 +1242,7 @@ export async function runWideScrapeInPage({ windowObj, documentObj }) {
   return {
     ok: failedArtifacts.length === 0,
     runKind: 'devscrapewide',
-    fixtureUrl: DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl: expectedFixtureUrl,
     pageInfo,
     startedAt,
     completedAt,

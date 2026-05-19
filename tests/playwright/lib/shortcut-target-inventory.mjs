@@ -4,7 +4,15 @@ const SHORTCUT_DEFAULTS_PATTERN = /const shortcutDefaults = \{([\s\S]*?)\n\s*\};
 const SHORTCUT_HANDLER_KEY_PATTERN = /^\s*\[shortcuts\.(\w+)\]:/gm;
 
 const { ACTIVATION_PROBE_MODES, SHORTCUT_ACTIONS, TARGET_DESCRIPTORS } = shortcutActionMetadata;
-const EXECUTABLE_ACTIVATION_PROBE_MODES = Object.freeze(['click-target', 'focus-target']);
+const EXECUTABLE_ACTIVATION_PROBE_MODES = Object.freeze([
+  'click-target',
+  'focus-target',
+  'opens-target',
+  'direct-menu-target',
+  'viewport-target',
+  'clipboard-text',
+  'dom-state',
+]);
 
 function uniqueSorted(values) {
   return [...new Set((values || []).filter(Boolean))].sort((left, right) =>

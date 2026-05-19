@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 05.19.2026
+- Fixed: Runtime shortcut validation and live probes cover the latest ChatGPT controls more reliably.
+
 #### 05.14.2026
 - Changed: Popup and shortcut overlay model grids now fit six items per row with a separate Effort row.
 - Fixed: Pro Effort shortcuts now update the current model when available, then fall back to the latest model.

@@ -16,6 +16,9 @@
     'focus-target',
     'opens-target',
     'direct-menu-target',
+    'viewport-target',
+    'clipboard-text',
+    'dom-state',
     'not-live-probed',
     'manual-only',
     'not-applicable',
@@ -194,12 +197,23 @@
     typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
       ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
       : [['role="menuitemradio"', 'Extended']];
-  const configureThinkingEffortListboxMatchGroups =
-    typeof modelPickerSelectors.getThinkingEffortListboxMatchGroups === 'function'
-      ? modelPickerSelectors.getThinkingEffortListboxMatchGroups()
-      : [['role="listbox"', 'role="option"']];
-  const configureThinkingEffortStandardMatchGroups = [['role="option"', 'Standard']];
-  const configureThinkingEffortExtendedMatchGroups = [['role="option"', 'Extended']];
+  const modelThinkingEffortLightMatchGroups = [['role="menuitemradio"', 'Light']];
+  const modelThinkingEffortHeavyMatchGroups = [['role="menuitemradio"', 'Heavy']];
+  const modelProThinkingEffortActionMatchGroups = [
+    ['data-model-picker-thinking-effort-action="true"', '-pro-thinking-effort'],
+  ];
+  const modelProThinkingEffortMenuMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortMenuMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortMenuMatchGroups()
+      : [['role="menu"', 'role="menuitemradio"', 'Standard', 'Extended']];
+  const modelProThinkingEffortStandardMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortStandardMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortStandardMatchGroups()
+      : [['role="menuitemradio"', 'Standard']];
+  const modelProThinkingEffortExtendedMatchGroups =
+    typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
+      ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
+      : [['role="menuitemradio"', 'Extended']];
   const configureProRowMatchGroups = [
     ['role="radio"', 'Pro'],
     ['__menu-item', 'Pro'],
@@ -214,13 +228,52 @@
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
     }),
     byAriaControls('stage-popover-sidebar-control', 'stage-popover-sidebar', {
-      uiStateRefs: ['topbar-bottom-disabled-header-area'],
+      uiStateRefs: ['narrow-header-sidebar-popover-control'],
+    }),
+    byMenuChain('native-sidebar-toggle-control', 'native-sidebar-toggle-control', {
+      matchGroups: [
+        ['data-testid="close-sidebar-button"'],
+        ['aria-controls="stage-slideover-sidebar"'],
+        ['aria-controls="stage-popover-sidebar"'],
+        ['data-testid="open-sidebar-button"'],
+      ],
+      uiStateRefs: [
+        'sidebar-expanded-body',
+        'sidebar-collapsed-body',
+        'narrow-header-sidebar-popover-control',
+      ],
+      notes:
+        'Responsive native sidebar toggle may be rendered as close, desktop open, or narrow popover open control.',
     }),
     byId('page-header', 'page-header', {
       uiStateRefs: ['topbar-bottom-disabled-header-area'],
     }),
     byId('thread-bottom', 'thread-bottom', {
       uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+    }),
+    manualTarget('message-scroll-up-delta', 'message-scroll-up-delta', {
+      notes:
+        'Validated by live-probe scroll position delta after invoking the extension scroll helper.',
+    }),
+    manualTarget('message-scroll-down-delta', 'message-scroll-down-delta', {
+      notes:
+        'Validated by live-probe scroll position delta after invoking the extension scroll helper.',
+    }),
+    manualTarget('code-block-content', 'pre code', {
+      searchNeedles: ['<pre', '<code'],
+      matchGroups: [['<pre'], ['<code']],
+      notes:
+        'Validated from a codebox conversation fixture rather than the fixed no-token scrape fixture.',
+    }),
+    manualTarget('codebox-wrap-enabled', 'html.csp-codebox-wrap-enabled', {
+      searchNeedles: ['<pre', '<code'],
+      matchGroups: [['<pre'], ['<code']],
+      notes: 'Validated by asserting the extension root class after toggling codebox wrapping.',
+    }),
+    manualTarget('shortcut-overlay', 'id=csp-shortcut-overlay', {
+      searchNeedles: ['id="csp-shortcut-overlay"'],
+      matchGroups: [['id="csp-shortcut-overlay"']],
+      notes: 'Internal extension shortcut overlay, opened by the standalone overlay listener.',
     }),
     byTestId('composer-plus-button', 'composer-plus-btn', {
       uiStateRefs: [
@@ -243,7 +296,12 @@
       uiStateRefs: ['user-turn-buttons-exposed'],
     }),
     manualTarget('edit-send-button', 'active-edit-send-button', {
-      notes: 'Requires an active edit state that is not yet part of the scrape dump family.',
+      searchNeedles: ['textarea', 'Cancel', 'Send'],
+      matchGroups: [
+        ['textarea', 'Cancel', 'Send'],
+        ['contenteditable="true"', 'Cancel', 'Send'],
+      ],
+      notes: 'Requires an active edit state created by the side-effectful live probe setup.',
     }),
     manualTarget('send-button', 'data-testid=send-button|id=composer-submit-button', {
       searchNeedles: ['data-testid="send-button"', 'id="composer-submit-button"'],
@@ -251,8 +309,9 @@
         'Only available when the composer already has draft content, so the no-token baseline scrape does not expose it.',
     }),
     manualTarget('stop-button', 'visible-stop-button-during-generation', {
+      searchNeedles: ['data-testid="stop-button"', 'data-test-id="stop-button"'],
       notes:
-        'Only rendered while ChatGPT is actively generating, so it is intentionally outside the no-token scrape path.',
+        'Only rendered while ChatGPT is actively generating; side-effectful live probe setup creates that state.',
     }),
     byTestId('create-new-chat-button', 'create-new-chat-button', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
@@ -310,22 +369,6 @@
       uiStateRefs: ['model-switcher-configure-dialog'],
     }),
     byMenuChain(
-      'model-switcher-configure-thinking-effort-listbox',
-      'role=listbox|thinking-effort-options',
-      {
-        matchGroups: configureThinkingEffortListboxMatchGroups,
-        uiStateRefs: ['model-switcher-configure-dialog'],
-      },
-    ),
-    byMenuChain('model-switcher-configure-thinking-effort-standard', 'role=option|Standard', {
-      matchGroups: configureThinkingEffortStandardMatchGroups,
-      uiStateRefs: ['model-switcher-configure-dialog'],
-    }),
-    byMenuChain('model-switcher-configure-thinking-effort-extended', 'role=option|Extended', {
-      matchGroups: configureThinkingEffortExtendedMatchGroups,
-      uiStateRefs: ['model-switcher-configure-dialog'],
-    }),
-    byMenuChain(
       'model-switcher-thinking-effort-action',
       'data-model-picker-thinking-effort-action',
       {
@@ -344,6 +387,34 @@
     byMenuChain('model-switcher-thinking-effort-extended', 'thinking-effort-extended', {
       matchGroups: modelThinkingEffortExtendedMatchGroups,
       uiStateRefs: ['model-switcher-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-thinking-effort-light', 'thinking-effort-light', {
+      matchGroups: modelThinkingEffortLightMatchGroups,
+      uiStateRefs: ['model-switcher-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-thinking-effort-heavy', 'thinking-effort-heavy', {
+      matchGroups: modelThinkingEffortHeavyMatchGroups,
+      uiStateRefs: ['model-switcher-thinking-effort-menu'],
+    }),
+    byMenuChain(
+      'model-switcher-pro-thinking-effort-action',
+      'data-model-picker-thinking-effort-action|pro',
+      {
+        matchGroups: modelProThinkingEffortActionMatchGroups,
+        uiStateRefs: ['model-switcher-menu'],
+      },
+    ),
+    byMenuChain('model-switcher-pro-thinking-effort-menu', 'role=menu|pro-thinking-effort', {
+      matchGroups: modelProThinkingEffortMenuMatchGroups,
+      uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-pro-thinking-effort-standard', 'pro-thinking-effort-standard', {
+      matchGroups: modelProThinkingEffortStandardMatchGroups,
+      uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
+    }),
+    byMenuChain('model-switcher-pro-thinking-effort-extended', 'pro-thinking-effort-extended', {
+      matchGroups: modelProThinkingEffortExtendedMatchGroups,
+      uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
     }),
     byIconToken('assistant-web-regenerate-trigger', '#ec66f0', {
       identifier: 'svg-token=#ec66f0 (assistant regenerate trigger)',
@@ -404,17 +475,17 @@
     byIconToken('composer-canvas-action', '#cf3864', {
       uiStateRefs: ['composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('dictate-start-button', ['#29f921', 'aria-label="Dictate button"'], {
-      identifier: 'svg-token=#29f921|aria-label=Dictate button',
-      matchGroups: [['#29f921'], ['aria-label="Dictate button"']],
+    byIconToken('dictate-start-button', ['#29f921', 'aria-label="Start dictation"'], {
+      identifier: 'svg-token=#29f921|aria-label=Start dictation',
+      matchGroups: [['#29f921'], ['aria-label="Start dictation"'], ['aria-label="Dictate button"']],
       uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
     }),
     manualTarget('dictate-submit-button', 'svg-token=#fa1dbd|aria-label=Submit dictation', {
       searchNeedles: ['#fa1dbd', 'aria-label="Submit dictation"'],
       notes: 'Only available after dictation has already started.',
     }),
-    manualTarget('cancel-dictation-button', 'svg-token=#85f94b|aria-label=Stop dictation', {
-      searchNeedles: ['#85f94b', 'aria-label="Stop dictation"'],
+    manualTarget('cancel-dictation-button', 'svg-token=#85f94b|aria-label=Cancel dictation', {
+      searchNeedles: ['#85f94b', 'aria-label="Cancel dictation"', 'aria-label="Stop dictation"'],
       notes: 'Only available while dictation is active.',
     }),
     byTestId('share-chat-button', 'share-chat-button', {
@@ -501,6 +572,36 @@
     });
   }
 
+  function viewportTargetProbe(expectedTargetRef, options = {}) {
+    return freezeActivationProbe({
+      ...options,
+      mode: 'viewport-target',
+      expectedTargetRef,
+      uiStateRefs: options.uiStateRefs || targetStateRefs(expectedTargetRef),
+      safe: true,
+    });
+  }
+
+  function clipboardTextProbe(options = {}) {
+    return freezeActivationProbe({
+      ...options,
+      mode: 'clipboard-text',
+      expectedTargetRef: options.expectedTargetRef || '',
+      uiStateRefs: options.uiStateRefs || [],
+      safe: true,
+    });
+  }
+
+  function domStateProbe(expectedTargetRef, options = {}) {
+    return freezeActivationProbe({
+      ...options,
+      mode: 'dom-state',
+      expectedTargetRef,
+      uiStateRefs: options.uiStateRefs || [],
+      safe: true,
+    });
+  }
+
   function notLiveProbed(notes, options = {}) {
     return freezeActivationProbe({
       ...options,
@@ -561,17 +662,45 @@
   }
 
   const SHORTCUT_ACTIONS = Object.freeze([
-    notApplicable('shortcutKeyScrollUpOneMessage', {
-      notes: 'Internal extension scroll helper.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyScrollUpOneMessage',
+      targetRefs: ['message-scroll-up-delta'],
+      uiStateRefs: [],
+      activationProbe: domStateProbe('message-scroll-up-delta', {
+        setup: 'message-scroll-from-middle',
+        notes: 'Validates that the shortcut moves the conversation scroll position upward.',
+      }),
+      notes: 'Internal extension scroll helper verified by scroll-position delta.',
     }),
-    notApplicable('shortcutKeyScrollDownOneMessage', {
-      notes: 'Internal extension scroll helper.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyScrollDownOneMessage',
+      targetRefs: ['message-scroll-down-delta'],
+      uiStateRefs: [],
+      activationProbe: domStateProbe('message-scroll-down-delta', {
+        setup: 'message-scroll-from-middle',
+        notes: 'Validates that the shortcut moves the conversation scroll position downward.',
+      }),
+      notes: 'Internal extension scroll helper verified by scroll-position delta.',
     }),
-    notApplicable('shortcutKeyScrollUpTwoMessages', {
-      notes: 'Internal extension scroll helper.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyScrollUpTwoMessages',
+      targetRefs: ['message-scroll-up-delta'],
+      uiStateRefs: [],
+      activationProbe: domStateProbe('message-scroll-up-delta', {
+        setup: 'message-scroll-from-middle',
+        notes: 'Validates that the shortcut moves the conversation scroll position upward.',
+      }),
+      notes: 'Internal extension scroll helper verified by scroll-position delta.',
     }),
-    notApplicable('shortcutKeyScrollDownTwoMessages', {
-      notes: 'Internal extension scroll helper.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyScrollDownTwoMessages',
+      targetRefs: ['message-scroll-down-delta'],
+      uiStateRefs: [],
+      activationProbe: domStateProbe('message-scroll-down-delta', {
+        setup: 'message-scroll-from-middle',
+        notes: 'Validates that the shortcut moves the conversation scroll position downward.',
+      }),
+      notes: 'Internal extension scroll helper verified by scroll-position delta.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyCopyLowest',
@@ -585,44 +714,74 @@
       actionId: 'shortcutKeyEdit',
       targetRefs: ['edit-message-button'],
       uiStateRefs: targetStateRefs('edit-message-button'),
-      activationProbe: notLiveProbed(
-        'Editing opens a stateful draft card and needs a dedicated cleanup path.',
-      ),
+      activationProbe: clickTargetProbe('edit-message-button', {
+        setup: 'sent-user-message',
+        notes: 'Side-effectful probe sends a disposable message and opens the user edit card.',
+      }),
     }),
-    manualOnly('shortcutKeySendEdit', {
+    defineShortcutAction({
+      actionId: 'shortcutKeySendEdit',
       targetRefs: ['edit-send-button'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('edit-send-button'),
+      activationProbe: clickTargetProbe('edit-send-button', {
+        setup: 'active-edit-card',
+        uiStateRefs: [],
+        notes:
+          'Side-effectful probe sends a disposable message, opens its edit card, replaces the text, then dispatches Send Edit.',
+      }),
       notes: 'Needs an active edit card state.',
     }),
-    notApplicable('shortcutKeyCopyAllCodeBlocks', {
-      notes: 'Clipboard transformation helper with no ChatGPT click target.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyCopyAllCodeBlocks',
+      targetRefs: ['code-block-content'],
+      uiStateRefs: [],
+      activationProbe: clipboardTextProbe({
+        expectedTargetRef: 'code-block-content',
+        setup: 'clipboard-code-blocks',
+        notes:
+          'Navigates to a codebox conversation fixture and validates that code text was written to the clipboard.',
+      }),
+      notes:
+        'Clipboard transformation helper verified by clipboard contents from a codebox fixture.',
     }),
-    notApplicable('shortcutKeyToggleCodeboxWrap', {
-      notes: 'Internal extension CSS word-wrap helper for code boxes with no ChatGPT click target.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyToggleCodeboxWrap',
+      targetRefs: ['codebox-wrap-enabled'],
+      uiStateRefs: [],
+      activationProbe: domStateProbe('codebox-wrap-enabled', {
+        setup: 'codebox-conversation',
+        notes:
+          'Navigates to a codebox conversation fixture and asserts the wrap root class toggled on.',
+      }),
+      notes: 'Internal extension CSS word-wrap helper verified by DOM state.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyClickNativeScrollToBottom',
       targetRefs: ['thread-bottom', 'composer-plus-button'],
       uiStateRefs: targetStateRefs('thread-bottom', 'composer-plus-button'),
-      activationProbe: notLiveProbed(
-        'Scroll position behavior needs a viewport assertion, not a click/focus target probe.',
-      ),
+      activationProbe: viewportTargetProbe('thread-bottom', {
+        setup: 'scroll-from-top',
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyScrollToTop',
       targetRefs: ['page-header'],
       uiStateRefs: targetStateRefs('page-header'),
-      activationProbe: notLiveProbed(
-        'Scroll position behavior needs a viewport assertion, not a click/focus target probe.',
-      ),
+      activationProbe: viewportTargetProbe('page-header', {
+        setup: 'scroll-from-bottom',
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyNewConversation',
       targetRefs: ['create-new-chat-button'],
       uiStateRefs: targetStateRefs('create-new-chat-button'),
-      activationProbe: notLiveProbed(
-        'Navigates away from the fixture and needs an explicit restore contract.',
-      ),
+      activationProbe: opensTargetProbe('temporary-chat-button', {
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        notes:
+          'New Conversation should open a blank chat where the Temporary Chat button is available before any prompt is sent.',
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeySearchConversationHistory',
@@ -645,7 +804,7 @@
         'stage-slideover-sidebar-control',
         'stage-popover-sidebar-control',
       ),
-      activationProbe: clickTargetProbe('close-sidebar-button', {
+      activationProbe: clickTargetProbe('native-sidebar-toggle-control', {
         uiStateRefs: ['sidebar-expanded-body'],
       }),
     }),
@@ -672,9 +831,9 @@
       targetRefs: ['previous-response-button'],
       uiStateRefs: targetStateRefs('previous-response-button'),
       activationProbe: clickTargetProbe('previous-response-button', {
-        setup: 'previous-thread-after-next-thread',
+        setup: 'response-navigation-before-previous-thread',
         uiStateRefs: ['assistant-turn-non-web-buttons-exposed'],
-        notes: 'Requires a prior Next Thread activation, then a 1500ms settle delay.',
+        notes: 'Primes by trying Next Thread twice, then validates Previous Thread twice.',
       }),
       notes: 'Response-navigation heuristic using prior thread buttons.',
     }),
@@ -683,24 +842,48 @@
       targetRefs: ['next-response-button'],
       uiStateRefs: targetStateRefs('next-response-button'),
       activationProbe: clickTargetProbe('next-response-button', {
+        setup: 'response-navigation-before-next-thread',
         uiStateRefs: ['assistant-turn-non-web-buttons-exposed'],
+        notes: 'Primes by trying Previous Thread twice, then validates Next Thread twice.',
       }),
       notes: 'Response-navigation heuristic using next thread buttons.',
     }),
-    notApplicable('selectThenCopy', {
-      notes: 'Clipboard selection helper with no stable ChatGPT click target.',
+    defineShortcutAction({
+      actionId: 'selectThenCopy',
+      targetRefs: ['copy-turn-action-button'],
+      uiStateRefs: targetStateRefs('copy-turn-action-button'),
+      activationProbe: clipboardTextProbe({
+        expectedTargetRef: 'copy-turn-action-button',
+        setup: 'clipboard-single-message',
+        uiStateRefs: ['assistant-turn-non-web-buttons-exposed'],
+        notes: 'Validates that the shortcut writes non-empty message text to the clipboard.',
+      }),
+      notes: 'Clipboard selection helper verified by clipboard contents.',
     }),
-    manualOnly('shortcutKeyClickSendButton', {
+    defineShortcutAction({
+      actionId: 'shortcutKeyClickSendButton',
       targetRefs: ['send-button'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('send-button'),
+      activationProbe: clickTargetProbe('send-button', {
+        setup: 'composer-draft-message',
+        uiStateRefs: [],
+        notes: 'Side-effectful probe creates a disposable draft and dispatches Ctrl+Enter.',
+      }),
       requiresHandler: false,
       handlerRef: 'keyFunctionMappingCtrl.Enter',
       notes:
         'Handled in the shared keydown path and only meaningful when the composer already has draft content.',
     }),
-    manualOnly('shortcutKeyClickStopButton', {
+    defineShortcutAction({
+      actionId: 'shortcutKeyClickStopButton',
       targetRefs: ['stop-button'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('stop-button'),
+      activationProbe: clickTargetProbe('stop-button', {
+        setup: 'in-flight-message',
+        uiStateRefs: [],
+        notes:
+          'Side-effectful probe selects Extended thinking, sends a disposable message, waits 500ms, then dispatches Ctrl+Backspace.',
+      }),
       requiresHandler: false,
       handlerRef: 'keyFunctionMappingCtrl.Backspace',
       notes: 'Handled in the shared keydown path and only available during an in-flight response.',
@@ -713,10 +896,19 @@
         notes: 'No-token live probe dispatches the shortcut and asserts that the model menu opens.',
       }),
     }),
-    notApplicable('shortcutKeyShowOverlay', {
+    defineShortcutAction({
+      actionId: 'shortcutKeyShowOverlay',
+      targetRefs: ['shortcut-overlay'],
+      uiStateRefs: [],
+      activationProbe: opensTargetProbe('shortcut-overlay', {
+        setup: 'shortcut-overlay-ready',
+        uiStateRefs: [],
+        notes:
+          'Opens the internal extension shortcut overlay and asserts its fixed overlay id exists.',
+      }),
       requiresHandler: false,
       handlerRef: 'standalone shortcut overlay listener',
-      notes: 'Internal extension overlay, not a ChatGPT target.',
+      notes: 'Internal extension overlay verified by DOM presence.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyRegenerateTryAgain',
@@ -725,9 +917,10 @@
         'assistant-web-regenerate-trigger',
         'assistant-web-regenerate-item-try-again',
       ),
-      activationProbe: notLiveProbed(
-        'Regenerate actions can spend tokens and must not run in routine live probes.',
-      ),
+      activationProbe: clickTargetProbe('assistant-web-regenerate-item-try-again', {
+        uiStateRefs: ['assistant-web-regenerate-menu'],
+        notes: 'Capture-phase observer prevents the native regenerate action after target click.',
+      }),
     }),
     notApplicable('shortcutKeyRegenerateMoreConcise', {
       requiresHandler: false,
@@ -747,9 +940,10 @@
         'assistant-web-regenerate-trigger',
         'assistant-web-regenerate-item-different-model',
       ),
-      activationProbe: notLiveProbed(
-        'Regenerate actions can spend tokens and must not run in routine live probes.',
-      ),
+      activationProbe: clickTargetProbe('assistant-web-regenerate-item-different-model', {
+        uiStateRefs: ['assistant-web-regenerate-menu'],
+        notes: 'Capture-phase observer prevents the native regenerate action after target click.',
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyRegenerateAskToChangeResponse',
@@ -758,9 +952,9 @@
         'assistant-web-regenerate-trigger',
         'assistant-web-regenerate-input',
       ),
-      activationProbe: notLiveProbed(
-        'Regenerate menu entry needs a text-input probe that does not submit.',
-      ),
+      activationProbe: focusTargetProbe('assistant-web-regenerate-input', {
+        uiStateRefs: ['assistant-web-regenerate-menu'],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyMoreDotsReadAloud',
@@ -769,9 +963,10 @@
         'assistant-more-actions-trigger',
         'assistant-more-actions-read-aloud',
       ),
-      activationProbe: notLiveProbed(
-        'Read-aloud can trigger audio side effects and needs a muted/manual-safe probe.',
-      ),
+      activationProbe: clickTargetProbe('assistant-more-actions-read-aloud', {
+        uiStateRefs: ['assistant-menu-read-aloud-branch'],
+        notes: 'Capture-phase observer prevents the native read-aloud action after target click.',
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyMoreDotsBranchInNewChat',
@@ -780,9 +975,10 @@
         'assistant-more-actions-trigger',
         'assistant-more-actions-branch',
       ),
-      activationProbe: notLiveProbed(
-        'Branch-in-new-chat can navigate/create state and needs an explicit restore contract.',
-      ),
+      activationProbe: clickTargetProbe('assistant-more-actions-branch', {
+        uiStateRefs: ['assistant-menu-read-aloud-branch'],
+        notes: 'Capture-phase observer prevents branch navigation after target click.',
+      }),
     }),
     notApplicable('altPageUp', {
       requiresHandler: false,
@@ -833,23 +1029,37 @@
         notes: 'No-token direct submenu target click used when no shortcut key is assigned.',
       }),
     }),
-    manualOnly('shortcutKeyToggleDictate', {
+    defineShortcutAction({
+      actionId: 'shortcutKeyToggleDictate',
       targetRefs: ['dictate-start-button', 'dictate-submit-button'],
       uiStateRefs: targetStateRefs('dictate-start-button'),
+      activationProbe: clickTargetProbe('dictate-start-button', {
+        setup: 'new-conversation',
+        uiStateRefs: [],
+        notes: 'Disposable blank conversation exposes the dictate start control.',
+      }),
       notes: 'Dual-state behavior that changes targets when dictation is active.',
     }),
-    manualOnly('shortcutKeyCancelDictation', {
+    defineShortcutAction({
+      actionId: 'shortcutKeyCancelDictation',
       targetRefs: ['cancel-dictation-button'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('cancel-dictation-button'),
+      activationProbe: clickTargetProbe('cancel-dictation-button', {
+        setup: 'dictation-active',
+        uiStateRefs: [],
+        notes:
+          'Side-effectful probe starts dictation in a disposable blank conversation, then dispatches the cancel shortcut.',
+      }),
       notes: 'Only available while dictation is active.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyShare',
       targetRefs: ['share-chat-button'],
       uiStateRefs: targetStateRefs('share-chat-button'),
-      activationProbe: notLiveProbed(
-        'No default key is currently assigned, so there is no runtime shortcut to dispatch.',
-      ),
+      activationProbe: clickTargetProbe('share-chat-button', {
+        uiStateRefs: ['topbar-bottom-disabled-header-area'],
+        notes: 'Uses a temporary validation-only key when no user/default key is assigned.',
+      }),
     }),
     notApplicable('shortcutKeyThinkLonger', {
       notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
@@ -865,8 +1075,17 @@
           'No-token direct menu target click; capture-phase observer prevents native file picker default behavior.',
       }),
     }),
-    notApplicable('selectThenCopyAllMessages', {
-      notes: 'Clipboard selection helper with no stable ChatGPT click target.',
+    defineShortcutAction({
+      actionId: 'selectThenCopyAllMessages',
+      targetRefs: ['thread-bottom'],
+      uiStateRefs: targetStateRefs('thread-bottom'),
+      activationProbe: clipboardTextProbe({
+        expectedTargetRef: 'thread-bottom',
+        setup: 'clipboard-entire-conversation',
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        notes: 'Validates that the shortcut writes conversation text to the clipboard.',
+      }),
+      notes: 'Clipboard selection helper verified by clipboard contents.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyThinkingExtended',
@@ -884,9 +1103,10 @@
         'model-switcher-thinking-effort-menu',
         'model-switcher-thinking-effort-extended',
       ),
-      activationProbe: notLiveProbed(
-        'Selecting a thinking effort changes the active model state; verify manually from the model selector submenu.',
-      ),
+      activationProbe: clickTargetProbe('model-switcher-thinking-effort-extended', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyThinkingStandard',
@@ -904,59 +1124,94 @@
         'model-switcher-thinking-effort-menu',
         'model-switcher-thinking-effort-standard',
       ),
-      activationProbe: notLiveProbed(
-        'Selecting a thinking effort changes the active model state; verify manually from the model selector submenu.',
-      ),
+      activationProbe: clickTargetProbe('model-switcher-thinking-effort-standard', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProStandard',
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
-        'model-switcher-configure-dialog',
-        'model-switcher-configure-pro-row',
-        'model-switcher-configure-thinking-effort-listbox',
-        'model-switcher-configure-thinking-effort-standard',
+        'model-switcher-pro-thinking-effort-action',
+        'model-switcher-pro-thinking-effort-menu',
+        'model-switcher-pro-thinking-effort-standard',
       ],
       uiStateRefs: targetStateRefs(
         'model-switcher-button',
         'model-switcher-menu',
-        'model-switcher-configure-dialog',
-        'model-switcher-configure-pro-row',
-        'model-switcher-configure-thinking-effort-listbox',
-        'model-switcher-configure-thinking-effort-standard',
+        'model-switcher-pro-thinking-effort-action',
+        'model-switcher-pro-thinking-effort-menu',
+        'model-switcher-pro-thinking-effort-standard',
       ),
-      activationProbe: notLiveProbed(
-        'Selecting Pro Standard changes the active model state; verify manually from the Configure dialog on a Pro account.',
-      ),
+      activationProbe: clickTargetProbe('model-switcher-pro-thinking-effort-standard', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProExtended',
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
-        'model-switcher-configure-dialog',
-        'model-switcher-configure-pro-row',
-        'model-switcher-configure-thinking-effort-listbox',
-        'model-switcher-configure-thinking-effort-extended',
+        'model-switcher-pro-thinking-effort-action',
+        'model-switcher-pro-thinking-effort-menu',
+        'model-switcher-pro-thinking-effort-extended',
       ],
       uiStateRefs: targetStateRefs(
         'model-switcher-button',
         'model-switcher-menu',
-        'model-switcher-configure-dialog',
-        'model-switcher-configure-pro-row',
-        'model-switcher-configure-thinking-effort-listbox',
-        'model-switcher-configure-thinking-effort-extended',
+        'model-switcher-pro-thinking-effort-action',
+        'model-switcher-pro-thinking-effort-menu',
+        'model-switcher-pro-thinking-effort-extended',
       ),
-      activationProbe: notLiveProbed(
-        'Selecting Pro Extended changes the active model state; verify manually from the Configure dialog on a Pro account.',
+      activationProbe: clickTargetProbe('model-switcher-pro-thinking-effort-extended', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
+    }),
+    defineShortcutAction({
+      actionId: 'shortcutKeyThinkingLight',
+      targetRefs: [
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-light',
+      ],
+      uiStateRefs: targetStateRefs(
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-light',
       ),
+      activationProbe: clickTargetProbe('model-switcher-thinking-effort-light', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
     }),
-    notApplicable('shortcutKeyThinkingLight', {
-      notes: 'Pro-tier thinking effort option is unavailable on this account.',
-    }),
-    notApplicable('shortcutKeyThinkingHeavy', {
-      notes: 'Pro-tier thinking effort option is unavailable on this account.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyThinkingHeavy',
+      targetRefs: [
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-heavy',
+      ],
+      uiStateRefs: targetStateRefs(
+        'model-switcher-button',
+        'model-switcher-menu',
+        'model-switcher-thinking-effort-action',
+        'model-switcher-thinking-effort-menu',
+        'model-switcher-thinking-effort-heavy',
+      ),
+      activationProbe: clickTargetProbe('model-switcher-thinking-effort-heavy', {
+        setup: 'model-effort-shortcut',
+        uiStateRefs: [],
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyNewGptConversation',
@@ -980,6 +1235,9 @@
     defineShortcutAction,
     clickTargetProbe,
     focusTargetProbe,
+    viewportTargetProbe,
+    clipboardTextProbe,
+    domStateProbe,
     notLiveProbed,
     byTestId,
     byId,

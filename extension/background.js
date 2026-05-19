@@ -242,6 +242,35 @@
     void openActionPopupWindow(tab);
   });
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'csp.relayToSenderTab') {
+      (async () => {
+        const senderTabId = Number(_sender?.tab?.id || 0) || 0;
+        if (!senderTabId) {
+          sendResponse({ ok: false, error: 'NO_SENDER_TAB' });
+          return;
+        }
+        try {
+          const response = await chrome.tabs.sendMessage(senderTabId, msg.payload);
+          sendResponse(response && typeof response === 'object' ? response : { ok: false });
+        } catch (error) {
+          if (/Receiving end does not exist/i.test(String(error?.message || ''))) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            try {
+              const retry = await chrome.tabs.sendMessage(senderTabId, msg.payload);
+              sendResponse(retry && typeof retry === 'object' ? retry : { ok: false });
+            } catch (retryError) {
+              sendResponse({
+                ok: false,
+                error: retryError?.message || error?.message || 'SEND_FAILED',
+              });
+            }
+            return;
+          }
+          sendResponse({ ok: false, error: error?.message || 'SEND_FAILED' });
+        }
+      })();
+      return true;
+    }
     if (msg?.type === 'csp.relayToChatGptTab') {
       (async () => {
         const result = await relayToChatGptTab(msg.payload, Number(msg.targetTabId) || 0);

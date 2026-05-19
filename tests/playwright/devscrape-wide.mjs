@@ -16,6 +16,7 @@ import {
   injectDevScrapeWideIntoPage,
   loadDevScrapeWideContract,
   normalizeArtifactsInPage,
+  refreshModelCatalogForValidation,
   runLiveShortcutActivationProbes,
   runWideScrapeWithPlaywright,
   verifyExtensionRuntimeReachable,
@@ -132,15 +133,88 @@ Options:
 `);
 }
 
-async function settleFixturePage(page) {
+function describeFixtureError(error) {
+  return error?.message || String(error) || 'Unknown fixture readiness failure';
+}
+
+async function settleFixturePage(
+  page,
+  {
+    fixtureUrl,
+    readyTimeout = 12000,
+    retryReadyTimeout = 30000,
+  } = {},
+) {
   await page.waitForLoadState('domcontentloaded');
   try {
-    await waitForFixtureConversationReady(page, 12000);
-  } catch {
+    await waitForFixtureConversationReady(page, readyTimeout, { fixtureUrl });
+  } catch (error) {
+    if (!retryReadyTimeout) throw error;
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await waitForFixtureConversationReady(page, 30000);
+    await waitForFixtureConversationReady(page, retryReadyTimeout, { fixtureUrl });
   }
   await page.waitForTimeout(500);
+}
+
+async function gotoAndSettleFixturePage(page, fixtureUrl, options = {}) {
+  await page.goto(fixtureUrl, {
+    waitUntil: 'domcontentloaded',
+    timeout: options.gotoTimeout || 45000,
+  });
+  await settleFixturePage(page, {
+    fixtureUrl,
+    readyTimeout: options.readyTimeout,
+    retryReadyTimeout: options.retryReadyTimeout,
+  });
+}
+
+async function chooseAvailableFixtureUrl(page, exports) {
+  const primaryFixtureUrl = exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
+  const fallbackFixtureUrl = exports.DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL;
+
+  try {
+    await gotoAndSettleFixturePage(page, primaryFixtureUrl, {
+      readyTimeout: 8000,
+      retryReadyTimeout: 0,
+    });
+    return primaryFixtureUrl;
+  } catch (error) {
+    if (!fallbackFixtureUrl || fallbackFixtureUrl === primaryFixtureUrl) {
+      throw error;
+    }
+    console.warn(
+      `Primary fixture was not ready immediately; falling back to ${fallbackFixtureUrl}.`,
+    );
+    console.warn(`Primary fixture readiness error: ${describeFixtureError(error)}`);
+    await gotoAndSettleFixturePage(page, fallbackFixtureUrl, {
+      readyTimeout: 12000,
+      retryReadyTimeout: 30000,
+    });
+    return fallbackFixtureUrl;
+  }
+}
+
+async function refreshModelCatalogBeforeValidation(page, context, { required = false } = {}) {
+  try {
+    const result = await refreshModelCatalogForValidation(page, context, {
+      extensionProfileDir: getProfileDir(),
+    });
+    const configureCount = Array.isArray(result.modelCatalog?.configureOptions)
+      ? result.modelCatalog.configureOptions.length
+      : 0;
+    const effortCount = Array.isArray(result.modelCatalog?.thinkingEffortIds)
+      ? result.modelCatalog.thinkingEffortIds.length
+      : 0;
+    console.log(
+      `Model catalog refreshed: ${configureCount} configure option(s), ${effortCount} thinking effort option(s).`,
+    );
+    return result;
+  } catch (error) {
+    const message = `Model catalog refresh failed before validation: ${error?.message || error}`;
+    if (required) throw new Error(message);
+    console.warn(`${message}. Continuing with direct scrape checks.`);
+    return null;
+  }
 }
 
 async function launchSetupLogin() {
@@ -359,13 +433,17 @@ async function scrapeWide({
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    await page.goto(exports.DEV_SCRAPE_WIDE_FIXTURE_URL, { waitUntil: 'domcontentloaded' });
-    await settleFixturePage(page);
+    const fixtureUrl = await chooseAvailableFixtureUrl(page, exports);
+    await refreshModelCatalogBeforeValidation(page, context, {
+      required: requireExtensionCapture,
+    });
     await injectDevScrapeWideIntoPage(page);
 
-    const pageInfo = await evaluateWideScrapePageInfo(page);
+    const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
     console.log(`CDP endpoint: ${cdpEndpoint}`);
-    console.log(`Fixture URL: ${exports.DEV_SCRAPE_WIDE_FIXTURE_URL}`);
+    console.log(
+      `Fixture URL: ${fixtureUrl}${fixtureUrl === exports.DEV_SCRAPE_WIDE_FIXTURE_URL ? '' : ' (fallback)'}`,
+    );
     console.log(`Require extension capture: ${requireExtensionCapture ? 'yes' : 'no'}`);
     console.log(`Probe shortcuts: ${probeShortcuts ? 'yes' : 'no'}`);
     console.log(
@@ -373,6 +451,7 @@ async function scrapeWide({
     );
 
     const scrapeResult = await runWideScrapeWithPlaywright(page, context, {
+      fixtureUrl,
       requireExtensionCapture,
       extensionProfileDir: getProfileDir(),
     });
@@ -388,6 +467,7 @@ async function scrapeWide({
     const writeResult = await writeScrapeRun({ scrapeResult, normalizedArtifacts });
     if (probeShortcuts) {
       const liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
+        fixtureUrl,
         extensionProfileDir: getProfileDir(),
       });
       const liveProbePath = await writeLiveProbeReport(writeResult.folderPath, liveProbeReport);
@@ -464,9 +544,10 @@ async function probeShortcutsOnly() {
   const page = await context.newPage();
   try {
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    await page.goto(exports.DEV_SCRAPE_WIDE_FIXTURE_URL, { waitUntil: 'domcontentloaded' });
-    await settleFixturePage(page);
+    const fixtureUrl = await chooseAvailableFixtureUrl(page, exports);
+    await refreshModelCatalogBeforeValidation(page, context);
     const liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
+      fixtureUrl,
       extensionProfileDir: getProfileDir(),
       onlyActionIds,
     });

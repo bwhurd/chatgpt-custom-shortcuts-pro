@@ -1453,16 +1453,13 @@ const delays = DELAYS;
 (() => {
   const ROOT_CLASS = 'csp-codebox-wrap-enabled';
   const STYLE_ID = 'csp-codebox-wrap-style';
+  const CODEMIRROR_CODE_SELECTOR = 'div[id="code-block-viewer"].cm-editor .cm-content code';
   const CODEMIRROR_LINE_SELECTOR =
     'div[id="code-block-viewer"].cm-editor .cm-content code > span';
-  const INDENT_ATTR = 'data-csp-codebox-wrap-indent';
+  const LINE_INDENT_ATTR = 'data-csp-codebox-wrap-line-indent';
+  const LEGACY_INDENT_ATTR = 'data-csp-codebox-wrap-indent';
 
-  const ensureStyle = () => {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+  const buildStyleText = () => `
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor,
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-scroller,
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content,
@@ -1493,7 +1490,7 @@ const delays = DELAYS;
         flex-shrink: 1 !important;
       }
 
-      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${INDENT_ATTR}] {
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${LINE_INDENT_ATTR}] {
         box-sizing: border-box !important;
         display: block !important;
         max-width: 100% !important;
@@ -1501,11 +1498,19 @@ const delays = DELAYS;
         text-indent: calc(-1 * var(--csp-codebox-wrap-indent, 0ch)) !important;
       }
 
-      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${INDENT_ATTR}] + br {
+      html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code > span[${LINE_INDENT_ATTR}] + br {
         display: none !important;
       }
     `;
-    (document.head || document.documentElement).appendChild(style);
+
+  const ensureStyle = () => {
+    let style = document.getElementById(STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = STYLE_ID;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = buildStyleText();
   };
 
   const measureIndentCh = (text) => {
@@ -1530,11 +1535,50 @@ const delays = DELAYS;
     return Math.max(0, Math.min(indent, 40));
   };
 
-  const applyCodeboxWrapIndents = () => {
+  const clearCodeboxWrapIndents = () => {
     document.querySelectorAll(CODEMIRROR_LINE_SELECTOR).forEach((line) => {
-      const indent = getHangingIndentCh(line.textContent || '');
-      line.setAttribute(INDENT_ATTR, 'true');
-      line.style.setProperty('--csp-codebox-wrap-indent', `${indent}ch`);
+      line.removeAttribute(LINE_INDENT_ATTR);
+      line.removeAttribute(LEGACY_INDENT_ATTR);
+      line.style.removeProperty('--csp-codebox-wrap-indent');
+    });
+  };
+
+  const applyIndentToWholeLineSpan = (lineNodes) => {
+    const elementNodes = lineNodes.filter((node) => node instanceof HTMLElement);
+    const hasMeaningfulNonElement = lineNodes.some(
+      (node) => !(node instanceof HTMLElement) && String(node.textContent || '').trim(),
+    );
+    if (hasMeaningfulNonElement || elementNodes.length !== 1) return;
+
+    const line = elementNodes[0];
+    if (!(line instanceof HTMLSpanElement)) return;
+
+    const indent = getHangingIndentCh(line.textContent || '');
+    line.setAttribute(LINE_INDENT_ATTR, 'true');
+    line.style.setProperty('--csp-codebox-wrap-indent', `${indent}ch`);
+  };
+
+  const applyCodeboxWrapIndents = () => {
+    clearCodeboxWrapIndents();
+
+    document.querySelectorAll(CODEMIRROR_CODE_SELECTOR).forEach((code) => {
+      let lineNodes = [];
+      const flushLine = () => {
+        applyIndentToWholeLineSpan(lineNodes);
+        lineNodes = [];
+      };
+
+      code.childNodes.forEach((node) => {
+        if (node instanceof HTMLBRElement) {
+          flushLine();
+          return;
+        }
+
+        if (node.nodeType === Node.TEXT_NODE && !String(node.textContent || '').trim()) return;
+        lineNodes.push(node);
+      });
+
+      flushLine();
     });
   };
 
@@ -1627,7 +1671,11 @@ const delays = DELAYS;
     ensureStyle();
     const snapshot = captureScrollSnapshot();
     const enabled = document.documentElement.classList.toggle(ROOT_CLASS);
-    if (enabled) applyCodeboxWrapIndents();
+    if (enabled) {
+      applyCodeboxWrapIndents();
+    } else {
+      clearCodeboxWrapIndents();
+    }
 
     restoreScrollSnapshot(snapshot);
     requestAnimationFrame(() => {
@@ -12298,9 +12346,9 @@ ${groupMarkup.join('')}`;
             'shortcutKeyNewConversation',
             'shortcutKeyActivateInput',
             'shortcutKeyToggleSidebar',
+            'shortcutKeySearchConversationHistory',
             'shortcutKeyPreviousThread',
             'shortcutKeyNextThread',
-            'shortcutKeySearchConversationHistory',
           ],
         },
         {
@@ -12326,6 +12374,8 @@ ${groupMarkup.join('')}`;
         {
           header: 'Compose + Send',
           keys: [
+            'shortcutKeyClickSendButton',
+            'shortcutKeyClickStopButton',
             'shortcutKeyEdit',
             'shortcutKeySendEdit',
             'shortcutKeyTemporaryChat',

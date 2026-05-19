@@ -77,14 +77,21 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
 
 ## Required Fixture
 
-The required validation fixture for `scrape-wide` is:
+The primary validation fixture for `scrape-wide` is:
 
 `https://chatgpt.com/c/69ea4723-7070-83ea-a069-89aaa4e6f9a1`
 
+If that fixture is not ready immediately, the Playwright tray validation path should fall back to:
+
+`https://chatgpt.com/c/6a0618aa-6bc4-832a-9d75-6500d0a40890`
+
 The runtime flow should:
-- verify that the page under capture is exactly that URL
+- verify that the page under capture is exactly the chosen fixture URL
 - stop cleanly if the loaded page does not match
-- treat that authenticated conversation as the required validation fixture because it is short, has multiple threads, and includes one response with web search and one without
+- wait for a web-backed assistant turn before scrape capture so `1h_AgentTurnWithButtons_SingleThread_SearchedTheWeb.txt` cannot race ahead of late-loaded citation DOM
+- trigger the extension-backed `CSP_SCRAPE_MODEL_CATALOG` refresh-model flow after fixture readiness and before collecting scrape artifacts or live probes, so model target metadata is based on the current ChatGPT model picker
+- use the chosen fixture URL for the rest of that scrape run, including resets and optional live probes
+- treat the authenticated conversation fixture as required because it is short, has multiple threads, and includes one response with web search and one without
 
 ## Capture Root And Folder Naming
 
@@ -92,6 +99,7 @@ The runtime flow should:
 - Browser-side directory pickers and handle persistence are not part of the primary path anymore.
 - Each run writes to a lexically sortable folder:
   - `YYYY-MM-DD_HH-mm-ss_devscrapewide_c-69ea4723`
+- Keep the historical folder suffix for report discovery compatibility even when the fallback fixture is used; the actual chosen fixture URL belongs in `run-manifest.json` and the generated report.
 - If the base run folder name already exists, append `_01`, `_02`, and so on.
 - `check-wide` should target the newest scrape by default, using the folder timestamp first and the manifest timestamp as fallback.
 - `check-wide` may also accept an explicit folder name for debugging.
@@ -144,6 +152,8 @@ For extension-backed setup, the runner should first discover the loaded extensio
 
 The model-refresh dump family should mirror the bounded `scrapeModelCatalogOnce` flow in `extension/content.js`:
 - open the model switcher main menu
+- open the current model row's thinking-effort submenu
+- open the Pro row's thinking-effort submenu when it exists; Pro Standard/Extended shortcut metadata should use this current model-selector path, not the retired Configure-dialog thinking-effort listbox
 - open the `model-configure-modal` dialog from that menu
 - open the configure combobox listbox
 - capture the dialog state for each configure option the refresh flow iterates
@@ -154,6 +164,7 @@ After the model-refresh menu family, the same no-reload scrape pass should also 
 - the composer `Add files and more` menu opened from `button[data-testid="composer-plus-btn"]`
 - the deeper submenu reached from the composer menu's nested `More` trigger
 - the header conversation menu opened from `button[data-testid="conversation-options-button"]` while `MoveTopBarToBottom` is still disabled
+- a narrow-viewport header scrape for `button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]`, because that target is responsive-only and should not be expected in the normal desktop header dump
 
 Those menu captures should reuse the same bounded menu-open pattern already used elsewhere in the Playwright collector:
 - close prior transient UI
@@ -165,16 +176,20 @@ The runtime validator should preserve a no-token-spend posture wherever practica
 - navigating to or reopening an existing conversation is acceptable
 - opening menus, toggling local extension settings, and scraping DOM is acceptable
 - actions that submit, retry, regenerate, or otherwise ask ChatGPT for a new response are not acceptable as part of routine scrape collection
+- side-effectful live activation probes are allowed only when explicitly declared in shortcut metadata and isolated in a disposable blank conversation; this currently covers Send, Stop, Send Edit, and dictation state probes
 
 Live activation probes may declare bounded setup modes in `extension/shared/shortcut-action-metadata.js`:
-- `new-conversation` may leave the fixed fixture briefly, create a blank conversation, and test only targets that are available before any prompt is sent; `shortcutKeyTemporaryChat` is the current user.
+- `shortcutKeyNewConversation` may leave the fixed fixture briefly and should verify that a blank conversation target is available after a 500ms settle delay.
+- `new-conversation` may create or reuse a blank conversation and test only targets that are available before any prompt is sent; `shortcutKeyTemporaryChat` should run immediately after `shortcutKeyNewConversation` when both are in the live probe set so it can reuse that blank state.
 - `gpt-conversation` may navigate to `https://chatgpt.com/g/g-vU0PtzgAJ-step-1-2-nbme-medical-school-question-analysis-v2/c/69eba3bf-6f18-83ea-aa31-9a995aca7bc0`; `shortcutKeyNewGptConversation` is the only current user.
 - setup modes must restore the primary fixture before the live probe run exits.
 - live probes must space browser navigations/reloads so repeated validation runs do not look like rapid automated request bursts.
 - live probes must also pause at least 350ms around browser-mutating clicks and keystrokes.
 - extension-page setup/storage tabs must pause at least 1 second around open, storage mutation/read, close, and any following ChatGPT reload.
 - when a probeable shortcut has no stored/default key, the validator may temporarily assign an unused validation-only key, run the probe, and restore the original storage value before exit.
-- `shortcutKeyPreviousThread` requires a `shortcutKeyNextThread` activation first, followed by a 1500ms settle delay, before probing the Previous Thread click.
+- response-navigation probes must be primed from both directions so the fixture's current response-variant position cannot create a false negative: before validating Next Thread, try Previous Thread twice and then probe Next Thread twice; before validating Previous Thread, try Next Thread twice and then probe Previous Thread twice.
+- send/stop/edit live probes must not mutate the fixed fixture conversation; they should create a blank conversation, use `this is a message I sent` as disposable draft content, use Extended thinking for the in-flight Stop setup, wait 500ms before the Stop shortcut assertion, and use `this is an edited message` for the Send Edit active-card assertion.
+- dictation live probes should grant microphone permission in the attached Playwright context when possible, test the start target from a blank conversation, and create an active dictation state before asserting Cancel Dictation.
 - account-unavailable options, such as Pro-only thinking effort levels on a non-Pro profile, must be explicit `not-applicable` metadata instead of reported as broken selectors.
 
 `2b ... - Copy.txt` is a compatibility alias of the same captured submenu state as `2c` until the inventory is deliberately cleaned up.

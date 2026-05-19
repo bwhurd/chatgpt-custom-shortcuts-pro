@@ -30,9 +30,12 @@ const englishLocaleMessagesPath = path.join(
 const inspectorCapturesRoot = path.join(repoRoot, '_temp-files', 'inspector-captures');
 const GPT_CONVERSATION_PROBE_URL =
   'https://chatgpt.com/g/g-vU0PtzgAJ-step-1-2-nbme-medical-school-question-analysis-v2/c/69eba3bf-6f18-83ea-aa31-9a995aca7bc0';
+const CODEBOX_CONVERSATION_PROBE_URL =
+  'https://chatgpt.com/c/6a064cb5-9838-8333-8f8f-fe686158860e';
 
 const PAGE_EXPORT_NAMES = [
   'DEV_SCRAPE_WIDE_FIXTURE_URL',
+  'DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL',
   'runWideScrapeInPage',
   'normalizeHtmlForDump',
 ];
@@ -42,10 +45,62 @@ const EXECUTABLE_LIVE_PROBE_MODES = Object.freeze([
   'focus-target',
   'opens-target',
   'direct-menu-target',
+  'viewport-target',
+  'clipboard-text',
+  'dom-state',
 ]);
 const MIN_BROWSER_REQUEST_SPACING_MS = 2500;
 const MIN_BROWSER_INTERACTION_SPACING_MS = 350;
 const MIN_EXTENSION_PAGE_SPACING_MS = 1000;
+const NEW_CONVERSATION_ACTION_ID = 'shortcutKeyNewConversation';
+const TEMPORARY_CHAT_ACTION_ID = 'shortcutKeyTemporaryChat';
+const PREVIOUS_THREAD_ACTION_ID = 'shortcutKeyPreviousThread';
+const NEXT_THREAD_ACTION_ID = 'shortcutKeyNextThread';
+const CLICK_SEND_ACTION_ID = 'shortcutKeyClickSendButton';
+const CLICK_STOP_ACTION_ID = 'shortcutKeyClickStopButton';
+const SEND_EDIT_ACTION_ID = 'shortcutKeySendEdit';
+const TOGGLE_DICTATE_ACTION_ID = 'shortcutKeyToggleDictate';
+const CANCEL_DICTATION_ACTION_ID = 'shortcutKeyCancelDictation';
+const NEW_CONVERSATION_TARGET_READY_DELAY_MS = 500;
+const DEFAULT_LIVE_PROBE_SETTLE_MS = 1600;
+const RESPONSE_NAVIGATION_ATTEMPTS = 2;
+const RESPONSE_NAVIGATION_STEP_SETTLE_MS = 1500;
+const SIDE_EFFECT_MESSAGE_TEXT = 'this is a message I sent';
+const SIDE_EFFECT_EDITED_MESSAGE_TEXT = 'this is an edited message';
+const STOP_AFTER_SEND_DELAY_MS = 500;
+const STATELESS_LIVE_PROBE_SETUPS = Object.freeze([
+  'new-conversation',
+  'gpt-conversation',
+  'composer-draft-message',
+  'in-flight-message',
+  'active-edit-card',
+  'sent-user-message',
+  'dictation-active',
+  'model-effort-shortcut',
+  'scroll-from-top',
+  'scroll-from-bottom',
+  'message-scroll-from-middle',
+  'clipboard-single-message',
+  'clipboard-entire-conversation',
+  'clipboard-code-blocks',
+  'codebox-conversation',
+  'shortcut-overlay-ready',
+]);
+const CONTROL_SHORTCUT_ACTION_IDS = Object.freeze([CLICK_SEND_ACTION_ID, CLICK_STOP_ACTION_ID]);
+const ALLOW_DEFAULT_CLICK_ACTION_IDS = Object.freeze([
+  CLICK_SEND_ACTION_ID,
+  CLICK_STOP_ACTION_ID,
+  SEND_EDIT_ACTION_ID,
+  CANCEL_DICTATION_ACTION_ID,
+]);
+const MODEL_EFFORT_ACTION_IDS = Object.freeze([
+  'shortcutKeyThinkingStandard',
+  'shortcutKeyThinkingExtended',
+  'shortcutKeyThinkingLight',
+  'shortcutKeyThinkingHeavy',
+  'shortcutKeyProStandard',
+  'shortcutKeyProExtended',
+]);
 
 let cachedContract = null;
 let lastBrowserRequestAt = 0;
@@ -78,6 +133,7 @@ function buildNodeContractFromSource(source) {
 ${sanitized}
 return {
   DEV_SCRAPE_WIDE_FIXTURE_URL,
+  DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL,
   DUMP_REGISTRY,
   DEFERRED_ARTIFACTS,
   buildRunFolderName,
@@ -160,9 +216,11 @@ export async function normalizeArtifactsInPage(page, artifacts) {
   }, artifacts);
 }
 
-export async function waitForFixtureConversationReady(page, timeout = 20000) {
+export async function waitForFixtureConversationReady(page, timeout = 20000, options = {}) {
+  const { exports } = await loadDevScrapeWideContract();
+  const fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
   await page.waitForFunction(
-    () => {
+    (expectedFixtureUrl) => {
       const turnCount = document.querySelectorAll(
         'section[data-testid^="conversation-turn-"][data-turn]',
       ).length;
@@ -172,33 +230,36 @@ export async function waitForFixtureConversationReady(page, timeout = 20000) {
       const userTurnCount = document.querySelectorAll(
         'section[data-testid^="conversation-turn-"][data-turn="user"]',
       ).length;
+      const hasWebAssistantTurn = Array.from(
+        document.querySelectorAll('section[data-testid^="conversation-turn-"][data-turn="assistant"]'),
+      ).some((turn) => turn.querySelector('[data-testid="webpage-citation-pill"]'));
       const hasThread = !!document.getElementById('thread');
       return (
-        window.location.href ===
-          'https://chatgpt.com/c/69ea4723-7070-83ea-a069-89aaa4e6f9a1' &&
+        window.location.href === expectedFixtureUrl &&
         hasThread &&
         turnCount >= 4 &&
         assistantTurnCount >= 2 &&
-        userTurnCount >= 2
+        userTurnCount >= 2 &&
+        hasWebAssistantTurn
       );
     },
-    undefined,
+    fixtureUrl,
     { timeout },
   );
 }
 
-export async function evaluateWideScrapePageInfo(page) {
-  return page.evaluate(() => {
+export async function evaluateWideScrapePageInfo(page, options = {}) {
+  const { exports } = await loadDevScrapeWideContract();
+  const fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
+  return page.evaluate((expectedFixtureUrl) => {
     const turns = Array.from(
       document.querySelectorAll('section[data-testid^="conversation-turn-"][data-turn]'),
     );
     return {
       url: window.location.href,
       title: document.title,
-      fixtureUrl: 'https://chatgpt.com/c/69ea4723-7070-83ea-a069-89aaa4e6f9a1',
-      fixtureOk:
-        window.location.href ===
-        'https://chatgpt.com/c/69ea4723-7070-83ea-a069-89aaa4e6f9a1',
+      fixtureUrl: expectedFixtureUrl,
+      fixtureOk: window.location.href === expectedFixtureUrl,
       turnCount: turns.length,
       assistantTurnCount: turns.filter((turn) => turn.getAttribute('data-turn') === 'assistant')
         .length,
@@ -207,7 +268,7 @@ export async function evaluateWideScrapePageInfo(page) {
         turn.querySelector('[data-testid="webpage-citation-pill"]'),
       ),
     };
-  });
+  }, fixtureUrl);
 }
 
 async function getExtensionId(context, options = {}) {
@@ -312,7 +373,7 @@ async function resetFixturePage(page, fixtureUrl) {
     await waitBeforeBrowserRequest();
     await page.reload({ waitUntil: 'domcontentloaded' });
   }
-  await waitForFixtureConversationReady(page, 30000);
+  await waitForFixtureConversationReady(page, 30000, { fixtureUrl });
   await page.waitForTimeout(500);
 }
 
@@ -640,15 +701,47 @@ async function openModelSwitcherMenu(page) {
   throw new Error(`Model switcher menu did not open${lastError ? `: ${lastError.message || lastError}` : ''}`);
 }
 
-async function openModelThinkingEffortMenu(page) {
-  await openModelSwitcherMenu(page);
-  const action = page.locator(modelPickerSelectors.MODEL_THINKING_EFFORT_ACTION_SELECTOR).first();
-  if (!((await action.count().catch(() => 0)) > 0)) {
-    throw new Error('Could not find model picker thinking effort action');
+async function findModelThinkingEffortAction(page, options = {}) {
+  const actions = page.locator(modelPickerSelectors.MODEL_THINKING_EFFORT_ACTION_SELECTOR);
+  const actionCount = await actions.count().catch(() => 0);
+  for (let index = 0; index < actionCount; index += 1) {
+    const candidate = actions.nth(index);
+    const isPro = await candidate
+      .evaluate((node) => {
+        const actionTestId = node.getAttribute('data-testid') || '';
+        const row = node.closest('[data-model-picker-thinking-effort-row="true"]');
+        const menuItem =
+          row?.querySelector('[data-model-picker-thinking-effort-menu-item="true"]') ||
+          node.closest('[data-model-picker-thinking-effort-menu-item="true"]');
+        const itemTestId = menuItem?.getAttribute?.('data-testid') || '';
+        const itemText = menuItem?.textContent || row?.textContent || '';
+        return (
+          /(?:^|-)pro(?:$|-)/i.test(actionTestId) ||
+          /(?:^|-)pro(?:$|-)/i.test(itemTestId) ||
+          /\bPro\b/i.test(itemText)
+        );
+      })
+      .catch(() => false);
+    if ((options.kind === 'pro' && isPro) || (options.kind !== 'pro' && !isPro)) {
+      return candidate;
+    }
   }
-  const row = page.locator(modelPickerSelectors.MODEL_THINKING_EFFORT_ROW_SELECTOR).first();
+  return actionCount > 0 && options.kind !== 'pro' ? actions.first() : null;
+}
+
+async function openModelThinkingEffortMenu(page, options = {}) {
+  await openModelSwitcherMenu(page);
+  const action = await findModelThinkingEffortAction(page, options);
+  if (!action || !((await action.count().catch(() => 0)) > 0)) {
+    throw new Error(
+      options.kind === 'pro'
+        ? 'Could not find model picker Pro thinking effort action'
+        : 'Could not find model picker thinking effort action',
+    );
+  }
+  const row = action.locator('xpath=ancestor::*[@data-model-picker-thinking-effort-row="true"][1]');
   if ((await row.count().catch(() => 0)) > 0) {
-    await row.hover({ force: true }).catch(() => {});
+    await row.first().hover({ force: true }).catch(() => {});
   }
   await action.hover({ force: true }).catch(() => {});
   const controlledId = (await action.getAttribute('aria-controls').catch(() => '')) || '';
@@ -686,7 +779,13 @@ async function openModelThinkingEffortMenu(page) {
     { timeout: 1800 },
   );
   const html = (await menuHtml.jsonValue().catch(() => '')) || '';
-  if (!html) throw new Error('Model picker thinking effort submenu did not open');
+  if (!html) {
+    throw new Error(
+      options.kind === 'pro'
+        ? 'Model picker Pro thinking effort submenu did not open'
+        : 'Model picker thinking effort submenu did not open',
+    );
+  }
   return html;
 }
 
@@ -933,7 +1032,7 @@ async function selectConfigureOption(page, optionId) {
     for (let index = 0; index < optionCount; index += 1) {
       const candidate = options.nth(index);
       const text = (await candidate.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() || '';
-      if (text === target.label) {
+      if (text === target.label || text.startsWith(`${target.label}Alt+`)) {
         option = candidate;
         break;
       }
@@ -1074,14 +1173,17 @@ async function captureTopBarMovedThreadBottom(page, context, fixtureUrl, options
 
 export async function runWideScrapeWithPlaywright(page, context, options = {}) {
   const { exports } = await loadDevScrapeWideContract();
+  const fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
   const startedAt = new Date().toISOString();
-  await resetFixturePage(page, exports.DEV_SCRAPE_WIDE_FIXTURE_URL);
-  const pageInfo = await evaluateWideScrapePageInfo(page);
+  const defaultViewportSize = page.viewportSize() || { width: 1280, height: 900 };
+  await resetFixturePage(page, fixtureUrl);
+  const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
   const rawArtifacts = new Map();
   const artifacts = [];
 
   for (const definition of exports.DUMP_REGISTRY) {
     if (definition.aliasOf) continue;
+    let restoreViewportSize = null;
     try {
       await closeOpenMenus(page);
       await closeConfigureDialog(page);
@@ -1123,6 +1225,10 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           state.latestMenuHtml = await openModelThinkingEffortMenu(page);
           continue;
         }
+        if (step.type === 'open-model-pro-thinking-effort-menu') {
+          state.latestMenuHtml = await openModelThinkingEffortMenu(page, { kind: 'pro' });
+          continue;
+        }
         if (step.type === 'open-composer-plus-menu') {
           state.latestMenuHtml = await openComposerPlusMenu(page);
           continue;
@@ -1151,6 +1257,15 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           await selectConfigureOption(page, step.optionId);
           continue;
         }
+        if (step.type === 'set-viewport-size') {
+          restoreViewportSize = restoreViewportSize || defaultViewportSize;
+          await page.setViewportSize({
+            width: Number(step.width) || 500,
+            height: Number(step.height) || 900,
+          });
+          await page.waitForTimeout(600);
+          continue;
+        }
         throw new Error(`Unsupported scrape step: ${step.type}`);
       }
 
@@ -1169,6 +1284,11 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           error?.message || String(error) || 'Unknown capture failure',
         ),
       );
+    } finally {
+      if (restoreViewportSize) {
+        await page.setViewportSize(restoreViewportSize).catch(() => {});
+        await page.waitForTimeout(300).catch(() => {});
+      }
     }
   }
 
@@ -1192,7 +1312,7 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
   const oneCArtifact = await captureTopBarMovedThreadBottom(
     page,
     context,
-    exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl,
     options,
   );
   artifacts.push(oneCArtifact);
@@ -1204,7 +1324,7 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
 
   return {
     runKind: 'devscrapewide',
-    fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl,
     pageInfo,
     startedAt,
     completedAt: new Date().toISOString(),
@@ -1232,6 +1352,69 @@ export async function verifyExtensionRuntimeReachable(context, options = {}) {
     await waitAroundExtensionPageAction();
     await extensionPage.close().catch(() => {});
     await waitAroundExtensionPageAction();
+  }
+}
+
+export async function refreshModelCatalogForValidation(page, context, options = {}) {
+  const session = await context.newCDPSession(page);
+  const executionContexts = [];
+  session.on('Runtime.executionContextCreated', (event) => {
+    if (event?.context) executionContexts.push(event.context);
+  });
+  try {
+    await session.send('Runtime.enable');
+    await page.waitForTimeout(250);
+    const contentContext = executionContexts.find(
+      (executionContext) =>
+        executionContext?.name === 'ChatGPT Custom Shortcuts Pro' &&
+        String(executionContext?.origin || '').startsWith('chrome-extension://'),
+    );
+    if (!contentContext?.id) {
+      throw new Error('Could not find the ChatGPT Custom Shortcuts Pro content-script context.');
+    }
+    const evaluation = await session.send('Runtime.evaluate', {
+      contextId: contentContext.id,
+      awaitPromise: true,
+      returnByValue: true,
+      expression: `new Promise((resolve) => {
+        if (!globalThis.chrome?.runtime?.sendMessage) {
+          resolve({ ok: false, error: 'chrome.runtime.sendMessage is not available.' });
+          return;
+        }
+        globalThis.chrome.runtime.sendMessage(
+          {
+            type: 'csp.relayToSenderTab',
+            payload: {
+              type: 'CSP_SCRAPE_MODEL_CATALOG',
+              hideUi: true,
+              keepPreparedSession: false,
+            },
+          },
+          (response) => {
+            const lastError = globalThis.chrome.runtime?.lastError;
+            if (lastError) {
+              resolve({ ok: false, error: lastError.message || String(lastError) });
+              return;
+            }
+            resolve(response && typeof response === 'object' ? response : { ok: false });
+          },
+        );
+      })`,
+    });
+    if (evaluation.exceptionDetails) {
+      throw new Error(
+        evaluation.exceptionDetails.text ||
+          evaluation.exceptionDetails.exception?.description ||
+          'Model catalog refresh evaluation failed',
+      );
+    }
+    const result = evaluation.result?.value || null;
+    if (!result?.ok) {
+      throw new Error(result?.error || 'Model catalog refresh failed');
+    }
+    return result;
+  } finally {
+    await session.detach().catch(() => {});
   }
 }
 
@@ -1328,12 +1511,35 @@ async function applyProbeStateStep(page, step, state) {
     await hoverTurn(page, turnTestId);
     return;
   }
+  if (step.type === 'open-turn-menu') {
+    if (!state.currentTurnTestId) {
+      throw new Error('No current turn is selected');
+    }
+    state.latestMenuHtml = await openTurnMenu(
+      page,
+      state.currentTurnTestId,
+      step.menuKind || 'more-actions',
+    );
+    return;
+  }
   if (step.type === 'open-model-switcher-menu') {
     state.latestMenuHtml = await openModelSwitcherMenu(page);
     return;
   }
   if (step.type === 'open-model-thinking-effort-menu') {
     state.latestMenuHtml = await openModelThinkingEffortMenu(page);
+    return;
+  }
+  if (step.type === 'open-model-pro-thinking-effort-menu') {
+    state.latestMenuHtml = await openModelThinkingEffortMenu(page, { kind: 'pro' });
+    return;
+  }
+  if (step.type === 'set-viewport-size') {
+    await page.setViewportSize({
+      width: Number(step.width) || 500,
+      height: Number(step.height) || 900,
+    });
+    await page.waitForTimeout(600);
     return;
   }
   if (step.type === 'open-composer-plus-menu') {
@@ -1405,7 +1611,7 @@ async function prepareNewConversationProbeState(page, fixtureUrl) {
   await waitBeforeBrowserInteraction();
   await newChat.click({ force: true });
   await page.waitForLoadState('domcontentloaded').catch(() => {});
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(NEW_CONVERSATION_TARGET_READY_DELAY_MS);
   await page.waitForFunction(
     () =>
       Array.from(document.querySelectorAll('#prompt-textarea,[name="prompt-textarea"]')).some(
@@ -1424,6 +1630,581 @@ async function prepareNewConversationProbeState(page, fixtureUrl) {
     undefined,
     { timeout: 10000 },
   );
+}
+
+async function setComposerText(page, text) {
+  const updated = await page.evaluate((value) => {
+    const candidates = Array.from(
+      document.querySelectorAll(
+        [
+          '#prompt-textarea',
+          '[name="prompt-textarea"]',
+          'textarea[placeholder]',
+          'div[contenteditable="true"][role="textbox"]',
+          'div[contenteditable="true"]',
+        ].join(', '),
+      ),
+    );
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.pointerEvents !== 'none' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const composer = candidates.find(isVisible) || candidates.at(-1) || null;
+    if (!composer) return false;
+    composer.scrollIntoView({ block: 'center', inline: 'nearest' });
+    composer.focus();
+    if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
+      const prototype = composer instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const valueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      valueSetter?.call(composer, value);
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+      composer.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(composer);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.execCommand('insertText', false, value);
+    if ((composer.textContent || '').trim() !== value) {
+      composer.textContent = value;
+    }
+    composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+    return true;
+  }, text);
+  if (!updated) {
+    throw new Error('Could not find the prompt composer.');
+  }
+  await page.waitForTimeout(250);
+}
+
+async function waitForEnabledButton(page, selectors, timeout = 10000) {
+  const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+  await page.waitForFunction(
+    (candidates) =>
+      candidates.some((selector) =>
+        Array.from(document.querySelectorAll(selector)).some((button) => {
+          if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+          const style = getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.pointerEvents !== 'none' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        }),
+      ),
+    selectorList,
+    { timeout },
+  );
+}
+
+async function clickEnabledButton(page, selectors) {
+  const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+  await waitBeforeBrowserInteraction();
+  const clicked = await page.evaluate((candidates) => {
+    const isClickable = (button) => {
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+      const style = getComputedStyle(button);
+      const rect = button.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.pointerEvents !== 'none' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    for (const selector of candidates) {
+      const button = Array.from(document.querySelectorAll(selector)).find(isClickable);
+      if (!button) continue;
+      button.scrollIntoView({ block: 'center', inline: 'nearest' });
+      button.click();
+      return true;
+    }
+    return false;
+  }, selectorList);
+  if (!clicked) {
+    throw new Error(`Could not click enabled button for selectors: ${selectorList.join(', ')}`);
+  }
+}
+
+async function ensureControlSendStopEnabled(page) {
+  await page.evaluate(() => {
+    window.enableSendWithControlEnterCheckbox = true;
+    window.enableStopWithControlBackspaceCheckbox = true;
+  });
+}
+
+async function selectThinkingEffortExtendedForProbe(page) {
+  await openModelThinkingEffortMenu(page);
+  const clicked = await page.evaluate(() => {
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const menus = Array.from(
+      document.querySelectorAll('[data-radix-menu-content][data-state="open"][role="menu"]'),
+    ).filter(isVisible);
+    const items = menus.flatMap((menu) =>
+      Array.from(menu.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')).filter(
+        isVisible,
+      ),
+    );
+    const extended = items.find((item) => /\bExtended\b/i.test(item.textContent || ''));
+    if (!extended) return false;
+    extended.click();
+    return true;
+  });
+  await page.waitForTimeout(500);
+  await closeOpenMenus(page);
+  if (!clicked) {
+    throw new Error('Could not select Extended thinking effort from the model picker.');
+  }
+}
+
+async function prepareComposerDraftMessageProbeState(page, fixtureUrl) {
+  await prepareNewConversationProbeState(page, fixtureUrl);
+  await ensureControlSendStopEnabled(page);
+  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await waitForEnabledButton(page, ['button[data-testid="send-button"]', '#composer-submit-button']);
+}
+
+async function prepareInFlightMessageProbeState(page, fixtureUrl) {
+  await prepareNewConversationProbeState(page, fixtureUrl);
+  await ensureControlSendStopEnabled(page);
+  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
+  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await clickEnabledButton(page, ['button[data-testid="send-button"]', '#composer-submit-button']);
+  await page.waitForTimeout(STOP_AFTER_SEND_DELAY_MS);
+  await waitForEnabledButton(
+    page,
+    ['button[data-testid="stop-button"]', 'button[data-test-id="stop-button"]'],
+    15000,
+  );
+}
+
+async function waitForLatestUserTurn(page) {
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll('section[data-testid^="conversation-turn-"][data-turn="user"]'))
+        .length > 0,
+    undefined,
+    { timeout: 15000 },
+  );
+}
+
+async function prepareSentDisposableMessage(page, fixtureUrl) {
+  await prepareNewConversationProbeState(page, fixtureUrl);
+  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
+  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await clickEnabledButton(page, ['button[data-testid="send-button"]', '#composer-submit-button']);
+  await waitForLatestUserTurn(page);
+  await page.waitForTimeout(2500);
+  await clickEnabledButton(page, [
+    'button[data-testid="stop-button"]',
+    'button[data-test-id="stop-button"]',
+  ]).catch(() => {});
+  await page.waitForTimeout(3000);
+}
+
+async function prepareActiveEditCardProbeState(page, fixtureUrl) {
+  await prepareSentDisposableMessage(page, fixtureUrl);
+  const userTurn = page.locator('section[data-testid^="conversation-turn-"][data-turn="user"]').last();
+  await userTurn.scrollIntoViewIfNeeded().catch(() => {});
+  const editButton = userTurn.locator('button[aria-label="Edit message"]').first();
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await userTurn.hover({ force: true }).catch(() => {});
+    await page.waitForTimeout(700);
+    if ((await editButton.count().catch(() => 0)) > 0) break;
+  }
+  if (!((await editButton.count().catch(() => 0)) > 0)) {
+    throw new Error('Could not find the user message edit button.');
+  }
+  await waitBeforeBrowserInteraction();
+  await editButton.click({ force: true });
+  await page.waitForTimeout(700);
+  const editField = page.locator('textarea, [contenteditable="true"]').last();
+  if (!((await editField.count().catch(() => 0)) > 0)) {
+    throw new Error('Could not find the active edit field.');
+  }
+  await editField.click({ force: true });
+  await editField.fill(SIDE_EFFECT_EDITED_MESSAGE_TEXT).catch(async () => {
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(SIDE_EFFECT_EDITED_MESSAGE_TEXT, { delay: 5 });
+  });
+  await page.waitForTimeout(250);
+}
+
+async function prepareSentUserMessageProbeState(page, fixtureUrl) {
+  await prepareSentDisposableMessage(page, fixtureUrl);
+  const userTurn = page.locator('section[data-testid^="conversation-turn-"][data-turn="user"]').last();
+  await userTurn.scrollIntoViewIfNeeded().catch(() => {});
+  await userTurn.hover({ force: true }).catch(() => {});
+  await page.waitForTimeout(700);
+}
+
+async function prepareDictationActiveProbeState(page, fixtureUrl) {
+  await prepareNewConversationProbeState(page, fixtureUrl);
+  await page.context().grantPermissions(['microphone'], { origin: 'https://chatgpt.com' }).catch(() => {});
+  await clickEnabledButton(page, [
+    'button[aria-label="Start dictation"]',
+    'button[aria-label="Dictate button"]',
+    'button:has(svg use[href*="#29f921"])',
+  ]);
+  await page.waitForTimeout(700);
+  await waitForLiveProbeTargetPresence(page, {
+    matchGroups: [['aria-label="Cancel dictation"'], ['aria-label="Stop dictation"'], ['#85f94b']],
+  });
+}
+
+async function setLiveProbeScrollPosition(page, position) {
+  await page.evaluate((targetPosition) => {
+    const container =
+      typeof window.getScrollableContainer === 'function'
+        ? window.getScrollableContainer()
+        : document.scrollingElement || document.documentElement;
+    const getMaxScroll = (node) => {
+      if (node === window) {
+        const root = document.scrollingElement || document.documentElement;
+        return Math.max(0, root.scrollHeight - window.innerHeight);
+      }
+      return Math.max(0, node.scrollHeight - node.clientHeight);
+    };
+    const maxScroll = getMaxScroll(container);
+    const y =
+      targetPosition === 'bottom'
+        ? maxScroll
+        : targetPosition === 'middle'
+          ? Math.round(maxScroll / 2)
+          : 0;
+    if (container === window) {
+      window.scrollTo(0, y);
+    } else {
+      container.scrollTop = y;
+    }
+  }, position);
+  await page.waitForTimeout(700);
+}
+
+async function captureLiveProbeScrollStart(page) {
+  await page.evaluate(() => {
+    const container =
+      typeof window.getScrollableContainer === 'function'
+        ? window.getScrollableContainer()
+        : document.scrollingElement || document.documentElement;
+    const getScrollTop = (node) =>
+      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
+    const getMaxScroll = (node) => {
+      if (node === window) {
+        const root = document.scrollingElement || document.documentElement;
+        return Math.max(0, root.scrollHeight - window.innerHeight);
+      }
+      return Math.max(0, node.scrollHeight - node.clientHeight);
+    };
+    window.__CGCSP_SCROLL_PROBE_START__ = {
+      top: getScrollTop(container),
+      max: getMaxScroll(container),
+    };
+  });
+}
+
+async function prepareMessageScrollProbeState(page, fixtureUrl) {
+  await resetFixturePage(page, fixtureUrl);
+  await closeTransientUi(page);
+  await setLiveProbeScrollPosition(page, 'middle');
+  await captureLiveProbeScrollStart(page);
+}
+
+async function isViewportProbeTargetReached(page, target) {
+  return page.evaluate((targetId) => {
+    const container =
+      typeof window.getScrollableContainer === 'function'
+        ? window.getScrollableContainer()
+        : document.scrollingElement || document.documentElement;
+    const getScrollTop = (node) =>
+      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
+    const getMaxScroll = (node) => {
+      if (node === window) {
+        const root = document.scrollingElement || document.documentElement;
+        return Math.max(0, root.scrollHeight - window.innerHeight);
+      }
+      return Math.max(0, node.scrollHeight - node.clientHeight);
+    };
+    if (targetId === 'page-header') {
+      const header = document.getElementById('page-header');
+      const rect = header?.getBoundingClientRect?.();
+      return getScrollTop(container) <= 120 || (rect && rect.bottom > 0 && rect.top < 180);
+    }
+    if (targetId === 'thread-bottom') {
+      const remaining = getMaxScroll(container) - getScrollTop(container);
+      const threadBottom = document.getElementById('thread-bottom');
+      const rect = threadBottom?.getBoundingClientRect?.();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      return remaining <= 160 || (rect && rect.top < viewportHeight && rect.bottom > 0);
+    }
+    return false;
+  }, target?.targetId || '');
+}
+
+async function isDomStateProbeTargetReached(page, target) {
+  return page.evaluate((targetId) => {
+    const container =
+      typeof window.getScrollableContainer === 'function'
+        ? window.getScrollableContainer()
+        : document.scrollingElement || document.documentElement;
+    const getScrollTop = (node) =>
+      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
+    const start = window.__CGCSP_SCROLL_PROBE_START__ || {};
+    const currentTop = getScrollTop(container);
+    if (targetId === 'message-scroll-up-delta') {
+      return Number.isFinite(start.top) && (start.top - currentTop >= 80 || currentTop <= 40);
+    }
+    if (targetId === 'message-scroll-down-delta') {
+      return (
+        Number.isFinite(start.top) &&
+        (currentTop - start.top >= 80 ||
+          (Number.isFinite(start.max) && start.max - currentTop <= 40))
+      );
+    }
+    if (targetId === 'codebox-wrap-enabled') {
+      return (
+        document.documentElement.classList.contains('csp-codebox-wrap-enabled') &&
+        Boolean(document.querySelector('pre code'))
+      );
+    }
+    return false;
+  }, target?.targetId || '');
+}
+
+async function clearClipboardForProbe(page) {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'https://chatgpt.com',
+  }).catch(() => {});
+  await page.evaluate(() => navigator.clipboard?.writeText?.('')).catch(() => {});
+}
+
+async function readClipboardTextForProbe(page) {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'https://chatgpt.com',
+  }).catch(() => {});
+  return page.evaluate(() => navigator.clipboard?.readText?.() || '').catch(() => '');
+}
+
+async function prepareClipboardSingleMessageProbeState(page, scrapeStateRegistry, fixtureUrl) {
+  await prepareLiveProbeState(
+    page,
+    'assistant-turn-non-web-buttons-exposed',
+    scrapeStateRegistry,
+    fixtureUrl,
+  );
+  await clearClipboardForProbe(page);
+}
+
+async function prepareClipboardEntireConversationProbeState(page, fixtureUrl) {
+  await resetFixturePage(page, fixtureUrl);
+  await closeTransientUi(page);
+  await clearClipboardForProbe(page);
+}
+
+async function prepareCodeboxConversationProbeState(page) {
+  await waitBeforeBrowserRequest();
+  await page.goto(CODEBOX_CONVERSATION_PROBE_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(2500);
+  await closeOpenMenus(page);
+  await closeTransientUi(page);
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll('pre code')).some((node) =>
+        Boolean(String(node.textContent || '').trim()),
+      ),
+    undefined,
+    { timeout: 15000 },
+  );
+}
+
+async function prepareClipboardCodeBlocksProbeState(page) {
+  await prepareCodeboxConversationProbeState(page);
+  await clearClipboardForProbe(page);
+}
+
+async function prepareCodeboxWrapProbeState(page) {
+  await prepareCodeboxConversationProbeState(page);
+  await page.evaluate(() => {
+    document.documentElement.classList.remove('csp-codebox-wrap-enabled');
+  });
+}
+
+async function clipboardProbeHasText(page, shortcut) {
+  const text = await readClipboardTextForProbe(page);
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (shortcut.actionId === 'shortcutKeyCopyAllCodeBlocks') {
+    return normalized.length >= 20 && !/no code boxes found/i.test(normalized);
+  }
+  if (shortcut.actionId === 'selectThenCopyAllMessages') {
+    return normalized.length >= 80;
+  }
+  return normalized.length >= 20;
+}
+
+function orderLiveProbeShortcuts(shortcuts) {
+  const ordered = [...shortcuts];
+  const temporaryChatIndex = ordered.findIndex(
+    (shortcut) => shortcut.actionId === TEMPORARY_CHAT_ACTION_ID,
+  );
+  if (temporaryChatIndex === -1) return ordered;
+
+  const [temporaryChatShortcut] = ordered.splice(temporaryChatIndex, 1);
+  const newConversationIndex = ordered.findIndex(
+    (shortcut) => shortcut.actionId === NEW_CONVERSATION_ACTION_ID,
+  );
+  if (newConversationIndex === -1) {
+    ordered.splice(temporaryChatIndex, 0, temporaryChatShortcut);
+    return ordered;
+  }
+  ordered.splice(newConversationIndex + 1, 0, temporaryChatShortcut);
+  return ordered;
+}
+
+function shouldPreservePreparedProbeState(shortcut) {
+  const stateRefs = [
+    ...(Array.isArray(shortcut.activationProbeUiStateRefs)
+      ? shortcut.activationProbeUiStateRefs
+      : []),
+    ...(Array.isArray(shortcut.requiredUiStateRefs) ? shortcut.requiredUiStateRefs : []),
+  ];
+  return stateRefs.some((stateRef) => String(stateRef).includes('buttons-exposed'));
+}
+
+function isResponseNavigationShortcut(shortcut) {
+  return (
+    shortcut?.actionId === PREVIOUS_THREAD_ACTION_ID || shortcut?.actionId === NEXT_THREAD_ACTION_ID
+  );
+}
+
+function isResponseNavigationProbeSetup(shortcut) {
+  return String(shortcut?.activationProbeSetup || '').startsWith('response-navigation-before-');
+}
+
+function isModelEffortShortcut(shortcut) {
+  return MODEL_EFFORT_ACTION_IDS.includes(shortcut?.actionId);
+}
+
+function getOppositeResponseNavigationActionId(actionId) {
+  return actionId === NEXT_THREAD_ACTION_ID ? PREVIOUS_THREAD_ACTION_ID : NEXT_THREAD_ACTION_ID;
+}
+
+function getResponseNavigationAriaLabel(target) {
+  if (target?.targetId === PREVIOUS_THREAD_ACTION_ID || target?.targetId === 'previous-response-button') {
+    return 'Previous response';
+  }
+  if (target?.targetId === NEXT_THREAD_ACTION_ID || target?.targetId === 'next-response-button') {
+    return 'Next response';
+  }
+  return '';
+}
+
+function getResponseNavigationAriaLabelForAction(actionId) {
+  return actionId === PREVIOUS_THREAD_ACTION_ID ? 'Previous response' : 'Next response';
+}
+
+async function waitForEnabledResponseNavigationTarget(page, target) {
+  const ariaLabel = getResponseNavigationAriaLabel(target);
+  if (!ariaLabel) return;
+  await page.waitForFunction(
+    (label) =>
+      Array.from(document.querySelectorAll(`button[aria-label="${label}"]`)).some((button) => {
+        return button instanceof HTMLButtonElement && !button.disabled;
+      }),
+    ariaLabel,
+    { timeout: 7000 },
+  );
+}
+
+async function clickEnabledResponseNavigationTarget(page, ariaLabel) {
+  await waitBeforeBrowserInteraction();
+  return page.evaluate((label) => {
+    const isVisible = (button) => {
+      if (!(button instanceof HTMLButtonElement)) return false;
+      const style = getComputedStyle(button);
+      const rect = button.getBoundingClientRect();
+      return (
+        !button.disabled &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.pointerEvents !== 'none' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const buttons = Array.from(document.querySelectorAll(`button[aria-label="${label}"]`)).filter(
+      (button) => button instanceof HTMLButtonElement && !button.disabled,
+    );
+    if (!buttons.length) return false;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const visibleButtons = buttons.filter(isVisible);
+    const inViewport = visibleButtons.filter((button) => {
+      const rect = button.getBoundingClientRect();
+      return rect.top >= 0 && rect.bottom <= viewportHeight;
+    });
+    const target = inViewport[0] || visibleButtons[0] || buttons[0];
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const wrapper = target.closest('[class*="group-hover"]');
+    wrapper?.classList?.add('force-hover');
+    ['pointerover', 'pointerenter', 'mouseover'].forEach((eventType) => {
+      wrapper?.dispatchEvent?.(new MouseEvent(eventType, { bubbles: true }));
+    });
+    target.click();
+    return true;
+  }, ariaLabel);
+}
+
+async function clickResponseNavigationTargetRepeated(page, ariaLabel, attempts) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await clickEnabledResponseNavigationTarget(page, ariaLabel);
+    await page.waitForTimeout(RESPONSE_NAVIGATION_STEP_SETTLE_MS);
+  }
+}
+
+async function dispatchLiveShortcutRepeated(page, code, attempts, settleMs) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await dispatchLiveShortcut(page, code);
+    await page.waitForTimeout(settleMs);
+  }
+}
+
+async function prepareResponseNavigationProbeState(
+  page,
+  shortcut,
+  target,
+  scrapeStateRegistry,
+  fixtureUrl,
+) {
+  const probeStateId = shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
+  await prepareLiveProbeState(page, probeStateId, scrapeStateRegistry, fixtureUrl);
+  const oppositeActionId = getOppositeResponseNavigationActionId(shortcut.actionId);
+  const oppositeAriaLabel = getResponseNavigationAriaLabelForAction(oppositeActionId);
+  await clickResponseNavigationTargetRepeated(page, oppositeAriaLabel, RESPONSE_NAVIGATION_ATTEMPTS);
+  await waitForEnabledResponseNavigationTarget(page, target);
 }
 
 async function prepareGptConversationProbeState(page, fixtureUrl) {
@@ -1717,6 +2498,46 @@ async function dispatchLiveShortcut(page, code) {
   });
 }
 
+async function dispatchControlShortcut(page, code) {
+  try {
+    await waitBeforeBrowserInteraction();
+    await page.keyboard.down('Control');
+    await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
+    await page.keyboard.press(code, { delay: 120 });
+    await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
+    await page.keyboard.up('Control');
+    return;
+  } catch {
+    await page.keyboard.up('Control').catch(() => {});
+  }
+
+  await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
+  await page.evaluate(({ shortcutCode, shortcutKey }) => {
+    const eventInit = {
+      key: shortcutKey,
+      code: shortcutCode,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    };
+    document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+    document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+  }, {
+    shortcutCode: code,
+    shortcutKey: keyForShortcutCode(code),
+  });
+}
+
+async function dispatchShortcutForAction(page, shortcut, code) {
+  if (CONTROL_SHORTCUT_ACTION_IDS.includes(shortcut?.actionId)) {
+    await ensureControlSendStopEnabled(page);
+    await dispatchControlShortcut(page, code);
+    return;
+  }
+  await dispatchLiveShortcut(page, code);
+}
+
 function buildLiveProbeSummary(rows, runStatus = 'completed') {
   return {
     runStatus,
@@ -1771,6 +2592,7 @@ function buildSkippedLiveProbeRow(shortcut, status, reason, dispatchCode = '') {
 export async function runLiveShortcutActivationProbes(page, context, options = {}) {
   const onlyActionIds = new Set(options.onlyActionIds || []);
   const { exports } = await loadDevScrapeWideContract();
+  const fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
   const scrapeStateRegistry = [
     ...(exports.DUMP_REGISTRY || []),
     ...(exports.DEFERRED_ARTIFACTS || []),
@@ -1819,10 +2641,18 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   }
 
   const rows = [];
+  const orderedShortcuts = orderLiveProbeShortcuts(inventory.shortcuts);
+  let blankConversationReadyFromShortcut = false;
   try {
-    for (const shortcut of inventory.shortcuts) {
+    for (const shortcut of orderedShortcuts) {
       if (onlyActionIds.size > 0 && !onlyActionIds.has(shortcut.actionId)) {
         continue;
+      }
+      if (
+        shortcut.actionId !== NEW_CONVERSATION_ACTION_ID &&
+        shortcut.actionId !== TEMPORARY_CHAT_ACTION_ID
+      ) {
+        blankConversationReadyFromShortcut = false;
       }
       const dispatchCode = resolveShortcutDispatchCode(shortcut, activeShortcutCodes);
       if (!executableProbeShortcuts.some((item) => item.actionId === shortcut.actionId)) {
@@ -1833,128 +2663,207 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       const startedAt = Date.now();
       const target = targetById[shortcut.activationProbeExpectedTargetRef];
       const probeStateId = shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
+      const canReuseNewConversationState =
+        shortcut.actionId === TEMPORARY_CHAT_ACTION_ID &&
+        shortcut.activationProbeSetup === 'new-conversation' &&
+        blankConversationReadyFromShortcut;
       try {
-      if (!dispatchCode && shortcut.activationProbeMode !== 'direct-menu-target') {
-        const reason = extensionStorageWarning
-          ? `No default shortcut key code is assigned and active extension storage was unavailable for a temporary assignment. ${extensionStorageWarning}`
-          : 'No assigned shortcut key code was found in active storage or defaults.';
-        rows.push(
-          buildSkippedLiveProbeRow(
+        if (!dispatchCode && shortcut.activationProbeMode !== 'direct-menu-target') {
+          const reason = extensionStorageWarning
+            ? `No default shortcut key code is assigned and active extension storage was unavailable for a temporary assignment. ${extensionStorageWarning}`
+            : 'No assigned shortcut key code was found in active storage or defaults.';
+          rows.push(
+            buildSkippedLiveProbeRow(
+              shortcut,
+              extensionStorageWarning ? 'environment-fail' : 'skipped',
+              reason,
+              dispatchCode,
+            ),
+          );
+          continue;
+        }
+        if (!target) {
+          throw new Error(`Unknown expected probe target: ${shortcut.activationProbeExpectedTargetRef}`);
+        }
+        if (
+          !probeStateId &&
+          !STATELESS_LIVE_PROBE_SETUPS.includes(shortcut.activationProbeSetup)
+        ) {
+          throw new Error('Shortcut has no probe scrape state to prepare.');
+        }
+
+        if (shortcut.activationProbeSetup === 'new-conversation') {
+          if (!canReuseNewConversationState) {
+            await prepareNewConversationProbeState(page, fixtureUrl);
+          }
+        } else if (shortcut.activationProbeSetup === 'gpt-conversation') {
+          await prepareGptConversationProbeState(
+            page,
+            shortcut.activationProbeUrl || GPT_CONVERSATION_PROBE_URL,
+          );
+        } else if (isResponseNavigationProbeSetup(shortcut)) {
+          await prepareResponseNavigationProbeState(
+            page,
             shortcut,
-            extensionStorageWarning ? 'environment-fail' : 'skipped',
-            reason,
+            target,
+            scrapeStateRegistry,
+            fixtureUrl,
+          );
+        } else if (shortcut.activationProbeSetup === 'composer-draft-message') {
+          await prepareComposerDraftMessageProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'in-flight-message') {
+          await prepareInFlightMessageProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'active-edit-card') {
+          await prepareActiveEditCardProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'sent-user-message') {
+          await prepareSentUserMessageProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'dictation-active') {
+          await prepareDictationActiveProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'model-effort-shortcut') {
+          await resetFixturePage(page, fixtureUrl);
+          await closeTransientUi(page);
+        } else if (shortcut.activationProbeSetup === 'scroll-from-top') {
+          await resetFixturePage(page, fixtureUrl);
+          await closeTransientUi(page);
+          await setLiveProbeScrollPosition(page, 'top');
+        } else if (shortcut.activationProbeSetup === 'scroll-from-bottom') {
+          await resetFixturePage(page, fixtureUrl);
+          await closeTransientUi(page);
+          await setLiveProbeScrollPosition(page, 'bottom');
+        } else if (shortcut.activationProbeSetup === 'message-scroll-from-middle') {
+          await prepareMessageScrollProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'clipboard-single-message') {
+          await prepareClipboardSingleMessageProbeState(page, scrapeStateRegistry, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'clipboard-entire-conversation') {
+          await prepareClipboardEntireConversationProbeState(page, fixtureUrl);
+        } else if (shortcut.activationProbeSetup === 'clipboard-code-blocks') {
+          await prepareClipboardCodeBlocksProbeState(page);
+        } else if (shortcut.activationProbeSetup === 'codebox-conversation') {
+          await prepareCodeboxWrapProbeState(page);
+        } else if (shortcut.activationProbeSetup === 'shortcut-overlay-ready') {
+          await resetFixturePage(page, fixtureUrl);
+          await closeTransientUi(page);
+        } else if (shortcut.activationProbeSetup === 'composer-plus-menu') {
+          await resetFixturePage(page, fixtureUrl);
+          await openComposerPlusMenu(page);
+        } else if (shortcut.activationProbeSetup === 'composer-more-submenu') {
+          await resetFixturePage(page, fixtureUrl);
+          await openComposerMoreSubmenu(page);
+        } else {
+          await prepareLiveProbeState(page, probeStateId, scrapeStateRegistry, fixtureUrl);
+        }
+        if (
+          shortcut.activationProbeSetup !== 'gpt-conversation' &&
+          shortcut.activationProbeMode !== 'opens-target' &&
+          shortcut.activationProbeMode !== 'dom-state' &&
+          !isModelEffortShortcut(shortcut)
+        ) {
+          await waitForLiveProbeTargetPresence(page, target);
+        }
+        if (isResponseNavigationShortcut(shortcut)) {
+          await waitForEnabledResponseNavigationTarget(page, target);
+        }
+        await installLiveProbeObserver(page, {
+          preventDefault:
+            shortcut.activationProbeMode !== 'opens-target' &&
+            !ALLOW_DEFAULT_CLICK_ACTION_IDS.includes(shortcut.actionId),
+        });
+        if (!shouldPreservePreparedProbeState(shortcut)) {
+          await page.evaluate(() => {
+            const active = document.activeElement;
+            if (active instanceof HTMLElement) active.blur();
+            document.body?.focus?.();
+          });
+        }
+        if (shortcut.activationProbeMode === 'direct-menu-target') {
+          await clickLiveProbeTarget(page, target);
+        } else if (isResponseNavigationShortcut(shortcut)) {
+          await dispatchLiveShortcutRepeated(
+            page,
             dispatchCode,
-          ),
+            RESPONSE_NAVIGATION_ATTEMPTS,
+            RESPONSE_NAVIGATION_STEP_SETTLE_MS,
+          );
+        } else {
+          await dispatchShortcutForAction(page, shortcut, dispatchCode);
+        }
+        await page.waitForTimeout(
+          shortcut.actionId === NEW_CONVERSATION_ACTION_ID
+            ? NEW_CONVERSATION_TARGET_READY_DELAY_MS
+            : DEFAULT_LIVE_PROBE_SETTLE_MS,
         );
-        continue;
-      }
-      if (!target) {
-        throw new Error(`Unknown expected probe target: ${shortcut.activationProbeExpectedTargetRef}`);
-      }
-      if (
-        !probeStateId &&
-        !['new-conversation', 'gpt-conversation'].includes(shortcut.activationProbeSetup)
-      ) {
-        throw new Error('Shortcut has no probe scrape state to prepare.');
-      }
+        const observed = await readLiveProbeObserver(page);
+        const clickMatch = (observed.clicks || []).find((click) =>
+          targetMatchesText(target, click.html),
+        );
+        const focusMatch = targetMatchesText(target, observed.activeElement?.html || '');
+        const openedMatch =
+          shortcut.activationProbeMode === 'opens-target'
+            ? targetMatchesText(
+                target,
+                await page.evaluate(() => document.documentElement?.outerHTML || ''),
+              )
+            : false;
+        const viewportMatch =
+          shortcut.activationProbeMode === 'viewport-target'
+            ? await isViewportProbeTargetReached(page, target)
+            : false;
+        const clipboardMatch =
+          shortcut.activationProbeMode === 'clipboard-text'
+            ? await clipboardProbeHasText(page, shortcut)
+            : false;
+        const domStateMatch =
+          shortcut.activationProbeMode === 'dom-state'
+            ? await isDomStateProbeTargetReached(page, target)
+            : false;
+        const matched =
+          shortcut.activationProbeMode === 'focus-target'
+            ? focusMatch
+            : shortcut.activationProbeMode === 'opens-target'
+              ? openedMatch
+              : shortcut.activationProbeMode === 'viewport-target'
+                ? viewportMatch
+                : shortcut.activationProbeMode === 'clipboard-text'
+                  ? clipboardMatch
+                  : shortcut.activationProbeMode === 'dom-state'
+                    ? domStateMatch
+                    : !!clickMatch;
+        const observedNode = clickMatch || observed.clicks?.[0] || observed.activeElement || {};
 
-      if (shortcut.activationProbeSetup === 'new-conversation') {
-        await prepareNewConversationProbeState(page, exports.DEV_SCRAPE_WIDE_FIXTURE_URL);
-      } else if (shortcut.activationProbeSetup === 'gpt-conversation') {
-        await prepareGptConversationProbeState(
-          page,
-          shortcut.activationProbeUrl || GPT_CONVERSATION_PROBE_URL,
-        );
-      } else if (shortcut.activationProbeSetup === 'composer-plus-menu') {
-        await resetFixturePage(page, exports.DEV_SCRAPE_WIDE_FIXTURE_URL);
-        await openComposerPlusMenu(page);
-      } else if (shortcut.activationProbeSetup === 'composer-more-submenu') {
-        await resetFixturePage(page, exports.DEV_SCRAPE_WIDE_FIXTURE_URL);
-        await openComposerMoreSubmenu(page);
-      } else {
-        await prepareLiveProbeState(
-          page,
-          probeStateId,
-          scrapeStateRegistry,
-          exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
-        );
-      }
-      if (
-        shortcut.activationProbeSetup !== 'gpt-conversation' &&
-        shortcut.activationProbeMode !== 'opens-target'
-      ) {
-        await waitForLiveProbeTargetPresence(page, target);
-      }
-      if (shortcut.activationProbeSetup === 'previous-thread-after-next-thread') {
-        const nextCode =
-          normalizeShortcutCode(activeShortcutCodes.shortcutKeyNextThread) || 'Semicolon';
-        await dispatchLiveShortcut(page, nextCode);
-        await page.waitForTimeout(1500);
-        await waitForLiveProbeTargetPresence(page, target);
-      }
-      await installLiveProbeObserver(page, {
-        preventDefault: shortcut.activationProbeMode !== 'opens-target',
-      });
-      await page.evaluate(() => {
-        const active = document.activeElement;
-        if (active instanceof HTMLElement) active.blur();
-        document.body?.focus?.();
-      });
-      if (shortcut.activationProbeMode === 'direct-menu-target') {
-        await clickLiveProbeTarget(page, target);
-      } else {
-        await dispatchLiveShortcut(page, dispatchCode);
-      }
-      await page.waitForTimeout(1600);
-      const observed = await readLiveProbeObserver(page);
-      const clickMatch = (observed.clicks || []).find((click) => targetMatchesText(target, click.html));
-      const focusMatch = targetMatchesText(target, observed.activeElement?.html || '');
-      const openedMatch =
-        shortcut.activationProbeMode === 'opens-target'
-          ? targetMatchesText(
-              target,
-              await page.evaluate(() => document.documentElement?.outerHTML || ''),
-            )
-          : false;
-      const matched =
-        shortcut.activationProbeMode === 'focus-target'
-          ? focusMatch
-          : shortcut.activationProbeMode === 'opens-target'
-            ? openedMatch
-            : !!clickMatch;
-      const observedNode = clickMatch || observed.clicks?.[0] || observed.activeElement || {};
-
-      rows.push({
-        actionId: shortcut.actionId,
-        label: shortcut.label,
-        defaultCode: shortcut.defaultCode,
-        dispatchCode,
-        probeMode: shortcut.activationProbeMode,
-        expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
-        status: matched ? 'pass' : 'fail',
-        reason: matched
-          ? 'Shortcut activated the expected target.'
-          : `Shortcut did not activate expected target ${shortcut.activationProbeExpectedTargetRef}.${
-              extensionStorageWarning ? ` ${extensionStorageWarning}` : ''
-            }`,
-        observedSelector: observedNode.selector || '',
-        observedTextSnippet: observedNode.textSnippet || '',
-        durationMs: Date.now() - startedAt,
-      });
-    } catch (error) {
-      rows.push({
-        actionId: shortcut.actionId,
-        label: shortcut.label,
-        defaultCode: shortcut.defaultCode,
-        dispatchCode,
-        probeMode: shortcut.activationProbeMode,
-        expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
-        status: 'fail',
-        reason: error?.message || String(error) || 'Unknown live probe failure',
-        observedSelector: '',
-        observedTextSnippet: '',
-        durationMs: Date.now() - startedAt,
-      });
+        rows.push({
+          actionId: shortcut.actionId,
+          label: shortcut.label,
+          defaultCode: shortcut.defaultCode,
+          dispatchCode,
+          probeMode: shortcut.activationProbeMode,
+          expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
+          status: matched ? 'pass' : 'fail',
+          reason: matched
+            ? 'Shortcut activated the expected target.'
+            : `Shortcut did not activate expected target ${shortcut.activationProbeExpectedTargetRef}.${
+                extensionStorageWarning ? ` ${extensionStorageWarning}` : ''
+              }`,
+          observedSelector: observedNode.selector || '',
+          observedTextSnippet: observedNode.textSnippet || '',
+          durationMs: Date.now() - startedAt,
+        });
+        blankConversationReadyFromShortcut =
+          shortcut.actionId === NEW_CONVERSATION_ACTION_ID && matched;
+      } catch (error) {
+        blankConversationReadyFromShortcut = false;
+        rows.push({
+          actionId: shortcut.actionId,
+          label: shortcut.label,
+          defaultCode: shortcut.defaultCode,
+          dispatchCode,
+          probeMode: shortcut.activationProbeMode,
+          expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
+          status: 'fail',
+          reason: error?.message || String(error) || 'Unknown live probe failure',
+          observedSelector: '',
+          observedTextSnippet: '',
+          durationMs: Date.now() - startedAt,
+        });
       } finally {
         await cleanupLiveProbeObserver(page);
         await closeOpenMenus(page).catch(() => {});
@@ -1985,11 +2894,11 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     }
   }
 
-  await resetFixturePage(page, exports.DEV_SCRAPE_WIDE_FIXTURE_URL).catch(() => {});
+  await resetFixturePage(page, fixtureUrl).catch(() => {});
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl,
     rows,
     summary: buildLiveProbeSummary(rows),
   };
@@ -2385,6 +3294,10 @@ export async function buildCheckReport({ folderName = null } = {}) {
       filename: fileName,
     })),
   );
+  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows) ? run.liveProbeReport.rows : [];
+  const livePassedActionIds = new Set(
+    liveProbeRows.filter((row) => row.status === 'pass').map((row) => row.actionId),
+  );
 
   const shortcutRows = inventory.shortcuts.map((shortcut) => {
     const targetRowsForShortcut = shortcut.targetIds.map((targetId) => targetRowById[targetId]).filter(Boolean);
@@ -2438,6 +3351,11 @@ export async function buildCheckReport({ folderName = null } = {}) {
         .filter((row) => row.status === 'no-scrape-coverage')
         .map((row) => `${row.targetId}: ${row.statusReason}`)
         .join(' | ');
+      if (livePassedActionIds.has(shortcut.actionId)) {
+        status = 'pass';
+        statusReason =
+          'Setup-only target coverage was validated by a passing live activation probe.';
+      }
     }
 
     return {
@@ -2489,10 +3407,6 @@ export async function buildCheckReport({ folderName = null } = {}) {
     noScrapeCoverage: targetRows.filter((row) => row.status === 'no-scrape-coverage').length,
   };
 
-  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows) ? run.liveProbeReport.rows : [];
-  const livePassedActionIds = new Set(
-    liveProbeRows.filter((row) => row.status === 'pass').map((row) => row.actionId),
-  );
   const failingShortcutRows = shortcutRows.filter((row) => row.status === 'fail');
   const partialShortcutRows = shortcutRows.filter(
     (row) => row.status === 'partial' && !livePassedActionIds.has(row.actionId),
@@ -2530,7 +3444,7 @@ export async function buildCheckReport({ folderName = null } = {}) {
   return {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
-    fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    fixtureUrl: run?.manifest?.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
     folderName: run.folderName,
     folderPath: run.folderPath,
     runManifest: run.manifest,
