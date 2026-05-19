@@ -566,13 +566,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // === Unified shortcut helpers (REPLACES 555) ================================
 
+  const DEFAULT_SEPARATOR_CANONICAL = '\n\n--- --- ---\n\n';
+
+  function normalizeDefaultSeparatorValue(str) {
+    if (typeof str !== 'string') return str;
+    const realNewlines = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+    return realNewlines.trim() === '--- --- ---' ? DEFAULT_SEPARATOR_CANONICAL : str;
+  }
+
   function sep_storageToUI(str) {
     // Converts real newlines to literal \n for display in the input
-    return typeof str === 'string' ? str.replace(/\n/g, '\\n') : str;
+    const normalized = normalizeDefaultSeparatorValue(str);
+    return typeof normalized === 'string' ? normalized.replace(/\n/g, '\\n') : normalized;
   }
   function sep_UItoStorage(str) {
     // Converts displayed literal \n back to real newlines for storage/export
-    return typeof str === 'string' ? str.replace(/\\n/g, '\n') : str;
+    const storage = typeof str === 'string' ? str.replace(/\\n/g, '\n') : str;
+    return normalizeDefaultSeparatorValue(storage);
   }
 
   // Source of truth for model-picker slots if storage is empty.
@@ -2459,7 +2469,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyEdit: 'KeyE',
     shortcutKeySendEdit: 'KeyD',
     shortcutKeyCopyAllCodeBlocks: 'BracketRight',
-    copyCodeUserSeparator: ' \n \n --- --- --- \n \n',
+    copyCodeUserSeparator: '\n\n--- --- ---\n\n',
     shortcutKeyNewConversation: 'KeyN',
     shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',

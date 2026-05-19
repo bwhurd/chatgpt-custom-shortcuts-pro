@@ -7,11 +7,12 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 ---
 
 #### 05.19.2026
-- Fixed: Runtime shortcut validation and live probes cover the latest ChatGPT controls more reliably.
+- Fixed: Code box word wrap no longer breaks syntax-highlighted lines too aggressively.
+- Fixed: Join + Copy All Code Boxes now preserves clean code output, dedupes wrapper copies, and supports a clean newline separator.
 
 #### 05.14.2026
 - Changed: Popup and shortcut overlay model grids now fit six items per row with a separate Effort row.
-- Fixed: Pro Effort shortcuts now update the current model when available, then fall back to the latest model.
+- Fixed: Effort shortcuts now update the current model when available, then fall back to the latest model.
 
 #### 05.13.2026
 - Added: Optional shortcut to wrap long lines in ChatGPT code boxes.

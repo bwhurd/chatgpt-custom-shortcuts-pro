@@ -33,9 +33,9 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyToggleCanvas: '',
   shortcutKeyAddPhotosFiles: '',
   shortcutKeyThinkLonger: '',
-  copyAllUserSeparator: ' \n  \n --- --- --- \n \n',
+  copyAllUserSeparator: '\n\n--- --- ---\n\n',
   shortcutKeyCopyAllCodeBlocks: ']',
-  copyCodeUserSeparator: ' \n  \n --- --- --- \n \n',
+  copyCodeUserSeparator: '\n\n--- --- ---\n\n',
   altPageUp: 'PageUp',
   altPageDown: 'PageDown',
 

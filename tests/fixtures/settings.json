@@ -75,7 +75,7 @@
     "enableStopWithControlBackspaceCheckbox": true,
     "useAltForModelSwitcherRadio": true,
     "useControlForModelSwitcherRadio": false,
-    "copyCodeUserSeparator": " \n \n --- --- --- \n \n",
+    "copyCodeUserSeparator": "\n\n--- --- ---\n\n",
     "modelPickerKeyCodes": ["Digit0", "Digit1", "KeyM", "", "", "", "KeyO", "Digit4", "Digit3", ""],
     "modelNames": [
       "GPT-5 Auto",

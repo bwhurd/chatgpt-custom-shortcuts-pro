@@ -2043,32 +2043,79 @@ const delays = DELAYS;
     }, delays.buttonFade);
   }
 
-  function getAllCodeBlocks() {
-    const codeBoxes = document.querySelectorAll('pre');
-    const blocks = [];
-    for (const codeBox of codeBoxes) {
-      const codeElements = codeBox.querySelectorAll('code');
-      for (const codeElement of codeElements) {
-        const block = codeElement.textContent.trim();
-        if (block) {
-          blocks.push(block);
-        }
+  const COPY_ALL_CODE_BLOCK_SELECTOR = [
+    '#code-block-viewer .cm-content code',
+    '#code-block-viewer code',
+    'pre.cm-content code',
+    'pre code',
+    'code[class*="whitespace-pre"]',
+    'code.whitespace-pre',
+  ].join(', ');
+
+  function getRenderedCodeText(codeElement) {
+    const parts = [];
+
+    const walk = (node) => {
+      if (!node) return;
+
+      if (node.nodeType === Node.TEXT_NODE) {
+        parts.push(node.nodeValue || '');
+        return;
       }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      if (node.tagName === 'BR') {
+        parts.push('\n');
+        return;
+      }
+
+      for (const child of node.childNodes) {
+        walk(child);
+      }
+    };
+
+    walk(codeElement);
+
+    const normalized = parts
+      .join('')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
+      .replace(/\r\n?/g, '\n');
+    const lines = normalized.split('\n');
+
+    while (lines.length && !lines[0].trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+
+    return lines.join('\n');
+  }
+
+  function getAllCodeBlocks() {
+    const blocks = [];
+    const codeElements = Array.from(document.querySelectorAll(COPY_ALL_CODE_BLOCK_SELECTOR));
+
+    for (const codeElement of codeElements) {
+      const roleContainer = codeElement.closest?.('[data-message-author-role]');
+      if (roleContainer?.getAttribute?.('data-message-author-role') !== 'assistant') continue;
+
+      const block = getRenderedCodeText(codeElement);
+      if (block) blocks.push(block);
     }
+
     return blocks;
   }
 
   function copyCode() {
-    const codeBoxes = document.querySelectorAll('pre');
-    if (codeBoxes.length === 0) {
+    const formattedBlocks = getAllCodeBlocks();
+    if (!formattedBlocks.length) {
       showToast('No code boxes found');
       return;
     }
+
     chrome.storage.sync.get('copyCodeUserSeparator', (data) => {
       const copyCodeSeparator = data.copyCodeUserSeparator
         ? parseSeparator(data.copyCodeUserSeparator)
-        : ' \n  \n --- --- --- \n \n';
-      const formattedBlocks = getAllCodeBlocks();
+        : '\n\n--- --- ---\n\n';
       const output = formattedBlocks.join(copyCodeSeparator);
 
       if (output.trim()) {
@@ -2084,7 +2131,8 @@ const delays = DELAYS;
 
   function parseSeparator(separator) {
     // Parse literal `\n` and similar into real line breaks
-    return separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+    const parsed = separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+    return parsed.trim() === '--- --- ---' ? '\n\n--- --- ---\n\n' : parsed;
   }
 
   function getConversationTurnMessages() {
@@ -3412,6 +3460,96 @@ const delays = DELAYS;
     return arr;
   };
 
+  const CODEBOX_PAYLOAD_SELECTOR = [
+    '#code-block-viewer code',
+    '.cm-content code',
+    'pre code',
+    'code[class*="language-"]',
+    'code[class*="whitespace-pre"]',
+    'code.whitespace-pre',
+  ].join(', ');
+  const MESSAGE_COPY_BOUNDARY_SELECTOR =
+    '[data-message-author-role], section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
+
+  function normalizeCodeTextForCopyGuard(text) {
+    return String(text || '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[ \t\u00A0\r\n]+$/g, '');
+  }
+
+  function getMessageCopyCodeBlockTexts(btn) {
+    if (btn?.getAttribute?.('data-testid') !== 'copy-turn-action-button') return [];
+
+    const scope = btn.closest?.(MESSAGE_COPY_BOUNDARY_SELECTOR);
+    if (!scope) return [];
+
+    const seen = new Set();
+    return Array.from(scope.querySelectorAll(CODEBOX_PAYLOAD_SELECTOR))
+      .map((codeEl) =>
+        normalizeCodeTextForCopyGuard(codeEl?.innerText ?? codeEl?.textContent ?? ''),
+      )
+      .filter((text) => {
+        if (!text || seen.has(text)) return false;
+        seen.add(text);
+        return true;
+      });
+  }
+
+  function isCodeBoxCopyControl(control) {
+    const btn = control?.closest?.('button, [role="button"]') || control;
+    if (!btn || !(btn instanceof Element)) return false;
+    if (btn.getAttribute?.('data-testid') === 'copy-turn-action-button') return false;
+
+    if (btn.closest('pre, #code-block-viewer, .cm-editor, .cm-content')) return true;
+
+    let node = btn.parentElement;
+    let depth = 0;
+    while (node && node !== document.body && depth < 7) {
+      if (node.matches?.(MESSAGE_COPY_BOUNDARY_SELECTOR)) break;
+      if (node.querySelector?.(CODEBOX_PAYLOAD_SELECTOR)) return true;
+      node = node.parentElement;
+      depth += 1;
+    }
+
+    return false;
+  }
+
+  function splitTextByProtectedBlocks(text, protectedBlocks = []) {
+    let segments = [{ text, protected: false }];
+    const blocks = Array.from(new Set(protectedBlocks.filter(Boolean))).sort(
+      (a, b) => b.length - a.length,
+    );
+
+    for (const block of blocks) {
+      const nextSegments = [];
+      for (const segment of segments) {
+        if (segment.protected) {
+          nextSegments.push(segment);
+          continue;
+        }
+
+        let remaining = segment.text;
+        let index = remaining.indexOf(block);
+        while (index >= 0) {
+          if (index > 0) {
+            nextSegments.push({ text: remaining.slice(0, index), protected: false });
+          }
+          nextSegments.push({ text: block, protected: true });
+          remaining = remaining.slice(index + block.length);
+          index = remaining.indexOf(block);
+        }
+        if (remaining) {
+          nextSegments.push({ text: remaining, protected: false });
+        }
+      }
+      segments = nextSegments;
+    }
+
+    return segments;
+  }
+
   async function copyFromLowestButton(dPrefix, opts = {}) {
     const { delayBeforeClick = 350, delayClipboardRead = 350 } = opts;
 
@@ -3442,7 +3580,10 @@ const delays = DELAYS;
 
     const btn = target;
 
-    const isMsgCopy = btn.getAttribute('data-testid') === 'copy-turn-action-button';
+    const isCodeBoxCopy = isCodeBoxCopyControl(btn);
+    const isMsgCopy =
+      !isCodeBoxCopy && btn.getAttribute('data-testid') === 'copy-turn-action-button';
+    const protectedCodeTexts = isMsgCopy ? getMessageCopyCodeBlockTexts(btn) : [];
 
     if (window.gsap && typeof window.flashBorder === 'function') {
       window.flashBorder(btn);
@@ -3451,6 +3592,9 @@ const delays = DELAYS;
     const shouldClick = await delayCopyLowest(delayBeforeClick, runToken);
     if (!shouldClick || runToken !== copyLowestRunToken) return;
     btn.click();
+    // Codebox copy controls already write exact code text; leave their clipboard payload untouched.
+    if (isCodeBoxCopy) return;
+
     const shouldRead = await delayCopyLowest(delayClipboardRead, runToken);
     if (!shouldRead || runToken !== copyLowestRunToken) return;
 
@@ -3461,7 +3605,7 @@ const delays = DELAYS;
       if (runToken !== copyLowestRunToken) return;
       const text = await navigator.clipboard.readText();
       if (runToken !== copyLowestRunToken) return;
-      const processed = sanitizeCopiedText(text, { isMsgCopy });
+      const processed = sanitizeCopiedText(text, { isMsgCopy, protectedCodeTexts });
       if (runToken !== copyLowestRunToken) return;
       await navigator.clipboard.writeText(processed);
     } catch {
@@ -3478,7 +3622,7 @@ const delays = DELAYS;
     );
   }
 
-  function sanitizeCopiedText(text, { isMsgCopy = false } = {}) {
+  function sanitizeCopiedText(text, { isMsgCopy = false, protectedCodeTexts = [] } = {}) {
     if (!text) return text;
 
     if (isMsgCopy && removeMarkdownOnCopyEnabled()) {
@@ -3490,7 +3634,27 @@ const delays = DELAYS;
             : null;
 
       if (stripFn) {
-        const processed = stripFn(text);
+        const codeTexts = Array.from(
+          new Set(
+            protectedCodeTexts
+              .map((codeText) => normalizeCodeTextForCopyGuard(codeText))
+              .filter(Boolean),
+          ),
+        );
+        const allProtectedBlocksFound = codeTexts.every((codeText) => text.includes(codeText));
+        const protectedSegments = allProtectedBlocksFound
+          ? splitTextByProtectedBlocks(text, codeTexts)
+          : [];
+        const processed =
+          protectedSegments.length > 1 || protectedSegments.some((seg) => seg.protected)
+            ? protectedSegments
+                .map((seg) => (seg.protected ? seg.text : stripFn(seg.text)))
+                .join('')
+            : stripFn(text);
+
+        if (codeTexts.length && !codeTexts.every((codeText) => processed.includes(codeText))) {
+          return text;
+        }
 
         // Failsafe: if any fenced OR inline code changed, prefer original.
         try {
@@ -5273,6 +5437,7 @@ const delays = DELAYS;
           document.addEventListener('click', (e) => {
             const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
             if (!btn) return;
+            if (isCodeBoxCopyControl(btn)) return;
 
             const contentEls = getContentElsForCopyButton(btn);
             if (contentEls.length) {
