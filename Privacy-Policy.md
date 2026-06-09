@@ -5,6 +5,7 @@ Effective: June 9, 2026
 - We use your data only to save your extension settings. If you turn on Cloud Sync, we back up those settings to your own Google Drive.
 - We do not sell your information. There are no ads or cross-site tracking.
 - We use a self-hosted Aptabase setup to collect anonymous usage summaries, such as which shortcut actions are used and whether settings are on or off. This helps us understand what features are useful and improve the extension.
+- The analytics server may record approximate country or region from request metadata for aggregate reporting.
 - Usage summaries do not include chats, prompts, responses, page content, URLs, browsing history, account info, or the actual shortcut keys you choose.
 - If you use Cloud Sync, your backup stays in a hidden app data file in your Google Drive. We do not see it.
 - Sign in uses a short lived Google token. A helper service that we operate and host on Netlify exchanges a one time Google code for that token. It does not store tokens or settings.
