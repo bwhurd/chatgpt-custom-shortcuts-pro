@@ -170,6 +170,17 @@ function ConvertTo-HtmlText {
     return [System.Net.WebUtility]::HtmlEncode([string]$Value)
 }
 
+function ConvertTo-ShortcutAssignmentStateLabel {
+    param([string]$State)
+
+    switch ($State) {
+        'blank' { return 'blank (no key assigned)' }
+        'default' { return 'assigned default key' }
+        'custom' { return 'assigned custom key' }
+        default { return $State }
+    }
+}
+
 function New-HtmlTable {
     param(
         [string]$Title,
@@ -570,6 +581,52 @@ $shortcutSummaryRows = @(
         } |
         Sort-Object State
 )
+$shortcutValueSummaryRows = @(
+    $shortcutSummaryRows | ForEach-Object {
+        [pscustomobject]@{
+            'Assignment State' = ConvertTo-ShortcutAssignmentStateLabel $_.State
+            Count = [int]$_.Count
+            Reports = [int]$_.Reports
+            Percent = $_.Percent
+        }
+    }
+)
+$shortcutStateDisplayRows = @(
+    $shortcutStateRows | ForEach-Object {
+        [pscustomobject]@{
+            Shortcut = $_.Shortcut
+            'Assignment State' = ConvertTo-ShortcutAssignmentStateLabel $_.State
+            Reports = [int]$_.Reports
+            Count = [int]$_.Count
+            Percent = $_.Percent
+        }
+    }
+)
+$shortcutChangeRows = @($changedFromDefaultRows | Where-Object { $_.Type -eq 'shortcut' })
+$shortcutDefaultObservationTotal = ($shortcutChangeRows | Measure-Object -Property Reports -Sum).Sum
+$shortcutChangedObservationCount = ($shortcutChangeRows | Measure-Object -Property Changed -Sum).Sum
+if ($null -eq $shortcutDefaultObservationTotal) {
+    $shortcutDefaultObservationTotal = 0
+}
+if ($null -eq $shortcutChangedObservationCount) {
+    $shortcutChangedObservationCount = 0
+}
+$shortcutAtDefaultObservationCount = [Math]::Max(
+    0,
+    [int]$shortcutDefaultObservationTotal - [int]$shortcutChangedObservationCount
+)
+$shortcutDefaultSummaryRows = @(
+    [pscustomobject]@{
+        Status = 'at default'
+        Count = [int]$shortcutAtDefaultObservationCount
+        Percent = Format-Percent $shortcutAtDefaultObservationCount $shortcutDefaultObservationTotal
+    },
+    [pscustomobject]@{
+        Status = 'changed from default'
+        Count = [int]$shortcutChangedObservationCount
+        Percent = Format-Percent $shortcutChangedObservationCount $shortcutDefaultObservationTotal
+    }
+)
 
 $usageReportCount = ($eventCounts | Where-Object { $_.Event -eq 'usage_summary_v1' } | Measure-Object -Property Reports -Sum).Sum
 $settingsReportCount = ($eventCounts | Where-Object { $_.Event -eq 'settings_snapshot_v1' } | Measure-Object -Property Reports -Sum).Sum
@@ -583,7 +640,7 @@ foreach ($row in $distinctRows) {
 }
 $averageDistinctShortcuts = Format-Number ($weightedDistinct / [Math]::Max(1, [double]$distinctReportTotal))
 $blankShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'blank' } | Select-Object -First 1)[0]
-$defaultShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'default' } | Select-Object -First 1)[0]
+$shortcutAtDefaultSummary = @($shortcutDefaultSummaryRows | Where-Object { $_.Status -eq 'at default' } | Select-Object -First 1)[0]
 $changedItemCount = @($changedFromDefaultRows | Where-Object { $_.Changed -gt 0 }).Count
 $highestChangedItem = @($changedFromDefaultRows | Sort-Object -Property @{ Expression = 'Changed'; Descending = $true }, Item | Select-Object -First 1)[0]
 
@@ -626,12 +683,12 @@ $summaryRows = @(
     [pscustomobject]@{
         Label = 'Blank shortcut fields'
         Value = if ($blankShortcutSummary) { $blankShortcutSummary.Percent } else { '0.0%' }
-        Detail = 'Share of tracked shortcut slots reported as blank'
+        Detail = 'Share of tracked shortcut slots with no assigned key, including defaults that are intentionally blank'
     },
     [pscustomobject]@{
-        Label = 'Default shortcut fields'
-        Value = if ($defaultShortcutSummary) { $defaultShortcutSummary.Percent } else { '0.0%' }
-        Detail = 'Share of tracked shortcut slots still at default'
+        Label = 'Shortcut fields at default'
+        Value = if ($shortcutAtDefaultSummary) { $shortcutAtDefaultSummary.Percent } else { '0.0%' }
+        Detail = 'Includes both default blank slots and default assigned keys'
     }
 )
 
@@ -648,6 +705,8 @@ $report = [ordered]@{
     totalShortcutUseBuckets = $useBucketRows
     changedFromDefault = $changedFromDefaultRows
     toggles = $toggleRows
+    shortcutDefaultSummary = $shortcutDefaultSummaryRows
+    shortcutValueSummary = $shortcutValueSummaryRows
     shortcutStateSummary = $shortcutSummaryRows
     shortcutStates = $shortcutStateRows
 }
@@ -670,10 +729,11 @@ $overviewSections += New-HtmlTable 'Distinct Shortcuts Used In Last 7 Days' $dis
 $overviewSections += New-HtmlTable 'Total Shortcut Use Buckets' $useBucketRows @('Bucket', 'Reports', 'Percent')
 
 $settingsSections = @()
+$settingsSections += New-HtmlTable 'Shortcut Default Summary' $shortcutDefaultSummaryRows @('Status', 'Count', 'Percent')
 $settingsSections += New-HtmlTable 'Changed From Default' $changedFromDefaultRows @('Type', 'Item', 'Default', 'Reports', 'Changed', 'Percent', 'Breakdown')
 $settingsSections += New-HtmlTable 'Toggle On Percentages' $toggleRows @('Metric', 'Reports', 'On', 'Percent')
-$settingsSections += New-HtmlTable 'Shortcut Assignment Summary' $shortcutSummaryRows @('State', 'Count', 'Reports', 'Percent')
-$settingsSections += New-HtmlTable 'Shortcut Assignment States' $shortcutStateRows @('Shortcut', 'State', 'Reports', 'Count', 'Percent')
+$settingsSections += New-HtmlTable 'Shortcut Key Assignment Coverage' $shortcutValueSummaryRows @('Assignment State', 'Count', 'Reports', 'Percent')
+$settingsSections += New-HtmlTable 'Shortcut Key Assignment By Item' $shortcutStateDisplayRows @('Shortcut', 'Assignment State', 'Reports', 'Count', 'Percent')
 
 $dataHealthSections = @()
 $dataHealthSections += New-HtmlTable 'Stored Events By Version' $eventCounts @('Event', 'Version', 'Reports', 'Latest')
