@@ -6430,6 +6430,12 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   });
 })();
 
+(() => {
+  try {
+    chrome.runtime.sendMessage({ type: 'csp.analytics.flush', reason: 'popup-open' });
+  } catch {}
+})();
+
 /* Sync Settings Button js IIFE */
 (() => {
   const getIcon = (btn) =>

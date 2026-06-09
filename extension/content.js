@@ -6415,6 +6415,20 @@ const delays = DELAYS;
       return event.key && event.key.toLowerCase() === setting.toLowerCase();
     }
 
+    function recordShortcutUsage(actionId) {
+      if (!actionId || typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+      try {
+        chrome.runtime.sendMessage({ type: 'csp.analytics.recordShortcut', actionId });
+      } catch {}
+    }
+
+    function flushUsageAnalytics(reason) {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+      try {
+        chrome.runtime.sendMessage({ type: 'csp.analytics.flush', reason });
+      } catch {}
+    }
+
     const THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
       {
         storageKey: 'shortcutKeyThinkingExtended',
@@ -6471,12 +6485,24 @@ const delays = DELAYS;
       return shortcutDefaults[storageKey] || '';
     };
 
+    const shortcutActionByEffectiveCode = new Map();
+    const rebuildShortcutActionLookup = () => {
+      shortcutActionByEffectiveCode.clear();
+      Object.keys(shortcutDefaults).forEach((storageKey) => {
+        const value = getEffectiveShortcutSetting(storageKey);
+        if (hasUsableShortcutSetting(value)) shortcutActionByEffectiveCode.set(String(value), storageKey);
+      });
+    };
+    rebuildShortcutActionLookup();
+    flushUsageAnalytics('content-start');
+
     const runDynamicThinkingEffortShortcut = (event) => {
       const matched = THINKING_EFFORT_DYNAMIC_SHORTCUTS.find(({ storageKey }) =>
         matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event),
       );
       if (!matched) return false;
       event.preventDefault();
+      recordShortcutUsage(matched.storageKey);
       if (window.__cspRunThinkingEffortAction?.(matched.optionId)) return true;
       matched.fallback();
       return true;
@@ -6487,6 +6513,7 @@ const delays = DELAYS;
       );
       if (!matched) return false;
       event.preventDefault();
+      recordShortcutUsage(matched.storageKey);
       window.__cspRunProThinkingEffortAction?.(matched.optionId);
       return true;
     };
@@ -6504,6 +6531,7 @@ const delays = DELAYS;
         ...(window.CSP_SHORTCUTS_EFFECTIVE || {}),
         ...shortcutPatch,
       };
+      rebuildShortcutActionLookup();
     });
 
     document.addEventListener(
@@ -6530,6 +6558,7 @@ const delays = DELAYS;
         // Always open menu for Alt+W (or whatever your toggle key is)
         if (!isCtrlPressed && matchesShortcutKey(modelToggleSetting, event)) {
           event.preventDefault();
+          recordShortcutUsage('shortcutKeyToggleModelSelector');
           window.toggleModelSelector();
           return;
         }
@@ -6557,6 +6586,7 @@ const delays = DELAYS;
             if (window.useAltForModelSwitcherRadio === true) {
               // Intercept only when Alt is the chosen modifier for model switching.
               event.preventDefault();
+              recordShortcutUsage(`modelPickerSlot:${modelAssignedIndex + 1}`);
               // Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
               if (typeof window.switchModelByIndex === 'function') {
                 window.switchModelByIndex(modelAssignedIndex);
@@ -6582,6 +6612,7 @@ const delays = DELAYS;
           keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]
         ) {
           event.preventDefault();
+          recordShortcutUsage('shortcutKeyPreviousThread');
           keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]({
             previewOnly: true,
             event,
@@ -6596,6 +6627,7 @@ const delays = DELAYS;
           keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]
         ) {
           event.preventDefault();
+          recordShortcutUsage('shortcutKeyNextThread');
           keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]({
             previewOnly: true,
             event,
@@ -6614,6 +6646,7 @@ const delays = DELAYS;
         );
         if (matchedAltKey) {
           event.preventDefault();
+          recordShortcutUsage(shortcutActionByEffectiveCode.get(matchedAltKey) || matchedAltKey);
           keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
           return;
         }
@@ -6627,6 +6660,7 @@ const delays = DELAYS;
           matchesShortcutKey(modelToggleSetting, event)
         ) {
           event.preventDefault();
+          recordShortcutUsage('shortcutKeyToggleModelSelector');
           window.toggleModelSelector(); // open / close the menu
           return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
         }
@@ -6648,6 +6682,7 @@ const delays = DELAYS;
             if (stopBtn) {
               event.preventDefault();
               try {
+                recordShortcutUsage('shortcutKeyClickStopButton');
                 ctrlShortcut(); // will click the stop button
               } catch (e) {
                 console.error('Backspace handler failed:', e);
@@ -6657,6 +6692,7 @@ const delays = DELAYS;
           } else {
             // Non-Backspace Ctrl shortcuts behave as before
             event.preventDefault();
+            recordShortcutUsage('shortcutKeyClickSendButton');
             ctrlShortcut();
           }
         }
@@ -11333,6 +11369,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return true;
       };
       // --- KEY HANDLING ---
+      const recordModelPickerSlotUsage = (index) => {
+        if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+        try {
+          chrome.runtime.sendMessage({
+            type: 'csp.analytics.recordShortcut',
+            actionId: `modelPickerSlot:${index + 1}`,
+          });
+        } catch {}
+      };
       window.addEventListener(
         'keydown',
         (e) => {
@@ -11345,6 +11390,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
           e.preventDefault();
           e.stopPropagation();
+          recordModelPickerSlotUsage(idx);
           executeModelAction(action);
         },
         true,

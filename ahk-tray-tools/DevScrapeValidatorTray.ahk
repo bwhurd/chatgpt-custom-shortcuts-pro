@@ -11,6 +11,7 @@ startPs := A_ScriptDir "\StartDevScrapeValidator.ps1"
 setupPs := A_ScriptDir "\StartDevScrapeExtensionSetup.ps1"
 stopPs := A_ScriptDir "\StopDevScrapeValidator.ps1"
 openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
+openUsageReportPs := A_ScriptDir "\OpenUsageAnalyticsReport.ps1"
 pushGitPs := A_ScriptDir "\PushLocalToGit.ps1"
 pushGitStatusPath := projectRoot "\_temp-files\tray-git-sync\git-sync-status.txt"
 pushGitPid := 0
@@ -44,6 +45,7 @@ Menu, Tray, NoStandard
 Menu, Tray, Add, Start DevScrape Validator, StartValidator
 Menu, Tray, Add, Setup Extension Profile, SetupExtensionProfile
 Menu, Tray, Add, Open Latest Report, OpenLatestReport
+Menu, Tray, Add, Open Usage Report, OpenUsageReport
 Menu, Tray, Add, Run build-zip.js, RunBuildZip
 Menu, Tray, Add, Push local to git, PushLocalToGit
 Menu, Tray, Add, Shutdown DevScrape Validator, ShutdownValidator
@@ -54,6 +56,8 @@ if !FileExist(pushGitPs)
     Menu, Tray, Disable, Push local to git
 if !FileExist(setupPs)
     Menu, Tray, Disable, Setup Extension Profile
+if !FileExist(openUsageReportPs)
+    Menu, Tray, Disable, Open Usage Report
 Menu, Tray, Tip, DevScrape Validator: checking status...
 if FileExist(trayIconPath)
     Menu, Tray, Icon, %trayIconPath%
@@ -87,6 +91,15 @@ return
 OpenLatestReport:
     SetTrayWorking("DevScrape Validator: opening latest report...")
     exitCode := RunPowerShellHelper(openLatestPs, output)
+    if (exitCode != 0) {
+        ShowError(output)
+    }
+    Gosub, UpdateState
+return
+
+OpenUsageReport:
+    SetTrayWorking("DevScrape Validator: opening usage report...")
+    exitCode := RunPowerShellHelper(openUsageReportPs, output)
     if (exitCode != 0) {
         ShowError(output)
     }

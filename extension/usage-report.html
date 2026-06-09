@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anonymous Usage Report</title>
+    <link rel="stylesheet" href="usage-report.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div>
+          <h1>Anonymous Usage Report</h1>
+          <p id="subtitle">Loading local usage summary...</p>
+        </div>
+        <div class="actions">
+          <button id="refreshBtn" type="button">Refresh</button>
+          <button id="copyJsonBtn" type="button">Copy JSON</button>
+        </div>
+      </header>
+
+      <section class="summary-grid" id="summaryGrid"></section>
+
+      <section>
+        <h2>Shortcut Groups</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th>Used</th>
+                <th>Count</th>
+                <th>Bucket</th>
+              </tr>
+            </thead>
+            <tbody id="groupRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Used Shortcut Actions</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Group</th>
+                <th>Count</th>
+                <th>Bucket</th>
+              </tr>
+            </thead>
+            <tbody id="actionRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Settings Snapshot</h2>
+        <div class="split">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Toggle</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody id="toggleRows"></tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Shortcut Setting</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody id="shortcutRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <p class="note">
+        This report is local to this browser profile. It shows the same anonymous, low-cardinality
+        summary shape used for analytics and never shows chat text, page content, URLs, account info,
+        model names, or actual shortcut key values.
+      </p>
+    </main>
+    <script src="usage-report.js"></script>
+  </body>
+</html>

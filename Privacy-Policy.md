@@ -1,10 +1,11 @@
 # Privacy Statement
 
-Effective: November 12, 2025
+Effective: June 9, 2026
 
 - We use your data only to save your extension settings. If you turn on Cloud Sync, we back up those settings to your own Google Drive.
-- We do not collect, sell, or share your information. There are no ads, analytics, or tracking.
-- By default, nothing leaves your device.
+- We do not sell or share your information. There are no ads or tracking.
+- We use a self-hosted Aptabase setup to collect anonymous usage summaries, such as which shortcut actions are used and whether settings are on or off. This helps us understand what features are useful and improve the extension.
+- Usage summaries do not include chats, prompts, responses, page content, URLs, browsing history, account info, or the actual shortcut keys you choose.
 - If you use Cloud Sync, your backup stays in a hidden app data file in your Google Drive. We do not see it.
 - Sign in uses a short lived Google token. A helper service that we operate and host on Netlify exchanges a one time Google code for that token. It does not store tokens or settings.
 - We do not request or store your email address.
@@ -17,7 +18,7 @@ Effective: November 12, 2025
 - The Google scope used is https://www.googleapis.com/auth/drive.appdata which is limited to the appDataFolder.
 - All Drive requests go directly from your browser to Google over HTTPS. The sign in helper is hosted on Netlify at https://profound-yeot-41eb0a.netlify.app. It exchanges the Google code for a token and does not store tokens or settings.
 - Permissions are requested only when needed. The storage permission saves settings. The identity permission gets a Google token. The extension does not request identity.email.
-- We do not collect browsing history, page content, keystrokes, or analytics. Content scripts run only on listed sites and do not transmit page content.
+- Content scripts run only on listed sites and do not transmit browsing history, page content, prompts, responses, URLs, account info, or actual shortcut keys.
 - To delete data, log out in the extension to clear tokens, remove the hidden backup in Google Drive under Manage apps, or uninstall the extension to remove local data.
 
 Contact: Use the Support link on the Chrome Web Store listing.

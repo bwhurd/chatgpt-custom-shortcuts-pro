@@ -52,6 +52,7 @@ Use:
 - Open `specs/0004-model-picker-and-shortcuts-spec.md` for shortcut normalization, deduplication, model picker rendering, Ctrl+/ overlay, shortcut safeguards, model routing, or direct DOM replacement of ChatGPT shortcuts (sidebar, new chat, search, composer focus).
 - Open `specs/0005-popup-settings-validator-spec.md` for changes to `tests/validate-keys.js`, `tests/lib/settings-wiring-validator.js`, popup/settings wiring contract validation, or supplemental validator inventory rules.
 - Open `specs/0006-runtime-scrape-selector-validator-spec.md` for dev-only inspector dump collection, popup `DevScrapeWide` / `Check-Scrape` controls, runtime selector presence audits, or the dev report page.
+- Open `specs/0007-anonymous-usage-analytics-spec.md` for anonymous usage analytics, local usage reporting, Aptabase wiring, analytics privacy boundaries, or the tray usage-report link.
 - If the right spec is unclear after routing, use `$spec-check`.
 - If multiple triggers match, open each relevant spec.
 - For non-trivial work, open the active plan; open `Deferred-`, `Blocked-`, or `Done-` plans only if named by the user or referenced by an active plan.

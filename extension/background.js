@@ -1,3 +1,9 @@
+try {
+  importScripts('vendor/aptabase-browser/index.global.js', 'analytics.js');
+} catch (error) {
+  console.warn('[CSP] Anonymous usage analytics scripts did not load.', error);
+}
+
 // CloudAuth background broker — runs the interactive OAuth so popup can close safely
 (() => {
   if (globalThis.__cloudAuthBG) return;
@@ -241,7 +247,9 @@
   chrome.action.onClicked.addListener((tab) => {
     void openActionPopupWindow(tab);
   });
+  globalThis.CSPUsageAnalytics?.init?.();
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (globalThis.CSPUsageAnalytics?.handleMessage?.(msg, _sender, sendResponse)) return true;
     if (msg?.type === 'csp.relayToSenderTab') {
       (async () => {
         const senderTabId = Number(_sender?.tab?.id || 0) || 0;
