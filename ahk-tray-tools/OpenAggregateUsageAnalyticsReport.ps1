@@ -76,6 +76,26 @@ function Format-Percent {
     return ('{0:N1}%' -f (($Numerator / $Denominator) * 100))
 }
 
+function Format-Number {
+    param([double]$Value)
+
+    return '{0:N1}' -f $Value
+}
+
+function Get-BucketMidpoint {
+    param([string]$Bucket)
+
+    switch ($Bucket) {
+        '0' { return 0.0 }
+        '1' { return 1.0 }
+        '2_5' { return 3.5 }
+        '6_20' { return 13.0 }
+        '21_100' { return 60.5 }
+        '101_plus' { return 101.0 }
+        default { return 0.0 }
+    }
+}
+
 function ConvertTo-Label {
     param([string]$Key)
 
@@ -258,6 +278,75 @@ FORMAT JSONEachRow
     })
 }
 
+function Get-UsageIntensityStats {
+    param([string[]]$Keys)
+
+    if (-not $Keys -or $Keys.Count -eq 0) {
+        return @()
+    }
+
+    $keyArray = ConvertTo-ClickHouseStringArray $Keys
+    $whereClause = Get-FullEventWhereClause 'usage_summary_v1'
+    $query = @"
+WITH $keyArray AS keys
+SELECT
+  key,
+  bucket,
+  count() AS report_count,
+  sum(observed_days) AS observed_days
+FROM
+(
+  SELECT
+    arrayJoin(keys) AS key,
+    JSONExtractString(string_props, key) AS bucket,
+    if(JSONExtractInt(numeric_props, 'days_observed_7d') > 0, JSONExtractInt(numeric_props, 'days_observed_7d'), 1) AS observed_days
+  FROM default.events
+  WHERE $whereClause
+)
+WHERE bucket != ''
+GROUP BY key, bucket
+ORDER BY key ASC, bucket ASC
+FORMAT JSONEachRow
+"@
+
+    $rawRows = @(Invoke-ClickHouseJsonRows $query)
+    $byKey = @{}
+    foreach ($row in $rawRows) {
+        $key = [string]$row.key
+        if (-not $byKey.ContainsKey($key)) {
+            $byKey[$key] = @()
+        }
+        $byKey[$key] += $row
+    }
+
+    @(foreach ($key in ($byKey.Keys | Sort-Object)) {
+        $rows = @($byKey[$key])
+        $reports = ($rows | Measure-Object -Property report_count -Sum).Sum
+        $observedDays = ($rows | Measure-Object -Property observed_days -Sum).Sum
+        $usedReports = ($rows | Where-Object { [string]$_.bucket -ne '0' } | Measure-Object -Property report_count -Sum).Sum
+        $estimatedUses = 0.0
+        foreach ($row in $rows) {
+            $estimatedUses += (Get-BucketMidpoint ([string]$row.bucket)) * [double]$row.report_count
+        }
+        $commonBucket = @($rows | Sort-Object -Property @{ Expression = 'report_count'; Descending = $true }, bucket | Select-Object -First 1)[0]
+        $bucketBreakdown = ($rows | Sort-Object bucket | ForEach-Object {
+            "$($_.bucket):$($_.report_count)"
+        }) -join ', '
+
+        [pscustomobject]@{
+            Shortcut = ConvertTo-Label $key
+            Key = $key
+            Reports = [int]$reports
+            Used = [int]$usedReports
+            'Used %' = Format-Percent $usedReports $reports
+            'Est 7d Uses/Report' = Format-Number ($estimatedUses / [Math]::Max(1, [double]$reports))
+            'Est Uses/Observed Day' = Format-Number ($estimatedUses / [Math]::Max(1, [double]$observedDays))
+            'Top Bucket' = [string]$commonBucket.bucket
+            'Bucket Breakdown' = $bucketBreakdown
+        }
+    })
+}
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 $generatedAt = Get-Date
@@ -292,6 +381,7 @@ $usageGroupKeys = Get-KeysFromLatestEvent 'usage_summary_v1' 'used_'
 $usageActionKeys = @(Get-KeysFromLatestEvent 'usage_summary_v1' 'u_' | Where-Object {
     $_ -notlike 'ub_*'
 })
+$usageBucketKeys = Get-KeysFromLatestEvent 'usage_summary_v1' 'ub_'
 $toggleKeys = Get-KeysFromLatestEvent 'settings_snapshot_v1' 't_'
 $shortcutKeys = Get-KeysFromLatestEvent 'settings_snapshot_v1' 's_'
 
@@ -299,6 +389,9 @@ $usageGroupRows = Get-BooleanStats 'usage_summary_v1' $usageGroupKeys 'Used'
 $usageActionRows = @(Get-BooleanStats 'usage_summary_v1' $usageActionKeys 'Used' |
     Where-Object { $_.Used -gt 0 } |
     Sort-Object -Property @{ Expression = 'Used'; Descending = $true }, Metric)
+$usageIntensityRows = @(Get-UsageIntensityStats $usageBucketKeys |
+    Where-Object { $_.Used -gt 0 } |
+    Sort-Object -Property @{ Expression = 'Used'; Descending = $true }, Shortcut)
 $toggleRows = Get-BooleanStats 'settings_snapshot_v1' $toggleKeys 'On'
 $shortcutStateRows = Get-StateStats 'settings_snapshot_v1' $shortcutKeys
 
@@ -360,13 +453,72 @@ $shortcutSummaryRows = @(
         Sort-Object State
 )
 
+$usageReportCount = ($eventCounts | Where-Object { $_.Event -eq 'usage_summary_v1' } | Measure-Object -Property Reports -Sum).Sum
+$settingsReportCount = ($eventCounts | Where-Object { $_.Event -eq 'settings_snapshot_v1' } | Measure-Object -Property Reports -Sum).Sum
+$latestEvent = @($eventCounts | Sort-Object Latest -Descending | Select-Object -First 1)[0]
+$topGroup = @($usageGroupRows | Sort-Object -Property @{ Expression = 'Used'; Descending = $true }, Metric | Select-Object -First 1)[0]
+$topShortcut = @($usageIntensityRows | Sort-Object -Property @{ Expression = 'Used'; Descending = $true }, Shortcut | Select-Object -First 1)[0]
+$distinctReportTotal = ($distinctRows | Measure-Object -Property Reports -Sum).Sum
+$weightedDistinct = 0.0
+foreach ($row in $distinctRows) {
+    $weightedDistinct += [double]$row.'Distinct Shortcuts' * [double]$row.Reports
+}
+$averageDistinctShortcuts = Format-Number ($weightedDistinct / [Math]::Max(1, [double]$distinctReportTotal))
+$blankShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'blank' } | Select-Object -First 1)[0]
+$defaultShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'default' } | Select-Object -First 1)[0]
+
+$summaryRows = @(
+    [pscustomobject]@{
+        Label = 'Usage reports'
+        Value = [int]$usageReportCount
+        Detail = 'Full schema shortcut usage summaries in this window'
+    },
+    [pscustomobject]@{
+        Label = 'Settings reports'
+        Value = [int]$settingsReportCount
+        Detail = 'Full schema settings snapshots in this window'
+    },
+    [pscustomobject]@{
+        Label = 'Latest version'
+        Value = if ($latestEvent) { $latestEvent.Version } else { 'none' }
+        Detail = if ($latestEvent) { "Latest event at $($latestEvent.Latest)" } else { 'No events found' }
+    },
+    [pscustomobject]@{
+        Label = 'Top feature group'
+        Value = if ($topGroup) { $topGroup.Metric } else { 'none' }
+        Detail = if ($topGroup) { "$($topGroup.Percent) of usage reports" } else { 'No usage rows found' }
+    },
+    [pscustomobject]@{
+        Label = 'Top shortcut'
+        Value = if ($topShortcut) { $topShortcut.Shortcut } else { 'none' }
+        Detail = if ($topShortcut) { "$($topShortcut.'Used %') used; est $($topShortcut.'Est 7d Uses/Report') uses/report" } else { 'No shortcut usage found' }
+    },
+    [pscustomobject]@{
+        Label = 'Avg distinct shortcuts'
+        Value = $averageDistinctShortcuts
+        Detail = 'Average distinct shortcut actions used in the reported 7-day local window'
+    },
+    [pscustomobject]@{
+        Label = 'Blank shortcut fields'
+        Value = if ($blankShortcutSummary) { $blankShortcutSummary.Percent } else { '0.0%' }
+        Detail = 'Share of tracked shortcut slots reported as blank'
+    },
+    [pscustomobject]@{
+        Label = 'Default shortcut fields'
+        Value = if ($defaultShortcutSummary) { $defaultShortcutSummary.Percent } else { '0.0%' }
+        Detail = 'Share of tracked shortcut slots still at default'
+    }
+)
+
 $report = [ordered]@{
     generatedAt = $generatedAt.ToString('o')
     days = $Days
     dashboardUrl = $DashboardUrl
+    summary = $summaryRows
     eventCounts = $eventCounts
     usageGroups = $usageGroupRows
     usedActions = $usageActionRows
+    usedActionIntensity = $usageIntensityRows
     distinctShortcutDistribution = $distinctRows
     totalShortcutUseBuckets = $useBucketRows
     toggles = $toggleRows
@@ -375,15 +527,25 @@ $report = [ordered]@{
 }
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $JsonReportPath -Encoding UTF8
 
+$summaryCards = ($summaryRows | ForEach-Object {
+    @"
+    <article class="summary-card">
+      <div class="summary-label">$(ConvertTo-HtmlText $_.Label)</div>
+      <div class="summary-value">$(ConvertTo-HtmlText $_.Value)</div>
+      <div class="summary-detail">$(ConvertTo-HtmlText $_.Detail)</div>
+    </article>
+"@
+}) -join "`n"
+
 $sections = @()
-$sections += New-HtmlTable 'Stored Events By Version' $eventCounts @('Event', 'Version', 'Reports', 'Latest')
 $sections += New-HtmlTable 'Shortcut Group Adoption' $usageGroupRows @('Metric', 'Reports', 'Used', 'Percent')
-$sections += New-HtmlTable 'Used Shortcut Actions' ($usageActionRows | Select-Object -First 40) @('Metric', 'Reports', 'Used', 'Percent')
+$sections += New-HtmlTable 'Shortcut Action Usage And Intensity' ($usageIntensityRows | Select-Object -First 40) @('Shortcut', 'Reports', 'Used', 'Used %', 'Est 7d Uses/Report', 'Est Uses/Observed Day', 'Top Bucket', 'Bucket Breakdown')
 $sections += New-HtmlTable 'Distinct Shortcuts Used In Last 7 Days' $distinctRows @('Distinct Shortcuts', 'Reports', 'Percent')
 $sections += New-HtmlTable 'Total Shortcut Use Buckets' $useBucketRows @('Bucket', 'Reports', 'Percent')
 $sections += New-HtmlTable 'Toggle On Percentages' $toggleRows @('Metric', 'Reports', 'On', 'Percent')
 $sections += New-HtmlTable 'Shortcut Assignment Summary' $shortcutSummaryRows @('State', 'Count', 'Reports', 'Percent')
 $sections += New-HtmlTable 'Shortcut Assignment States' $shortcutStateRows @('Shortcut', 'State', 'Reports', 'Count', 'Percent')
+$sections += New-HtmlTable 'Stored Events By Version' $eventCounts @('Event', 'Version', 'Reports', 'Latest')
 
 $html = @"
 <!doctype html>
@@ -404,6 +566,12 @@ $html = @"
     tr:last-child td { border-bottom: 0; }
     .muted { color: #52525b; }
     .meta { padding: 14px 16px; background: #fff; border: 1px solid #d4d4d8; }
+    .summary-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 18px 0 10px; }
+    .summary-card { background: #fff; border: 1px solid #d4d4d8; padding: 14px; }
+    .summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; }
+    .summary-value { margin-top: 6px; font-size: 24px; font-weight: 700; }
+    .summary-detail { margin-top: 4px; font-size: 12px; color: #52525b; line-height: 1.35; }
+    .note { margin-top: 12px; padding: 12px 14px; background: #eef2ff; border: 1px solid #c7d2fe; color: #312e81; }
   </style>
 </head>
 <body>
@@ -416,6 +584,10 @@ $html = @"
     <p class="muted">Percentages use full schema active reporting install-days as the denominator; validation probes are excluded. No raw shortcut keys, chats, prompts, responses, URLs, account info, or model names are collected.</p>
     <p class="muted">Raw aggregate JSON: $(ConvertTo-HtmlText $JsonReportPath)</p>
   </div>
+  <div class="summary-grid">
+  $summaryCards
+  </div>
+  <p class="note">Shortcut intensity is estimated from privacy-preserving buckets such as 1, 2-5, and 6-20 uses. It is intended for prioritization, not exact per-user accounting.</p>
   $($sections -join "`n")
 </main>
 </body>
