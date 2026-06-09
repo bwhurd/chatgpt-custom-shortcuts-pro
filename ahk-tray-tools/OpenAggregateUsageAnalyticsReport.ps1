@@ -16,6 +16,56 @@ $MetricLabels = @{
     't_select_then_copy_all_messages_onl_1jdl' = 'select then copy all messages: only user'
     't_select_then_copy_all_messages_onl_1ka6' = 'select then copy all messages: only assistant'
 }
+$ToggleDefaults = @{
+    't_page_up_down_takeover' = $true
+    't_move_top_bar_to_bottom' = $false
+    't_remove_markdown_on_copy' = $true
+    't_click_to_copy_inline_code' = $false
+    't_hide_pasted_library_files' = $false
+    't_color_bold_text' = $false
+    't_show_legacy_arrow_buttons' = $false
+    't_fade_slim_sidebar' = $false
+    't_enable_send_with_control_enter' = $true
+    't_enable_stop_with_control_backspace' = $true
+    't_disable_copy_after_select' = $false
+    't_do_not_include_labels' = $false
+    't_select_then_copy_all_messages_bot_i1de' = $true
+    't_select_then_copy_all_messages_onl_1jdl' = $false
+    't_select_then_copy_all_messages_onl_1ka6' = $false
+    't_use_alt_for_model_switcher' = $true
+    't_use_control_for_model_switcher' = $false
+}
+$BlankDefaultShortcutKeys = @(
+    's_add_photos_files',
+    's_cancel_dictation',
+    's_create_image',
+    's_model_slot_10',
+    's_model_slot_11',
+    's_model_slot_12',
+    's_model_slot_13',
+    's_model_slot_14',
+    's_model_slot_15',
+    's_model_slot_8',
+    's_model_slot_9',
+    's_more_dots_branch_in_new_chat',
+    's_more_dots_read_aloud',
+    's_new_gpt_conversation',
+    's_pro_extended',
+    's_pro_standard',
+    's_regenerate_add_details',
+    's_regenerate_ask_to_change_response',
+    's_regenerate_more_concise',
+    's_regenerate_with_different_model',
+    's_share',
+    's_study',
+    's_think_longer',
+    's_thinking_extended',
+    's_thinking_heavy',
+    's_thinking_light',
+    's_thinking_standard',
+    's_toggle_canvas',
+    's_toggle_codebox_wrap'
+)
 
 function Invoke-ClickHouseJsonRows {
     param([Parameter(Mandatory = $true)][string]$Query)
@@ -347,6 +397,73 @@ FORMAT JSONEachRow
     })
 }
 
+function Get-ShortcutDefaultState {
+    param([string]$Key)
+
+    if ($BlankDefaultShortcutKeys -contains $Key) {
+        return 'blank'
+    }
+    return 'default'
+}
+
+function Get-ChangedFromDefaultRows {
+    param(
+        [object[]]$ToggleRows,
+        [object[]]$ShortcutStateRows
+    )
+
+    $rows = New-Object System.Collections.Generic.List[object]
+
+    foreach ($toggle in $ToggleRows) {
+        $key = [string]$toggle.Key
+        if (-not $ToggleDefaults.ContainsKey($key)) {
+            continue
+        }
+
+        $reports = [int]$toggle.Reports
+        $onCount = [int]$toggle.On
+        $defaultOn = [bool]$ToggleDefaults[$key]
+        $changed = if ($defaultOn) { $reports - $onCount } else { $onCount }
+        $rows.Add([pscustomobject]@{
+            Type = 'toggle'
+            Item = ConvertTo-Label $key
+            Default = if ($defaultOn) { 'on' } else { 'off' }
+            Reports = $reports
+            Changed = [int]$changed
+            Percent = Format-Percent $changed $reports
+            Breakdown = "on:$onCount, off:$($reports - $onCount)"
+        })
+    }
+
+    $shortcutGroups = $ShortcutStateRows | Group-Object Key
+    foreach ($group in $shortcutGroups) {
+        $key = [string]$group.Name
+        $defaultState = Get-ShortcutDefaultState $key
+        $reports = ($group.Group | Measure-Object -Property Count -Sum).Sum
+        $changed = ($group.Group |
+            Where-Object { [string]$_.State -ne $defaultState } |
+            Measure-Object -Property Count -Sum).Sum
+        if ($null -eq $changed) {
+            $changed = 0
+        }
+        $breakdown = ($group.Group | Sort-Object State | ForEach-Object {
+            "$($_.State):$($_.Count)"
+        }) -join ', '
+
+        $rows.Add([pscustomobject]@{
+            Type = 'shortcut'
+            Item = ConvertTo-Label $key
+            Default = $defaultState
+            Reports = [int]$reports
+            Changed = [int]$changed
+            Percent = Format-Percent $changed $reports
+            Breakdown = $breakdown
+        })
+    }
+
+    @($rows | Sort-Object -Property @{ Expression = 'Changed'; Descending = $true }, Type, Item)
+}
+
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 $generatedAt = Get-Date
@@ -394,6 +511,7 @@ $usageIntensityRows = @(Get-UsageIntensityStats $usageBucketKeys |
     Sort-Object -Property @{ Expression = 'Used'; Descending = $true }, Shortcut)
 $toggleRows = Get-BooleanStats 'settings_snapshot_v1' $toggleKeys 'On'
 $shortcutStateRows = Get-StateStats 'settings_snapshot_v1' $shortcutKeys
+$changedFromDefaultRows = Get-ChangedFromDefaultRows $toggleRows $shortcutStateRows
 
 $distinctQuery = @"
 SELECT
@@ -466,6 +584,8 @@ foreach ($row in $distinctRows) {
 $averageDistinctShortcuts = Format-Number ($weightedDistinct / [Math]::Max(1, [double]$distinctReportTotal))
 $blankShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'blank' } | Select-Object -First 1)[0]
 $defaultShortcutSummary = @($shortcutSummaryRows | Where-Object { $_.State -eq 'default' } | Select-Object -First 1)[0]
+$changedItemCount = @($changedFromDefaultRows | Where-Object { $_.Changed -gt 0 }).Count
+$highestChangedItem = @($changedFromDefaultRows | Sort-Object -Property @{ Expression = 'Changed'; Descending = $true }, Item | Select-Object -First 1)[0]
 
 $summaryRows = @(
     [pscustomobject]@{
@@ -499,6 +619,11 @@ $summaryRows = @(
         Detail = 'Average distinct shortcut actions used in the reported 7-day local window'
     },
     [pscustomobject]@{
+        Label = 'Items changed from default'
+        Value = [int]$changedItemCount
+        Detail = if ($changedItemCount -gt 0 -and $highestChangedItem) { "Highest: $($highestChangedItem.Item) at $($highestChangedItem.Percent)" } else { 'No tracked items changed from default in this sample' }
+    },
+    [pscustomobject]@{
         Label = 'Blank shortcut fields'
         Value = if ($blankShortcutSummary) { $blankShortcutSummary.Percent } else { '0.0%' }
         Detail = 'Share of tracked shortcut slots reported as blank'
@@ -521,6 +646,7 @@ $report = [ordered]@{
     usedActionIntensity = $usageIntensityRows
     distinctShortcutDistribution = $distinctRows
     totalShortcutUseBuckets = $useBucketRows
+    changedFromDefault = $changedFromDefaultRows
     toggles = $toggleRows
     shortcutStateSummary = $shortcutSummaryRows
     shortcutStates = $shortcutStateRows
@@ -537,15 +663,20 @@ $summaryCards = ($summaryRows | ForEach-Object {
 "@
 }) -join "`n"
 
-$sections = @()
-$sections += New-HtmlTable 'Shortcut Group Adoption' $usageGroupRows @('Metric', 'Reports', 'Used', 'Percent')
-$sections += New-HtmlTable 'Shortcut Action Usage And Intensity' ($usageIntensityRows | Select-Object -First 40) @('Shortcut', 'Reports', 'Used', 'Used %', 'Est 7d Uses/Report', 'Est Uses/Observed Day', 'Top Bucket', 'Bucket Breakdown')
-$sections += New-HtmlTable 'Distinct Shortcuts Used In Last 7 Days' $distinctRows @('Distinct Shortcuts', 'Reports', 'Percent')
-$sections += New-HtmlTable 'Total Shortcut Use Buckets' $useBucketRows @('Bucket', 'Reports', 'Percent')
-$sections += New-HtmlTable 'Toggle On Percentages' $toggleRows @('Metric', 'Reports', 'On', 'Percent')
-$sections += New-HtmlTable 'Shortcut Assignment Summary' $shortcutSummaryRows @('State', 'Count', 'Reports', 'Percent')
-$sections += New-HtmlTable 'Shortcut Assignment States' $shortcutStateRows @('Shortcut', 'State', 'Reports', 'Count', 'Percent')
-$sections += New-HtmlTable 'Stored Events By Version' $eventCounts @('Event', 'Version', 'Reports', 'Latest')
+$overviewSections = @()
+$overviewSections += New-HtmlTable 'Shortcut Group Adoption' $usageGroupRows @('Metric', 'Reports', 'Used', 'Percent')
+$overviewSections += New-HtmlTable 'Shortcut Action Usage And Intensity' ($usageIntensityRows | Select-Object -First 40) @('Shortcut', 'Reports', 'Used', 'Used %', 'Est 7d Uses/Report', 'Est Uses/Observed Day', 'Top Bucket', 'Bucket Breakdown')
+$overviewSections += New-HtmlTable 'Distinct Shortcuts Used In Last 7 Days' $distinctRows @('Distinct Shortcuts', 'Reports', 'Percent')
+$overviewSections += New-HtmlTable 'Total Shortcut Use Buckets' $useBucketRows @('Bucket', 'Reports', 'Percent')
+
+$settingsSections = @()
+$settingsSections += New-HtmlTable 'Changed From Default' $changedFromDefaultRows @('Type', 'Item', 'Default', 'Reports', 'Changed', 'Percent', 'Breakdown')
+$settingsSections += New-HtmlTable 'Toggle On Percentages' $toggleRows @('Metric', 'Reports', 'On', 'Percent')
+$settingsSections += New-HtmlTable 'Shortcut Assignment Summary' $shortcutSummaryRows @('State', 'Count', 'Reports', 'Percent')
+$settingsSections += New-HtmlTable 'Shortcut Assignment States' $shortcutStateRows @('Shortcut', 'State', 'Reports', 'Count', 'Percent')
+
+$dataHealthSections = @()
+$dataHealthSections += New-HtmlTable 'Stored Events By Version' $eventCounts @('Event', 'Version', 'Reports', 'Latest')
 
 $html = @"
 <!doctype html>
@@ -572,6 +703,11 @@ $html = @"
     .summary-value { margin-top: 6px; font-size: 24px; font-weight: 700; }
     .summary-detail { margin-top: 4px; font-size: 12px; color: #52525b; line-height: 1.35; }
     .note { margin-top: 12px; padding: 12px 14px; background: #eef2ff; border: 1px solid #c7d2fe; color: #312e81; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+    .tab-button { border: 1px solid #d4d4d8; background: #fff; color: #18181b; padding: 9px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+    .tab-button.active { background: #18181b; color: #fff; border-color: #18181b; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
   </style>
 </head>
 <body>
@@ -588,8 +724,34 @@ $html = @"
   $summaryCards
   </div>
   <p class="note">Shortcut intensity is estimated from privacy-preserving buckets such as 1, 2-5, and 6-20 uses. It is intended for prioritization, not exact per-user accounting.</p>
-  $($sections -join "`n")
+  <nav class="tabs" aria-label="Report sections">
+    <button class="tab-button active" type="button" data-tab="overview">Overview</button>
+    <button class="tab-button" type="button" data-tab="settings">Settings changes</button>
+    <button class="tab-button" type="button" data-tab="data-health">Data health</button>
+  </nav>
+  <div id="overview" class="tab-panel active">
+  $($overviewSections -join "`n")
+  </div>
+  <div id="settings" class="tab-panel">
+  $($settingsSections -join "`n")
+  </div>
+  <div id="data-health" class="tab-panel">
+  $($dataHealthSections -join "`n")
+  </div>
 </main>
+<script>
+  document.querySelectorAll('.tab-button').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tabId = button.dataset.tab;
+      document.querySelectorAll('.tab-button').forEach((item) => {
+        item.classList.toggle('active', item === button);
+      });
+      document.querySelectorAll('.tab-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === tabId);
+      });
+    });
+  });
+</script>
 </body>
 </html>
 "@

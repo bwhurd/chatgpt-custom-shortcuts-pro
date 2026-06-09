@@ -43,7 +43,7 @@
 - The local report page shows total shortcut uses, distinct shortcuts used, group usage, used action ids, toggle states, and shortcut assignment states as `blank`, `default`, or `custom`.
 - The report never displays actual shortcut key values.
 - The aggregate Aptabase dashboard is available at `https://cgcsp.chordstash.com`.
-- `ahk-tray-tools/OpenAggregateUsageAnalyticsReport.ps1` queries the self-hosted ClickHouse store through `ssh librechat-vm`, generates `_temp-files/usage-analytics/latest-aggregate-report.html` and `latest-aggregate-report.json`, and opens the HTML report. The report starts with summary cards, then shows shortcut group adoption, per-shortcut usage and bucket-based intensity estimates, engagement distributions, toggle percentages, shortcut assignment states, and the Aptabase dashboard link.
+- `ahk-tray-tools/OpenAggregateUsageAnalyticsReport.ps1` queries the self-hosted ClickHouse store through `ssh librechat-vm`, generates `_temp-files/usage-analytics/latest-aggregate-report.html` and `latest-aggregate-report.json`, and opens the HTML report. The report starts with summary cards and uses three tabs: `Overview` for feature/shortcut adoption and bucket-based intensity estimates, `Settings changes` for every tracked item and the percentage changed from default plus toggle/shortcut-state detail, and `Data health` for stored event counts. The Aptabase dashboard link stays in the header.
 - `ahk-tray-tools/OpenUsageAnalyticsReport.ps1` opens the report for the loaded unpacked extension when it can find that Chrome profile, otherwise it falls back to the store extension id.
 - `ahk-tray-tools/DevScrapeValidatorTray.ahk` exposes these through the right-click menu items `Open Usage Report` and `Open Aggregate Usage Report`.
 
