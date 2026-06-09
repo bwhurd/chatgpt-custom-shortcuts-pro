@@ -11,6 +11,7 @@
       "!.git",
       "!.playwright",
       "!test-results",
+      "!extension/vendor",
       "!extension/lib/*.min.js"
     ],
     "ignoreUnknown": false
