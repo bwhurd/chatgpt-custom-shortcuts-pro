@@ -43,13 +43,15 @@
 - The local report page shows total shortcut uses, distinct shortcuts used, group usage, used action ids, toggle states, and shortcut assignment states as `blank`, `default`, or `custom`.
 - The report never displays actual shortcut key values.
 - The aggregate Aptabase dashboard is available at `https://cgcsp.chordstash.com`.
+- `ahk-tray-tools/OpenAggregateUsageAnalyticsReport.ps1` queries the self-hosted ClickHouse store through `ssh librechat-vm`, generates `_temp-files/usage-analytics/latest-aggregate-report.html` and `latest-aggregate-report.json`, and opens the HTML report. The report includes the Aptabase dashboard link plus active-reporting install-day percentages for shortcut groups/actions, toggles, and shortcut assignment states.
 - `ahk-tray-tools/OpenUsageAnalyticsReport.ps1` opens the report for the loaded unpacked extension when it can find that Chrome profile, otherwise it falls back to the store extension id.
-- `ahk-tray-tools/DevScrapeValidatorTray.ahk` exposes this through the right-click menu item `Open Usage Report`.
+- `ahk-tray-tools/DevScrapeValidatorTray.ahk` exposes these through the right-click menu items `Open Usage Report` and `Open Aggregate Usage Report`.
 
 ## Validation
 
 - Run `node --check` on touched extension JavaScript files.
 - Run `npx biome check` on touched extension JavaScript and report files.
 - Run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenUsageAnalyticsReport.ps1` after editing the report opener.
+- Run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1` and then `.\ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1 -NoOpen` after editing the aggregate report helper.
 - Build with `node scripts/build-zip.js` and confirm `analytics.js`, `usage-report.*`, and `vendor/aptabase-browser/*` are included.
 - In a manually loaded dev Chrome profile, verify `csp.analytics.getReport` shows local counters, verify failed network attempts are daily-throttled if `cgcsp.chordstash.com` is not routable, and verify the manifest still has no analytics `host_permissions`.

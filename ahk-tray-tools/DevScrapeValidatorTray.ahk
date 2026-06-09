@@ -12,6 +12,7 @@ setupPs := A_ScriptDir "\StartDevScrapeExtensionSetup.ps1"
 stopPs := A_ScriptDir "\StopDevScrapeValidator.ps1"
 openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
 openUsageReportPs := A_ScriptDir "\OpenUsageAnalyticsReport.ps1"
+openAggregateUsageReportPs := A_ScriptDir "\OpenAggregateUsageAnalyticsReport.ps1"
 pushGitPs := A_ScriptDir "\PushLocalToGit.ps1"
 pushGitStatusPath := projectRoot "\_temp-files\tray-git-sync\git-sync-status.txt"
 pushGitPid := 0
@@ -46,6 +47,7 @@ Menu, Tray, Add, Start DevScrape Validator, StartValidator
 Menu, Tray, Add, Setup Extension Profile, SetupExtensionProfile
 Menu, Tray, Add, Open Latest Report, OpenLatestReport
 Menu, Tray, Add, Open Usage Report, OpenUsageReport
+Menu, Tray, Add, Open Aggregate Usage Report, OpenAggregateUsageReport
 Menu, Tray, Add, Run build-zip.js, RunBuildZip
 Menu, Tray, Add, Push local to git, PushLocalToGit
 Menu, Tray, Add, Shutdown DevScrape Validator, ShutdownValidator
@@ -58,6 +60,8 @@ if !FileExist(setupPs)
     Menu, Tray, Disable, Setup Extension Profile
 if !FileExist(openUsageReportPs)
     Menu, Tray, Disable, Open Usage Report
+if !FileExist(openAggregateUsageReportPs)
+    Menu, Tray, Disable, Open Aggregate Usage Report
 Menu, Tray, Tip, DevScrape Validator: checking status...
 if FileExist(trayIconPath)
     Menu, Tray, Icon, %trayIconPath%
@@ -102,6 +106,17 @@ OpenUsageReport:
     exitCode := RunPowerShellHelper(openUsageReportPs, output)
     if (exitCode != 0) {
         ShowError(output)
+    }
+    Gosub, UpdateState
+return
+
+OpenAggregateUsageReport:
+    SetTrayWorking("DevScrape Validator: opening aggregate usage report...")
+    exitCode := RunPowerShellHelper(openAggregateUsageReportPs, output)
+    if (exitCode != 0) {
+        ShowError(output)
+    } else {
+        ShowToast("CGCSP Aggregate Usage Report", output)
     }
     Gosub, UpdateState
 return
