@@ -2262,9 +2262,88 @@ const delays = DELAYS;
 
   let activeMessageScrollTween = null;
   let activeMessageScrollSettleFrame = null;
+  let activeBoundaryScrollSettleFrame = null;
+  let activeBoundaryScrollSettleTimeouts = [];
   const MESSAGE_SCROLL_SETTLE_MS = 900;
+  const BOUNDARY_SCROLL_SETTLE_DELAYS_MS = [50, 150, 350, 700];
+
+  function clearBoundaryScrollSettle() {
+    if (activeBoundaryScrollSettleFrame) {
+      cancelAnimationFrame(activeBoundaryScrollSettleFrame);
+      activeBoundaryScrollSettleFrame = null;
+    }
+
+    for (const timeoutId of activeBoundaryScrollSettleTimeouts) {
+      clearTimeout(timeoutId);
+    }
+    activeBoundaryScrollSettleTimeouts = [];
+  }
+
+  function getMaxBoundaryScrollTop(scrollContainer) {
+    if (!(scrollContainer instanceof Element)) return 0;
+    return Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+  }
+
+  function getBoundaryScrollTop(scrollContainer, boundary) {
+    return boundary === 'bottom' ? getMaxBoundaryScrollTop(scrollContainer) : 0;
+  }
+
+  function setBoundaryScrollPosition(scrollContainer, boundary) {
+    if (!(scrollContainer instanceof Element)) return NaN;
+    if (
+      !scrollContainer.isConnected &&
+      scrollContainer !== document.scrollingElement &&
+      scrollContainer !== document.documentElement &&
+      scrollContainer !== document.body
+    ) {
+      return NaN;
+    }
+
+    stabilizeConversationScrollContainer(scrollContainer);
+    const targetY = getBoundaryScrollTop(scrollContainer, boundary);
+    scrollContainer.scrollTop = targetY;
+    return targetY;
+  }
+
+  function settleBoundaryScrollTarget(scrollContainer, boundary) {
+    clearBoundaryScrollSettle();
+
+    const settle = () => {
+      setBoundaryScrollPosition(scrollContainer, boundary);
+    };
+
+    activeBoundaryScrollSettleFrame = requestAnimationFrame(() => {
+      activeBoundaryScrollSettleFrame = null;
+      settle();
+    });
+
+    activeBoundaryScrollSettleTimeouts = BOUNDARY_SCROLL_SETTLE_DELAYS_MS.map((delay) =>
+      setTimeout(settle, delay),
+    );
+  }
+
+  function animateBoundaryScrollTo(scrollContainer, boundary) {
+    if (!(scrollContainer instanceof Element)) return;
+
+    killActiveMessageScrollTween();
+    clearBoundaryScrollSettle();
+    gsap.killTweensOf(scrollContainer);
+    stabilizeConversationScrollContainer(scrollContainer);
+
+    gsap.to(scrollContainer, {
+      duration: 0.3,
+      overwrite: 'auto',
+      scrollTo: { y: getBoundaryScrollTop(scrollContainer, boundary), autoKill: false },
+      ease: 'power4.out',
+      onComplete: () => {
+        settleBoundaryScrollTarget(scrollContainer, boundary);
+      },
+    });
+  }
 
   function killActiveMessageScrollTween() {
+    clearBoundaryScrollSettle();
+
     if (activeMessageScrollSettleFrame) {
       cancelAnimationFrame(activeMessageScrollSettleFrame);
       activeMessageScrollSettleFrame = null;
@@ -4525,30 +4604,14 @@ const delays = DELAYS;
         const el = getScrollableContainer();
         if (!el) return;
 
-        killActiveMessageScrollTween();
-        gsap.killTweensOf(el);
-
-        gsap.to(el, {
-          duration: 0.3,
-          overwrite: 'auto',
-          scrollTo: { y: 'max' },
-          ease: 'power4.out',
-        });
+        animateBoundaryScrollTo(el, 'bottom');
       },
       [shortcuts.shortcutKeyScrollToTop]: () => {
         // native scroll to top
         const el = getScrollableContainer();
         if (!el) return;
 
-        killActiveMessageScrollTween();
-        gsap.killTweensOf(el);
-
-        gsap.to(el, {
-          duration: 0.3,
-          overwrite: 'auto',
-          scrollTo: { y: 0 },
-          ease: 'power4.out',
-        });
+        animateBoundaryScrollTo(el, 'top');
       },
       // @note Toggle Sidebar Function
       [shortcuts.shortcutKeyToggleSidebar]: function toggleSidebar() {

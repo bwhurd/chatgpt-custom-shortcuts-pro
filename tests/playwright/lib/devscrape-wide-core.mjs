@@ -30,8 +30,6 @@ const englishLocaleMessagesPath = path.join(
 const inspectorCapturesRoot = path.join(repoRoot, '_temp-files', 'inspector-captures');
 const GPT_CONVERSATION_PROBE_URL =
   'https://chatgpt.com/g/g-vU0PtzgAJ-step-1-2-nbme-medical-school-question-analysis-v2/c/69eba3bf-6f18-83ea-aa31-9a995aca7bc0';
-const CODEBOX_CONVERSATION_PROBE_URL =
-  'https://chatgpt.com/c/6a064cb5-9838-8333-8f8f-fe686158860e';
 
 const PAGE_EXPORT_NAMES = [
   'DEV_SCRAPE_WIDE_FIXTURE_URL',
@@ -61,6 +59,8 @@ const CLICK_STOP_ACTION_ID = 'shortcutKeyClickStopButton';
 const SEND_EDIT_ACTION_ID = 'shortcutKeySendEdit';
 const TOGGLE_DICTATE_ACTION_ID = 'shortcutKeyToggleDictate';
 const CANCEL_DICTATION_ACTION_ID = 'shortcutKeyCancelDictation';
+const COPY_ALL_CODE_BLOCKS_ACTION_ID = 'shortcutKeyCopyAllCodeBlocks';
+const TOGGLE_CODEBOX_WRAP_ACTION_ID = 'shortcutKeyToggleCodeboxWrap';
 const NEW_CONVERSATION_TARGET_READY_DELAY_MS = 500;
 const DEFAULT_LIVE_PROBE_SETTLE_MS = 1600;
 const RESPONSE_NAVIGATION_ATTEMPTS = 2;
@@ -68,6 +68,12 @@ const RESPONSE_NAVIGATION_STEP_SETTLE_MS = 1500;
 const SIDE_EFFECT_MESSAGE_TEXT = 'this is a message I sent';
 const SIDE_EFFECT_EDITED_MESSAGE_TEXT = 'this is an edited message';
 const STOP_AFTER_SEND_DELAY_MS = 500;
+const CODEBOX_RESPONSE_MIN_WAIT_MS = 15000;
+const CODEBOX_RESPONSE_TIMEOUT_MS = 90000;
+const CODEBOX_WRAP_PROMPT_TEXT =
+  'give me a 300 word story about sword fighting rats in space in a single codebox';
+const CODEBOX_COPY_PROMPT_TEXT =
+  'give me a 300 word story about sword fighting rats defending a moon base in a single codebox';
 const STATELESS_LIVE_PROBE_SETUPS = Object.freeze([
   'new-conversation',
   'gpt-conversation',
@@ -2025,30 +2031,139 @@ async function prepareClipboardEntireConversationProbeState(page, fixtureUrl) {
   await clearClipboardForProbe(page);
 }
 
-async function prepareCodeboxConversationProbeState(page) {
-  await waitBeforeBrowserRequest();
-  await page.goto(CODEBOX_CONVERSATION_PROBE_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(2500);
-  await closeOpenMenus(page);
-  await closeTransientUi(page);
+function createCodeboxProbeSession() {
+  return {
+    initialized: false,
+    sentPromptKeys: new Set(),
+  };
+}
+
+async function countAssistantCodeBlocks(page) {
+  return page.evaluate(() => {
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    return Array.from(document.querySelectorAll('pre code')).filter((node) => {
+      const roleContainer = node.closest?.('[data-message-author-role]');
+      return (
+        roleContainer?.getAttribute?.('data-message-author-role') === 'assistant' &&
+        Boolean(String(node.textContent || '').trim()) &&
+        isVisible(node instanceof HTMLElement ? node : node.parentElement)
+      );
+    }).length;
+  });
+}
+
+async function waitForAssistantCodeBlockCount(page, minimumCount, timeout = CODEBOX_RESPONSE_TIMEOUT_MS) {
   await page.waitForFunction(
-    () =>
-      Array.from(document.querySelectorAll('pre code')).some((node) =>
-        Boolean(String(node.textContent || '').trim()),
-      ),
-    undefined,
-    { timeout: 15000 },
+    (expectedCount) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      return (
+        Array.from(document.querySelectorAll('pre code')).filter((node) => {
+          const roleContainer = node.closest?.('[data-message-author-role]');
+          return (
+            roleContainer?.getAttribute?.('data-message-author-role') === 'assistant' &&
+            Boolean(String(node.textContent || '').trim()) &&
+            isVisible(node instanceof HTMLElement ? node : node.parentElement)
+          );
+        }).length >= expectedCount
+      );
+    },
+    minimumCount,
+    { timeout },
   );
 }
 
-async function prepareClipboardCodeBlocksProbeState(page) {
-  await prepareCodeboxConversationProbeState(page);
+async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEOUT_MS) {
+  await page.waitForFunction(
+    () => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const visibleStopButtons = Array.from(
+        document.querySelectorAll('button[data-testid="stop-button"], button[data-test-id="stop-button"]'),
+      ).filter(isVisible);
+      const visibleComposers = Array.from(
+        document.querySelectorAll(
+          [
+            '#prompt-textarea',
+            '[name="prompt-textarea"]',
+            'textarea[placeholder]',
+            'div[contenteditable="true"][role="textbox"]',
+            'div[contenteditable="true"]',
+          ].join(', '),
+        ),
+      ).filter(isVisible);
+      return visibleStopButtons.length === 0 && visibleComposers.length > 0;
+    },
+    undefined,
+    { timeout },
+  );
+}
+
+async function prepareCodeboxProbeConversation(page, fixtureUrl, session) {
+  if (session.initialized) return;
+  await prepareNewConversationProbeState(page, fixtureUrl);
+  await closeOpenMenus(page);
+  await closeTransientUi(page);
+  session.initialized = true;
+}
+
+async function sendCodeboxPromptAndWaitForBlocks(page, promptText, expectedMinimumCount) {
+  await waitForCodeboxResponseIdle(page);
+  const beforeCount = await countAssistantCodeBlocks(page);
+  await setComposerText(page, promptText);
+  await waitForEnabledButton(page, ['button[data-testid="send-button"]', '#composer-submit-button'], 15000);
+  await clickEnabledButton(page, ['button[data-testid="send-button"]', '#composer-submit-button']);
+  await page.waitForTimeout(CODEBOX_RESPONSE_MIN_WAIT_MS);
+  await waitForAssistantCodeBlockCount(page, Math.max(expectedMinimumCount, beforeCount + 1));
+  await waitForCodeboxResponseIdle(page);
+}
+
+async function ensureCodeboxPromptSent(page, fixtureUrl, session, promptKey, promptText) {
+  await prepareCodeboxProbeConversation(page, fixtureUrl, session);
+  if (session.sentPromptKeys.has(promptKey)) return;
+  const expectedMinimumCount = session.sentPromptKeys.size + 1;
+  await sendCodeboxPromptAndWaitForBlocks(page, promptText, expectedMinimumCount);
+  session.sentPromptKeys.add(promptKey);
+}
+
+async function prepareClipboardCodeBlocksProbeState(page, fixtureUrl, session) {
+  await ensureCodeboxPromptSent(page, fixtureUrl, session, 'wrap-story', CODEBOX_WRAP_PROMPT_TEXT);
+  await ensureCodeboxPromptSent(page, fixtureUrl, session, 'copy-story', CODEBOX_COPY_PROMPT_TEXT);
+  await waitForAssistantCodeBlockCount(page, 2);
   await clearClipboardForProbe(page);
 }
 
-async function prepareCodeboxWrapProbeState(page) {
-  await prepareCodeboxConversationProbeState(page);
+async function prepareCodeboxWrapProbeState(page, fixtureUrl, session) {
+  await ensureCodeboxPromptSent(page, fixtureUrl, session, 'wrap-story', CODEBOX_WRAP_PROMPT_TEXT);
+  await waitForAssistantCodeBlockCount(page, 1);
   await page.evaluate(() => {
     document.documentElement.classList.remove('csp-codebox-wrap-enabled');
   });
@@ -2057,8 +2172,14 @@ async function prepareCodeboxWrapProbeState(page) {
 async function clipboardProbeHasText(page, shortcut) {
   const text = await readClipboardTextForProbe(page);
   const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-  if (shortcut.actionId === 'shortcutKeyCopyAllCodeBlocks') {
-    return normalized.length >= 20 && !/no code boxes found/i.test(normalized);
+  if (shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID) {
+    const codeBlockCount = await countAssistantCodeBlocks(page);
+    return (
+      codeBlockCount >= 2 &&
+      normalized.length >= 40 &&
+      normalized.includes('--- --- ---') &&
+      !/no code boxes found/i.test(normalized)
+    );
   }
   if (shortcut.actionId === 'selectThenCopyAllMessages') {
     return normalized.length >= 80;
@@ -2071,17 +2192,30 @@ function orderLiveProbeShortcuts(shortcuts) {
   const temporaryChatIndex = ordered.findIndex(
     (shortcut) => shortcut.actionId === TEMPORARY_CHAT_ACTION_ID,
   );
-  if (temporaryChatIndex === -1) return ordered;
-
-  const [temporaryChatShortcut] = ordered.splice(temporaryChatIndex, 1);
-  const newConversationIndex = ordered.findIndex(
-    (shortcut) => shortcut.actionId === NEW_CONVERSATION_ACTION_ID,
-  );
-  if (newConversationIndex === -1) {
-    ordered.splice(temporaryChatIndex, 0, temporaryChatShortcut);
-    return ordered;
+  if (temporaryChatIndex !== -1) {
+    const [temporaryChatShortcut] = ordered.splice(temporaryChatIndex, 1);
+    const newConversationIndex = ordered.findIndex(
+      (shortcut) => shortcut.actionId === NEW_CONVERSATION_ACTION_ID,
+    );
+    if (newConversationIndex === -1) {
+      ordered.splice(temporaryChatIndex, 0, temporaryChatShortcut);
+    } else {
+      ordered.splice(newConversationIndex + 1, 0, temporaryChatShortcut);
+    }
   }
-  ordered.splice(newConversationIndex + 1, 0, temporaryChatShortcut);
+  const codeboxWrapIndex = ordered.findIndex(
+    (shortcut) => shortcut.actionId === TOGGLE_CODEBOX_WRAP_ACTION_ID,
+  );
+  const copyCodeBlocksIndex = ordered.findIndex(
+    (shortcut) => shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID,
+  );
+  if (codeboxWrapIndex !== -1 && copyCodeBlocksIndex !== -1 && copyCodeBlocksIndex < codeboxWrapIndex) {
+    const [codeboxWrapShortcut] = ordered.splice(codeboxWrapIndex, 1);
+    const insertionIndex = ordered.findIndex(
+      (shortcut) => shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID,
+    );
+    ordered.splice(insertionIndex, 0, codeboxWrapShortcut);
+  }
   return ordered;
 }
 
@@ -2610,6 +2744,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   let extensionId = '';
   let temporaryShortcutAssignments = {};
   let extensionStorageWarning = '';
+  const codeboxProbeSession = createCodeboxProbeSession();
   try {
     const reachability = await verifyExtensionRuntimeReachable(context, options);
     extensionId = reachability.extensionId;
@@ -2737,9 +2872,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         } else if (shortcut.activationProbeSetup === 'clipboard-entire-conversation') {
           await prepareClipboardEntireConversationProbeState(page, fixtureUrl);
         } else if (shortcut.activationProbeSetup === 'clipboard-code-blocks') {
-          await prepareClipboardCodeBlocksProbeState(page);
+          await prepareClipboardCodeBlocksProbeState(page, fixtureUrl, codeboxProbeSession);
         } else if (shortcut.activationProbeSetup === 'codebox-conversation') {
-          await prepareCodeboxWrapProbeState(page);
+          await prepareCodeboxWrapProbeState(page, fixtureUrl, codeboxProbeSession);
         } else if (shortcut.activationProbeSetup === 'shortcut-overlay-ready') {
           await resetFixturePage(page, fixtureUrl);
           await closeTransientUi(page);

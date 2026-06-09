@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 06.09.2026
+- Fixed: Scroll to Top and Scroll to Bottom now reach the actual conversation boundaries reliably.
+
 #### 05.19.2026
 - Fixed: Code box word wrap no longer breaks syntax-highlighted lines too aggressively.
 - Fixed: Join + Copy All Code Boxes now preserves clean code output, dedupes wrapper copies, and supports a clean newline separator.

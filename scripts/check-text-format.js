@@ -5,6 +5,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 
 const fix = process.argv.includes('--write');
+const maxListedPaths = 50;
 const textExtensions = new Set([
   '.ahk',
   '.css',
@@ -63,8 +64,11 @@ for (const filePath of trackedFiles().filter(isTextFile)) {
 
 if (changed.length) {
   const verb = fix ? 'Normalized' : 'Text formatting issues found in';
-  console.error(`${verb} ${changed.length} tracked file(s):`);
-  for (const filePath of changed) console.error(`- ${filePath}`);
+  console.error(`${verb} ${changed.length} tracked text file(s).`);
+  for (const filePath of changed.slice(0, maxListedPaths)) console.error(`- ${filePath}`);
+  if (changed.length > maxListedPaths) {
+    console.error(`...and ${changed.length - maxListedPaths} more file(s).`);
+  }
   if (!fix) {
     console.error('\nRun `npm run format:text` to normalize line endings and trailing whitespace.');
     process.exit(1);

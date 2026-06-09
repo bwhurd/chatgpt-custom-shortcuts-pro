@@ -344,10 +344,8 @@ async function launchChromeForCdp({
   ];
   if (loadExtension) {
     const extensionDir = getExtensionDir();
-    launchArgs.push(
-      `--disable-extensions-except=${extensionDir}`,
-      `--load-extension=${extensionDir}`,
-    );
+    // Keep Developer Mode repair usable in the persistent CodexCleanProfile.
+    launchArgs.push(`--load-extension=${extensionDir}`);
   }
   launchArgs.push(initialUrl);
 

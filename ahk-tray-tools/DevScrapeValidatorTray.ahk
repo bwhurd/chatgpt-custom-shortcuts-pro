@@ -8,6 +8,7 @@ SetTitleMatchMode, 2
 psExe := A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
 projectRoot := ParentDirectory(A_ScriptDir)
 startPs := A_ScriptDir "\StartDevScrapeValidator.ps1"
+setupPs := A_ScriptDir "\StartDevScrapeExtensionSetup.ps1"
 stopPs := A_ScriptDir "\StopDevScrapeValidator.ps1"
 openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
 pushGitPs := A_ScriptDir "\PushLocalToGit.ps1"
@@ -41,6 +42,7 @@ if !FileExist(buildZipPy) {
 
 Menu, Tray, NoStandard
 Menu, Tray, Add, Start DevScrape Validator, StartValidator
+Menu, Tray, Add, Setup Extension Profile, SetupExtensionProfile
 Menu, Tray, Add, Open Latest Report, OpenLatestReport
 Menu, Tray, Add, Run build-zip.js, RunBuildZip
 Menu, Tray, Add, Push local to git, PushLocalToGit
@@ -50,6 +52,8 @@ Menu, Tray, Add, Reload Tray, ReloadTray
 Menu, Tray, Add, Shutdown and Exit Tray, ShutdownAndExitTray
 if !FileExist(pushGitPs)
     Menu, Tray, Disable, Push local to git
+if !FileExist(setupPs)
+    Menu, Tray, Disable, Setup Extension Profile
 Menu, Tray, Tip, DevScrape Validator: checking status...
 if FileExist(trayIconPath)
     Menu, Tray, Icon, %trayIconPath%
@@ -87,6 +91,12 @@ OpenLatestReport:
         ShowError(output)
     }
     Gosub, UpdateState
+return
+
+SetupExtensionProfile:
+    SetTrayWorking("DevScrape Validator: opening extension setup...")
+    RunVisiblePowerShellHelper(setupPs)
+    SetTimer, UpdateAfterInteraction, -500
 return
 
 RunBuildZip:
@@ -234,6 +244,14 @@ RunPowerShellHelper(scriptPath, ByRef output) {
     FileRead, output, %tempFile%
     FileDelete, %tempFile%
     return exitCode
+}
+
+RunVisiblePowerShellHelper(scriptPath) {
+    global psExe, projectRoot
+    Run, "%psExe%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%scriptPath%", %projectRoot%, UseErrorLevel
+    if (ErrorLevel) {
+        ToastMessage("Could not start the requested PowerShell helper.", 8000)
+    }
 }
 
 RunPythonHelper(scriptPath, ByRef output) {

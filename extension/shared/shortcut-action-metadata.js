@@ -263,7 +263,7 @@
       searchNeedles: ['<pre', '<code'],
       matchGroups: [['<pre'], ['<code']],
       notes:
-        'Validated from a codebox conversation fixture rather than the fixed no-token scrape fixture.',
+        'Validated from a disposable live-probe codebox conversation rather than the fixed no-token scrape fixture.',
     }),
     manualTarget('codebox-wrap-enabled', 'html.csp-codebox-wrap-enabled', {
       searchNeedles: ['<pre', '<code'],
@@ -739,7 +739,7 @@
         expectedTargetRef: 'code-block-content',
         setup: 'clipboard-code-blocks',
         notes:
-          'Navigates to a codebox conversation fixture and validates that code text was written to the clipboard.',
+          'Creates a disposable conversation with multiple assistant codeboxes and validates that code text was written to the clipboard.',
       }),
       notes:
         'Clipboard transformation helper verified by clipboard contents from a codebox fixture.',
@@ -751,7 +751,7 @@
       activationProbe: domStateProbe('codebox-wrap-enabled', {
         setup: 'codebox-conversation',
         notes:
-          'Navigates to a codebox conversation fixture and asserts the wrap root class toggled on.',
+          'Creates a disposable conversation with an assistant codebox and asserts the wrap root class toggled on.',
       }),
       notes: 'Internal extension CSS word-wrap helper verified by DOM state.',
     }),
