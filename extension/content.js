@@ -4336,24 +4336,309 @@ const delays = DELAYS;
       // @note shortcutKeyEDIT
       [shortcuts.shortcutKeyEdit]: () => {
         // Centralized timing constants (all halved from original)
-        const DELAY_SAFE_CLICK = 200; // after scroll, before click
-        const GSAP_SCROLL_DURATION = 0.2; // smooth scroll duration with GSAP
+        const DELAY_SAFE_CLICK = 300; // after scroll, before click
+        const GSAP_SCROLL_DURATION = 0.3; // smooth scroll duration with GSAP
         const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
         const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
+        const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
+        const editSelectors = [withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button')];
+
+        const getEditButtonData = (root = document) => {
+          const queryRoot = root && typeof root.querySelectorAll === 'function' ? root : document;
+          return Array.from(
+            new Set(
+              editSelectors
+                .flatMap((sel) =>
+                  Array.from(queryRoot.querySelectorAll(sel)).map(
+                    (node) => node.closest('button') || node,
+                  ),
+                )
+                .filter(Boolean),
+            ),
+          )
+            .filter((btn) => btn !== null)
+            .map((btn) => {
+              const rect = btn.getBoundingClientRect();
+              return { btn, rect };
+            });
+        };
+
+        const pickEditTarget = (buttonData) => {
+          const filteredButtonsData = buttonData
+            .filter(({ btn, rect }) => isAboveComposer(rect, btn))
+            .sort((a, b) => a.rect.top - b.rect.top);
+
+          const inViewport = filteredButtonsData.filter(
+            ({ rect }) =>
+              rect.bottom > 0 &&
+              rect.right > 0 &&
+              rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
+              rect.left < (window.innerWidth || document.documentElement.clientWidth),
+          );
+
+          if (inViewport.length > 0) {
+            return inViewport.reduce((bottomMost, current) =>
+              current.rect.top > bottomMost.rect.top ? current : bottomMost,
+            ).btn;
+          }
+
+          const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
+          if (aboveViewport.length > 0) {
+            return aboveViewport.reduce((closest, current) =>
+              current.rect.bottom > closest.rect.bottom ? current : closest,
+            ).btn;
+          }
+
+          return null;
+        };
+
+        const resolveFinalEditButton = (initialButton) => {
+          const initialTurn = initialButton?.closest?.(CONVERSATION_TURN_SELECTOR);
+          if (initialTurn?.isConnected) {
+            const sameTurnButton = pickEditTarget(getEditButtonData(initialTurn));
+            if (sameTurnButton) return sameTurnButton;
+
+            const sameTurnButtons = getEditButtonData(initialTurn);
+            if (sameTurnButtons.length > 0) return sameTurnButtons[sameTurnButtons.length - 1].btn;
+          }
+
+          return pickEditTarget(getEditButtonData()) || (initialButton?.isConnected ? initialButton : null);
+        };
+
+        const clickEditButton = (button) => {
+          if (!button || !button.isConnected || typeof button.click !== 'function') return false;
+          if (button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
+
+          const rect = button.getBoundingClientRect();
+          const center =
+            rect && rect.width > 0 && rect.height > 0
+              ? {
+                clientX: Math.round(rect.left + rect.width / 2),
+                clientY: Math.round(rect.top + rect.height / 2),
+              }
+              : {};
+          const pointTarget =
+            Number.isFinite(center.clientX) && Number.isFinite(center.clientY)
+              ? document.elementFromPoint(center.clientX, center.clientY)
+              : null;
+          const eventTarget = pointTarget && button.contains(pointTarget) ? pointTarget : button;
+          const mouseBase = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            view: window,
+            button: 0,
+            ...center,
+          };
+          const pointerBase = {
+            ...mouseBase,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true,
+          };
+
+          try {
+            button.focus?.({ preventScroll: true });
+          } catch { }
+
+          try {
+            if (typeof PointerEvent === 'function') {
+              eventTarget.dispatchEvent(
+                new PointerEvent('pointerover', { ...pointerBase, buttons: 0 }),
+              );
+              eventTarget.dispatchEvent(
+                new PointerEvent('pointerenter', { ...pointerBase, bubbles: false, buttons: 0 }),
+              );
+              eventTarget.dispatchEvent(
+                new PointerEvent('pointerdown', { ...pointerBase, buttons: 1 }),
+              );
+            }
+            eventTarget.dispatchEvent(new MouseEvent('mouseover', { ...mouseBase, buttons: 0 }));
+            eventTarget.dispatchEvent(new MouseEvent('mousedown', { ...mouseBase, buttons: 1 }));
+            if (typeof PointerEvent === 'function') {
+              eventTarget.dispatchEvent(
+                new PointerEvent('pointerup', { ...pointerBase, buttons: 0 }),
+              );
+            }
+            eventTarget.dispatchEvent(new MouseEvent('mouseup', { ...mouseBase, buttons: 0 }));
+            eventTarget.dispatchEvent(new MouseEvent('click', { ...mouseBase, buttons: 0 }));
+            if (button.isConnected) button.click();
+            return true;
+          } catch {
+            try {
+              button.click();
+              return true;
+            } catch {
+              return false;
+            }
+          }
+        };
+
+        const getScrollContainerMetrics = (container) => {
+          if (container === window) {
+            return {
+              scrollTop: window.scrollY,
+              viewportTop: 0,
+              viewportBottom: window.innerHeight || document.documentElement.clientHeight,
+              maxScroll: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+              scrollTo: (top, behavior = 'auto') => window.scrollTo({ top, behavior }),
+            };
+          }
+
+          const rect = container.getBoundingClientRect();
+          return {
+            scrollTop: container.scrollTop,
+            viewportTop: rect.top,
+            viewportBottom: rect.bottom,
+            maxScroll: Math.max(0, container.scrollHeight - container.clientHeight),
+            scrollTo: (top, behavior = 'auto') => {
+              if (typeof container.scrollTo === 'function') {
+                container.scrollTo({ top, behavior });
+              } else {
+                container.scrollTop = top;
+              }
+            },
+          };
+        };
+
+        const resolveScrollContainer = () => {
+          try {
+            if (typeof getScrollableContainer === 'function') {
+              const candidate = getScrollableContainer();
+              if (candidate && candidate instanceof Element && candidate.isConnected) {
+                return candidate;
+              }
+            }
+          } catch { }
+
+          return window;
+        };
+
+        const getEditTurn = (target) => target?.closest?.(CONVERSATION_TURN_SELECTOR) || null;
+
+        const findOpenedEditField = (turn) => {
+          if (!turn?.isConnected) return null;
+          return (
+            Array.from(
+              turn.querySelectorAll(
+                'textarea, [contenteditable="true"][role="textbox"], [contenteditable="true"]',
+              ),
+            )
+              .filter((field) => field instanceof Element && field.isConnected)
+              .find((field) => {
+                const rect = field.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+              }) || null
+          );
+        };
+
+        const smoothScrollContainerTo = (container, top) => {
+          try {
+            const hasScrollTo =
+              window.gsap &&
+              ((gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
+                typeof ScrollToPlugin !== 'undefined');
+            if (hasScrollTo) {
+              gsap.to(container, {
+                duration: 0.25,
+                scrollTo: { y: top, autoKill: true },
+                ease: 'power2.out',
+              });
+              return true;
+            }
+          } catch { }
+
+          try {
+            if (container === window) {
+              window.scrollTo({ top, behavior: 'smooth' });
+              return true;
+            }
+            if (typeof container.scrollTo === 'function') {
+              container.scrollTo({ top, behavior: 'smooth' });
+              return true;
+            }
+          } catch { }
+
+          return false;
+        };
+
+        const scrollOverlappingEditCardAboveComposer = (targetTurnOrButton) => {
+          const turn = getEditTurn(targetTurnOrButton);
+          if (!turn?.isConnected) return { found: false, scrolled: false };
+
+          const editField = findOpenedEditField(turn);
+          if (!editField) return { found: false, scrolled: false };
+
+          const editFrame =
+            editField.closest('.bg-token-main-surface-tertiary.rounded-3xl') ||
+            editField.closest('.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id]') ||
+            editField;
+          const target = turn.contains(editFrame) ? editFrame : editField;
+          const rect = target.getBoundingClientRect();
+          const container = resolveScrollContainer();
+          const metrics = getScrollContainerMetrics(container);
+          const composerTop = getComposerTopEdge();
+          if (!Number.isFinite(composerTop) || composerTop <= metrics.viewportTop) {
+            return { found: true, scrolled: false };
+          }
+
+          const margin = 16;
+          const exposedBottom = Math.min(metrics.viewportBottom, composerTop) - margin;
+          const overlap = rect.bottom - exposedBottom;
+          if (overlap <= 8) return { found: true, scrolled: false };
+
+          const nextTop = metrics.scrollTop + overlap;
+          const clampedTop = Math.max(0, Math.min(nextTop, metrics.maxScroll));
+          if (Math.abs(clampedTop - metrics.scrollTop) < 1) {
+            return { found: true, scrolled: false };
+          }
+
+          return { found: true, scrolled: smoothScrollContainerTo(container, clampedTop) };
+        };
+
+        const stabilizeOpenedEditCard = (targetTurnOrButton) => {
+          const run = () => {
+            scrollOverlappingEditCardAboveComposer(targetTurnOrButton);
+          };
+
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => setTimeout(run, 150));
+          } else {
+            setTimeout(run, 150);
+          }
+        };
+
+        const openEditButtonWithRetry = (button) => {
+          const turn = getEditTurn(button);
+          if (!turn?.isConnected || !clickEditButton(button)) return;
+
+          setTimeout(() => {
+            if (findOpenedEditField(turn)) {
+              stabilizeOpenedEditCard(turn);
+              return;
+            }
+
+            if (!button?.isConnected) {
+              setTimeout(() => {
+                if (findOpenedEditField(turn)) stabilizeOpenedEditCard(turn);
+              }, 150);
+              return;
+            }
+            clickEditButton(button);
+
+            setTimeout(() => {
+              if (findOpenedEditField(turn)) {
+                stabilizeOpenedEditCard(turn);
+              }
+            }, 100);
+          }, 100);
+        };
 
         // always scroll to center if possible, clamp if not
         const gsapScrollToCenterAndClick = (button) => {
           if (!button || !button.isConnected || typeof button.click !== 'function') return;
 
-          let container = window;
-          try {
-            if (typeof getScrollableContainer === 'function') {
-              const candidate = getScrollableContainer();
-              if (candidate && candidate instanceof Element && candidate.isConnected) {
-                container = candidate;
-              }
-            }
-          } catch { }
+          const container = resolveScrollContainer();
 
           let contTop = 0;
           let contHeight = window.innerHeight;
@@ -4380,24 +4665,59 @@ const delays = DELAYS;
 
           targetY = Math.max(0, Math.min(targetY, maxScroll));
 
-          const safeClick = () => {
-            const canClick = button?.isConnected && typeof button?.click === 'function';
-            if (!canClick) return;
-            try {
-              button.click();
-            } catch { }
-          };
-
+          let finished = false;
           const finish = () => {
-            try {
-              if (typeof flashBorder === 'function') flashBorder(button);
-            } catch { }
-            setTimeout(safeClick, DELAY_SAFE_CLICK);
+            const clickFinalTarget = () => {
+              const finalButton = resolveFinalEditButton(button);
+              if (!finalButton) return;
+              try {
+                if (typeof flashBorder === 'function') flashBorder(finalButton);
+              } catch { }
+              openEditButtonWithRetry(finalButton);
+            };
+
+            if (typeof window.requestAnimationFrame === 'function') {
+              window.requestAnimationFrame(() => setTimeout(clickFinalTarget, DELAY_SAFE_CLICK));
+            } else {
+              setTimeout(clickFinalTarget, DELAY_SAFE_CLICK);
+            }
+          };
+          const finishOnce = () => {
+            if (finished) return;
+            finished = true;
+            finish();
           };
 
           const animateWithGsap = () => {
             try {
               if (!window.gsap) return false;
+              const scrollElement =
+                container === window
+                  ? document.scrollingElement || document.documentElement
+                  : container;
+              const targetTurn = getEditTurn(button);
+              if (
+                scrollElement instanceof Element &&
+                targetTurn instanceof HTMLElement &&
+                typeof scrollToMessageTop === 'function' &&
+                typeof getMessageScrollOptions === 'function'
+              ) {
+                const { scrollOffset } = getMessageScrollOptions();
+                scrollToMessageTop(scrollElement, targetTurn, scrollOffset);
+                setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
+                return true;
+              }
+
+              if (
+                scrollElement instanceof Element &&
+                button instanceof HTMLElement &&
+                typeof animateMessageScrollTo === 'function'
+              ) {
+                animateMessageScrollTo(scrollElement, targetY, button, offsetCenter);
+                setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
+                return true;
+              }
+
               const hasScrollTo =
                 (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
                 typeof ScrollToPlugin !== 'undefined';
@@ -4407,8 +4727,10 @@ const delays = DELAYS;
                 duration: GSAP_SCROLL_DURATION,
                 scrollTo: { y: targetY, autoKill: true },
                 ease: 'power4.out',
-                onComplete: finish,
+                onComplete: finishOnce,
+                onInterrupt: finishOnce,
               });
+              setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
               return true;
             } catch {
               return false;
@@ -4428,63 +4750,13 @@ const delays = DELAYS;
               if (container === window) window.scrollTo(0, targetY);
               else container.scrollTop = targetY;
             }
-            setTimeout(finish, DELAY_FALLBACK_FINISH);
+            setTimeout(finishOnce, DELAY_FALLBACK_FINISH);
           }
         };
 
         setTimeout(() => {
           try {
-            const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
-            const editSelectors = [
-              'button[aria-label="Edit message"]',
-              withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
-            ];
-
-            const allButtons = Array.from(
-              new Set(
-                editSelectors
-                  .flatMap((sel) =>
-                    Array.from(document.querySelectorAll(sel)).map(
-                      (node) => node.closest('button') || node,
-                    ),
-                  )
-                  .filter(Boolean),
-              ),
-            );
-
-            const filteredButtonsData = allButtons
-              .filter((btn) => btn !== null)
-              .map((btn) => {
-                const rect = btn.getBoundingClientRect();
-                return { btn, rect };
-              })
-              .filter(({ btn, rect }) => isAboveComposer(rect, btn));
-
-            filteredButtonsData.sort((a, b) => a.rect.top - b.rect.top);
-
-            const inViewport = filteredButtonsData.filter(
-              ({ rect }) =>
-                rect.bottom > 0 &&
-                rect.right > 0 &&
-                rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
-                rect.left < (window.innerWidth || document.documentElement.clientWidth),
-            );
-
-            let targetButton = null;
-            if (inViewport.length > 0) {
-              const target = inViewport.reduce((bottomMost, current) =>
-                current.rect.top > bottomMost.rect.top ? current : bottomMost,
-              );
-              targetButton = target.btn;
-            } else {
-              const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
-              if (aboveViewport.length > 0) {
-                const target = aboveViewport.reduce((closest, current) =>
-                  current.rect.bottom > closest.rect.bottom ? current : closest,
-                );
-                targetButton = target.btn;
-              }
-            }
+            const targetButton = pickEditTarget(getEditButtonData());
 
             if (targetButton) {
               gsapScrollToCenterAndClick(targetButton);
