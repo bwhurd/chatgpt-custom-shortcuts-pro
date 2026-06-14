@@ -15,7 +15,7 @@ vm.runInContext(source, context, {
 const { ModelLabels } = context.window;
 assert.ok(ModelLabels, 'ModelLabels should load');
 
-const getConfigureActions = (catalog) => {
+const getModelNameActions = (catalog) => {
   const groups = ModelLabels.getPopupPresentationGroups(
     ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
     [],
@@ -67,7 +67,7 @@ for (const [label, catalog] of [
   ['slotful refreshed catalog', slotfulCatalog],
   ['mixed refreshed catalog', mixedCatalog],
 ]) {
-  const actions = getConfigureActions(catalog);
+  const actions = getModelNameActions(catalog);
   assertUniqueSlots(actions, label);
 
   const byLabel = Object.fromEntries(actions.map((action) => [action.label, action]));
@@ -85,16 +85,32 @@ for (const [label, catalog] of [
     `${label} should assign distinct default key codes`,
   );
   assert.equal(
-    ModelLabels.getCatalogConfigureActionForOption('4.5', 4, catalog)?.slot,
+    ModelLabels.getCatalogModelNameActionForLabel('4.5', 4, catalog)?.slot,
     byLabel['4.5'].slot,
     `${label} should resolve live 4.5 hints through the catalog slot`,
   );
   assert.equal(
-    ModelLabels.getCatalogConfigureActionForOption('Latest • 5.5', 0, catalog)?.id,
+    ModelLabels.getCatalogModelNameActionForLabel('Latest • 5.5', 0, catalog)?.id,
     'configure-latest',
     `${label} should treat Latest version labels as the static latest action`,
   );
 }
+
+assert.equal(
+  ModelLabels.getLatestModelNameIndex(['5.5', '5.6', '5.4', 'o3']),
+  1,
+  'highest numeric model label should be treated as latest',
+);
+assert.equal(
+  ModelLabels.getModelNameActionForLabelInList('5.6', 1, ['5.5', '5.6', '5.4', 'o3'])?.id,
+  'configure-latest',
+  'a newly added higher model should take the latest action id even when not first',
+);
+assert.equal(
+  ModelLabels.getModelNameActionForLabelInList('5.5', 0, ['5.5', '5.6', '5.4', 'o3'])?.id,
+  'configure-dynamic-5-5',
+  'old first-row latest should become a dynamic model when a higher version is visible',
+);
 
 const dynamicSelfPrimaryCatalog = {
   configureOptions: [
@@ -179,4 +195,130 @@ assert.equal(
   'Pro Extended shortcut should target the Extended thinking effort',
 );
 
-console.log('model picker configure slots are unique');
+const integratedEffortCatalog = {
+  integratedEffort: true,
+  configureOptions: [
+    { id: 'configure-latest', slot: 3, label: '5.5' },
+    { id: 'configure-dynamic-5-4', slot: 8, label: '5.4' },
+    { id: 'configure-dynamic-5-3', slot: 9, label: '5.3' },
+    { id: 'configure-o3', slot: 6, label: 'o3' },
+  ],
+  frontendByConfig: {
+    'configure-latest': [
+      { id: 'instant', slot: 0, label: 'Instant', available: true },
+      { id: 'thinking', slot: 1, label: 'Medium', available: true },
+      { id: 'pro', slot: 7, label: 'High', available: true },
+    ],
+    'configure-dynamic-5-4': [
+      { id: 'instant', slot: 0, label: 'Instant', available: true },
+      { id: 'thinking', slot: 1, label: 'Medium', available: true },
+      { id: 'pro', slot: 7, label: 'High', available: true },
+    ],
+    'configure-dynamic-5-3': [{ id: 'instant', slot: 0, label: 'Instant', available: true }],
+    'configure-o3': [{ id: 'thinking', slot: 1, label: 'Medium', available: true }],
+  },
+};
+const integratedGroups = ModelLabels.getPopupPresentationGroups(
+  ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
+  [],
+  integratedEffortCatalog,
+);
+assert.deepEqual(
+  integratedGroups.find((group) => group.id === 'primary')?.actions.map((action) => action.label),
+  ['Instant', 'Medium', 'High'],
+  'integrated effort catalog should render first-level options as the first popup row',
+);
+assert.deepEqual(
+  integratedGroups.find((group) => group.id === 'configure')?.actions.map((action) => action.label),
+  ['5.5', '5.4', '5.3', 'o3'],
+  'integrated effort catalog should render second-level model options as the second popup row',
+);
+assert.deepEqual(
+  ModelLabels.getPopupPresentationGroups('configure-dynamic-5-3', [], integratedEffortCatalog)
+    .find((group) => group.id === 'primary')
+    ?.actions.map((action) => action.label),
+  ['Instant'],
+  'integrated effort catalog should allow per-model first-level option sets',
+);
+assert.deepEqual(
+  ModelLabels.getPopupPresentationGroups('configure-o3', [], integratedEffortCatalog)
+    .find((group) => group.id === 'primary')
+    ?.actions.map((action) => action.label),
+  ['Medium'],
+  'integrated effort catalog should preserve medium-only model option sets',
+);
+
+const integratedFallbackLabels = ModelLabels.getPopupPresentationGroups(
+  ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
+  [],
+  {
+    integratedEffort: true,
+    configureOptions: [{ id: 'configure-latest', slot: 3, label: '5.5' }],
+    frontendByConfig: {},
+  },
+)
+  .find((group) => group.id === 'primary')
+  ?.actions.map((action) => action.label);
+assert.equal(
+  JSON.stringify(integratedFallbackLabels),
+  JSON.stringify(['Instant', 'Medium', 'High']),
+  'integrated effort fallback should not render the removed Configure first-row button',
+);
+
+const noCatalogGroups = ModelLabels.getPopupPresentationGroups(
+  ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
+  [],
+  null,
+);
+assert.equal(
+  JSON.stringify(
+    noCatalogGroups.find((group) => group.id === 'primary')?.actions.map((action) => action.label),
+  ),
+  JSON.stringify(['Instant', 'Medium', 'High']),
+  'no-catalog popup fallback should use the scraped integrated first row',
+);
+assert.equal(
+  JSON.stringify(
+    noCatalogGroups.find((group) => group.id === 'configure')?.actions.map((action) => action.label),
+  ),
+  JSON.stringify(['5.5', '5.4', '5.3', 'o3']),
+  'no-catalog popup fallback should use the scraped second-row model labels',
+);
+assert.equal(
+  JSON.stringify(ModelLabels.defaultKeyCodes().slice(0, 10)),
+  JSON.stringify(['Digit1', 'Digit2', '', 'Digit4', '', '', 'Digit7', 'Digit3', 'Digit5', 'Digit6']),
+  'default model picker codes should not assign the removed Configure slot',
+);
+assert.equal(
+  JSON.stringify(ModelLabels.defaultNames().slice(0, 10)),
+  JSON.stringify(['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3']),
+  'default model names should mirror the scraped integrated picker layout',
+);
+assert.equal(
+  JSON.stringify(
+    ModelLabels.resolveActionableNames([
+      'Instant',
+      'Thinking',
+      'Configure...',
+      'Latest',
+      '5.2',
+      '5.0 Thinking Mini',
+      'o3',
+    ]).slice(0, 10),
+  ),
+  JSON.stringify([
+    'Instant',
+    'Medium',
+    '',
+    '5.5',
+    '',
+    '',
+    'o3',
+    'High',
+    '5.4',
+    '5.3',
+  ]),
+  'legacy stored names should not restore Thinking/Configure/Latest fallbacks',
+);
+
+console.log('model picker model-name slots are unique');

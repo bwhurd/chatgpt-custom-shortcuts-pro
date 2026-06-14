@@ -43,7 +43,7 @@
       rowLabel: 'Pro',
     }),
   ]);
-  const CONFIGURE_ACTIONS = Object.freeze([
+  const MODEL_NAME_ACTIONS = Object.freeze([
     Object.freeze({
       slot: 3,
       id: 'configure-latest',
@@ -90,14 +90,14 @@
     }),
     Object.freeze({
       id: 'configure',
-      label: 'Configure Models',
+      label: 'Pick Model',
       labelI18nKey: 'label_configureModelsCompact',
       compactLabel: true,
-      actions: CONFIGURE_ACTIONS,
+      actions: MODEL_NAME_ACTIONS,
     }),
   ]);
   const ACTION_SLOTS = Object.freeze(
-    [...PRIMARY_ACTIONS, ...CONFIGURE_ACTIONS, ...EXTRA_ACTIONS].map((action) =>
+    [...PRIMARY_ACTIONS, ...MODEL_NAME_ACTIONS, ...EXTRA_ACTIONS].map((action) =>
       Object.freeze({ ...action }),
     ),
   );
@@ -108,10 +108,10 @@
       return acc;
     }, {}),
   );
-  const CONFIGURE_ACTION_IDS = Object.freeze(CONFIGURE_ACTIONS.map((action) => action.id));
-  const CONFIGURE_DYNAMIC_SLOT_START =
+  const MODEL_NAME_ACTION_IDS = Object.freeze(MODEL_NAME_ACTIONS.map((action) => action.id));
+  const MODEL_NAME_DYNAMIC_SLOT_START =
     Math.max(
-      ...CONFIGURE_ACTIONS.map((action) => action.slot),
+      ...MODEL_NAME_ACTIONS.map((action) => action.slot),
       ...EXTRA_ACTIONS.map((action) => action.slot),
     ) + 1;
   const PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG = Object.freeze({
@@ -140,6 +140,48 @@
     'configure-5-0-thinking-mini': Object.freeze(['configure-5-0-thinking-mini', 'configure']),
     'configure-o3': Object.freeze(['configure-o3', 'configure']),
   });
+  const DEFAULT_INTEGRATED_MODEL_CATALOG = Object.freeze({
+    version: 3,
+    integratedEffort: true,
+    scrapedAt: 0,
+    thinkingEffortIds: Object.freeze([]),
+    configureOptions: Object.freeze([
+      Object.freeze({ id: 'configure-latest', label: '5.5', slot: 3 }),
+      Object.freeze({ id: 'configure-dynamic-5-4', label: '5.4', slot: 8 }),
+      Object.freeze({ id: 'configure-dynamic-5-3', label: '5.3', slot: 9 }),
+      Object.freeze({ id: 'configure-o3', label: 'o3', slot: 6 }),
+    ]),
+    frontendByConfig: Object.freeze({
+      'configure-latest': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Instant', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+      ]),
+      'configure-dynamic-5-4': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Instant', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+      ]),
+      'configure-dynamic-5-3': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Instant', slot: 0 }),
+      ]),
+      'configure-o3': Object.freeze([
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+      ]),
+    }),
+  });
+  const DEFAULT_INTEGRATED_MODEL_NAMES = Object.freeze([
+    'Instant',
+    'Medium',
+    '',
+    '5.5',
+    '',
+    '',
+    'o3',
+    'High',
+    '5.4',
+    '5.3',
+  ]);
   const THINKING_EFFORT_OPTIONS = Object.freeze([
     Object.freeze({
       id: 'thinking-standard',
@@ -306,8 +348,6 @@
     return '';
   };
 
-  const defaultActionNames = () => ACTION_SLOTS.map((action) => action.label);
-
   const DEFAULT_SEQUENTIAL_MODEL_CODES = Object.freeze([
     'Digit1',
     'Digit2',
@@ -317,7 +357,7 @@
     'Digit6',
     'Digit7',
   ]);
-  const DEFAULT_CONFIGURE_MODEL_CODE = 'Digit0';
+  const DEFAULT_PICK_MODEL_CODE = 'Digit0';
 
   const buildDefaultKeyCodesFromPresentationGroups = (groups) => {
     const out = new Array(MAX_SLOTS).fill('');
@@ -336,7 +376,7 @@
         seenSlots.add(slot);
 
         if (base?.id === 'configure') {
-          out[slot] = DEFAULT_CONFIGURE_MODEL_CODE;
+          out[slot] = DEFAULT_PICK_MODEL_CODE;
           return;
         }
 
@@ -356,66 +396,103 @@
     );
   };
 
-  const isDynamicConfigureActionId = (value) =>
+  const isDynamicModelNameActionId = (value) =>
     /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
-  const normalizeConfigureOptionLabel = (value) =>
+  const normalizeModelNameLabel = (value) =>
     String(value || '')
       .replace(/\s+/g, ' ')
       .trim();
-  const isLatestConfigureOptionLabel = (value) => {
-    const text = normalizeConfigureOptionLabel(value).toLowerCase();
+  const isLatestModelNameLabel = (value) => {
+    const text = normalizeModelNameLabel(value).toLowerCase();
     return text === 'latest' || /^latest\b/.test(text);
   };
-  const slugifyConfigureOptionLabel = (value) => {
-    const slug = normalizeConfigureOptionLabel(value)
+  const parseModelNameVersion = (value) => {
+    const text = normalizeModelNameLabel(value);
+    const match = text.match(/(?:^|\b)(\d+(?:\.\d+)+)(?:\b|$)/);
+    return match ? match[1].split('.').map((part) => Number(part)) : null;
+  };
+  const compareModelNameVersions = (left, right) => {
+    const a = Array.isArray(left) ? left : [];
+    const b = Array.isArray(right) ? right : [];
+    const length = Math.max(a.length, b.length);
+    for (let i = 0; i < length; i++) {
+      const delta = (Number(a[i]) || 0) - (Number(b[i]) || 0);
+      if (delta !== 0) return delta;
+    }
+    return 0;
+  };
+  const getLatestModelNameIndex = (labels) => {
+    const normalizedLabels = Array.isArray(labels) ? labels : [];
+    const explicitLatestIndex = normalizedLabels.findIndex(isLatestModelNameLabel);
+    if (explicitLatestIndex >= 0) return explicitLatestIndex;
+
+    let latestIndex = -1;
+    let latestVersion = null;
+    normalizedLabels.forEach((label, index) => {
+      const version = parseModelNameVersion(label);
+      if (!version) return;
+      if (latestIndex < 0 || compareModelNameVersions(version, latestVersion) > 0) {
+        latestIndex = index;
+        latestVersion = version;
+      }
+    });
+    return latestIndex;
+  };
+  const slugifyModelNameLabel = (value) => {
+    const slug = normalizeModelNameLabel(value)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
     return slug || 'option';
   };
-  const normalizeConfigureActionId = (value) => {
+  const normalizeModelNameActionId = (value) => {
     const id = String(value || '').trim();
-    if (CONFIGURE_ACTION_IDS.includes(id) || isDynamicConfigureActionId(id)) return id;
+    if (MODEL_NAME_ACTION_IDS.includes(id) || isDynamicModelNameActionId(id)) return id;
     return '';
   };
   const normalizeActiveConfigId = (value) =>
-    normalizeConfigureActionId(value) || DEFAULT_ACTIVE_CONFIG_ID;
+    normalizeModelNameActionId(value) || DEFAULT_ACTIVE_CONFIG_ID;
   const normalizeAvailableConfigId = (value) => {
-    return normalizeConfigureActionId(value);
+    return normalizeModelNameActionId(value);
   };
   const toValidSlot = (value) => {
     const slot = Number(value);
     return Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS ? slot : -1;
   };
-  const toValidDynamicConfigureSlot = (value) => {
+  const toValidDynamicModelNameSlot = (value) => {
     const slot = toValidSlot(value);
-    return slot >= CONFIGURE_DYNAMIC_SLOT_START ? slot : -1;
+    return slot >= MODEL_NAME_DYNAMIC_SLOT_START ? slot : -1;
   };
-  const getDynamicConfigureFallbackSlot = (optionIndex) => {
+  const getDynamicModelNameFallbackSlot = (optionIndex) => {
     const index = Number.isInteger(Number(optionIndex)) ? Number(optionIndex) : 0;
-    return Math.min(MAX_SLOTS - 1, CONFIGURE_DYNAMIC_SLOT_START + Math.max(0, index - 1));
+    return Math.min(MAX_SLOTS - 1, MODEL_NAME_DYNAMIC_SLOT_START + Math.max(0, index - 1));
   };
 
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
-  const getStaticConfigureActionForOption = (label, optionIndex) => {
-    const text = normalizeConfigureOptionLabel(label);
-    if (optionIndex === 0 || isLatestConfigureOptionLabel(text))
-      return getActionById('configure-latest');
+  const getStaticModelNameActionForLabel = (label, optionIndex, latestIndex = -1) => {
+    const text = normalizeModelNameLabel(label);
+    const normalizedIndex = Number.isInteger(Number(optionIndex)) ? Number(optionIndex) : -1;
+    const normalizedLatestIndex = Number.isInteger(Number(latestIndex)) ? Number(latestIndex) : -1;
+    const isLatestIndex =
+      normalizedLatestIndex >= 0
+        ? normalizedIndex === normalizedLatestIndex
+        : normalizedIndex === 0;
+    if (isLatestIndex || isLatestModelNameLabel(text)) return getActionById('configure-latest');
     if (text === '5.2') return getActionById('configure-5-2');
     if (text === '5.0') return getActionById('configure-5-0-thinking-mini');
     if (text === 'o3') return getActionById('configure-o3');
     return null;
   };
-  const getConfigureActionForOption = (label, optionIndex = -1, slotHint = -1) => {
-    const text = normalizeConfigureOptionLabel(label);
-    const staticAction = getStaticConfigureActionForOption(text, optionIndex);
+  const getModelNameActionForLabel = (label, optionIndex = -1, slotHint = -1) => {
+    const text = normalizeModelNameLabel(label);
+    const staticAction = getStaticModelNameActionForLabel(text, optionIndex);
     if (staticAction) return { ...staticAction };
     if (!text) return null;
-    const hintedSlot = toValidDynamicConfigureSlot(slotHint);
-    const slot = hintedSlot >= 0 ? hintedSlot : getDynamicConfigureFallbackSlot(optionIndex);
+    const hintedSlot = toValidDynamicModelNameSlot(slotHint);
+    const slot = hintedSlot >= 0 ? hintedSlot : getDynamicModelNameFallbackSlot(optionIndex);
     return {
       slot,
-      id: `configure-dynamic-${slugifyConfigureOptionLabel(text)}`,
+      id: `configure-dynamic-${slugifyModelNameLabel(text)}`,
       group: 'configure',
       label: text,
       actionKind: 'configure-option',
@@ -424,16 +501,40 @@
       optionIndex: Number(optionIndex),
     };
   };
-  const getCatalogConfigureActions = (catalog, incomingNames) => {
+  const getModelNameActionForLabelInList = (
+    label,
+    optionIndex = -1,
+    labels = [],
+    slotHint = -1,
+  ) => {
+    const latestIndex = getLatestModelNameIndex(labels);
+    const text = normalizeModelNameLabel(label);
+    const staticAction = getStaticModelNameActionForLabel(text, optionIndex, latestIndex);
+    if (staticAction) return { ...staticAction };
+    if (!text) return null;
+    const hintedSlot = toValidDynamicModelNameSlot(slotHint);
+    const slot = hintedSlot >= 0 ? hintedSlot : getDynamicModelNameFallbackSlot(optionIndex);
+    return {
+      slot,
+      id: `configure-dynamic-${slugifyModelNameLabel(text)}`,
+      group: 'configure',
+      label: text,
+      actionKind: 'configure-option',
+      optionKind: 'value',
+      optionValue: text,
+      optionIndex: Number(optionIndex),
+    };
+  };
+  const getCatalogModelNameActions = (catalog, incomingNames) => {
     const options = Array.isArray(catalog?.configureOptions) ? catalog.configureOptions : [];
     const seenActionIds = new Set();
     const usedSlots = new Set();
     const reservedDynamicSlots = new Set(
       options
-        .map((option) => toValidDynamicConfigureSlot(option?.slot))
+        .map((option) => toValidDynamicModelNameSlot(option?.slot))
         .filter((slot) => slot >= 0),
     );
-    let nextDynamicSlot = CONFIGURE_DYNAMIC_SLOT_START;
+    let nextDynamicSlot = MODEL_NAME_DYNAMIC_SLOT_START;
     const takeNextDynamicSlot = () => {
       while (
         nextDynamicSlot < MAX_SLOTS &&
@@ -451,15 +552,15 @@
         const optionId = normalizeAvailableConfigId(option?.id);
         const base =
           getActionById(optionId) ||
-          getConfigureActionForOption(option?.label || '', index, option?.slot);
+          getModelNameActionForLabel(option?.label || '', index, option?.slot);
         const actionId = optionId || base?.id || '';
         if (!base || seenActionIds.has(actionId)) return null;
-        const isDynamic = isDynamicConfigureActionId(actionId);
+        const isDynamic = isDynamicModelNameActionId(actionId);
         let slot = toValidSlot(base.slot);
         if (isDynamic) {
-          const optionSlot = toValidDynamicConfigureSlot(option?.slot);
+          const optionSlot = toValidDynamicModelNameSlot(option?.slot);
           slot = optionSlot >= 0 ? optionSlot : -1;
-          if (slot < CONFIGURE_DYNAMIC_SLOT_START || usedSlots.has(slot)) {
+          if (slot < MODEL_NAME_DYNAMIC_SLOT_START || usedSlots.has(slot)) {
             slot = takeNextDynamicSlot();
           }
           if (slot < 0) return null;
@@ -470,7 +571,7 @@
         usedSlots.add(slot);
         const label =
           getCanonicalActionLabel(actionId, option?.label || '') ||
-          resolveConfigureDisplayLabel(base, incomingNames);
+          resolveModelNameDisplayLabel(base, incomingNames);
         return {
           ...base,
           slot,
@@ -484,26 +585,33 @@
     if (!actionId) return null;
     const staticAction = getActionById(actionId);
     if (staticAction) return { ...staticAction };
-    return getCatalogConfigureActions(catalog, incomingNames).find((action) => action.id === actionId) || null;
+    return (
+      getCatalogModelNameActions(catalog, incomingNames).find((action) => action.id === actionId) ||
+      null
+    );
   };
-  const getCatalogConfigureActionForOption = (label, optionIndex = -1, catalog = null) => {
-    const text = normalizeConfigureOptionLabel(label);
-    const fallback = getConfigureActionForOption(text, optionIndex);
-    const catalogActions = getCatalogConfigureActions(catalog, []);
+  const getCatalogModelNameActionForLabel = (label, optionIndex = -1, catalog = null) => {
+    const text = normalizeModelNameLabel(label);
+    const fallback = getModelNameActionForLabel(text, optionIndex);
+    const catalogActions = getCatalogModelNameActions(catalog, []);
     if (catalogActions.length) {
       const byId = fallback?.id ? catalogActions.find((action) => action.id === fallback.id) : null;
       if (byId) return { ...byId, fromCatalog: true };
 
       const byLabel = text
-        ? catalogActions.find((action) => normalizeConfigureOptionLabel(action.label) === text)
+        ? catalogActions.find((action) => normalizeModelNameLabel(action.label) === text)
         : null;
       if (byLabel) return { ...byLabel, fromCatalog: true };
     }
     return fallback ? { ...fallback, fromCatalog: false } : null;
   };
+  const getConfigureActionForOption = getModelNameActionForLabel;
+  const getConfigureActionForOptionInList = getModelNameActionForLabelInList;
+  const getLatestConfigureOptionIndex = getLatestModelNameIndex;
+  const getCatalogConfigureActionForOption = getCatalogModelNameActionForLabel;
   const resolveCatalogActiveConfigId = (activeConfigId, catalog) => {
     const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
-    const availableIds = getCatalogConfigureActions(catalog, []).map((action) => action.id);
+    const availableIds = getCatalogModelNameActions(catalog, []).map((action) => action.id);
     if (!availableIds.length || availableIds.includes(normalizedActiveConfigId)) {
       return normalizedActiveConfigId;
     }
@@ -511,22 +619,21 @@
       ? DEFAULT_ACTIVE_CONFIG_ID
       : availableIds[0];
   };
-  const getConfigurePresentationActions = (activeConfigId, incomingNames, catalog) => {
+  const getModelNamePresentationActions = (activeConfigId, incomingNames, catalog) => {
     const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
-    const sourceActions = getCatalogConfigureActions(catalog, incomingNames);
-    const actions = sourceActions.length ? sourceActions : CONFIGURE_ACTIONS;
+    const sourceActions = getCatalogModelNameActions(catalog, incomingNames);
+    const actions = sourceActions.length ? sourceActions : MODEL_NAME_ACTIONS;
     return actions.map((action) => ({
       ...action,
       label: sourceActions.length
         ? action.label
-        : resolveConfigureDisplayLabel(action, incomingNames),
+        : resolveModelNameDisplayLabel(action, incomingNames),
       viewGroup: 'configure',
       viewKey: `configure:${action.id}`,
       active: action.id === normalizedActiveConfigId,
       labelI18nKey: '',
     }));
   };
-
   const getPrimaryActionIdsForActiveConfig = (activeConfigId) =>
     PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG[normalizeActiveConfigId(activeConfigId)] ||
     PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG[DEFAULT_ACTIVE_CONFIG_ID];
@@ -649,7 +756,7 @@
     return action?.label || '';
   };
 
-  const resolveConfigureDisplayLabel = (action, incomingNames) => {
+  const resolveModelNameDisplayLabel = (action, incomingNames) => {
     const names = Array.isArray(incomingNames) ? incomingNames : [];
     const slot = Number(action?.slot);
     const fromStorage =
@@ -700,9 +807,9 @@
   const getPresentationGroups = (activeConfigId, incomingNames) => {
     const normalizedActiveConfigId = normalizeActiveConfigId(activeConfigId);
     const primaryActions = getPrimaryPresentationActions(normalizedActiveConfigId, incomingNames);
-    const configureActions = CONFIGURE_ACTIONS.map((action) => ({
+    const modelNameActions = MODEL_NAME_ACTIONS.map((action) => ({
       ...action,
-      label: resolveConfigureDisplayLabel(action, incomingNames),
+      label: resolveModelNameDisplayLabel(action, incomingNames),
       viewGroup: 'configure',
       viewKey: `configure:${action.id}`,
       active: action.id === normalizedActiveConfigId,
@@ -719,10 +826,10 @@
       },
       {
         id: 'configure',
-        label: 'Configure Models',
+        label: 'Pick Model',
         labelI18nKey: 'label_configureModelsCompact',
         compactLabel: true,
-        actions: configureActions,
+        actions: modelNameActions,
       },
     ];
   };
@@ -745,8 +852,9 @@
       )
       .filter(Boolean);
     if (fromCatalog.length) {
-      const configureAction = getActionById('configure');
-      if (configureAction) {
+      const shouldAppendConfigure = catalog?.integratedEffort !== true;
+      const configureAction = shouldAppendConfigure ? getActionById('configure') : null;
+      if (configureAction && !fromCatalog.some((action) => action.id === configureAction.id)) {
         fromCatalog.push({
           ...configureAction,
           label: configureAction.label,
@@ -756,6 +864,28 @@
         });
       }
       return fromCatalog;
+    }
+
+    if (catalog?.integratedEffort === true) {
+      const fallbackIds =
+        normalizedActiveConfigId === DEFAULT_ACTIVE_CONFIG_ID
+          ? ['instant', 'thinking', 'pro']
+          : getPopupPrimaryFallbackIdsForActiveConfig(normalizedActiveConfigId).filter(
+              (actionId) => actionId !== 'configure',
+            );
+      return fallbackIds
+        .map((actionId) => {
+          const base = getActionById(actionId);
+          if (!base) return null;
+          return {
+            ...base,
+            label: base.id === 'thinking' ? 'Medium' : base.id === 'pro' ? 'High' : base.label,
+            labelI18nKey: '',
+            viewGroup: 'primary',
+            viewKey: `popup-primary:${normalizedActiveConfigId}:${base.id}`,
+          };
+        })
+        .filter(Boolean);
     }
 
     return getPopupPrimaryFallbackIdsForActiveConfig(normalizedActiveConfigId)
@@ -775,12 +905,18 @@
       .filter(Boolean);
   };
   const getPopupPresentationGroups = (activeConfigId, incomingNames, catalog) => {
-    const normalizedActiveConfigId = resolveCatalogActiveConfigId(activeConfigId, catalog);
-    const primaryActions = getPopupPrimaryActions(normalizedActiveConfigId, incomingNames, catalog);
-    const configureActions = getConfigurePresentationActions(
+    const effectiveCatalog =
+      catalog && typeof catalog === 'object' ? catalog : DEFAULT_INTEGRATED_MODEL_CATALOG;
+    const normalizedActiveConfigId = resolveCatalogActiveConfigId(activeConfigId, effectiveCatalog);
+    const primaryActions = getPopupPrimaryActions(
       normalizedActiveConfigId,
       incomingNames,
-      catalog,
+      effectiveCatalog,
+    );
+    const modelNameActions = getModelNamePresentationActions(
+      normalizedActiveConfigId,
+      incomingNames,
+      effectiveCatalog,
     );
 
     return [
@@ -793,10 +929,10 @@
       },
       {
         id: 'configure',
-        label: 'Configure Models',
+        label: 'Pick Model',
         labelI18nKey: 'label_configureModelsCompact',
         compactLabel: true,
-        actions: configureActions,
+        actions: modelNameActions,
       },
     ];
   };
@@ -804,7 +940,8 @@
     const text = normalizeMenuText(label);
     if (!text) return '';
     if (text === 'instant') return 'instant';
-    if (text === 'thinking') return 'thinking';
+    if (text === 'thinking' || text === 'medium') return 'thinking';
+    if (text === 'high') return 'pro';
     if (text === 'pro')
       return normalizeActiveConfigId(activeConfigId) === 'configure-latest' ? 'pro' : '';
     if (text === 'thinking mini' || text === 'gpt-5 mini') return 'configure-5-0-thinking-mini';
@@ -816,6 +953,12 @@
     const action = getActionById(actionId);
     const fallback = (observedLabel ?? '').toString().trim();
     if (!action) return fallback;
+    if (action.id === 'thinking')
+      return fallback && !/^thinking$/i.test(fallback) ? fallback : 'Medium';
+    if (action.id === 'pro') return fallback && !/^pro$/i.test(fallback) ? fallback : 'High';
+    if (action.id === 'configure' && /^configure\b/i.test(fallback)) return '';
+    if (action.id === 'configure-latest')
+      return fallback && !/^latest$/i.test(fallback) ? fallback : '5.5';
     if (action.id === 'configure-5-0-thinking-mini') return '5.0 Thinking Mini';
     return String(action.label || fallback || '').trim();
   };
@@ -824,6 +967,12 @@
     const text = (value ?? '').toString().trim();
     if (!text) return '';
     const action = getActionBySlot(slot);
+    if (
+      (action?.id === 'configure-5-2' && /^5\.2$/i.test(text)) ||
+      (action?.id === 'configure-5-0-thinking-mini' && /^5\.0\b/i.test(text))
+    ) {
+      return '';
+    }
     if (action?.id) return getCanonicalActionLabel(action.id, text);
     return text;
   };
@@ -837,18 +986,18 @@
   };
 
   const resolveActionableNames = (incoming) => {
-    const out = defaultActionNames();
+    const out = defaultNames();
     const inArr = Array.isArray(incoming) ? incoming.slice(0, MAX_SLOTS) : [];
-    for (let i = 0; i < ACTION_SLOT_COUNT; i++) {
+    for (let i = 0; i < MAX_SLOTS; i++) {
       const value = normalizeStoredActionName(i, inArr[i]);
       if (value && !isLegacyArrow(value)) out[i] = value;
     }
-    return out.slice(0, ACTION_SLOT_COUNT);
+    return out.slice(0, MAX_SLOTS);
   };
 
-  // Best-guess defaults for initial UI (before scrape). Arrow is canonical “→”.
+  // Current scraped defaults for initial UI before a live refresh completes.
   const defaultNames = () => {
-    const arr = defaultActionNames();
+    const arr = DEFAULT_INTEGRATED_MODEL_NAMES.slice(0, MAX_SLOTS);
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
   };
@@ -887,7 +1036,15 @@
     getActionBySlot,
     getActionById,
     getCatalogActionById,
+    getModelNameActionForLabel,
+    getModelNameActionForLabelInList,
+    getLatestModelNameIndex,
+    getCatalogModelNameActionForLabel,
+    getCatalogModelNameActions,
+    getModelNamePresentationActions,
     getConfigureActionForOption,
+    getConfigureActionForOptionInList,
+    getLatestConfigureOptionIndex,
     getCatalogConfigureActionForOption,
     getPrimaryActionIdsForActiveConfig,
     getPrimaryPresentationActions,

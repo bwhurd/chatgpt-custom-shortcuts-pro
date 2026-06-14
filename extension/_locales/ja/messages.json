@@ -492,7 +492,7 @@
     "message": "Pro Effort"
   },
   "label_configureModelsCompact": {
-    "message": "モデルを設定"
+    "message": "Pick Model"
   },
   "label_modelPickerUseLatestModel": {
     "message": "最新モデルを使う"

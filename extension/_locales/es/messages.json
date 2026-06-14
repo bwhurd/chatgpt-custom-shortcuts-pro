@@ -492,7 +492,7 @@
     "message": "Pro Effort"
   },
   "label_configureModelsCompact": {
-    "message": "Configurar modelos"
+    "message": "Pick Model"
   },
   "label_modelPickerUseLatestModel": {
     "message": "Usar el modelo más reciente"

@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 06.14.2026
+- Changed: Legacy message arrows shift left when ChatGPT's prompt rail gets crowded.
+
 #### 06.09.2026
 - Fixed: Edit Message shortcut opens reliably after bottom-of-thread reloads without jumpy follow-up scrolling.
 - Fixed: Scroll to Top and Scroll to Bottom now reach the actual conversation boundaries reliably.

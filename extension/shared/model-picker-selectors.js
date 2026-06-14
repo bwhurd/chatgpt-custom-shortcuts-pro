@@ -17,6 +17,10 @@
   ]);
   const MODEL_MENU_BUTTON_SELECTOR = MODEL_MENU_BUTTON_SELECTORS.join(', ');
   const MODEL_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR =
+    '[data-testid="composer-intelligence-picker-content"]';
+  const MODEL_SUBMENU_TRIGGER_SELECTOR =
+    '[role="menuitem"][aria-haspopup="menu"], [role="menuitem"][data-has-submenu]';
   const MODEL_CONFIGURE_MENU_ITEM_SELECTOR = '[data-testid="model-configure-modal"]';
   const MODEL_CONFIGURE_DIALOG_SELECTOR = '[role="dialog"]';
   const MODEL_SELECTION_LABEL_ID = 'model-selection-label';
@@ -43,6 +47,7 @@
   function getModelSwitcherMenuMatchGroups() {
     return [
       ['data-radix-menu-content', 'role="menu"', 'data-state="open"'],
+      ['data-testid="composer-intelligence-picker-content"'],
       ['role="menu"', 'data-testid="model-configure-modal"'],
     ];
   }
@@ -128,6 +133,7 @@
       .filter((menu) => isUsablyVisibleElement(menu, windowObj))
       .filter((menu) => {
         if (triggerId && menu.getAttribute('aria-labelledby') === triggerId) return true;
+        if (menu.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR)) return true;
         if (menu.querySelector(MODEL_CONFIGURE_MENU_ITEM_SELECTOR)) return true;
         return !!menu.querySelector('[data-testid^="model-switcher-"]');
       });
@@ -140,6 +146,8 @@
     MODEL_MENU_BUTTON_SELECTORS,
     MODEL_MENU_BUTTON_SELECTOR,
     MODEL_MENU_SELECTOR,
+    COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR,
+    MODEL_SUBMENU_TRIGGER_SELECTOR,
     MODEL_CONFIGURE_MENU_ITEM_SELECTOR,
     MODEL_CONFIGURE_DIALOG_SELECTOR,
     MODEL_SELECTION_LABEL_ID,

@@ -480,7 +480,7 @@
     "message": "Start a new conversation that stays with your current custom GPT, instead of switching back to the main ChatGPT model."
   },
   "section_switch_models": {
-    "message": "Switch Models"
+    "message": "Effort"
   },
   "section_model_picker_tweaks": {
     "message": "Model Picker"
@@ -492,7 +492,7 @@
     "message": "Pro Effort"
   },
   "label_configureModelsCompact": {
-    "message": "Configure Models"
+    "message": "Pick Model"
   },
   "label_modelPickerUseLatestModel": {
     "message": "Use latest model"
@@ -501,7 +501,7 @@
     "message": "Thinking mini"
   },
   "toast_modelPickerOpenChatGptTab": {
-    "message": "Open a ChatGPT tab to switch configure models."
+    "message": "Open a ChatGPT tab to pick models."
   },
   "label_modelPickerLoadingAvailableModels": {
     "message": "Loading available models..."

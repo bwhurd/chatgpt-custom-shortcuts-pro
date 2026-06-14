@@ -2505,6 +2505,28 @@ const delays = DELAYS;
     scrollUpByMessages(2, feedbackTarget);
   }
 
+  const LEGACY_ARROW_POSITION_STYLE_ID = 'csp-legacy-arrow-position-style';
+  const LEGACY_ARROW_RIGHT_DEFAULT = '26px';
+  const LEGACY_ARROW_RIGHT_WITH_PROMPT_RAIL = 'calc(1rem + 2.25rem + 2em)';
+
+  function ensureLegacyArrowButtonPositionStyle() {
+    if (document.getElementById(LEGACY_ARROW_POSITION_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = LEGACY_ARROW_POSITION_STYLE_ID;
+    style.textContent = `
+      @supports selector(body:has(*)) {
+        body:has(
+          div[class~="fixed"][class~="top-1/2"][class~="inset-e-4"]
+            div[class~="no-scrollbar"][class~="overflow-y-auto"] > button:nth-of-type(40)
+        ) {
+          --csp-legacy-scroll-arrow-right: ${LEGACY_ARROW_RIGHT_WITH_PROMPT_RAIL};
+        }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   function createScrollUpButton() {
     // Return a harmless node when button is gated off – avoids undefined append
     if (!window.showLegacyArrowButtonsCheckbox) {
@@ -2533,8 +2555,9 @@ const delays = DELAYS;
       'dark:text-gray-200',
     );
     upButton.style.cssText =
-      'display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 196px; right: 26px; z-index: 10000; transition: opacity 1s;';
+      `display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 196px; right: var(--csp-legacy-scroll-arrow-right, ${LEGACY_ARROW_RIGHT_DEFAULT}); z-index: 10000; transition: opacity 1s;`;
     upButton.id = 'upButton';
+    upButton.dataset.cspLegacyScrollArrow = 'true';
 
     upButton.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xl" style="transform: scale(0.75);">
@@ -2668,8 +2691,9 @@ const delays = DELAYS;
       'dark:text-gray-200',
     );
     downButton.style.cssText =
-      'display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 228px; right: 26px; z-index: 10000; transition: opacity 1s;';
+      `display: flex; align-items: center; justify-content: center; background-color: var(--main-surface-tertiary); color: var(--text-primary); opacity: 0.8; width: 25.33px; height: 25.33px; border-radius: 50%; position: fixed; top: 228px; right: var(--csp-legacy-scroll-arrow-right, ${LEGACY_ARROW_RIGHT_DEFAULT}); z-index: 10000; transition: opacity 1s;`;
     downButton.id = 'downButton';
+    downButton.dataset.cspLegacyScrollArrow = 'true';
 
     downButton.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="icon-2xl" style="transform: scale(0.75);">
@@ -2753,6 +2777,7 @@ const delays = DELAYS;
 
     // Remove any previous buttons (or comments)
     removeExistingArrowButtons();
+    ensureLegacyArrowButtonPositionStyle();
 
     // Add fresh buttons (will only show when the checkbox is checked)
     const upButton = createScrollUpButton();
@@ -4608,27 +4633,158 @@ const delays = DELAYS;
           }
         };
 
+        const focusAndSelectEditField = (turn) => {
+          if (!turn?.isConnected || !findOpenedEditField(turn)) return false;
+          let expectedText = null;
+
+          const selectFieldText = () => {
+            if (!turn?.isConnected) return;
+            const editField = findOpenedEditField(turn);
+            if (!editField) return;
+
+            const currentText = editField.matches('textarea, input')
+              ? editField.value || ''
+              : editField.textContent || '';
+            if (expectedText === null || (expectedText === '' && currentText)) {
+              expectedText = currentText;
+            } else if (currentText !== expectedText) {
+              return;
+            }
+
+            try {
+              editField.focus({ preventScroll: true });
+            } catch {
+              try {
+                editField.focus();
+              } catch { }
+            }
+
+            try {
+              if (editField.matches('textarea, input')) {
+                const length = editField.value?.length || 0;
+                if (
+                  document.activeElement === editField &&
+                  editField.selectionStart === 0 &&
+                  editField.selectionEnd === length
+                ) {
+                  return;
+                }
+                if (typeof editField.select === 'function') editField.select();
+                editField.setSelectionRange(0, length);
+                return;
+              }
+
+              if (editField.isContentEditable) {
+                const range = document.createRange();
+                range.selectNodeContents(editField);
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+              }
+            } catch { }
+          };
+
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => {
+              selectFieldText();
+              setTimeout(selectFieldText, 80);
+              setTimeout(selectFieldText, 250);
+            });
+          } else {
+            setTimeout(selectFieldText, 0);
+            setTimeout(selectFieldText, 80);
+            setTimeout(selectFieldText, 250);
+          }
+
+          return true;
+        };
+
+        const handleOpenedEditField = (turn) => {
+          focusAndSelectEditField(turn);
+          stabilizeOpenedEditCard(turn);
+        };
+
+        const waitForOpenedEditField = (turn, onOpen, timeout = 1500) => {
+          if (!turn?.isConnected || typeof onOpen !== 'function') return false;
+          let done = false;
+          let observer = null;
+          let timeoutId = null;
+          let rafId = null;
+
+          const cleanup = () => {
+            done = true;
+            observer?.disconnect();
+            if (timeoutId !== null) clearTimeout(timeoutId);
+            if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
+              window.cancelAnimationFrame(rafId);
+            }
+          };
+
+          const check = () => {
+            if (done) return true;
+            if (!turn?.isConnected) {
+              cleanup();
+              return true;
+            }
+            if (findOpenedEditField(turn)) {
+              cleanup();
+              onOpen();
+              return true;
+            }
+            return false;
+          };
+
+          const scheduleCheck = () => {
+            if (done) return;
+            if (typeof window.requestAnimationFrame === 'function') {
+              if (rafId !== null) return;
+              rafId = window.requestAnimationFrame(() => {
+                rafId = null;
+                check();
+              });
+            } else {
+              setTimeout(check, 0);
+            }
+          };
+
+          if (check()) return true;
+
+          observer = new MutationObserver(scheduleCheck);
+          observer.observe(turn, { childList: true, subtree: true });
+          timeoutId = setTimeout(() => {
+            check();
+            cleanup();
+          }, timeout);
+
+          return true;
+        };
+
         const openEditButtonWithRetry = (button) => {
           const turn = getEditTurn(button);
           if (!turn?.isConnected || !clickEditButton(button)) return;
+          let handled = false;
+          const handleOnce = () => {
+            if (handled) return;
+            handled = true;
+            handleOpenedEditField(turn);
+          };
+          waitForOpenedEditField(turn, handleOnce);
 
           setTimeout(() => {
             if (findOpenedEditField(turn)) {
-              stabilizeOpenedEditCard(turn);
+              handleOnce();
               return;
             }
 
             if (!button?.isConnected) {
-              setTimeout(() => {
-                if (findOpenedEditField(turn)) stabilizeOpenedEditCard(turn);
-              }, 150);
               return;
             }
             clickEditButton(button);
+            waitForOpenedEditField(turn, handleOnce);
 
             setTimeout(() => {
               if (findOpenedEditField(turn)) {
-                stabilizeOpenedEditCard(turn);
+                handleOnce();
               }
             }, 100);
           }, 100);
@@ -4771,9 +4927,18 @@ const delays = DELAYS;
 
           const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
           const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+          const COMPOSER_SCOPE_SELECTOR =
+            '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background';
+          const USER_TURN_SELECTOR =
+            'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], [data-turn="user"]';
+          const getUserTurn = (el) => {
+            const turn = el?.closest?.(USER_TURN_SELECTOR);
+            return turn?.getAttribute?.('data-turn') === 'user' ? turn : null;
+          };
 
           const isVisible = (btn) => {
             if (!btn || btn.disabled) return false;
+            if (btn.closest(COMPOSER_SCOPE_SELECTOR)) return false;
             if (btn.closest('[aria-hidden="true"]')) return false;
             const style = window.getComputedStyle(btn);
             if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
@@ -4793,6 +4958,74 @@ const delays = DELAYS;
           const getButtonLabel = (btn) =>
             (btn?.textContent || btn?.innerText || btn?.getAttribute?.('aria-label') || '').trim();
 
+          const getFocusedEditField = () => {
+            const roots = [];
+            if (document.activeElement instanceof Element) roots.push(document.activeElement);
+
+            try {
+              const selection = window.getSelection?.();
+              for (const node of [selection?.anchorNode, selection?.focusNode]) {
+                const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+                if (element instanceof Element) roots.push(element);
+              }
+            } catch { }
+
+            return (
+              roots
+                .map((root) =>
+                  root.closest?.('textarea, input, [contenteditable="true"]'),
+                )
+                .filter((field) => field instanceof Element && field.isConnected)
+                .find((field) => {
+                  if (!getUserTurn(field) || field.closest(COMPOSER_SCOPE_SELECTOR)) return false;
+
+                  const rect = field.getBoundingClientRect();
+                  return (
+                    rect.width > 0 &&
+                    rect.height > 0 &&
+                    rect.bottom > 0 &&
+                    rect.right > 0 &&
+                    rect.top < viewportHeight &&
+                    rect.left < viewportWidth &&
+                    isAboveComposer(rect, field)
+                  );
+                }) || null
+            );
+          };
+
+          const findFocusedEditSendButton = () => {
+            const editField = getFocusedEditField();
+            if (!editField) return null;
+
+            const editCard =
+              editField.closest('.bg-token-main-surface-tertiary') ||
+              editField.closest('.rounded-3xl') ||
+              editField.closest('[data-message-id]') ||
+              getUserTurn(editField);
+            if (!editCard) return null;
+
+            const rows = Array.from(
+              new Set([
+                ...Array.from(editCard.querySelectorAll('div.flex.justify-end.gap-2')),
+                ...Array.from(editCard.querySelectorAll('div.flex.justify-end')),
+              ]),
+            );
+            const buttons = rows
+              .flatMap((row) => Array.from(row.querySelectorAll('button')))
+              .filter(isVisible);
+            if (!buttons.length) return null;
+
+            return (
+              buttons.find((btn) => btn.classList.contains('btn-primary')) ||
+              buttons.reduce((rightMost, current) => {
+                const rightRect = rightMost.getBoundingClientRect();
+                const currentRect = current.getBoundingClientRect();
+                if (currentRect.top > rightRect.top + 4) return current;
+                return currentRect.right >= rightRect.right ? current : rightMost;
+              })
+            );
+          };
+
           const findEditSendButton = (row) => {
             if (!row) return null;
             const buttons = Array.from(row.querySelectorAll('button'));
@@ -4807,9 +5040,20 @@ const delays = DELAYS;
             return sendBtn || null;
           };
 
+          const focusedSendButton = findFocusedEditSendButton();
+          if (focusedSendButton) {
+            if (window.gsap) flashBorder(focusedSendButton);
+            setTimeout(() => {
+              safeClick(focusedSendButton);
+            }, DELAY_BEFORE_CLICK);
+            return;
+          }
+
           // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
           const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
             .map((ta) => {
+              if (!getUserTurn(ta) || ta.closest(COMPOSER_SCOPE_SELECTOR)) return null;
+
               // Scope to the edit card around the textarea
               const editCard =
                 ta.closest('.bg-token-main-surface-tertiary') ||
@@ -4832,10 +5076,12 @@ const delays = DELAYS;
             document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'),
           )
             .map((row) => {
+              if (row.closest(COMPOSER_SCOPE_SELECTOR)) return null;
               const scope = row.closest(
                 '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]',
               );
               if (!scope) return null;
+              if (!getUserTurn(scope)) return null;
               if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
               return findEditSendButton(row);
             })
@@ -9081,6 +9327,12 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const MODEL_MENU_SELECTOR =
     ModelPickerSelectors.MODEL_MENU_SELECTOR ||
     '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR =
+    ModelPickerSelectors.COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR ||
+    '[data-testid="composer-intelligence-picker-content"]';
+  const MODEL_SUBMENU_TRIGGER_SELECTOR =
+    ModelPickerSelectors.MODEL_SUBMENU_TRIGGER_SELECTOR ||
+    '[role="menuitem"][aria-haspopup="menu"], [role="menuitem"][data-has-submenu]';
   const MODEL_THINKING_EFFORT_ROW_SELECTOR =
     ModelPickerSelectors.MODEL_THINKING_EFFORT_ROW_SELECTOR ||
     '[data-model-picker-thinking-effort-row="true"]';
@@ -9096,7 +9348,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
     ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
     ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
-    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])';
+    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
+    ':scope > * > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
+    ':scope > * > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])';
   const THINKING_EFFORT_OPTION_IDS = [
     'thinking-standard',
     'thinking-extended',
@@ -9189,6 +9443,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       ? window.ModelLabels.normalizeActiveConfigId(value)
       : [
         'configure-latest',
+        'configure-dynamic-5-4',
+        'configure-dynamic-5-3',
         'configure-5-2',
         'configure-5-0-thinking-mini',
         'configure-o3',
@@ -9205,11 +9461,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const out = new Array(MAX_SLOTS).fill('');
         out[0] = 'Digit1';
         out[1] = 'Digit2';
-        out[2] = 'Digit0';
-        out[3] = 'Digit3';
-        out[4] = 'Digit4';
-        out[5] = 'Digit5';
-        out[6] = 'Digit6';
+        out[3] = 'Digit4';
+        out[6] = 'Digit7';
+        out[7] = 'Digit3';
+        out[8] = 'Digit5';
+        out[9] = 'Digit6';
         return out;
       })();
   const sleepAsync =
@@ -9441,6 +9697,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     }
 
     return !!document.querySelector(
+      `${MODEL_MENU_SELECTOR} ${COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR}, ` +
       `${MODEL_MENU_SELECTOR} [data-testid="model-configure-modal"], ` +
       `${MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`,
     );
@@ -9460,6 +9717,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
   const isModelSubmenuTriggerItem = (item) => {
     if (!(item instanceof Element)) return false;
+    if (item.matches(MODEL_THINKING_EFFORT_ACTION_SELECTOR)) return false;
+    if (item.matches(MODEL_SUBMENU_TRIGGER_SELECTOR) || item.hasAttribute('data-has-submenu')) {
+      return true;
+    }
     if (
       typeof window.ModelLabels?.isSubmenuTrigger === 'function' &&
       window.ModelLabels.isSubmenuTrigger(item)
@@ -9469,12 +9730,37 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     const tid = normModelTid(item.getAttribute('data-testid'));
     return !!tid && (tid.endsWith('-submenu') || tid.includes('legacy'));
   };
+  const isLegacyModelSubmenuTriggerItem = (item) => {
+    if (!(item instanceof Element)) return false;
+    const tid = normModelTid(item.getAttribute('data-testid'));
+    if (tid.includes('legacy')) return true;
+    const text = (item.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return /^legacy\s+models?\b/.test(text);
+  };
+  const isCurrentModelSubmenuTriggerItem = (item) =>
+    isModelSubmenuTriggerItem(item) && !isLegacyModelSubmenuTriggerItem(item);
+  const isLikelyModelVersionLabel = (value) => {
+    const text = String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (!text) return false;
+    if (['instant', 'medium', 'high', 'standard', 'extended', 'light', 'heavy'].includes(text)) {
+      return false;
+    }
+    return /^(?:gpt[-\s]*)?\d+(?:\.\d+)?(?:\b|$)/i.test(text) || /^o\d+(?:\b|$)/i.test(text);
+  };
+  const isLikelyModelVersionMenuElement = (menuEl) =>
+    menuEl instanceof Element &&
+    getDirectModelMenuItems(menuEl).some((item) => isLikelyModelVersionLabel(item.textContent));
 
   const isPrimaryModelMenuElement = (menuEl) => {
     if (!(menuEl instanceof Element)) return false;
 
     const items = getDirectModelMenuItems(menuEl);
     if (!items.length) return false;
+
+    if (menuEl.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR)) return true;
 
     const labelledby = menuEl.getAttribute('aria-labelledby') || '';
     const triggerId = getModelMenuButton()?.id || '';
@@ -9495,12 +9781,28 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
   const isNestedModelMenuElement = (menuEl) => {
     if (!(menuEl instanceof Element)) return false;
-    if (!getDirectModelMenuItems(menuEl).some(isKnownModelMenuItem)) return false;
+    const directItems = getDirectModelMenuItems(menuEl);
+    if (!directItems.length) return false;
 
     const labelledby = menuEl.getAttribute('aria-labelledby') || '';
     const triggerEl = labelledby ? document.getElementById(labelledby) : null;
     const parentMenu = triggerEl?.closest('[data-radix-menu-content]');
-    return !!(parentMenu && isPrimaryModelMenuElement(parentMenu));
+    if (
+      parentMenu &&
+      isPrimaryModelMenuElement(parentMenu) &&
+      isCurrentModelSubmenuTriggerItem(triggerEl)
+    ) {
+      return true;
+    }
+
+    if (
+      getOpenRadixMenus().some((menu) => menu !== menuEl && isPrimaryModelMenuElement(menu)) &&
+      isLikelyModelVersionMenuElement(menuEl)
+    ) {
+      return true;
+    }
+
+    return directItems.some(isKnownModelMenuItem) && !!(parentMenu && isPrimaryModelMenuElement(parentMenu));
   };
 
   const sortModelMenus = (menus) =>
@@ -9533,6 +9835,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     if (exact) return exact;
 
     const candidates = directItems.filter(isModelSubmenuTriggerItem);
+    const current = candidates.find(isCurrentModelSubmenuTriggerItem);
+    if (current) return current;
+
     const byTid = candidates.find((item) =>
       normModelTid(item.getAttribute('data-testid')).includes('legacy'),
     );
@@ -9551,7 +9856,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     for (let m = 0; m < orderedMenus.length && items.length < MAX_SLOTS; m++) {
       const directItems = getDirectModelMenuItems(orderedMenus[m]);
       const filtered =
-        m === 0 ? directItems.filter((item) => !isModelSubmenuTriggerItem(item)) : directItems;
+        m === 0
+          ? directItems.filter((item) => !isLegacyModelSubmenuTriggerItem(item))
+          : directItems;
       filtered.forEach((el, idx) => {
         if (items.length < MAX_SLOTS) {
           items.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
@@ -9562,6 +9869,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     return {
       menus: orderedMenus,
       main,
+      submenu: orderedMenus.find((menu) => menu !== main) || null,
       submenuTrigger: findModelSubmenuTrigger(main),
       submenuOpen: orderedMenus.length > 1,
       items,
@@ -10041,6 +10349,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         };
         const tid = normModelTid(item.getAttribute('data-testid'));
         if (tid === 'model-configure-modal') return 'configure';
+        if (isCurrentModelSubmenuTriggerItem(item)) return 'configure';
         if (
           item.hasAttribute('data-model-picker-thinking-effort-menu-item') ||
           /(?:^|-)thinking(?:$|-)/.test(tid)
@@ -10293,9 +10602,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (primaryMatch) return primaryMatch.item;
         if (action.id === 'configure') {
           const configureEl = findConfigureMenuItem(state);
+          if (!configureEl && isCurrentModelSubmenuTriggerItem(state.submenuTrigger)) {
+            return { el: state.submenuTrigger, menu: 'main', idx: -1 };
+          }
           return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
         }
         if (action.actionKind === 'configure-option') {
+          if (isCurrentModelSubmenuTriggerItem(state.submenuTrigger)) {
+            return { el: state.submenuTrigger, menu: 'main', idx: -1 };
+          }
           const stateItem = findMainItemByTestId('model-configure-modal', state);
           if (stateItem) return stateItem;
           const configureEl = findConfigureMenuItem(state);
@@ -10390,15 +10705,31 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
         const optionIndex = options.indexOf(option);
         const label = getConfigureOptionLabel(option);
-        if (typeof window.ModelLabels?.getCatalogConfigureActionForOption === 'function') {
-          return window.ModelLabels.getCatalogConfigureActionForOption(
+        const optionLabels = options.map(getConfigureOptionLabel);
+        const listAction =
+          optionLabels.length && typeof window.ModelLabels?.getModelNameActionForLabelInList === 'function'
+            ? window.ModelLabels.getModelNameActionForLabelInList(
+                label,
+                optionIndex,
+                optionLabels,
+                slotHint,
+              )
+            : null;
+        if (typeof window.ModelLabels?.getCatalogModelNameActionForLabel === 'function') {
+          const catalogAction = window.ModelLabels.getCatalogModelNameActionForLabel(
             label,
             optionIndex,
             window.__modelCatalog || null,
           );
+          if (listAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID) return listAction;
+          if (catalogAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID && listAction?.id) {
+            return listAction;
+          }
+          if (catalogAction) return catalogAction;
         }
-        if (typeof window.ModelLabels?.getConfigureActionForOption === 'function') {
-          return window.ModelLabels.getConfigureActionForOption(label, optionIndex, slotHint);
+        if (listAction) return listAction;
+        if (typeof window.ModelLabels?.getModelNameActionForLabel === 'function') {
+          return window.ModelLabels.getModelNameActionForLabel(label, optionIndex, slotHint);
         }
         if (optionIndex === 0) return getModelActionById('configure-latest');
         if (label === '5.2') return getModelActionById('configure-5-2');
@@ -10837,8 +11168,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           : [];
         configureOptions.forEach((option, optionIndex) => {
           const action =
-            typeof window.ModelLabels?.getConfigureActionForOption === 'function'
-              ? window.ModelLabels.getConfigureActionForOption(
+            typeof window.ModelLabels?.getModelNameActionForLabel === 'function'
+              ? window.ModelLabels.getModelNameActionForLabel(
                   option?.label || '',
                   optionIndex,
                   option?.slot,
@@ -10891,10 +11222,312 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         await sleepAsync(80);
         return option;
       };
+      const getModelVersionMenuItems = (menu) =>
+        menu instanceof Element
+          ? getDirectModelMenuItems(menu).filter((item) =>
+              isLikelyModelVersionLabel(__cspTextNoHint(item)),
+            )
+          : [];
+      const getModelVersionMenuItemLabel = (item) => {
+        if (!(item instanceof Element)) return '';
+        const primary = item.querySelector('.truncate') || item;
+        return __cspTextNoHint(primary).replace(/\s+/g, ' ').trim();
+      };
+      const getModelNameActionForMenuItem = (
+        item,
+        itemIndex,
+        catalog = window.__modelCatalog,
+        listLabels = [],
+      ) => {
+        const label = getModelVersionMenuItemLabel(item);
+        if (!label) return null;
+        const listAction =
+          Array.isArray(listLabels) &&
+          listLabels.length &&
+          typeof window.ModelLabels?.getModelNameActionForLabelInList === 'function'
+            ? window.ModelLabels.getModelNameActionForLabelInList(label, itemIndex, listLabels)
+            : null;
+        if (typeof window.ModelLabels?.getCatalogModelNameActionForLabel === 'function') {
+          const catalogAction = window.ModelLabels.getCatalogModelNameActionForLabel(
+            label,
+            itemIndex,
+            catalog || null,
+          );
+          if (listAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID) return listAction;
+          if (catalogAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID && listAction?.id) {
+            return listAction;
+          }
+          if (catalogAction) return catalogAction;
+        }
+        if (listAction) return listAction;
+        if (typeof window.ModelLabels?.getModelNameActionForLabel === 'function') {
+          return window.ModelLabels.getModelNameActionForLabel(label, itemIndex);
+        }
+        return null;
+      };
+      const getOpenModelVersionSubmenu = (trigger = null) => {
+        const triggerControls = trigger?.getAttribute?.('aria-controls') || '';
+        const controlled = triggerControls ? document.getElementById(triggerControls) : null;
+        if (
+          controlled instanceof Element &&
+          controlled.matches(MODEL_MENU_SELECTOR) &&
+          isUsablyVisibleElement(controlled) &&
+          isLikelyModelVersionMenuElement(controlled)
+        ) {
+          return controlled;
+        }
+
+        const triggerId = trigger?.id || '';
+        const parentMenu = trigger?.closest?.('[data-radix-menu-content]') || null;
+        const menus = Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).filter(
+          (menu) => menu instanceof Element && isUsablyVisibleElement(menu),
+        );
+        return (
+          menus.find(
+            (menu) =>
+              triggerId &&
+              menu.getAttribute('aria-labelledby') === triggerId &&
+              isLikelyModelVersionMenuElement(menu),
+          ) ||
+          menus.find((menu) => menu !== parentMenu && isLikelyModelVersionMenuElement(menu)) ||
+          null
+        );
+      };
+      const openModelVersionSubmenu = async (state = getVisibleModelMenuState()) => {
+        const existing =
+          (state.submenu instanceof Element && isLikelyModelVersionMenuElement(state.submenu)
+            ? state.submenu
+            : null) || getOpenModelVersionSubmenu(state.submenuTrigger);
+        if (existing) return { menu: existing, opened: false };
+
+        const trigger = state.submenuTrigger;
+        if (!(trigger instanceof Element)) return null;
+
+        const openAttempt = (attemptIndex) => {
+          trigger.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+          trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          trigger.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+          trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+          trigger.focus?.();
+          switch (attemptIndex % 4) {
+            case 1:
+              smartClickSafe(trigger);
+              break;
+            case 2:
+              pressElementKey(trigger, 'ArrowRight', 'ArrowRight');
+              break;
+            case 3:
+              pressElementKey(trigger, 'Enter', 'Enter');
+              break;
+            default:
+              trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+              break;
+          }
+        };
+
+        let attempts = 0;
+        const menu = await waitForAsync(
+          () => {
+            const found = getOpenModelVersionSubmenu(trigger);
+            if (found) return found;
+            openAttempt(attempts++);
+            return null;
+          },
+          { timeout: 1800, interval: 45 },
+        );
+        return menu instanceof Element ? { menu, opened: true } : null;
+      };
+      const getIntegratedFrontendRowsFromState = (
+        state = getVisibleModelMenuState(),
+        activeConfigId = DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+      ) => {
+        const main = state.main;
+        if (!(main instanceof Element)) return [];
+        const seen = new Set();
+        return getDirectModelMenuItems(main)
+          .filter((item) => !isModelSubmenuTriggerItem(item))
+          .map((item) => {
+            const label = __cspTextNoHint(item).replace(/\s+/g, ' ').trim();
+            if (!label || typeof window.ModelLabels?.mapFrontendLabelToActionId !== 'function') {
+              return null;
+            }
+            const actionId =
+              window.ModelLabels.mapFrontendLabelToActionId(label, activeConfigId) ||
+              window.ModelLabels.mapFrontendLabelToActionId(label, DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+            if (!actionId || seen.has(actionId)) return null;
+            const action = getModelActionById(actionId);
+            const slot = Number(action?.slot);
+            if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+            seen.add(actionId);
+            return {
+              id: actionId,
+              slot,
+              available: true,
+              label,
+            };
+          })
+          .filter(Boolean);
+      };
+      const findModelVersionMenuItemForAction = (menu, action) => {
+        const items = getModelVersionMenuItems(menu);
+        return (
+          items.find((item, index) => {
+            const itemAction = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
+            return itemAction?.id === action?.id;
+          }) || null
+        );
+      };
+      const selectIntegratedModelNameDuringScrape = async (action) => {
+        if (!action?.id) return false;
+        const alreadyOpen = ensureMainMenuOpen();
+        await sleepAsync(alreadyOpen ? 100 : 160);
+        const opened = await openModelVersionSubmenu(getVisibleModelMenuState());
+        const menu = opened?.menu || null;
+        if (!(menu instanceof Element)) return false;
+        const item = findModelVersionMenuItemForAction(menu, action);
+        if (!(item instanceof Element)) return false;
+        activateMenuItem(item);
+        persistActiveModelConfigId(action.id);
+        await sleepAsync(180);
+        return true;
+      };
+      const scrapeIntegratedModelCatalogOnce = async () => {
+        await releasePreparedModelConfigSession();
+        const alreadyOpen = ensureMainMenuOpen();
+        await sleepAsync(alreadyOpen ? 120 : 180);
+        let state = getVisibleModelMenuState();
+        const isIntegratedMenu =
+          state.main instanceof Element &&
+          !!state.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+        if (!isIntegratedMenu) return { fallback: true };
+
+        const opened = await openModelVersionSubmenu(state);
+        const submenu = opened?.menu || null;
+        if (!(submenu instanceof Element)) return { ok: false, error: 'MODEL_SUBMENU_NOT_FOUND' };
+
+        const modelNameItems = getModelVersionMenuItems(submenu);
+        if (!modelNameItems.length) return { ok: false, error: 'MODEL_SUBMENU_OPTIONS_NOT_FOUND' };
+
+        const modelNameLabels = modelNameItems.map(getModelVersionMenuItemLabel);
+        const modelNameActions = modelNameItems.map((item, index) =>
+          getModelNameActionForMenuItem(item, index, window.__modelCatalog, modelNameLabels),
+        );
+        let nextDynamicModelNameSlot = 8;
+        const usedModelNameSlots = new Set();
+        const reservedCatalogSlots = new Set(
+          modelNameActions
+            .filter((action) => action?.fromCatalog)
+            .map((action) => Number(action.slot))
+            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+        );
+        const takeModelNameSlot = (action) => {
+          const isDynamic =
+            action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
+          let slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
+          if (isDynamic && !action?.fromCatalog) slot = -1;
+          if (slot >= 0 && !usedModelNameSlots.has(slot)) {
+            usedModelNameSlots.add(slot);
+            return slot;
+          }
+          if (!isDynamic) return -1;
+          while (
+            nextDynamicModelNameSlot < MAX_SLOTS &&
+            (usedModelNameSlots.has(nextDynamicModelNameSlot) ||
+              reservedCatalogSlots.has(nextDynamicModelNameSlot))
+          ) {
+            nextDynamicModelNameSlot += 1;
+          }
+          if (nextDynamicModelNameSlot >= MAX_SLOTS) return -1;
+          slot = nextDynamicModelNameSlot;
+          usedModelNameSlots.add(slot);
+          nextDynamicModelNameSlot += 1;
+          return slot;
+        };
+        const availableModelNames = modelNameItems
+          .map((item, index) => {
+            const action = modelNameActions[index];
+            if (!action?.id) return null;
+            const slot = takeModelNameSlot(action);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+            return {
+              ...action,
+              slot,
+              label: getModelVersionMenuItemLabel(item),
+            };
+          })
+          .filter(Boolean);
+        if (!availableModelNames.length) return { ok: false, error: 'MODEL_OPTIONS_UNRESOLVED' };
+
+        const activeIndex = modelNameItems.findIndex(
+          (item) =>
+            item.getAttribute('aria-checked') === 'true' ||
+            item.getAttribute('data-state') === 'checked',
+        );
+        const initialActiveModelName =
+          availableModelNames[Math.max(0, activeIndex)] || availableModelNames[0] || null;
+        const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
+        const frontendByConfig = {};
+        frontendByConfig[initialActiveConfigId] = getIntegratedFrontendRowsFromState(
+          state,
+          initialActiveConfigId,
+        );
+
+        for (const modelName of availableModelNames) {
+          if (modelName.id === initialActiveConfigId) continue;
+          const selected = await selectIntegratedModelNameDuringScrape(modelName);
+          if (!selected) continue;
+          const reopened = ensureMainMenuOpen();
+          await sleepAsync(reopened ? 100 : 160);
+          state = getVisibleModelMenuState();
+          frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(state, modelName.id);
+        }
+
+        if (initialActiveModelName?.id) {
+          await selectIntegratedModelNameDuringScrape(initialActiveModelName);
+        }
+
+        const catalog = {
+          version: 3,
+          scrapedAt: Date.now(),
+          integratedEffort: true,
+          configureOptions: availableModelNames.map((modelName) => ({
+            id: modelName.id,
+            slot: modelName.slot,
+            label:
+              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                ? window.ModelLabels.getCanonicalActionLabel(modelName.id, modelName.label)
+                : modelName.label,
+          })),
+          thinkingEffortIds: [],
+          frontendByConfig,
+        };
+        const modelNames = deriveFlatModelNamesFromCatalog(catalog);
+        chrome.storage.sync.set(
+          {
+            [MODEL_CATALOG_STORAGE_KEY]: catalog,
+            modelNames,
+            modelNamesAt: catalog.scrapedAt,
+            activeModelConfigId: initialActiveConfigId,
+          },
+          () => {},
+        );
+        setCachedActiveModelConfigId(initialActiveConfigId);
+
+        return {
+          ok: true,
+          modelCatalog: catalog,
+          modelNames,
+          activeModelConfigId: initialActiveConfigId,
+        };
+      };
       const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) => {
         const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
         SCRAPE_HIDE_UI_ACTIVE = !!hideUi;
         try {
+          const integratedResult = await scrapeIntegratedModelCatalogOnce();
+          if (!integratedResult?.fallback) return integratedResult;
+
           await releasePreparedModelConfigSession();
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 120 : 180);
@@ -11134,8 +11767,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const value =
           combobox?.querySelector('span')?.textContent?.replace(/\s+/g, ' ').trim() || '';
         if (!value) return DEFAULT_ACTIVE_MODEL_CONFIG_ID;
-        if (typeof window.ModelLabels?.getConfigureActionForOption === 'function') {
-          return window.ModelLabels.getConfigureActionForOption(value, -1)?.id || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        if (typeof window.ModelLabels?.getModelNameActionForLabel === 'function') {
+          return window.ModelLabels.getModelNameActionForLabel(value, -1)?.id || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
         }
         if (value === '5.2') return 'configure-5-2';
         if (value === '5.0') return 'configure-5-0-thinking-mini';
@@ -11256,6 +11889,113 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           await clickAfterFlash(closeButton, DELAY_CONFIGURE_FINAL_CLICK_MS);
           flashBottomBar();
         });
+      };
+      const runIntegratedModelNameAction = async (
+        action,
+        { hideUi = false, initialState = null } = {},
+      ) => {
+        if (!action?.id || window.__modelCatalog?.integratedEffort !== true) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 80 : 140);
+          const opened = await openModelVersionSubmenu(initialState || getVisibleModelMenuState());
+          const menu = opened?.menu || null;
+          if (!(menu instanceof Element)) return false;
+          if (hideUi) hideOpenModelUiForScrape(getVisibleModelMenuState());
+
+          const item = findModelVersionMenuItemForAction(menu, action);
+          if (!(item instanceof Element)) return false;
+
+          if (!hideUi) {
+            applyHints();
+            if (window.gsap) flashMenuItem(item);
+          }
+          await sleepAsync(hideUi ? 0 : DELAY_ACTIVATE_TARGET_MS);
+          activateMenuItem(item);
+          persistActiveModelConfigId(action.id);
+          await sleepAsync(100);
+          if (!hideUi) flashBottomBar();
+          return true;
+        });
+      };
+      const INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS = 100;
+      const clearOpenModelMenuBeforeSequentialReplay = async () => {
+        if (!isModelMenuLikelyActive()) return;
+        const state = getVisibleModelMenuState();
+        const targets = [
+          document.activeElement instanceof Element ? document.activeElement : null,
+          state.submenu,
+          state.main,
+          getModelMenuButton(),
+        ].filter((target, index, arr) => target instanceof Element && arr.indexOf(target) === index);
+        targets.forEach((target) => {
+          pressElementKey(target, 'Escape', 'Escape');
+        });
+        await sleepAsync(30);
+      };
+      const BASELINE_INTEGRATED_EFFORT_ACTION_IDS = new Set(['instant', 'thinking', 'pro']);
+      const isIntegratedBaselineEffortAction = (action) =>
+        window.__modelCatalog?.integratedEffort === true &&
+        BASELINE_INTEGRATED_EFFORT_ACTION_IDS.has(String(action?.id || '').trim());
+      const latestModelSupportsEffortAction = (action) => {
+        const rows = window.__modelCatalog?.frontendByConfig?.[DEFAULT_ACTIVE_MODEL_CONFIG_ID];
+        if (!Array.isArray(rows)) return true;
+        return rows.some(
+          (row) =>
+            row?.available === true &&
+            String(row?.id || '').trim() === String(action?.id || '').trim(),
+        );
+      };
+      const getLatestModelShortcutSlot = () => {
+        const latestAction = getModelActionById(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+        const slot = Number(latestAction?.slot);
+        return Number.isInteger(slot) && slot >= 0 && slot < KEY_CODES.length ? slot : -1;
+      };
+      const shouldFallbackToLatestForMissingLiveEffort = (
+        action,
+        state = getVisibleModelMenuState(),
+      ) => {
+        if (!isIntegratedBaselineEffortAction(action)) return false;
+        if (!latestModelSupportsEffortAction(action)) return false;
+        if (!(state?.main instanceof Element)) return false;
+        return getPrimaryMenuActionPairs(state).some((pair) =>
+          BASELINE_INTEGRATED_EFFORT_ACTION_IDS.has(String(pair.action?.id || '').trim()),
+        );
+      };
+      const runIntegratedEffortFallbackAction = async (
+        action,
+        { hideUi = false, initialState = null, sourceSlot = -1 } = {},
+      ) => {
+        if (!shouldFallbackToLatestForMissingLiveEffort(action, initialState)) return false;
+        const fallbackAction = getModelActionById(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+        if (!fallbackAction) return false;
+        const fallbackSlot = getLatestModelShortcutSlot();
+        if (fallbackSlot < 0) return false;
+
+        const replaySlot = Number.isInteger(Number(sourceSlot))
+          ? Number(sourceSlot)
+          : Number(action?.slot);
+        const replayAction = getModelActionBySlot(replaySlot) || action;
+
+        runModelPickerShortcutSlot(fallbackSlot, {
+          hideUi,
+          skipIntegratedEffortFallback: true,
+          fallbackAction,
+          skipUsageRecord: true,
+          onComplete: async (switched) => {
+            if (!switched) return;
+            persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+            await sleepAsync(INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS);
+            await clearOpenModelMenuBeforeSequentialReplay();
+            runModelPickerShortcutSlot(replaySlot, {
+              hideUi,
+              skipIntegratedEffortFallback: true,
+              fallbackAction: replayAction,
+              skipUsageRecord: true,
+            });
+          },
+        });
+        return true;
       };
       const runConfigureFrontendRowAction = async (action) => {
         const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
@@ -11476,6 +12216,22 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return applied;
       };
 
+      const applyModelVersionSubmenuHints = () => {
+        const menu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
+        if (!(menu instanceof Element)) return false;
+        let applied = false;
+        getModelVersionMenuItems(menu).forEach((item, index) => {
+          const action = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
+          const slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+          const label = displayFromCode(KEY_CODES[slot]);
+          if (!label || label === '—') return;
+          addLabel(item, label);
+          applied = true;
+        });
+        return applied;
+      };
+
       const applyConfigureFrontendRowHints = () => {
         const dialog = findConfigureDialog();
         if (!(dialog instanceof Element) || !isUsablyVisibleElement(dialog)) return false;
@@ -11499,6 +12255,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         applied = applyConfigureListboxHints() || applied;
         applied = applyThinkingEffortListboxHints() || applied;
         applied = applyModelSelectorThinkingEffortMenuHints() || applied;
+        applied = applyModelVersionSubmenuHints() || applied;
         return applied;
       };
 
@@ -11539,15 +12296,24 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       // Expose a minimal hook so outer listeners can refresh labels when keys change
       window.__mp_applyHints = (options = {}) => scheduleHints(options);
 
-      const openMenuForAction = (nextAction, done) => {
+      const openMenuForAction = (nextAction, done, options = {}) => {
         ensureMainMenuOpen();
 
         let mainPolls = 0;
+        let lastState = null;
         const waitForReadyState = () => {
           const state = getVisibleModelMenuState();
+          if (state?.menus?.length || state?.items?.length) lastState = state;
           const target = getTargetMenuItemForAction(nextAction, state);
           if (!target) {
-            if (mainPolls++ > 50) return done(null);
+            if (
+              options.allowIntegratedEffortFallback !== false &&
+              shouldFallbackToLatestForMissingLiveEffort(nextAction, state)
+            ) {
+              done({ state, target: null });
+              return;
+            }
+            if (mainPolls++ > 50) return done(lastState ? { state: lastState, target: null } : null);
             setTimeout(waitForReadyState, 30);
             return;
           }
@@ -11559,6 +12325,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
       const executeModelAction = (action, options = {}) => {
         if (!action) return false;
+        let completed = false;
+        const complete = (ok = true) => {
+          if (completed) return;
+          completed = true;
+          if (typeof options.onComplete === 'function') {
+            try {
+              options.onComplete(ok);
+            } catch {}
+          }
+        };
         const activateDirectModelTarget = (ready) => {
           const targetEl = ready?.target?.el;
           if (!targetEl) return false;
@@ -11570,6 +12346,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           setTimeout(() => {
             activateMenuItem(targetEl);
             flashBottomBar();
+            complete(true);
           }, DELAY_ACTIVATE_TARGET_MS);
           return true;
         };
@@ -11579,7 +12356,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             void runConfigureOptionAction(action, {
               hideUi: options.hideUi === true,
               preferPreparedSession: true,
-            });
+            }).then((result) => complete(result !== false));
             return true;
           }
         }
@@ -11587,37 +12364,71 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         setTimeout(
           () => {
             openMenuForAction(action, (ready) => {
-              if (!ready) {
+              if (!ready?.target) {
+                if (
+                  options.skipIntegratedEffortFallback !== true &&
+                  shouldFallbackToLatestForMissingLiveEffort(action, ready?.state || null)
+                ) {
+                  void runIntegratedEffortFallbackAction(action, {
+                    hideUi: options.hideUi === true,
+                    initialState: ready?.state || null,
+                    sourceSlot: options.sourceSlot,
+                  }).then((result) => complete(result !== false));
+                  return;
+                }
                 if (
                   action.actionKind === 'main-row' ||
                   action.actionKind === 'configure-frontend-row'
                 ) {
-                  void runConfigureFrontendRowAction(action);
+                  void runConfigureFrontendRowAction(action).then((result) =>
+                    complete(result !== false),
+                  );
+                } else {
+                  complete(false);
                 }
                 return;
               }
               if (action.actionKind === 'configure-option') {
                 if (!options.hideUi) applyHints();
-                void runConfigureOptionAction(action, {
-                  hideUi: options.hideUi === true,
-                  initialState: ready.state,
-                  preferPreparedSession: options.preferPreparedSession === true,
-                });
+                void (async () => {
+                  if (
+                    await runIntegratedModelNameAction(action, {
+                      hideUi: options.hideUi === true,
+                      initialState: ready.state,
+                    })
+                  ) {
+                    complete(true);
+                    return;
+                  }
+                  await runConfigureOptionAction(action, {
+                    hideUi: options.hideUi === true,
+                    initialState: ready.state,
+                    preferPreparedSession: options.preferPreparedSession === true,
+                  });
+                  complete(true);
+                })();
                 return;
               }
               if (action.actionKind === 'configure-open') {
                 if (!options.hideUi) applyHints();
-                void runConfigureOpenAction({ initialState: ready.state });
+                void runConfigureOpenAction({ initialState: ready.state }).then((result) =>
+                  complete(result !== false),
+                );
                 return;
               }
               applyHints();
               if (action.actionKind === 'configure-frontend-row') {
                 if (activateDirectModelTarget(ready)) return;
-                void runConfigureFrontendRowAction(action);
+                void runConfigureFrontendRowAction(action).then((result) =>
+                  complete(result !== false),
+                );
                 return;
               }
               const targetEl = ready.target?.el;
-              if (!targetEl) return;
+              if (!targetEl) {
+                complete(false);
+                return;
+              }
               if (window.gsap) flashMenuItem(targetEl);
               setTimeout(() => {
                 activateMenuItem(targetEl);
@@ -11627,20 +12438,41 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                   (pair) => pair.item.el === targetEl,
                 );
                 const clickedAction = clickedPair?.action || null;
-                if (clickedAction?.id === 'configure') return;
+                if (clickedAction?.id === 'configure') {
+                  complete(true);
+                  return;
+                }
                 if (clickedAction?.actionKind === 'configure-option') {
                   persistActiveModelConfigId(clickedAction.id);
+                  complete(true);
                   return;
                 }
                 syncActiveConfigFromMenuState(ready.state, { persist: true });
+                complete(true);
               }, DELAY_ACTIVATE_TARGET_MS);
-            });
-          },
+              }, { allowIntegratedEffortFallback: options.skipIntegratedEffortFallback !== true });
+            },
           alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
         );
         return true;
       };
       // --- KEY HANDLING ---
+      function runModelPickerShortcutSlot(slot, options = {}) {
+        const idx = Number(slot);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= KEY_CODES.length) return false;
+        const action = getModelActionBySlot(idx) || options.fallbackAction || null;
+        if (!action) return false;
+        if (options.skipUsageRecord !== true) recordModelPickerSlotUsage(idx);
+        executeModelAction(action, {
+          hideUi: options.hideUi === true,
+          preferPreparedSession: options.preferPreparedSession === true,
+          skipIntegratedEffortFallback: options.skipIntegratedEffortFallback === true,
+          sourceSlot: idx,
+          onComplete: options.onComplete,
+        });
+        return true;
+      }
+
       const recordModelPickerSlotUsage = (index) => {
         if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
         try {
@@ -11662,8 +12494,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 
           e.preventDefault();
           e.stopPropagation();
-          recordModelPickerSlotUsage(idx);
-          executeModelAction(action);
+          runModelPickerShortcutSlot(idx, { fallbackAction: action });
         },
         true,
       );
@@ -11677,6 +12508,24 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           );
         }
         const t = e.target instanceof Element ? e.target : null;
+        const modelVersionMenu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
+        const clickedModelVersionItem =
+          modelVersionMenu instanceof Element
+            ? getModelVersionMenuItems(modelVersionMenu).find((item) => item === t || item.contains(t))
+            : null;
+        if (clickedModelVersionItem) {
+          const itemIndex = getModelVersionMenuItems(modelVersionMenu).indexOf(clickedModelVersionItem);
+          const clickedAction = getModelNameActionForMenuItem(
+            clickedModelVersionItem,
+            itemIndex,
+            window.__modelCatalog,
+          );
+          if (clickedAction?.id) {
+            setTimeout(() => {
+              persistActiveModelConfigId(clickedAction.id);
+            }, 0);
+          }
+        }
         const clickedPrimaryItem = t?.closest(
           '[data-radix-menu-content][role="menu"] > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
           '[data-radix-menu-content][role="menu"] > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])',
@@ -11771,126 +12620,112 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     },
   );
 
-  // Alt+/ opens the menu and forces the “Legacy models” submenu to be visible (robust to current DOM)
+  const pressModelMenuKey = (el, key, code = key, extraInit = {}) => {
+    if (!el) return;
+    ['keydown', 'keyup'].forEach((type) => {
+      el.dispatchEvent(
+        new KeyboardEvent(type, {
+          key,
+          code,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          ...extraInit,
+        }),
+      );
+    });
+  };
+
+  const hoverModelMenuElement = (el, { includeMove = false } = {}) => {
+    if (!el) return;
+    el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+    if (includeMove) el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+  };
+
+  const clickModelMenuElement = (el) => {
+    if (!el) return;
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  };
+
+  const waitForModelMenuOpen = (btn, cb) => {
+    const currentState = getVisibleModelMenuState();
+    const isExpanded = () => btn.getAttribute('aria-expanded') === 'true';
+    if (isExpanded() && (currentState.main || hasOpenModelMenuCandidate()))
+      return cb(currentState);
+
+    btn.focus();
+    pressModelMenuKey(btn, ' ', 'Space', { keyCode: 32, charCode: 32 });
+
+    let tries = 0;
+    let usedClickFallback = false;
+    const poll = () => {
+      const state = getVisibleModelMenuState();
+      if (state.main || isExpanded() || tries++ > 50) return cb(state);
+      if (!usedClickFallback && tries >= 4) {
+        usedClickFallback = true;
+        clickModelMenuElement(btn);
+      }
+      setTimeout(poll, 30);
+    };
+    poll();
+  };
+
+  const tryOpenModelVersionSubmenu = (trigger, attempt) => {
+    switch (attempt % 4) {
+      case 0:
+        hoverModelMenuElement(trigger, { includeMove: true });
+        break;
+      case 1:
+        clickModelMenuElement(trigger);
+        break;
+      case 2:
+        trigger.focus();
+        pressModelMenuKey(trigger, 'ArrowRight', 'ArrowRight');
+        break;
+      case 3:
+        trigger.focus();
+        pressModelMenuKey(trigger, 'Enter', 'Enter');
+        break;
+    }
+  };
+
+  const openModelVersionSubmenuFromState = (state, done = () => { }) => {
+    if (!state?.main || state.submenuOpen) return done();
+
+    const trigger = state.submenuTrigger;
+    if (!trigger) return done();
+
+    let polls = 0;
+    const tick = () => {
+      const nextState = getVisibleModelMenuState();
+      if (nextState.submenuOpen || trigger.getAttribute('aria-expanded') === 'true') {
+        setTimeout(() => window.__mp_applyHints?.(), 25);
+        return done();
+      }
+
+      tryOpenModelVersionSubmenu(trigger, polls);
+
+      if (polls++ > 60) return done();
+      setTimeout(tick, 30);
+    };
+    tick();
+  };
+
+  // Opens current single-level menus and older submenu layouts when present.
   window.toggleModelSelector = () => {
     const btn = getModelMenuButton();
     if (!btn) return;
 
-    // Helpers
-    const pressSpace = (el) => {
-      ['keydown', 'keyup'].forEach((type) => {
-        el.dispatchEvent(
-          new KeyboardEvent(type, {
-            key: ' ',
-            code: 'Space',
-            keyCode: 32,
-            charCode: 32,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-          }),
-        );
-      });
-    };
-    const hover = (el) => {
-      if (!el) return;
-      el.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
-      el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      el.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
-      el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
-    };
-    const safeClick = (el) => {
-      if (!el) return;
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    };
-
-    const waitForMainOpen = (cb) => {
-      const currentState = getVisibleModelMenuState();
-      const isExpanded = () => btn.getAttribute('aria-expanded') === 'true';
-      if (isExpanded() && (currentState.main || hasOpenModelMenuCandidate()))
-        return cb(currentState);
-      btn.focus();
-      pressSpace(btn);
-
-      let tries = 0;
-      let usedClickFallback = false;
-      const poll = () => {
-        const state = getVisibleModelMenuState();
-        if (state.main || isExpanded() || tries++ > 50) return cb(state);
-        if (!usedClickFallback && tries >= 4) {
-          usedClickFallback = true;
-          safeClick(btn);
-        }
-        setTimeout(poll, 30);
-      };
-      poll();
-    };
-
-    const pressKey = (el, key, code) => {
-      ['keydown', 'keyup'].forEach((type) => {
-        el.dispatchEvent(
-          new KeyboardEvent(type, {
-            key,
-            code,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-          }),
-        );
-      });
-    };
-
-    const forceOpenSubmenu = (done) => {
-      const state = getVisibleModelMenuState();
-      if (!state.main || state.submenuOpen) return done();
-
-      const trigger = state.submenuTrigger;
-      if (!trigger) return done();
-
-      let polls = 0;
-      const tick = () => {
-        const nextState = getVisibleModelMenuState();
-        if (nextState.submenuOpen || trigger.getAttribute('aria-expanded') === 'true') {
-          // Let labels render (if needed)
-          setTimeout(() => window.__mp_applyHints?.(), 25);
-          return done();
-        }
-
-        // Try multiple strategies in sequence to satisfy Radix submenu behavior
-        switch (polls % 4) {
-          case 0:
-            // Hover (Radix often opens submenu on pointer enter)
-            hover(trigger);
-            trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
-            break;
-          case 1:
-            // Click (some menus toggle on click)
-            safeClick(trigger);
-            break;
-          case 2:
-            // Keyboard open (ArrowRight is a common submenu open action)
-            trigger.focus();
-            pressKey(trigger, 'ArrowRight', 'ArrowRight');
-            break;
-          case 3:
-            // Keyboard fallback (Enter)
-            trigger.focus();
-            pressKey(trigger, 'Enter', 'Enter');
-            break;
-        }
-
-        if (polls++ > 60) return done(); // ~1.8s total attempts
-        setTimeout(tick, 30);
-      };
-      tick();
-    };
-
-    // Open main menu, then open the Legacy submenu
-    waitForMainOpen((state) => {
+    waitForModelMenuOpen(btn, (state) => {
       const readyState = state || getVisibleModelMenuState();
       if (!readyState.submenuTrigger) return;
-      // Let Radix mount main content before searching
-      setTimeout(() => forceOpenSubmenu(() => { }), 40);
+      setTimeout(
+        () => openModelVersionSubmenuFromState(getVisibleModelMenuState()),
+        40,
+      );
     });
   };
 
@@ -12691,83 +13526,97 @@ setTimeout(() => {
       : false;
   };
 
-  // ====== content.js (NEW SECTION TO PASTE IN) ======
-  // Build model switcher shortcut grid (top of overlay)
-  function buildModelSwitcherGrid(cfg) {
-    const activeModelConfigId =
-      typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
-        ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
-        : cfg?.activeModelConfigId || 'configure-latest';
-    const names =
-      typeof window.ModelLabels?.resolveActionableNames === 'function'
-        ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
-        : window.MODEL_NAMES || [];
-    const actionGroups =
-      typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
-        ? window.ModelLabels.getPopupPresentationGroups(
-          activeModelConfigId,
-          names,
-          cfg?.modelCatalog || null,
-        )
-        : typeof window.ModelLabels?.getPresentationGroups === 'function'
-          ? window.ModelLabels.getPresentationGroups(activeModelConfigId, names)
-          : typeof window.ModelLabels?.getActionGroups === 'function'
-            ? window.ModelLabels.getActionGroups()
-            : [];
+  const getOverlayModelSlotLimit = () => window.ModelLabels?.MAX_SLOTS || 15;
+
+  const getOverlayActiveModelConfigId = (cfg) =>
+    typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
+      ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
+      : cfg?.activeModelConfigId || 'configure-latest';
+
+  const getOverlayModelNames = () =>
+    typeof window.ModelLabels?.resolveActionableNames === 'function'
+      ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
+      : window.MODEL_NAMES || [];
+
+  const getOverlayModelActionGroups = (activeModelConfigId, names, catalog) =>
+    typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
+      ? window.ModelLabels.getPopupPresentationGroups(activeModelConfigId, names, catalog || null)
+      : typeof window.ModelLabels?.getPresentationGroups === 'function'
+        ? window.ModelLabels.getPresentationGroups(activeModelConfigId, names)
+        : typeof window.ModelLabels?.getActionGroups === 'function'
+          ? window.ModelLabels.getActionGroups()
+          : [];
+
+  const getOverlayModelKeyCodes = () => {
+    const maxSlots = getOverlayModelSlotLimit();
     const codes =
       Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
-        ? window.__modelPickerKeyCodes.slice(0, window.ModelLabels?.MAX_SLOTS || 15)
+        ? window.__modelPickerKeyCodes.slice(0, maxSlots)
         : typeof window.ModelLabels?.defaultKeyCodes === 'function'
-          ? window.ModelLabels.defaultKeyCodes().slice(0, window.ModelLabels?.MAX_SLOTS || 15)
+          ? window.ModelLabels.defaultKeyCodes().slice(0, maxSlots)
           : [];
-    while (codes.length < (window.ModelLabels?.MAX_SLOTS || 15)) codes.push('');
+    while (codes.length < maxSlots) codes.push('');
+    return codes;
+  };
 
-    const esc = (s) =>
-      String(s).replace(
-        /[&<>"']/g,
-        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-      );
+  const getOverlayGroupLabel = (group) => {
+    const key = group?.labelI18nKey || '';
+    const localized = key ? getMessage(key, '') : '';
+    return localized || group?.label || '';
+  };
 
-    // Platform-aware modifier label for the model picker (Alt vs Control/Command)
-    const isMac = isMacPlatform();
+  const getOverlayModelPickerModifierLabel = (cfg) => {
     const useCtrl = !!cfg?.useControlForModelSwitcherRadio;
-    const modLabel = useCtrl ? (isMac ? 'Command + ' : 'Ctrl + ') : isMac ? 'Opt ⌥ ' : 'Alt + ';
+    if (!useCtrl) return isMacPlatform() ? 'Opt ⌥ ' : 'Alt + ';
+    return isMacPlatform() ? 'Command + ' : 'Ctrl + ';
+  };
 
-    const resolveGroupLabel = (group) => {
-      const key = group?.labelI18nKey || '';
-      const localized = key ? getMessage(key, '') : '';
-      return localized || group?.label || '';
-    };
+  const buildShortcutOverlayModelPickerRow = (action, group, context) => {
+    const { activeModelConfigId, codes, modifierLabel, names } = context;
+    const label = escapeHtml(action.label || names[action.slot] || '');
+    const value = displayFromCode(codes[action.slot]);
+    const activeClass =
+      group.id === 'configure' && action.id === activeModelConfigId
+        ? ' mp-configure-item mp-configure-item-active'
+        : group.id === 'configure'
+          ? ' mp-configure-item'
+          : '';
+
+    return `
+      <div class="shortcut-item${activeClass}">
+        <div class="shortcut-label"><span class="mp-label">${label}</span></div>
+        <div class="shortcut-keys">
+          <span class="key-text platform-alt-label">${modifierLabel}</span>
+          <input class="key-input" disabled maxlength="12" value="${value}" />
+        </div>
+      </div>
+    `;
+  };
+
+  function buildShortcutOverlayModelPickerGrid(cfg) {
+    const activeModelConfigId = getOverlayActiveModelConfigId(cfg);
+    const names = getOverlayModelNames();
+    const actionGroups = getOverlayModelActionGroups(
+      activeModelConfigId,
+      names,
+      cfg?.modelCatalog || null,
+    );
+    const codes = getOverlayModelKeyCodes();
+    const modifierLabel = getOverlayModelPickerModifierLabel(cfg);
+    const rowContext = { activeModelConfigId, codes, modifierLabel, names };
 
     const groupMarkup = actionGroups
       .map((group) => {
         const rows = (group.actions || [])
           .filter((action) => isAssigned(codes[action.slot]))
-          .map((action) => {
-            const label = esc(action.label || names[action.slot] || '');
-            const val = displayFromCode(codes[action.slot]);
-            const activeClass =
-              group.id === 'configure' && action.id === activeModelConfigId
-                ? ' mp-configure-item mp-configure-item-active'
-                : group.id === 'configure'
-                  ? ' mp-configure-item'
-                  : '';
-            return `
-      <div class="shortcut-item${activeClass}">
-        <div class="shortcut-label"><span class="mp-label">${label}</span></div>
-        <div class="shortcut-keys">
-          <span class="key-text platform-alt-label">${modLabel}</span>
-          <input class="key-input" disabled maxlength="12" value="${val}" />
-        </div>
-      </div>
-    `;
-          });
+          .map((action) => buildShortcutOverlayModelPickerRow(action, group, rowContext));
 
         if (!rows.length) return '';
 
+        const groupLabel = getOverlayGroupLabel(group);
         const heading =
-          group.compactLabel && resolveGroupLabel(group)
-            ? `<div class="blank-row section-header" role="heading" aria-level="2">${escapeHtml(resolveGroupLabel(group))}</div>`
+          group.compactLabel && groupLabel
+            ? `<div class="blank-row section-header" role="heading" aria-level="2">${escapeHtml(groupLabel)}</div>`
             : '';
 
         return `
@@ -12784,13 +13633,13 @@ setTimeout(() => {
 
     return `
 <div class="section-header" role="heading" aria-level="2" style="margin-top:0;padding-left:12px;font-size:12px;font-family:ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol';font-weight:600;line-height:12px;letter-spacing:0.72px;text-transform:uppercase;color:rgba(60,60,67,0.6);">
-  Switch Models
+  Effort
 </div>
 ${groupMarkup.join('')}`;
   }
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
-  const buildOverlayHtml = (cfg) => {
+  const buildShortcutOverlayHtml = (cfg) => {
     const schemaSections = window.CSP_SETTINGS_SCHEMA?.shortcuts?.overlaySections;
     const isShortcutVisibleInCatalog = (key) => {
       if (EFFORT_SHORTCUT_KEY_SET.has(key)) {
@@ -12952,7 +13801,7 @@ ${groupMarkup.join('')}`;
     const out = [];
     out.push(`<div class="shortcut-container">
     <h1 class="i18n" data-i18n="popup_title">ChatGPT Custom Shortcuts Pro</h1>
-    ${buildModelSwitcherGrid(cfg)}
+    ${buildShortcutOverlayModelPickerGrid(cfg)}
     ${buildEffortShortcutGrid()}
     <div class="shortcut-grid">`);
 
@@ -13148,7 +13997,7 @@ ${groupMarkup.join('')}`;
 
     </style>
     <div class="csp-box-wrap" style="max-height:90vh;overflow-y:auto;width:min(800px,100vw - 10px);margin:0 auto;">
-      ${buildOverlayHtml(cfg)}
+      ${buildShortcutOverlayHtml(cfg)}
       <button class="csp-close-btn" aria-label="Close overlay">×</button>
     </div>
     `;
@@ -13202,7 +14051,6 @@ ${groupMarkup.join('')}`;
     document.body.appendChild(overlay);
   };
 
-  // ====== content.js (NEW SECTION TO PASTE IN) ======
   // ---- 5) Read settings and open overlay on Alt + configured key ----
   let overlayContextInvalidated = false;
   let overlayContextInvalidatedLogged = false;
@@ -13365,7 +14213,7 @@ ${groupMarkup.join('')}`;
       const defaultNames = (raw) =>
         typeof window.ModelLabels?.resolveActionableNames === 'function'
           ? window.ModelLabels.resolveActionableNames(raw)
-          : ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'];
+          : ['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3'];
       const buildDefaultCodes = () =>
         typeof window.ModelLabels?.defaultKeyCodes === 'function'
           ? window.ModelLabels.defaultKeyCodes()

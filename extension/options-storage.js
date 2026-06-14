@@ -64,7 +64,7 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyAssistant: false,
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
-  modelNames: ['Instant', 'Thinking', 'Configure...', 'Latest', '5.2', '5.0 Thinking Mini', 'o3'],
+  modelNames: ['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3'],
   activeModelConfigId: 'configure-latest',
   showLegacyArrowButtonsCheckbox: false,
 
@@ -90,18 +90,18 @@ const OPTIONS_DEFAULTS = {
   disableCopyAfterSelectCheckbox: false,
 
   // Model picker — up to 15 slots.
-  // Configure... ships as a stable default on Digit0; configure-model actions keep visible defaults.
+  // Current picker defaults: Instant, Medium, High, then 5.5 / 5.4 / 5.3 / o3.
   modelPickerKeyCodes: [
     'Digit1',
     'Digit2',
-    'Digit0',
-    'Digit3',
+    '',
     'Digit4',
+    '',
+    '',
+    'Digit7',
+    'Digit3',
     'Digit5',
     'Digit6',
-    '',
-    '',
-    '',
     '',
     '',
     '',
