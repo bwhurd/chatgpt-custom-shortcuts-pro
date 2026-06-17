@@ -94,6 +94,7 @@ const includeItems = [
   'usage-report.css',
   'usage-report.js',
   'content.js',
+  'content-gated-ui-features.js',
   'popup.js',
   'popup.html',
   'popup.css',

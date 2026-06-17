@@ -1119,11 +1119,11 @@ function applyVisibilitySettings(data) {
   }
 }
 
-// Expose globally for use in other scripts/IIFEs
+// Runtime bridge: later IIFEs call this after storage changes update visibility settings.
 window.applyVisibilitySettings = applyVisibilitySettings;
 
-// helper for slim sidebar bugs with sidebar toggle shortcut
-// These helpers only set styles directly, no timers, no recursion
+// Runtime bridge: early slim-sidebar fallback controls.
+// The feature IIFE later owns timers/state and overwrites window.flashSlimSidebarBar.
 window.hideSlimSidebarBarInstant = () => {
   const bar = document.getElementById('stage-sidebar-tiny-bar');
   if (!bar) return;
@@ -1140,12 +1140,12 @@ window.hideSlimSidebarBarInstant = () => {
 };
 
 window.flashSlimSidebarBar = (dur = 2500) => {
-  // Use the canonical timer in the main IIFE if present
+  // Delegate if a stateful slim-sidebar flash implementation was already attached.
   if (typeof window._flashSlimSidebarBar === 'function') {
     window._flashSlimSidebarBar(dur);
     return;
   }
-  // Fallback for standalone: just snap to 1, fade to idle after dur
+  // Fallback before the slim-sidebar feature owns bar state: snap to 1, then fade to idle.
   const bar = document.getElementById('stage-sidebar-tiny-bar');
   if (!bar) return;
   bar.style.setProperty('transition', 'none', 'important');
@@ -1164,7 +1164,6 @@ window.fadeSlimSidebarBarToIdle = () => {
   bar.style.setProperty('opacity', (window._slimBarIdleOpacity ?? 0.6).toString(), 'important');
 };
 
-// Mac Cross-Compatibility Helper
 // Mac Cross-Compatibility Helper
 const MAC_REGEX = /Mac/i;
 
@@ -1216,7 +1215,7 @@ function charToCode(ch) {
   }
 }
 
-// --- Helpers (global scope) -----------------------------------------------
+// --- Shortcut normalization helpers (runtime bridge source) -----------------
 
 /**
  * Treat 'DigitX' and 'NumpadX' as equivalent.
@@ -1273,7 +1272,7 @@ const coerceNumberFromStorage = (v, fallback) => {
   return fallback;
 };
 
-// Expose a single, canonical place for these helpers (used elsewhere in the file)
+// Runtime bridge: shortcut normalization used by overlay and model-picker blocks.
 window.ShortcutUtils = {
   ...(window.ShortcutUtils || {}),
   codeEquals,
@@ -1303,7 +1302,7 @@ const getOpenMenus = () => {
 };
 
 // ======================================================
-// ==== Shared flashBorder helper (deduplicated) =========
+// ==== Shared flashBorder helper (canonical GSAP visual cue) =========
 const flashBorder = (el) => {
   if (!el) return;
   if (!window.gsap) return;
@@ -1389,6 +1388,7 @@ const DELAYS = {
   feedbackDelay: 100, // ms, feedback animation delay
 };
 
+// Runtime bridge: keep both names for existing IIFE callers; DELAYS is canonical.
 window.DELAYS = DELAYS;
 window.delays = DELAYS;
 const delays = DELAYS;
@@ -1693,6 +1693,86 @@ const delays = DELAYS;
   window.toggleCodeboxWrap = toggleCodeboxWrap;
 })();
 
+// Shared menu DOM helpers. Keep these near the menu utility IIFEs so call sites below are traceable.
+const getIconTokenList = (tokenOrTokens) =>
+  Array.isArray(tokenOrTokens) ? tokenOrTokens.filter(Boolean) : [tokenOrTokens].filter(Boolean);
+
+const escapeCssSelectorValue = (value) => {
+  try {
+    return CSS?.escape ? CSS.escape(String(value)) : String(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const escapeAttributeSelectorFragment = (value) => String(value).replace(/(["\\])/g, '\\$1');
+
+const buildSvgSelectorForIconTokens = (tokenOrTokens) =>
+  getIconTokenList(tokenOrTokens)
+    .map((token) => {
+      const escapedPath = escapeCssSelectorValue(token);
+      const escapedHref = escapeAttributeSelectorFragment(token);
+      return [`svg path[d^="${escapedPath}"]`, `svg use[href*="${escapedHref}"]`].join(', ');
+    })
+    .join(', ');
+
+const clickElementLikeUser = (el) => {
+  if (!el) return false;
+  try {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dispatch = (type, Ctor) => {
+      const isPress = type === 'pointerdown' || type === 'mousedown';
+      const isRelease =
+        type === 'pointerup' ||
+        type === 'mouseup' ||
+        type === 'pointerout' ||
+        type === 'pointerleave';
+      try {
+        el.dispatchEvent(
+          new Ctor(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            clientX: cx,
+            clientY: cy,
+            button: 0,
+            buttons: isPress ? 1 : isRelease ? 0 : 0,
+            view: window,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+
+    if ('PointerEvent' in window) {
+      dispatch('pointerover', PointerEvent);
+      dispatch('pointerenter', PointerEvent);
+      dispatch('pointerdown', PointerEvent);
+    }
+    dispatch('mouseover', MouseEvent);
+    dispatch('mouseenter', MouseEvent);
+    dispatch('mousedown', MouseEvent);
+    if ('PointerEvent' in window) dispatch('pointerup', PointerEvent);
+    dispatch('mouseup', MouseEvent);
+    el.click();
+    if ('PointerEvent' in window) {
+      dispatch('pointerout', PointerEvent);
+      dispatch('pointerleave', PointerEvent);
+    }
+    return true;
+  } catch {
+    try {
+      el.click();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+
 // ==================================================
 // Custom GPT Menu Utilities
 // Detects and interacts with GPT-specific menu buttons and submenu items,
@@ -1723,28 +1803,8 @@ const delays = DELAYS;
   // Down-chevron in the GPT trigger (text-agnostic)
   const CHEVRON_ICON_TOKENS = ['M12.1338 5.94433', '#ba3792'];
 
-  const toTokenArray = (tokenOrTokens) =>
-    Array.isArray(tokenOrTokens) ? tokenOrTokens.filter(Boolean) : [tokenOrTokens].filter(Boolean);
-
-  const safeEsc = (s) => {
-    try {
-      return CSS?.escape ? CSS.escape(String(s)) : String(s);
-    } catch {
-      return String(s);
-    }
-  };
-
-  const svgSelectorForTokensLocal = (tokenOrTokens) =>
-    toTokenArray(tokenOrTokens)
-      .map((token) => {
-        const escapedPath = safeEsc(token);
-        const escapedHref = String(token).replace(/(["\\])/g, '\\$1');
-        return [`svg path[d^="${escapedPath}"]`, `svg use[href*="${escapedHref}"]`].join(', ');
-      })
-      .join(', ');
-
-  // Call the same flashBorder you already use (support both local symbol and window export)
-  function callFlash(el) {
+  // Menu-specific cue wrapper around the shared flashBorder visual.
+  function flashCustomGptMenuCue(el) {
     const fn =
       typeof window.flashBorder === 'function'
         ? window.flashBorder
@@ -1758,70 +1818,13 @@ const delays = DELAYS;
   }
 
   // Visibility matches viewport bounds and clips anything under the composer
-  function isVisible(el) {
+  function isPartlyVisibleAboveComposer(el) {
     if (!el) return false;
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const inViewport = r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw;
     return inViewport && isAboveComposer(r, el);
-  }
-
-  function smartClick(el) {
-    if (!el) return false;
-    try {
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dispatch = (type, Ctor) => {
-        const isPress = type === 'pointerdown' || type === 'mousedown';
-        const isRelease =
-          type === 'pointerup' ||
-          type === 'mouseup' ||
-          type === 'pointerout' ||
-          type === 'pointerleave';
-        try {
-          el.dispatchEvent(
-            new Ctor(type, {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-              clientX: cx,
-              clientY: cy,
-              button: 0,
-              buttons: isPress ? 1 : isRelease ? 0 : 0,
-              view: window,
-            }),
-          );
-        } catch {
-          /* ignore */
-        }
-      };
-
-      if ('PointerEvent' in window) {
-        dispatch('pointerover', PointerEvent);
-        dispatch('pointerenter', PointerEvent);
-        dispatch('pointerdown', PointerEvent);
-      }
-      dispatch('mouseover', MouseEvent);
-      dispatch('mouseenter', MouseEvent);
-      dispatch('mousedown', MouseEvent);
-      if ('PointerEvent' in window) dispatch('pointerup', PointerEvent);
-      dispatch('mouseup', MouseEvent);
-      el.click();
-      if ('PointerEvent' in window) {
-        dispatch('pointerout', PointerEvent);
-        dispatch('pointerleave', PointerEvent);
-      }
-      return true;
-    } catch {
-      try {
-        el.click();
-        return true;
-      } catch {
-        return false;
-      }
-    }
   }
 
   function openRadixMenuIfNeeded(triggerEl, delays = DEFAULT_MENU_DELAYS) {
@@ -1832,7 +1835,7 @@ const delays = DELAYS;
       } catch { }
 
       // Radix triggers are frequently non-button elements; use a real pointer click.
-      smartClick(triggerEl);
+      clickElementLikeUser(triggerEl);
       return delays.MENU_READY_OPEN;
     }
     return delays.MENU_READY_EXPANDED;
@@ -1844,7 +1847,7 @@ const delays = DELAYS;
     const triggerId = triggerEl.getAttribute('id');
     if (triggerId) {
       const byLabel = document.querySelector(
-        `${MENU_CONTENT_SELECTOR}[aria-labelledby="${safeEsc(triggerId)}"]`,
+        `${MENU_CONTENT_SELECTOR}[aria-labelledby="${escapeCssSelectorValue(triggerId)}"]`,
       );
       if (byLabel) return byLabel;
     }
@@ -1881,17 +1884,17 @@ const delays = DELAYS;
     fallbackText,
   ) {
     const menu = findOpenMenuForTrigger(triggerEl);
-    const selector = svgSelectorForTokensLocal(pathPrefix);
+    const selector = buildSvgSelectorForIconTokens(pathPrefix);
     const item = menu
       ? Array.from(menu.querySelectorAll(selector))
         .map((p) => p.closest(MENU_ITEM_ROLES))
         .filter(Boolean)
-        .filter(isVisible)[0] || null
+        .filter(isPartlyVisibleAboveComposer)[0] || null
       : null;
 
     if (item) {
       // Flash the menu item with same logic
-      callFlash(item);
+      flashCustomGptMenuCue(item);
       setTimeout(() => item.click(), delays.ITEM_CLICK);
       return true;
     }
@@ -1899,10 +1902,10 @@ const delays = DELAYS;
     if (menu && fallbackText) {
       const needle = String(fallbackText).trim().toLowerCase();
       const fallback = Array.from(menu.querySelectorAll(MENU_ITEM_ROLES))
-        .filter(isVisible)
+        .filter(isPartlyVisibleAboveComposer)
         .find((el) => getMenuItemLabel(el).toLowerCase() === needle);
       if (fallback) {
-        callFlash(fallback);
+        flashCustomGptMenuCue(fallback);
         setTimeout(() => fallback.click(), delays.ITEM_CLICK);
         return true;
       }
@@ -1932,11 +1935,11 @@ const delays = DELAYS;
         scope.querySelectorAll(
           ':is([aria-haspopup="menu"][id^="radix-"], div[type="button"][aria-haspopup="menu"], div[role="button"][aria-haspopup="menu"], button[aria-haspopup="menu"])',
         ),
-      ).filter(isVisible);
+      ).filter(isPartlyVisibleAboveComposer);
 
       if (!candidates.length) continue;
 
-      const chevronSelector = svgSelectorForTokensLocal(CHEVRON_ICON_TOKENS);
+      const chevronSelector = buildSvgSelectorForIconTokens(CHEVRON_ICON_TOKENS);
       const withChevron = candidates.filter((el) => el.querySelector(chevronSelector));
       if (withChevron.length) return withChevron[withChevron.length - 1];
 
@@ -1957,15 +1960,15 @@ const delays = DELAYS;
     if (!trigger) return false;
 
     // Flash the trigger exactly like your other helper
-    callFlash(trigger);
+    flashCustomGptMenuCue(trigger);
 
     const waitMs = openRadixMenuIfNeeded(trigger, delays);
     const fallbackText = typeof options.fallbackText === 'string' ? options.fallbackText : undefined;
     const tryClickMenuItem = (attempt = 0) => {
       if (!findOpenMenuForTrigger(trigger) && attempt < 1) {
         const retryTrigger = findGptMenuTrigger() || trigger;
-        callFlash(retryTrigger);
-        smartClick(retryTrigger);
+        flashCustomGptMenuCue(retryTrigger);
+        clickElementLikeUser(retryTrigger);
         setTimeout(() => tryClickMenuItem(attempt + 1), delays.MENU_READY_OPEN);
         return;
       }
@@ -1986,12 +1989,12 @@ const delays = DELAYS;
     return uniq;
   }
 
-  // Expose for your gated GPT-only IIFE / hotkeys
+  // Runtime bridge: GPT menu helpers consumed by shortcut handlers and GPT-specific IIFEs.
   window.clickGptHeaderThenSubItemSvg = clickGptHeaderThenSubItemSvg;
   window.findGptMenuTrigger = findGptMenuTrigger;
   window.debugListOpenMenuItemPathPrefixes = debugListOpenMenuItemPathPrefixes;
 
-  // Also export flashBorder if your base script didn't (prevents missing flash when our IIFE runs first)
+  // Runtime bridge: shared visual cue fallback for later feature IIFEs.
   if (typeof window.flashBorder !== 'function' && typeof flashBorder === 'function') {
     window.flashBorder = flashBorder;
   }
@@ -2785,9 +2788,10 @@ const delays = DELAYS;
     appendWithFragment(parent, upButton, downButton);
   }
 
+  // Runtime bridge: visibility settings reapply legacy arrows from other IIFEs.
   window.__cspInjectOrToggleArrowButtons = injectOrToggleArrowButtons;
 
-  // Wrap applyVisibilitySettings so every time it's called, it also (re)injects
+  // Runtime bridge extension point: keep legacy arrows in sync with global visibility changes.
   const _applyVisibilitySettings = window.applyVisibilitySettings;
   window.applyVisibilitySettings = (data) => {
     _applyVisibilitySettings(data);
@@ -2816,61 +2820,7 @@ const delays = DELAYS;
 
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-  const smartClick = (el) => {
-    if (!el) return;
-    try {
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dispatch = (type, Ctor) => {
-        const isPress = type === 'pointerdown' || type === 'mousedown';
-        const isRelease =
-          type === 'pointerup' ||
-          type === 'mouseup' ||
-          type === 'pointerout' ||
-          type === 'pointerleave';
-        try {
-          el.dispatchEvent(
-            new Ctor(type, {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-              clientX: cx,
-              clientY: cy,
-              button: 0,
-              buttons: isPress ? 1 : isRelease ? 0 : 0,
-              view: window,
-            }),
-          );
-        } catch {
-          /* ignore */
-        }
-      };
-      if ('PointerEvent' in window) {
-        dispatch('pointerover', PointerEvent);
-        dispatch('pointerenter', PointerEvent);
-        dispatch('pointerdown', PointerEvent);
-      }
-      dispatch('mouseover', MouseEvent);
-      dispatch('mouseenter', MouseEvent);
-      dispatch('mousedown', MouseEvent);
-      // Natural order: release before activation
-      if ('PointerEvent' in window) dispatch('pointerup', PointerEvent);
-      dispatch('mouseup', MouseEvent);
-      // Now activate the element
-      el.click();
-      if ('PointerEvent' in window) {
-        dispatch('pointerout', PointerEvent);
-        dispatch('pointerleave', PointerEvent);
-      }
-    } catch {
-      try {
-        el.click();
-      } catch {
-        /* ignore */
-      }
-    }
-  };
+  const smartClick = clickElementLikeUser;
 
   const sendKey = (el, key, code = key, keyCode = 0) => {
     const opts = {
@@ -3021,16 +2971,7 @@ const delays = DELAYS;
     return true;
   };
 
-  const normalizeIconTokens = (tokens) =>
-    Array.isArray(tokens) ? tokens.filter(Boolean) : [tokens];
-
-  const buildIconSelector = (tokens) =>
-    normalizeIconTokens(tokens)
-      .map((token) => {
-        const safe = String(token).replace(/(["\\])/g, '\\$1');
-        return `svg path[d^="${safe}"], svg use[href*="${safe}"]`;
-      })
-      .join(', ');
+  const buildIconSelector = buildSvgSelectorForIconTokens;
 
   const findMenuItemByPath = (iconTokens, { rootMenus } = {}) => {
     // Match both menuitem and menuitemradio for maximum compatibility
@@ -3150,17 +3091,9 @@ const delays = DELAYS;
   const MENU_ITEM_ROLES =
     ':is(div[role="menuitem"], div[role="menuitemradio"], div[role="menuitemcheckbox"])';
 
-  const toTokenArray = (tokenOrTokens) =>
-    Array.isArray(tokenOrTokens) ? tokenOrTokens.filter(Boolean) : [tokenOrTokens].filter(Boolean);
-
-  const svgSelectorForTokens = (tokenOrTokens) =>
-    toTokenArray(tokenOrTokens)
-      .map((token) => {
-        const escapedPath = safeEsc(token);
-        const escapedHref = String(token).replace(/(["\\])/g, '\\$1');
-        return [`svg path[d^="${escapedPath}"]`, `svg use[href*="${escapedHref}"]`].join(', ');
-      })
-      .join(', ');
+  const toTokenArray = getIconTokenList;
+  const safeEsc = escapeCssSelectorValue;
+  const svgSelectorForTokens = buildSvgSelectorForIconTokens;
 
   const withPrefix = (selectorList, prefix) =>
     selectorList
@@ -3177,15 +3110,8 @@ const delays = DELAYS;
     menuItemAncestor: MENU_ITEM_ROLES,
   };
 
-  function safeEsc(s) {
-    try {
-      return CSS?.escape ? CSS.escape(s) : s;
-    } catch (_) {
-      return s;
-    }
-  }
-
-  function isVisible(el) {
+  // Strict menu helper: fully inside viewport and not hidden under the composer.
+  function isFullyVisibleAboveComposer(el) {
     if (!el) return false;
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -3198,7 +3124,7 @@ const delays = DELAYS;
     const els = paths
       .map((p) => p.closest(ancestorSelector))
       .filter(Boolean)
-      .filter(isVisible)
+      .filter(isFullyVisibleAboveComposer)
       .filter((el) => !excludeAncestorSelector || !el.closest(excludeAncestorSelector));
     return els.length ? els[els.length - 1] : null;
   }
@@ -3223,6 +3149,7 @@ const delays = DELAYS;
     const expanded = buttonEl.getAttribute('aria-expanded') === 'true';
     if (!expanded) {
       buttonEl.focus();
+      // Button-owned Radix menus respond reliably to Space; Custom GPT triggers above use pointer clicks.
       simulateSpace(buttonEl);
       return delays.MENU_READY_OPEN;
     }
@@ -3314,6 +3241,7 @@ const delays = DELAYS;
     return true;
   }
 
+  // Runtime bridge: model-picker thinking fallbacks and shortcut handlers reuse this Radix menu path.
   window.__cspClickLowestSvgThenSubItemSvg = clickLowestSvgThenSubItemSvg;
 
   /* ===== End clickLowestSvgThenSubItemSvg Reusable Radix menu helpers ===== */
@@ -3327,7 +3255,7 @@ const delays = DELAYS;
       .map(
         (el) => el.closest('div[role="menuitem"],button[role="menuitem"],[role="menuitem"]') || el,
       )
-      .filter(isVisible);
+      .filter(isFullyVisibleAboveComposer);
     return items.length ? items[items.length - 1] : null;
   }
 
@@ -3380,7 +3308,7 @@ const delays = DELAYS;
 
   function focusLowestVisibleInputBySelector(selector, options = {}, attempt = 0) {
     const { delays = DEFAULT_MENU_DELAYS, caret = 'end', selectAll = false } = options;
-    const inputs = Array.from(document.querySelectorAll(selector)).filter(isVisible);
+    const inputs = Array.from(document.querySelectorAll(selector)).filter(isFullyVisibleAboveComposer);
     const target = inputs.length ? inputs[inputs.length - 1] : null;
 
     if (target) {
@@ -3424,7 +3352,7 @@ const delays = DELAYS;
   }
   /* ===== End input focus helpers ===== */
 
-  // Click Model by Label helper
+  // Runtime bridge: diagnostics/manual model-menu activation by visible label.
   window.pressModelMenuItemByText = (needle) => {
     // Looks for any open menu (main or submenu) and clicks the first item containing the needle (case-insensitive)
     if (!needle) return false;
@@ -3448,31 +3376,6 @@ const delays = DELAYS;
     }
     return false;
   };
-
-  /* ===== Toggle Dictation Helpers: click a single visible button by SVG path (simplified) ===== */
-
-  if (typeof safeClick !== 'function') {
-    // biome-ignore lint/correctness/noUnusedVariables: allow unused function for now
-    function safeClick(el) {
-      if (!el || el.disabled || el.getAttribute?.('aria-disabled') === 'true') return false;
-      try {
-        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        return true;
-      } catch (_) {
-        try {
-          el.click();
-          return true;
-        } catch {
-          return false;
-        }
-      }
-    }
-  }
-
-  /* ===== End simplified helpers ===== */
 
   // delayCall: calls a function after a delay with arguments
   function delayCall(fn, ms, ...args) {
@@ -4072,6 +3975,7 @@ const delays = DELAYS;
     shortcutKeyProExtended: '',
     shortcutKeyNewGptConversation: '',
   };
+  // Runtime bridge: overlay, analytics, and model-picker handlers read the effective shortcut map.
   window.CSP_SHORTCUT_DEFAULTS = {
     ...(window.CSP_SHORTCUT_DEFAULTS || {}),
     ...shortcutDefaults,
@@ -4091,8 +3995,6 @@ const delays = DELAYS;
       ...(window.CSP_SHORTCUTS_EFFECTIVE || {}),
       ...shortcuts,
     };
-
-    const modelToggleSetting = shortcuts.shortcutKeyToggleModelSelector;
 
     const isMac = isMacPlatform();
 
@@ -4281,7 +4183,7 @@ const delays = DELAYS;
       return trimResult ? result.trim() : result;
     }
 
-    // Expose helpers globally so sanitizeCopiedText can find them in MV3 scope
+    // Runtime bridge: sanitizeCopiedText and copy handlers share Markdown stripping in MV3 scope.
     if (typeof window !== 'undefined') {
       if (
         typeof window.splitByCodeFences !== 'function' &&
@@ -4318,598 +4220,1483 @@ const delays = DELAYS;
       },
     };
 
-    let dictateInProgress = false;
+    const COPY_EXPORT_FONT_STACK =
+      "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
+    const COPY_EXPORT_CODE_CHROME_SELECTOR =
+      '.flex.items-center.text-token-text-secondary,[data-testid="copy-code-button"],button[aria-label*="Copy"],button[title*="Copy"]';
 
-    // @note Alt Key Function Maps
-    const keyFunctionMappingAlt = {
-      [shortcuts.shortcutKeyScrollUpOneMessage]: () => {
-        const upButton = document.getElementById('upButton');
-        if (upButton) {
-          upButton.click();
-          // feedbackAnimation is already called inside the click handler, so this is redundant.
-        } else {
-          goUpOneMessage(); // Call the scroll function directly, no feedback since no button.
+    function normalizeCopyContentElements(contentEls) {
+      return Array.isArray(contentEls) ? contentEls.filter(Boolean) : [contentEls].filter(Boolean);
+    }
+
+    async function writeClipboardHtmlAndText(html, text) {
+      if (navigator.clipboard && window.ClipboardItem) {
+        try {
+          const item = new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+          });
+          await navigator.clipboard.write([item]);
+          return;
+        } catch (_) {
+          /* fall back to copy event */
         }
-      },
-      [shortcuts.shortcutKeyScrollDownOneMessage]: () => {
-        const downButton = document.getElementById('downButton');
-        if (downButton) {
-          downButton.click(); // feedback is triggered in the click handler
-        } else {
-          goDownOneMessage(); // function is available even when button is hidden
+      }
+      document.addEventListener(
+        'copy',
+        (e) => {
+          e.clipboardData.setData('text/html', html);
+          e.clipboardData.setData('text/plain', text);
+          e.preventDefault();
+        },
+        { once: true },
+      );
+      document.execCommand('copy');
+    }
+
+    async function copyClipboardPayload(payload) {
+      const html = payload?.html || '';
+      const text = payload?.text || '';
+      if (!html && !text) return;
+      await writeClipboardHtmlAndText(html, text);
+    }
+
+    function makeCopyTextWalker(root) {
+      return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          return node.nodeValue?.trim().length
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_SKIP;
+        },
+      });
+    }
+
+    function findFirstCopyTextNode(root) {
+      return makeCopyTextWalker(root).nextNode();
+    }
+
+    function findLastCopyTextNode(root) {
+      const walker = makeCopyTextWalker(root);
+      let last = null;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) last = node;
+      return last;
+    }
+
+    function createSelectionRangeForElements(elements, options = {}) {
+      const normalizedElements = normalizeCopyContentElements(elements);
+      if (!normalizedElements.length) return null;
+
+      const { fallback = 'span-elements' } = options;
+      const firstEl = normalizedElements[0];
+      const lastEl = normalizedElements[normalizedElements.length - 1];
+      const startNode = findFirstCopyTextNode(firstEl);
+      const endNode = findLastCopyTextNode(lastEl);
+      const range = document.createRange();
+
+      if (startNode && endNode) {
+        range.setStart(startNode, 0);
+        range.setEnd(endNode, endNode.nodeValue.length);
+        return range;
+      }
+
+      if (fallback === 'first-element') {
+        range.selectNodeContents(firstEl);
+        return range;
+      }
+
+      range.setStart(firstEl, 0);
+      range.setEnd(lastEl, lastEl.childNodes.length);
+      return range;
+    }
+
+    function selectElementsForCopyFeedback(elements, options = {}) {
+      const selection = window.getSelection?.();
+      const range = createSelectionRangeForElements(elements, options);
+      if (!selection || !range) return false;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    }
+
+    const COPY_CONVERSATION_TURN_SELECTOR =
+      'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
+    const COPY_CONTENT_SELECTOR = '.whitespace-pre-wrap, .prose, .markdown, .markdown-new-styling';
+    const COPY_SHORTCUT_DEBUG = false;
+
+    function hasCopyTextContent(el) {
+      return !!(el && (el.innerText || el.textContent || '').trim());
+    }
+
+    function dedupeCopyContentElements(elements) {
+      const seen = new Set();
+      return normalizeCopyContentElements(elements).filter((contentEl) => {
+        if (!hasCopyTextContent(contentEl)) return false;
+        if (seen.has(contentEl)) return false;
+        seen.add(contentEl);
+        return true;
+      });
+    }
+
+    function getCopyRoleContainers(container, preferredRole = null) {
+      if (!container) return [];
+      const roles = preferredRole ? [preferredRole] : ['assistant', 'user'];
+      for (const role of roles) {
+        const selector = `[data-message-author-role="${role}"]`;
+        const direct = container.matches?.(selector) ? [container] : [];
+        const nested = Array.from(container.querySelectorAll?.(selector) || []);
+        const matches = [...direct, ...nested];
+        if (matches.length) return matches;
+      }
+      return [];
+    }
+
+    function getCopyContentElementForRoleContainer(roleContainer) {
+      if (!roleContainer) return null;
+      return roleContainer.querySelector?.(COPY_CONTENT_SELECTOR) || roleContainer;
+    }
+
+    function getFallbackCopyContentElement(container) {
+      return container?.querySelector?.(COPY_CONTENT_SELECTOR) || container || null;
+    }
+
+    function getCopyContentElementsForTurn(turn, preferredRole = null, options = {}) {
+      const { fallbackToContainer = false } = options;
+      const roleContainers = getCopyRoleContainers(turn, preferredRole);
+      const contentEls = roleContainers.map(getCopyContentElementForRoleContainer);
+      if (!contentEls.length && fallbackToContainer) {
+        contentEls.push(getFallbackCopyContentElement(turn));
+      }
+      return dedupeCopyContentElements(contentEls);
+    }
+
+    function getPreferredCopyRoleForTurn(turn) {
+      const dataTurn = turn?.getAttribute?.('data-turn');
+      if (dataTurn === 'assistant' || dataTurn === 'user') return dataTurn;
+      return getCopyRoleContainers(turn, 'assistant').length ? 'assistant' : 'user';
+    }
+
+    function copyTurnHasRole(turn, role) {
+      return getCopyRoleContainers(turn, role).length > 0;
+    }
+
+    function getPrimaryCopyContentElementsForTurn(turn) {
+      return getCopyContentElementsForTurn(turn, getPreferredCopyRoleForTurn(turn));
+    }
+
+    function getDirectCopyContentElementsForButton(btn) {
+      const roleContainer = btn?.closest?.('[data-message-author-role]');
+      return dedupeCopyContentElements([getCopyContentElementForRoleContainer(roleContainer)]);
+    }
+
+    function getCopyButtonContentElements(btn) {
+      const directContentEls = getDirectCopyContentElementsForButton(btn);
+      if (directContentEls.length) return directContentEls;
+      const turn = btn?.closest?.(COPY_CONVERSATION_TURN_SELECTOR);
+      return getPrimaryCopyContentElementsForTurn(turn);
+    }
+
+    function getVisibleCopyTurnsAboveComposer() {
+      const allConversationTurns = Array.from(
+        document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR),
+      );
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const composerTop = getComposerTopEdge();
+
+      return allConversationTurns.filter((el) => {
+        const rect = el.getBoundingClientRect();
+        const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
+        const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
+        if (!(horizontallyVisible && verticallyVisible)) return false;
+        if (Number.isFinite(composerTop) && rect.top >= composerTop) return false;
+        return true;
+      });
+    }
+
+    function resolveConversationCopyFlag(v) {
+      return !!(v && typeof v === 'object' && 'checked' in v ? v.checked : v);
+    }
+
+    function replaceNewlinesWithBr_UserPreWrap(root) {
+      try {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+        const toProcess = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.nodeValue?.includes('\n')) toProcess.push(node);
         }
-      },
-      [shortcuts.shortcutKeyScrollUpTwoMessages]: () => {
-        const upButton = document.getElementById('upButton');
-        goUpTwoMessages(upButton || null);
-      },
-      [shortcuts.shortcutKeyScrollDownTwoMessages]: () => {
-        const downButton = document.getElementById('downButton');
-        goDownTwoMessages(downButton || null);
-      },
-      [shortcuts.shortcutKeyCopyAllCodeBlocks]: copyCode,
-      [shortcuts.shortcutKeyToggleCodeboxWrap]: () => {
-        window.toggleCodeboxWrap?.();
-      },
-      [shortcuts.shortcutKeyCopyLowest]: () => {
-        const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
-        copyFromLowestButton(copyPath, {
-          delayBeforeClick: 350,
-          delayClipboardRead: 350,
+        for (const textNode of toProcess) {
+          const parts = textNode.nodeValue.split('\n');
+          const frag = document.createDocumentFragment();
+          parts.forEach((part, index) => {
+            if (part) frag.appendChild(document.createTextNode(part));
+            if (index < parts.length - 1) frag.appendChild(document.createElement('br'));
+          });
+          textNode.parentNode.replaceChild(frag, textNode);
+        }
+      } catch (_) {
+        /* copy/export should not fail because one text node could not normalize */
+      }
+    }
+
+    function safeCodeLanguage(value) {
+      const normalizedValue = (value || '').trim();
+      return /^[a-z0-9+.#-]+$/i.test(normalizedValue) ? normalizedValue.toLowerCase() : '';
+    }
+
+    function languageFromCodeClass(codeEl) {
+      const className = Array.from(codeEl?.classList || []).find((name) =>
+        name.toLowerCase().startsWith('language-'),
+      );
+      return className ? className.split(/language-/i)[1] : '';
+    }
+
+    function inferCodeBlockLanguage(blockNode, codeEl) {
+      const classLanguage = languageFromCodeClass(codeEl);
+      if (classLanguage) return safeCodeLanguage(classLanguage);
+      const datasetLanguage = codeEl?.dataset?.language;
+      if (datasetLanguage) return safeCodeLanguage(datasetLanguage);
+      const headerText = blockNode
+        ?.querySelector?.('.flex.items-center.text-token-text-secondary')
+        ?.innerText?.trim();
+      return safeCodeLanguage(headerText);
+    }
+
+    function removeCopyExportCodeChrome(root) {
+      root.querySelectorAll(COPY_EXPORT_CODE_CHROME_SELECTOR).forEach((el) => {
+        el.remove();
+      });
+    }
+
+    function getNormalizedCodeText(node, codeEl) {
+      return (codeEl?.innerText ?? node.innerText ?? '')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/[ \t\u00A0\r\n]+$/g, '');
+    }
+
+    function buildFencedCodeText(codeText, language = '') {
+      const eol = '\r\n';
+      if (/^\s*```/.test(codeText)) {
+        let fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
+        if (!fenced.endsWith(eol)) fenced += eol;
+        return fenced;
+      }
+      return `\`\`\`${language || ''}${eol}${codeText}${eol}\`\`\`${eol}`;
+    }
+
+    function normalizeCodeBlocksInClone(root) {
+      const preNodes = Array.from(root.querySelectorAll('pre'));
+      const codeBlocks = Array.from(
+        root.querySelectorAll(
+          'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
+        ),
+      ).filter((codeEl) => !codeEl.closest('pre'));
+      const blockMeta = [...preNodes, ...codeBlocks].map((node) => {
+        const isPre = node.tagName === 'PRE';
+        const codeEl = isPre ? node.querySelector('code') || node : node;
+        return {
+          codeEl,
+          language: inferCodeBlockLanguage(node, codeEl),
+          node,
+        };
+      });
+
+      removeCopyExportCodeChrome(root);
+
+      for (const { codeEl, language, node } of blockMeta) {
+        if (!root.contains(node)) continue;
+        const codeText = getNormalizedCodeText(node, codeEl);
+        const preNew = document.createElement('pre');
+        const codeNew = document.createElement('code');
+        if (language) codeNew.className = `language-${language}`;
+        codeNew.textContent = buildFencedCodeText(codeText, language);
+        preNew.appendChild(codeNew);
+        node.replaceWith(preNew);
+      }
+    }
+
+    function demotePTagsAndStripDataAttrs(root) {
+      for (const el of Array.from(root.querySelectorAll('*'))) {
+        for (const attr of Array.from(el.attributes)) {
+          if (
+            attr.name === 'data-start' ||
+            attr.name === 'data-end' ||
+            attr.name.startsWith('data-')
+          ) {
+            el.removeAttribute(attr.name);
+          }
+        }
+      }
+    }
+
+    function splitListsAroundCodeBlocks_Word(root) {
+      ['ul', 'ol'].forEach((tag) => {
+        root.querySelectorAll(tag).forEach((list) => {
+          const lis = Array.from(list.children).filter((child) => child.tagName === 'LI');
+          if (!lis.some((li) => li.querySelector('pre'))) return;
+          const frag = document.createDocumentFragment();
+          let acc = document.createElement(tag);
+          const flushAcc = () => {
+            if (acc.children.length) frag.appendChild(acc);
+            acc = document.createElement(tag);
+          };
+          for (const li of lis) {
+            const firstPre = li.querySelector(':scope > pre') || li.querySelector('pre');
+            if (!firstPre) {
+              acc.appendChild(li.cloneNode(true));
+              continue;
+            }
+            const newLi = document.createElement('li');
+            for (const child of Array.from(li.childNodes)) {
+              if (child === firstPre) break;
+              newLi.appendChild(child.cloneNode(true));
+            }
+            if (newLi.childNodes.length) acc.appendChild(newLi);
+            flushAcc();
+            let started = false;
+            for (const child of Array.from(li.childNodes)) {
+              if (child === firstPre) started = true;
+              if (started) frag.appendChild(child.cloneNode(true));
+            }
+          }
+          flushAcc();
+          for (const node of Array.from(list.childNodes)) {
+            if (node.tagName !== 'LI') frag.appendChild(node.cloneNode(true));
+          }
+          list.replaceWith(frag);
         });
-      },
-      // @note shortcutKeyEDIT
-      [shortcuts.shortcutKeyEdit]: () => {
-        // Centralized timing constants (all halved from original)
-        const DELAY_SAFE_CLICK = 300; // after scroll, before click
-        const GSAP_SCROLL_DURATION = 0.3; // smooth scroll duration with GSAP
-        const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
-        const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
-        const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
-        const editSelectors = [withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button')];
+      });
+    }
 
-        const getEditButtonData = (root = document) => {
-          const queryRoot = root && typeof root.querySelectorAll === 'function' ? root : document;
-          return Array.from(
-            new Set(
-              editSelectors
-                .flatMap((sel) =>
-                  Array.from(queryRoot.querySelectorAll(sel)).map(
-                    (node) => node.closest('button') || node,
-                  ),
-                )
-                .filter(Boolean),
-            ),
-          )
-            .filter((btn) => btn !== null)
-            .map((btn) => {
-              const rect = btn.getBoundingClientRect();
-              return { btn, rect };
-            });
+    function applyWordSpacingAndFont_Word(root) {
+      if (!root) return;
+      const baseRules = [
+        `font-family:${COPY_EXPORT_FONT_STACK}`,
+        'line-height:116%',
+        'mso-line-height-alt:116%',
+        'mso-line-height-rule:exactly',
+      ].join(';');
+      const base = root.getAttribute('style') || '';
+      root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
+
+      const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
+      root.querySelectorAll(selector).forEach((el) => {
+        const currentStyle = el.getAttribute('style') || '';
+        const rules = [
+          `font-family:${COPY_EXPORT_FONT_STACK}`,
+          'margin-top:0pt',
+          'margin-bottom:8pt',
+          'line-height:116%',
+          'mso-margin-top-alt:0pt',
+          'mso-margin-bottom-alt:8pt',
+          'mso-line-height-alt:116%',
+          'mso-line-height-rule:exactly',
+        ].join(';');
+        el.setAttribute('style', currentStyle ? `${currentStyle};${rules}` : rules);
+      });
+    }
+
+    function addListGuardStyles(el) {
+      const existing = el.getAttribute('style') || '';
+      const guard = 'list-style-type:none;';
+      el.setAttribute('style', existing ? `${existing};${guard}` : guard);
+    }
+
+    function guardSingleMessageAutoListStartsForWord(root) {
+      const WJ = '\u2060';
+      const NBSP = '\u00A0';
+      const listStartRe = /^(\s*)(\d{1,3}|[A-Za-z])([.)])\s+/;
+
+      function firstText(rootEl) {
+        return findFirstCopyTextNode(rootEl);
+      }
+
+      function neutralizeStart(textNode) {
+        const value = textNode.nodeValue || '';
+        if (!value || !listStartRe.test(value)) return;
+        textNode.nodeValue = value.replace(
+          listStartRe,
+          (_, lead, num, punct) => `${lead}${num}${WJ}${punct}${NBSP}`,
+        );
+      }
+
+      root.querySelectorAll('p, pre, blockquote, h1, h2, h3, h4, h5, h6, div').forEach((el) => {
+        if (el.closest('li, ol, ul')) return;
+        const textNode = firstText(el);
+        if (textNode) neutralizeStart(textNode);
+      });
+
+      root.querySelectorAll('p, pre, blockquote, div').forEach((el) => {
+        if (el.closest('li, ol, ul')) return;
+        el.querySelectorAll('br').forEach((br) => {
+          let node = br.nextSibling;
+          while (
+            node &&
+            ((node.nodeType === 3 && !(node.nodeValue || '').trim()) ||
+              (node.nodeType === 1 && node.tagName === 'BR'))
+          ) {
+            node = node.nextSibling;
+          }
+          if (!node) return;
+          if (node.nodeType === 3) {
+            neutralizeStart(node);
+          } else if (node.nodeType === 1) {
+            const textNode = firstText(node);
+            if (textNode) neutralizeStart(textNode);
+          }
+        });
+      });
+    }
+
+    function buildPlainTextWithFences(root) {
+      const clone = root.cloneNode(true);
+      normalizeCodeBlocksInClone(clone);
+      for (const pre of Array.from(clone.querySelectorAll('pre'))) {
+        const codeEl = pre.querySelector('code');
+        const codeText = getNormalizedCodeText(pre, codeEl);
+        const language = safeCodeLanguage(languageFromCodeClass(codeEl));
+        const eol = '\r\n';
+        const out = codeText.trim().startsWith('```')
+          ? `${eol}${codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol)}${eol}`
+          : `${eol}\`\`\`${language}${eol}${codeText}${eol}\`\`\`${eol}`;
+        const container = document.createElement('div');
+        container.textContent = out;
+        pre.replaceWith(container);
+      }
+      return clone.innerText.replace(/\u00A0/g, ' ').trim();
+    }
+
+    function getThreadNavigationScrollAnchorPct() {
+      return typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
+    }
+
+    function getThreadNavigationScrollableContainer() {
+      return typeof window.getScrollableContainer === 'function'
+        ? window.getScrollableContainer()
+        : window;
+    }
+
+    function getThreadNavigationContainerRect(container) {
+      return container === window
+        ? { top: 0, height: window.innerHeight }
+        : {
+          top: container.getBoundingClientRect().top,
+          height: container.clientHeight,
         };
+    }
 
-        const pickEditTarget = (buttonData) => {
-          const filteredButtonsData = buttonData
-            .filter(({ btn, rect }) => isAboveComposer(rect, btn))
-            .sort((a, b) => a.rect.top - b.rect.top);
+    function scrollThreadNavigationTargetToAnchor(container, target, options = {}) {
+      if (!window.gsap || !target) {
+        options.onComplete?.();
+        return;
+      }
 
-          const inViewport = filteredButtonsData.filter(
-            ({ rect }) =>
-              rect.bottom > 0 &&
-              rect.right > 0 &&
-              rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
-              rect.left < (window.innerWidth || document.documentElement.clientWidth),
-          );
+      const scrollAnchorPct = getThreadNavigationScrollAnchorPct();
+      const scrollDuration = options.scrollDuration ?? 0.2;
+      const rect = target.getBoundingClientRect();
+      const contRect = getThreadNavigationContainerRect(container);
+      const anchorPx = (contRect.height * scrollAnchorPct) / 100 - rect.height / 2;
+      const current = container === window ? window.scrollY : container.scrollTop;
+      let targetY =
+        container === window
+          ? current + rect.top - anchorPx
+          : container.scrollTop + (rect.top - contRect.top) - anchorPx;
 
-          if (inViewport.length > 0) {
-            return inViewport.reduce((bottomMost, current) =>
-              current.rect.top > bottomMost.rect.top ? current : bottomMost,
-            ).btn;
-          }
+      const maxScroll =
+        container === window
+          ? (document.scrollingElement || document.documentElement).scrollHeight - window.innerHeight
+          : container.scrollHeight - container.clientHeight;
+      targetY = Math.max(0, Math.min(targetY, maxScroll));
 
-          const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
-          if (aboveViewport.length > 0) {
-            return aboveViewport.reduce((closest, current) =>
-              current.rect.bottom > closest.rect.bottom ? current : closest,
-            ).btn;
-          }
+      gsap.to(container, {
+        duration: scrollDuration,
+        scrollTo: { y: targetY, autoKill: false },
+        ease: 'power4.out',
+        onComplete: options.onComplete,
+      });
+    }
 
-          return null;
+    function isThreadNavigationButtonCentered(container, btn) {
+      if (!window.gsap || !btn) return false;
+      const scrollAnchorPct = getThreadNavigationScrollAnchorPct();
+      const rect = btn.getBoundingClientRect();
+      const contRect = getThreadNavigationContainerRect(container);
+      const anchorPx = (contRect.height * scrollAnchorPct) / 100 - rect.height / 2;
+      const currentScroll = container === window ? window.scrollY : container.scrollTop;
+      const btnTop =
+        container === window ? rect.top + window.scrollY : rect.top - contRect.top + container.scrollTop;
+      const targetY = btnTop - anchorPx;
+      return Math.abs(currentScroll - targetY) < 2;
+    }
+
+    function relaunchThreadNavigationHover(wrapper) {
+      if (!wrapper) return;
+      wrapper.classList.add('force-hover');
+      ['pointerover', 'pointerenter', 'mouseover'].forEach((eventName) => {
+        wrapper.dispatchEvent(new MouseEvent(eventName, { bubbles: true }));
+      });
+    }
+
+    function getThreadNavigationButtonLabel(btn) {
+      return [
+        btn.textContent,
+        btn.getAttribute?.('aria-label'),
+        btn.getAttribute?.('title'),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function isThoughtForThreadNavigationButton(btn) {
+      return /^Thought for\b/i.test(getThreadNavigationButtonLabel(btn));
+    }
+
+    function collectThreadNavigationCandidates(config) {
+      const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
+        .map((el) => el.previousElementSibling)
+        .filter((el) => el?.tagName === 'BUTTON');
+      const iconSelectors = [
+        `button[aria-label="${config.ariaLabel}"]`,
+        withPrefix(svgSelectorForTokens(config.iconTokens), 'button'),
+      ];
+      const iconBtns = iconSelectors.flatMap((selector) =>
+        Array.from(document.querySelectorAll(selector)).map(
+          (node) => node.closest('button') || node,
+        ),
+      );
+      const candidates = [...divBtns, ...iconBtns].filter(Boolean);
+      return config.excludeThoughtFor
+        ? candidates.filter((btn) => !isThoughtForThreadNavigationButton(btn))
+        : candidates;
+    }
+
+    function isThreadNavigationOverComposer(rect) {
+      const composer = document.getElementById('composer-background')?.getBoundingClientRect();
+      return composer
+        ? !(
+          rect.bottom < composer.top ||
+          rect.top > composer.bottom ||
+          rect.right < composer.left ||
+          rect.left > composer.right
+        )
+        : false;
+    }
+
+    function chooseThreadNavigationTarget(buttons) {
+      const scrollY = window.scrollY;
+      const viewH = window.innerHeight;
+      const bottomBuffer = 85;
+      const withMeta = buttons.map((btn) => {
+        const rect = btn.getBoundingClientRect();
+        return {
+          absBottom: rect.bottom + scrollY,
+          btn,
+          fullyVisible:
+            rect.top >= 0 &&
+            rect.bottom <= viewH - bottomBuffer &&
+            !isThreadNavigationOverComposer(rect),
+          rect,
         };
+      });
 
-        const resolveFinalEditButton = (initialButton) => {
-          const initialTurn = initialButton?.closest?.(CONVERSATION_TURN_SELECTOR);
-          if (initialTurn?.isConnected) {
-            const sameTurnButton = pickEditTarget(getEditButtonData(initialTurn));
-            if (sameTurnButton) return sameTurnButton;
+      const fully = withMeta.filter((meta) => meta.fullyVisible);
+      if (fully.length) return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
 
-            const sameTurnButtons = getEditButtonData(initialTurn);
-            if (sameTurnButtons.length > 0) return sameTurnButtons[sameTurnButtons.length - 1].btn;
+      const above = withMeta.filter((meta) => meta.rect.bottom <= 0);
+      if (above.length) return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
+
+      return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
+    }
+
+    function chooseThreadNavigationPreviewTarget(target, buttons, container, config) {
+      if (!target || !isThreadNavigationButtonCentered(container, target)) return target;
+
+      const idx = buttons.indexOf(target);
+      for (let index = idx - 1; index >= 0; --index) {
+        if (!isThreadNavigationButtonCentered(container, buttons[index])) return buttons[index];
+      }
+      return config.wrapPreviewToLast && buttons.length > 1 ? buttons[buttons.length - 1] : target;
+    }
+
+    function getThreadNavigationMessageId(btn) {
+      return btn.closest('[data-message-id]')?.getAttribute('data-message-id');
+    }
+
+    function recenterThreadNavigationTarget(msgId, scrollDuration) {
+      if (!msgId) return;
+      const container = getThreadNavigationScrollableContainer();
+      const target = document.querySelector(`[data-message-id="${msgId}"] button`);
+      if (!target) return;
+      scrollThreadNavigationTargetToAnchor(container, target, { scrollDuration });
+    }
+
+    function runThreadNavigationShortcut(opts = {}, config = {}) {
+      const initialDelay = config.initialDelay ?? 25;
+      const postClickDelay = config.postClickDelay ?? 175;
+      const scrollDuration = config.scrollDuration ?? 0.2;
+
+      setTimeout(() => {
+        try {
+          const all = collectThreadNavigationCandidates(config);
+          if (!all.length) return;
+
+          const container = getThreadNavigationScrollableContainer();
+          let target = chooseThreadNavigationTarget(all);
+
+          if (opts.previewOnly) {
+            target = chooseThreadNavigationPreviewTarget(target, all, container, config);
           }
 
-          return pickEditTarget(getEditButtonData()) || (initialButton?.isConnected ? initialButton : null);
-        };
+          if (!target) return;
+          const msgId = getThreadNavigationMessageId(target);
 
-        const clickEditButton = (button) => {
-          if (!button || !button.isConnected || typeof button.click !== 'function') return false;
-          if (button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
+          scrollThreadNavigationTargetToAnchor(container, target, {
+            onComplete: () => {
+              flashBorder(target);
+              relaunchThreadNavigationHover(target.closest('[class*="group-hover"]'));
 
-          const rect = button.getBoundingClientRect();
-          const center =
-            rect && rect.width > 0 && rect.height > 0
-              ? {
-                clientX: Math.round(rect.left + rect.width / 2),
-                clientY: Math.round(rect.top + rect.height / 2),
-              }
-              : {};
-          const pointTarget =
-            Number.isFinite(center.clientX) && Number.isFinite(center.clientY)
-              ? document.elementFromPoint(center.clientX, center.clientY)
-              : null;
-          const eventTarget = pointTarget && button.contains(pointTarget) ? pointTarget : button;
-          const mouseBase = {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            view: window,
-            button: 0,
-            ...center,
-          };
-          const pointerBase = {
-            ...mouseBase,
-            pointerId: 1,
-            pointerType: 'mouse',
-            isPrimary: true,
-          };
-
-          try {
-            button.focus?.({ preventScroll: true });
-          } catch { }
-
-          try {
-            if (typeof PointerEvent === 'function') {
-              eventTarget.dispatchEvent(
-                new PointerEvent('pointerover', { ...pointerBase, buttons: 0 }),
-              );
-              eventTarget.dispatchEvent(
-                new PointerEvent('pointerenter', { ...pointerBase, bubbles: false, buttons: 0 }),
-              );
-              eventTarget.dispatchEvent(
-                new PointerEvent('pointerdown', { ...pointerBase, buttons: 1 }),
-              );
-            }
-            eventTarget.dispatchEvent(new MouseEvent('mouseover', { ...mouseBase, buttons: 0 }));
-            eventTarget.dispatchEvent(new MouseEvent('mousedown', { ...mouseBase, buttons: 1 }));
-            if (typeof PointerEvent === 'function') {
-              eventTarget.dispatchEvent(
-                new PointerEvent('pointerup', { ...pointerBase, buttons: 0 }),
-              );
-            }
-            eventTarget.dispatchEvent(new MouseEvent('mouseup', { ...mouseBase, buttons: 0 }));
-            eventTarget.dispatchEvent(new MouseEvent('click', { ...mouseBase, buttons: 0 }));
-            if (button.isConnected) button.click();
-            return true;
-          } catch {
-            try {
-              button.click();
-              return true;
-            } catch {
-              return false;
-            }
-          }
-        };
-
-        const getScrollContainerMetrics = (container) => {
-          if (container === window) {
-            return {
-              scrollTop: window.scrollY,
-              viewportTop: 0,
-              viewportBottom: window.innerHeight || document.documentElement.clientHeight,
-              maxScroll: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-              scrollTo: (top, behavior = 'auto') => window.scrollTo({ top, behavior }),
-            };
-          }
-
-          const rect = container.getBoundingClientRect();
-          return {
-            scrollTop: container.scrollTop,
-            viewportTop: rect.top,
-            viewportBottom: rect.bottom,
-            maxScroll: Math.max(0, container.scrollHeight - container.clientHeight),
-            scrollTo: (top, behavior = 'auto') => {
-              if (typeof container.scrollTo === 'function') {
-                container.scrollTo({ top, behavior });
-              } else {
-                container.scrollTop = top;
+              if (!opts.previewOnly) {
+                setTimeout(() => {
+                  target.click();
+                  setTimeout(
+                    () => recenterThreadNavigationTarget(msgId, scrollDuration),
+                    postClickDelay,
+                  );
+                }, postClickDelay);
               }
             },
-          };
-        };
+            scrollDuration,
+          });
+        } catch (_) {
+          /* silent */
+        }
+      }, initialDelay);
+    }
 
-        const resolveScrollContainer = () => {
-          try {
-            if (typeof getScrollableContainer === 'function') {
-              const candidate = getScrollableContainer();
-              if (candidate && candidate instanceof Element && candidate.isConnected) {
-                return candidate;
-              }
-            }
-          } catch { }
+    function buildSingleMessageClipboardPayload(contentEls) {
+      const elements = normalizeCopyContentElements(contentEls);
+      if (!elements.length) return { html: '', text: '' };
 
-          return window;
-        };
+      const turnWrapper = document.createElement('div');
+      turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
 
-        const getEditTurn = (target) => target?.closest?.(CONVERSATION_TURN_SELECTOR) || null;
+      const roleContainer = elements[0].closest?.('[data-message-author-role]');
+      turnWrapper.setAttribute(
+        'data-role',
+        roleContainer?.getAttribute?.('data-message-author-role') || 'assistant',
+      );
 
-        const findOpenedEditField = (turn) => {
-          if (!turn?.isConnected) return null;
-          return (
-            Array.from(
-              turn.querySelectorAll(
-                'textarea, [contenteditable="true"][role="textbox"], [contenteditable="true"]',
-              ),
-            )
-              .filter((field) => field instanceof Element && field.isConnected)
-              .find((field) => {
-                const rect = field.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-              }) || null
+      const textParts = [];
+      for (const contentEl of elements) {
+        const cloneForHtml = contentEl.cloneNode(true);
+
+        const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
+        if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
+
+        normalizeCodeBlocksInClone(cloneForHtml);
+        demotePTagsAndStripDataAttrs(cloneForHtml);
+        splitListsAroundCodeBlocks_Word(cloneForHtml);
+
+        const bodyDiv = document.createElement('div');
+        bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+        applyWordSpacingAndFont_Word(bodyDiv);
+        splitListsAroundCodeBlocks_Word(bodyDiv);
+        guardSingleMessageAutoListStartsForWord(bodyDiv);
+
+        turnWrapper.appendChild(bodyDiv);
+        textParts.push(buildPlainTextWithFences(contentEl));
+      }
+
+      const html =
+        '<div data-export="chatgpt-shortcuts-single-message">' +
+        turnWrapper.outerHTML +
+        '</div>';
+      const text = textParts.filter(Boolean).join('\n\n');
+
+      return { html, text };
+    }
+
+    async function copySingleMessagePayloadFromElements(contentEls) {
+      await copyClipboardPayload(buildSingleMessageClipboardPayload(contentEls));
+    }
+
+    function selectAndMaybeCopySingleMessage(contentEls, shouldCopy = true) {
+      try {
+        const elements = normalizeCopyContentElements(contentEls);
+        if (!elements.length) return;
+        selectElementsForCopyFeedback(elements, { fallback: 'first-element' });
+        if (shouldCopy) void copySingleMessagePayloadFromElements(elements);
+      } catch (err) {
+        if (COPY_SHORTCUT_DEBUG) console.debug('selectAndMaybeCopySingleMessage failed:', err);
+      }
+    }
+
+    function installSelectThenCopyButtonHandler() {
+      if (window.__selectThenCopyCopyHandlerAttached) return;
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
+        if (!btn) return;
+        if (isCodeBoxCopyControl(btn)) return;
+
+        const contentEls = getCopyButtonContentElements(btn);
+        if (contentEls.length) {
+          selectAndMaybeCopySingleMessage(contentEls, true);
+        }
+      });
+      window.__selectThenCopyCopyHandlerAttached = true;
+    }
+
+    function runSelectThenCopyShortcut() {
+      setTimeout(() => {
+        try {
+          window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
+          const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
+          const onlySelectUser = window.onlySelectUserCheckbox || false;
+          const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
+          const shouldCopy = !disableCopyAfterSelect;
+
+          const filteredVisibleTurns = getVisibleCopyTurnsAboveComposer().filter((turn) => {
+            if (onlySelectAssistant && !copyTurnHasRole(turn, 'assistant')) return false;
+            if (onlySelectUser && !copyTurnHasRole(turn, 'user')) return false;
+            return true;
+          });
+
+          if (!filteredVisibleTurns.length) return;
+
+          filteredVisibleTurns.sort(
+            (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
           );
-        };
 
-        const smoothScrollContainerTo = (container, top) => {
-          try {
-            const hasScrollTo =
-              window.gsap &&
-              ((gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
-                typeof ScrollToPlugin !== 'undefined');
-            if (hasScrollTo) {
-              gsap.to(container, {
-                duration: 0.25,
-                scrollTo: { y: top, autoKill: true },
-                ease: 'power2.out',
-              });
-              return true;
-            }
-          } catch { }
+          const { lastSelectedIndex } = window.selectThenCopyState;
+          const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
+          const selectedTurn = filteredVisibleTurns[nextIndex];
+          if (!selectedTurn) return;
+          window.selectThenCopyState.lastSelectedIndex = nextIndex;
 
-          try {
-            if (container === window) {
-              window.scrollTo({ top, behavior: 'smooth' });
-              return true;
-            }
-            if (typeof container.scrollTo === 'function') {
-              container.scrollTo({ top, behavior: 'smooth' });
-              return true;
-            }
-          } catch { }
+          const contentEls = getPrimaryCopyContentElementsForTurn(selectedTurn);
+          if (!contentEls.length) return;
 
-          return false;
-        };
+          selectAndMaybeCopySingleMessage(contentEls, shouldCopy);
+        } catch (err) {
+          if (COPY_SHORTCUT_DEBUG) console.debug('outer selectThenCopy failure:', err);
+        }
+      }, 50);
+    }
 
-        const scrollOverlappingEditCardAboveComposer = (targetTurnOrButton) => {
-          const turn = getEditTurn(targetTurnOrButton);
-          if (!turn?.isConnected) return { found: false, scrolled: false };
+    function getConversationCopyLabelText(turn, role, includeLabels) {
+      if (!includeLabels) return '';
+      let nativeLabel = '';
+      try {
+        nativeLabel = (
+          turn.querySelector?.('h4.sr-only, h5.sr-only, h6.sr-only')?.textContent || ''
+        ).trim();
+      } catch (_) {
+        /* ignore */
+      }
+      const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
+      return nativeLabel || fallbackLabel;
+    }
 
-          const editField = findOpenedEditField(turn);
-          if (!editField) return { found: false, scrolled: false };
+    function buildConversationClipboardPayload({
+      includeAssistant,
+      includeUser,
+      includeLabels,
+    }) {
+      const allTurns = Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR));
+      const filteredTurns = allTurns.filter((turn) => {
+        if (copyTurnHasRole(turn, 'assistant') && includeAssistant) return true;
+        if (copyTurnHasRole(turn, 'user') && includeUser) return true;
+        return false;
+      });
 
-          const editFrame =
-            editField.closest('.bg-token-main-surface-tertiary.rounded-3xl') ||
-            editField.closest('.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id]') ||
-            editField;
-          const target = turn.contains(editFrame) ? editFrame : editField;
-          const rect = target.getBoundingClientRect();
-          const container = resolveScrollContainer();
-          const metrics = getScrollContainerMetrics(container);
-          const composerTop = getComposerTopEdge();
-          if (!Number.isFinite(composerTop) || composerTop <= metrics.viewportTop) {
-            return { found: true, scrolled: false };
+      const turnContentGroups = filteredTurns
+        .map((turn) => ({
+          els: getCopyContentElementsForTurn(turn, getPreferredCopyRoleForTurn(turn), {
+            fallbackToContainer: true,
+          }),
+          turn,
+        }))
+        .filter(({ els }) => els.length);
+
+      if (!turnContentGroups.length) return { html: '', text: '' };
+
+      const blocksHTML = [];
+      const blocksText = [];
+      const selectionEls = [];
+
+      for (const { els, turn } of turnContentGroups) {
+        const roleContainer = els[0]?.closest?.('[data-message-author-role]');
+        const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
+        const labelText = getConversationCopyLabelText(turn, role, includeLabels);
+        const turnWrapper = document.createElement('div');
+        turnWrapper.setAttribute('data-role', role);
+
+        if (labelText) {
+          const spacerP = document.createElement('p');
+          spacerP.setAttribute(
+            'style',
+            'margin-top:0pt;margin-bottom:8pt;line-height:116%;mso-line-height-alt:116%;mso-line-height-rule:exactly;',
+          );
+          spacerP.innerHTML = '&nbsp;';
+          turnWrapper.appendChild(spacerP);
+
+          const labelH = document.createElement('h1');
+          labelH.setAttribute(
+            'style',
+            [
+              "font-family:'Calibri',Arial,sans-serif",
+              'font-size:18pt',
+              'font-weight:bold',
+              'margin-top:0pt',
+              'margin-bottom:8pt',
+              'line-height:116%',
+              'mso-line-height-alt:116%',
+              'mso-line-height-rule:exactly',
+            ].join(';'),
+          );
+          labelH.innerHTML = `\u200B${labelText}`;
+          addListGuardStyles(labelH);
+          turnWrapper.appendChild(labelH);
+        }
+
+        const textParts = [];
+        for (const el of els) {
+          selectionEls.push(el);
+          const cloneForHtml = el.cloneNode(true);
+
+          if (role === 'user') {
+            replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
           }
 
-          const margin = 16;
-          const exposedBottom = Math.min(metrics.viewportBottom, composerTop) - margin;
-          const overlap = rect.bottom - exposedBottom;
-          if (overlap <= 8) return { found: true, scrolled: false };
+          normalizeCodeBlocksInClone(cloneForHtml);
+          demotePTagsAndStripDataAttrs(cloneForHtml);
+          splitListsAroundCodeBlocks_Word(cloneForHtml);
 
-          const nextTop = metrics.scrollTop + overlap;
-          const clampedTop = Math.max(0, Math.min(nextTop, metrics.maxScroll));
-          if (Math.abs(clampedTop - metrics.scrollTop) < 1) {
-            return { found: true, scrolled: false };
+          const bodyDiv = document.createElement('div');
+          bodyDiv.innerHTML = cloneForHtml.innerHTML;
+
+          applyWordSpacingAndFont_Word(bodyDiv);
+
+          turnWrapper.appendChild(bodyDiv);
+          textParts.push(buildPlainTextWithFences(el));
+        }
+
+        blocksHTML.push(turnWrapper.outerHTML);
+
+        const contentText = textParts.filter(Boolean).join('\n\n');
+        blocksText.push(labelText ? `${labelText}\n${contentText}` : contentText);
+      }
+
+      const html =
+        '<div data-export="chatgpt-shortcuts-entire-conversation">' +
+        blocksHTML.join('') +
+        '</div>';
+      const text = blocksText.join('\n\n');
+
+      return { html, text, contentEls: selectionEls };
+    }
+
+    function runSelectThenCopyAllMessagesShortcut() {
+      setTimeout(() => {
+        try {
+          const onlyAssistant = resolveConversationCopyFlag(
+            window.selectThenCopyAllMessagesOnlyAssistant || false,
+          );
+          const onlyUser = resolveConversationCopyFlag(
+            window.selectThenCopyAllMessagesOnlyUser || false,
+          );
+          let includeAssistant = true;
+          let includeUser = true;
+          if (onlyAssistant) {
+            includeUser = false;
+          } else if (onlyUser) {
+            includeAssistant = false;
           }
 
-          return { found: true, scrolled: smoothScrollContainerTo(container, clampedTop) };
+          const omitViaSeparators = resolveConversationCopyFlag(
+            window.includeLabelsAndSeparatorsCheckbox,
+          );
+          const omitViaDoNotInclude = resolveConversationCopyFlag(window.doNotIncludeLabelsCheckbox);
+          const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
+
+          const { html, text, contentEls } = buildConversationClipboardPayload({
+            includeAssistant,
+            includeUser,
+            includeLabels,
+          });
+
+          if (!html && !text) return;
+
+          if (contentEls?.length) {
+            selectElementsForCopyFeedback(contentEls);
+          }
+
+          void copyClipboardPayload({ html, text });
+        } catch (err) {
+          if (COPY_SHORTCUT_DEBUG) console.debug('selectThenCopyAllMessages error:', err);
+        }
+      }, 50);
+    }
+
+    installSelectThenCopyButtonHandler();
+    window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
+
+    const EditMessageShortcut = (() => {
+      // Centralized timing constants (all halved from original)
+      const DELAY_SAFE_CLICK = 300; // after scroll, before click
+      const GSAP_SCROLL_DURATION = 0.3; // smooth scroll duration with GSAP
+      const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
+      const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
+      const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
+      const editSelectors = [withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button')];
+
+      const getEditButtonData = (root = document) => {
+        const queryRoot = root && typeof root.querySelectorAll === 'function' ? root : document;
+        return Array.from(
+          new Set(
+            editSelectors
+              .flatMap((sel) =>
+                Array.from(queryRoot.querySelectorAll(sel)).map(
+                  (node) => node.closest('button') || node,
+                ),
+              )
+              .filter(Boolean),
+          ),
+        )
+          .filter((btn) => btn !== null)
+          .map((btn) => {
+            const rect = btn.getBoundingClientRect();
+            return { btn, rect };
+          });
+      };
+
+      const pickEditTarget = (buttonData) => {
+        const filteredButtonsData = buttonData
+          .filter(({ btn, rect }) => isAboveComposer(rect, btn))
+          .sort((a, b) => a.rect.top - b.rect.top);
+
+        const inViewport = filteredButtonsData.filter(
+          ({ rect }) =>
+            rect.bottom > 0 &&
+            rect.right > 0 &&
+            rect.top < (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.left < (window.innerWidth || document.documentElement.clientWidth),
+        );
+
+        if (inViewport.length > 0) {
+          return inViewport.reduce((bottomMost, current) =>
+            current.rect.top > bottomMost.rect.top ? current : bottomMost,
+          ).btn;
+        }
+
+        const aboveViewport = filteredButtonsData.filter(({ rect }) => rect.bottom < 0);
+        if (aboveViewport.length > 0) {
+          return aboveViewport.reduce((closest, current) =>
+            current.rect.bottom > closest.rect.bottom ? current : closest,
+          ).btn;
+        }
+
+        return null;
+      };
+
+      const resolveFinalEditButton = (initialButton) => {
+        const initialTurn = initialButton?.closest?.(CONVERSATION_TURN_SELECTOR);
+        if (initialTurn?.isConnected) {
+          const sameTurnButton = pickEditTarget(getEditButtonData(initialTurn));
+          if (sameTurnButton) return sameTurnButton;
+
+          const sameTurnButtons = getEditButtonData(initialTurn);
+          if (sameTurnButtons.length > 0) return sameTurnButtons[sameTurnButtons.length - 1].btn;
+        }
+
+        return pickEditTarget(getEditButtonData()) || (initialButton?.isConnected ? initialButton : null);
+      };
+
+      const clickEditButton = (button) => {
+        if (!button || !button.isConnected || typeof button.click !== 'function') return false;
+        if (button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
+
+        const rect = button.getBoundingClientRect();
+        const center =
+          rect && rect.width > 0 && rect.height > 0
+            ? {
+              clientX: Math.round(rect.left + rect.width / 2),
+              clientY: Math.round(rect.top + rect.height / 2),
+            }
+            : {};
+        const pointTarget =
+          Number.isFinite(center.clientX) && Number.isFinite(center.clientY)
+            ? document.elementFromPoint(center.clientX, center.clientY)
+            : null;
+        const eventTarget = pointTarget && button.contains(pointTarget) ? pointTarget : button;
+        const mouseBase = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          button: 0,
+          ...center,
+        };
+        const pointerBase = {
+          ...mouseBase,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
         };
 
-        const stabilizeOpenedEditCard = (targetTurnOrButton) => {
-          const run = () => {
-            scrollOverlappingEditCardAboveComposer(targetTurnOrButton);
+        try {
+          button.focus?.({ preventScroll: true });
+        } catch { }
+
+        try {
+          if (typeof PointerEvent === 'function') {
+            eventTarget.dispatchEvent(
+              new PointerEvent('pointerover', { ...pointerBase, buttons: 0 }),
+            );
+            eventTarget.dispatchEvent(
+              new PointerEvent('pointerenter', { ...pointerBase, bubbles: false, buttons: 0 }),
+            );
+            eventTarget.dispatchEvent(
+              new PointerEvent('pointerdown', { ...pointerBase, buttons: 1 }),
+            );
+          }
+          eventTarget.dispatchEvent(new MouseEvent('mouseover', { ...mouseBase, buttons: 0 }));
+          eventTarget.dispatchEvent(new MouseEvent('mousedown', { ...mouseBase, buttons: 1 }));
+          if (typeof PointerEvent === 'function') {
+            eventTarget.dispatchEvent(
+              new PointerEvent('pointerup', { ...pointerBase, buttons: 0 }),
+            );
+          }
+          eventTarget.dispatchEvent(new MouseEvent('mouseup', { ...mouseBase, buttons: 0 }));
+          eventTarget.dispatchEvent(new MouseEvent('click', { ...mouseBase, buttons: 0 }));
+          if (button.isConnected) button.click();
+          return true;
+        } catch {
+          try {
+            button.click();
+            return true;
+          } catch {
+            return false;
+          }
+        }
+      };
+
+      const getScrollContainerMetrics = (container) => {
+        if (container === window) {
+          return {
+            scrollTop: window.scrollY,
+            viewportTop: 0,
+            viewportBottom: window.innerHeight || document.documentElement.clientHeight,
+            maxScroll: Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+            scrollTo: (top, behavior = 'auto') => window.scrollTo({ top, behavior }),
           };
+        }
 
-          if (typeof window.requestAnimationFrame === 'function') {
-            window.requestAnimationFrame(() => setTimeout(run, 150));
-          } else {
-            setTimeout(run, 150);
+        const rect = container.getBoundingClientRect();
+        return {
+          scrollTop: container.scrollTop,
+          viewportTop: rect.top,
+          viewportBottom: rect.bottom,
+          maxScroll: Math.max(0, container.scrollHeight - container.clientHeight),
+          scrollTo: (top, behavior = 'auto') => {
+            if (typeof container.scrollTo === 'function') {
+              container.scrollTo({ top, behavior });
+            } else {
+              container.scrollTop = top;
+            }
+          },
+        };
+      };
+
+      const resolveScrollContainer = () => {
+        try {
+          if (typeof getScrollableContainer === 'function') {
+            const candidate = getScrollableContainer();
+            if (candidate && candidate instanceof Element && candidate.isConnected) {
+              return candidate;
+            }
           }
+        } catch { }
+
+        return window;
+      };
+
+      const getEditTurn = (target) => target?.closest?.(CONVERSATION_TURN_SELECTOR) || null;
+
+      const findOpenedEditField = (turn) => {
+        if (!turn?.isConnected) return null;
+        return (
+          Array.from(
+            turn.querySelectorAll(
+              'textarea, [contenteditable="true"][role="textbox"], [contenteditable="true"]',
+            ),
+          )
+            .filter((field) => field instanceof Element && field.isConnected)
+            .find((field) => {
+              const rect = field.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            }) || null
+        );
+      };
+
+      const smoothScrollContainerTo = (container, top) => {
+        try {
+          const hasScrollTo =
+            window.gsap &&
+            ((gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
+              typeof ScrollToPlugin !== 'undefined');
+          if (hasScrollTo) {
+            gsap.to(container, {
+              duration: 0.25,
+              scrollTo: { y: top, autoKill: true },
+              ease: 'power2.out',
+            });
+            return true;
+          }
+        } catch { }
+
+        try {
+          if (container === window) {
+            window.scrollTo({ top, behavior: 'smooth' });
+            return true;
+          }
+          if (typeof container.scrollTo === 'function') {
+            container.scrollTo({ top, behavior: 'smooth' });
+            return true;
+          }
+        } catch { }
+
+        return false;
+      };
+
+      const scrollOverlappingEditCardAboveComposer = (targetTurnOrButton) => {
+        const turn = getEditTurn(targetTurnOrButton);
+        if (!turn?.isConnected) return { found: false, scrolled: false };
+
+        const editField = findOpenedEditField(turn);
+        if (!editField) return { found: false, scrolled: false };
+
+        const editFrame =
+          editField.closest('.bg-token-main-surface-tertiary.rounded-3xl') ||
+          editField.closest('.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id]') ||
+          editField;
+        const target = turn.contains(editFrame) ? editFrame : editField;
+        const rect = target.getBoundingClientRect();
+        const container = resolveScrollContainer();
+        const metrics = getScrollContainerMetrics(container);
+        const composerTop = getComposerTopEdge();
+        if (!Number.isFinite(composerTop) || composerTop <= metrics.viewportTop) {
+          return { found: true, scrolled: false };
+        }
+
+        const margin = 16;
+        const exposedBottom = Math.min(metrics.viewportBottom, composerTop) - margin;
+        const overlap = rect.bottom - exposedBottom;
+        if (overlap <= 8) return { found: true, scrolled: false };
+
+        const nextTop = metrics.scrollTop + overlap;
+        const clampedTop = Math.max(0, Math.min(nextTop, metrics.maxScroll));
+        if (Math.abs(clampedTop - metrics.scrollTop) < 1) {
+          return { found: true, scrolled: false };
+        }
+
+        return { found: true, scrolled: smoothScrollContainerTo(container, clampedTop) };
+      };
+
+      const stabilizeOpenedEditCard = (targetTurnOrButton) => {
+        const run = () => {
+          scrollOverlappingEditCardAboveComposer(targetTurnOrButton);
         };
 
-        const focusAndSelectEditField = (turn) => {
-          if (!turn?.isConnected || !findOpenedEditField(turn)) return false;
-          let expectedText = null;
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => setTimeout(run, 150));
+        } else {
+          setTimeout(run, 150);
+        }
+      };
 
-          const selectFieldText = () => {
-            if (!turn?.isConnected) return;
-            const editField = findOpenedEditField(turn);
-            if (!editField) return;
+      const focusAndSelectEditField = (turn) => {
+        if (!turn?.isConnected || !findOpenedEditField(turn)) return false;
+        let expectedText = null;
 
-            const currentText = editField.matches('textarea, input')
-              ? editField.value || ''
-              : editField.textContent || '';
-            if (expectedText === null || (expectedText === '' && currentText)) {
-              expectedText = currentText;
-            } else if (currentText !== expectedText) {
+        const selectFieldText = () => {
+          if (!turn?.isConnected) return;
+          const editField = findOpenedEditField(turn);
+          if (!editField) return;
+
+          const currentText = editField.matches('textarea, input')
+            ? editField.value || ''
+            : editField.textContent || '';
+          if (expectedText === null || (expectedText === '' && currentText)) {
+            expectedText = currentText;
+          } else if (currentText !== expectedText) {
+            return;
+          }
+
+          try {
+            editField.focus({ preventScroll: true });
+          } catch {
+            try {
+              editField.focus();
+            } catch { }
+          }
+
+          try {
+            if (editField.matches('textarea, input')) {
+              const length = editField.value?.length || 0;
+              if (
+                document.activeElement === editField &&
+                editField.selectionStart === 0 &&
+                editField.selectionEnd === length
+              ) {
+                return;
+              }
+              if (typeof editField.select === 'function') editField.select();
+              editField.setSelectionRange(0, length);
               return;
             }
 
-            try {
-              editField.focus({ preventScroll: true });
-            } catch {
-              try {
-                editField.focus();
-              } catch { }
+            if (editField.isContentEditable) {
+              const range = document.createRange();
+              range.selectNodeContents(editField);
+              const selection = window.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
             }
+          } catch { }
+        };
 
-            try {
-              if (editField.matches('textarea, input')) {
-                const length = editField.value?.length || 0;
-                if (
-                  document.activeElement === editField &&
-                  editField.selectionStart === 0 &&
-                  editField.selectionEnd === length
-                ) {
-                  return;
-                }
-                if (typeof editField.select === 'function') editField.select();
-                editField.setSelectionRange(0, length);
-                return;
-              }
-
-              if (editField.isContentEditable) {
-                const range = document.createRange();
-                range.selectNodeContents(editField);
-                const selection = window.getSelection();
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-              }
-            } catch { }
-          };
-
-          if (typeof window.requestAnimationFrame === 'function') {
-            window.requestAnimationFrame(() => {
-              selectFieldText();
-              setTimeout(selectFieldText, 80);
-              setTimeout(selectFieldText, 250);
-            });
-          } else {
-            setTimeout(selectFieldText, 0);
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => {
+            selectFieldText();
             setTimeout(selectFieldText, 80);
             setTimeout(selectFieldText, 250);
+          });
+        } else {
+          setTimeout(selectFieldText, 0);
+          setTimeout(selectFieldText, 80);
+          setTimeout(selectFieldText, 250);
+        }
+
+        return true;
+      };
+
+      const handleOpenedEditField = (turn) => {
+        focusAndSelectEditField(turn);
+        stabilizeOpenedEditCard(turn);
+      };
+
+      const waitForOpenedEditField = (turn, onOpen, timeout = 1500) => {
+        if (!turn?.isConnected || typeof onOpen !== 'function') return false;
+        let done = false;
+        let observer = null;
+        let timeoutId = null;
+        let rafId = null;
+
+        const cleanup = () => {
+          done = true;
+          observer?.disconnect();
+          if (timeoutId !== null) clearTimeout(timeoutId);
+          if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
+            window.cancelAnimationFrame(rafId);
+          }
+        };
+
+        const check = () => {
+          if (done) return true;
+          if (!turn?.isConnected) {
+            cleanup();
+            return true;
+          }
+          if (findOpenedEditField(turn)) {
+            cleanup();
+            onOpen();
+            return true;
+          }
+          return false;
+        };
+
+        const scheduleCheck = () => {
+          if (done) return;
+          if (typeof window.requestAnimationFrame === 'function') {
+            if (rafId !== null) return;
+            rafId = window.requestAnimationFrame(() => {
+              rafId = null;
+              check();
+            });
+          } else {
+            setTimeout(check, 0);
+          }
+        };
+
+        if (check()) return true;
+
+        observer = new MutationObserver(scheduleCheck);
+        observer.observe(turn, { childList: true, subtree: true });
+        timeoutId = setTimeout(() => {
+          check();
+          cleanup();
+        }, timeout);
+
+        return true;
+      };
+
+      const openEditButtonWithRetry = (button) => {
+        const turn = getEditTurn(button);
+        if (!turn?.isConnected || !clickEditButton(button)) return;
+        let handled = false;
+        const handleOnce = () => {
+          if (handled) return;
+          handled = true;
+          handleOpenedEditField(turn);
+        };
+        waitForOpenedEditField(turn, handleOnce);
+
+        setTimeout(() => {
+          if (findOpenedEditField(turn)) {
+            handleOnce();
+            return;
           }
 
-          return true;
-        };
-
-        const handleOpenedEditField = (turn) => {
-          focusAndSelectEditField(turn);
-          stabilizeOpenedEditCard(turn);
-        };
-
-        const waitForOpenedEditField = (turn, onOpen, timeout = 1500) => {
-          if (!turn?.isConnected || typeof onOpen !== 'function') return false;
-          let done = false;
-          let observer = null;
-          let timeoutId = null;
-          let rafId = null;
-
-          const cleanup = () => {
-            done = true;
-            observer?.disconnect();
-            if (timeoutId !== null) clearTimeout(timeoutId);
-            if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
-              window.cancelAnimationFrame(rafId);
-            }
-          };
-
-          const check = () => {
-            if (done) return true;
-            if (!turn?.isConnected) {
-              cleanup();
-              return true;
-            }
-            if (findOpenedEditField(turn)) {
-              cleanup();
-              onOpen();
-              return true;
-            }
-            return false;
-          };
-
-          const scheduleCheck = () => {
-            if (done) return;
-            if (typeof window.requestAnimationFrame === 'function') {
-              if (rafId !== null) return;
-              rafId = window.requestAnimationFrame(() => {
-                rafId = null;
-                check();
-              });
-            } else {
-              setTimeout(check, 0);
-            }
-          };
-
-          if (check()) return true;
-
-          observer = new MutationObserver(scheduleCheck);
-          observer.observe(turn, { childList: true, subtree: true });
-          timeoutId = setTimeout(() => {
-            check();
-            cleanup();
-          }, timeout);
-
-          return true;
-        };
-
-        const openEditButtonWithRetry = (button) => {
-          const turn = getEditTurn(button);
-          if (!turn?.isConnected || !clickEditButton(button)) return;
-          let handled = false;
-          const handleOnce = () => {
-            if (handled) return;
-            handled = true;
-            handleOpenedEditField(turn);
-          };
+          if (!button?.isConnected) {
+            return;
+          }
+          clickEditButton(button);
           waitForOpenedEditField(turn, handleOnce);
 
           setTimeout(() => {
             if (findOpenedEditField(turn)) {
               handleOnce();
-              return;
             }
-
-            if (!button?.isConnected) {
-              return;
-            }
-            clickEditButton(button);
-            waitForOpenedEditField(turn, handleOnce);
-
-            setTimeout(() => {
-              if (findOpenedEditField(turn)) {
-                handleOnce();
-              }
-            }, 100);
           }, 100);
+        }, 100);
+      };
+
+      // always scroll to center if possible, clamp if not
+      const gsapScrollToCenterAndClick = (button) => {
+        if (!button || !button.isConnected || typeof button.click !== 'function') return;
+
+        const container = resolveScrollContainer();
+
+        let contTop = 0;
+        let contHeight = window.innerHeight;
+        if (container !== window) {
+          try {
+            const cr = container.getBoundingClientRect();
+            contTop = cr.top;
+            contHeight = container.clientHeight;
+          } catch { }
+        }
+
+        const rect = button.getBoundingClientRect();
+        const offsetCenter = (contHeight - rect.height) / 2;
+
+        let targetY =
+          container === window
+            ? window.scrollY + rect.top - offsetCenter
+            : container.scrollTop + (rect.top - contTop) - offsetCenter;
+
+        const maxScroll =
+          container === window
+            ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+            : Math.max(0, container.scrollHeight - container.clientHeight);
+
+        targetY = Math.max(0, Math.min(targetY, maxScroll));
+
+        let finished = false;
+        const finish = () => {
+          const clickFinalTarget = () => {
+            const finalButton = resolveFinalEditButton(button);
+            if (!finalButton) return;
+            try {
+              if (typeof flashBorder === 'function') flashBorder(finalButton);
+            } catch { }
+            openEditButtonWithRetry(finalButton);
+          };
+
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => setTimeout(clickFinalTarget, DELAY_SAFE_CLICK));
+          } else {
+            setTimeout(clickFinalTarget, DELAY_SAFE_CLICK);
+          }
+        };
+        const finishOnce = () => {
+          if (finished) return;
+          finished = true;
+          finish();
         };
 
-        // always scroll to center if possible, clamp if not
-        const gsapScrollToCenterAndClick = (button) => {
-          if (!button || !button.isConnected || typeof button.click !== 'function') return;
-
-          const container = resolveScrollContainer();
-
-          let contTop = 0;
-          let contHeight = window.innerHeight;
-          if (container !== window) {
-            try {
-              const cr = container.getBoundingClientRect();
-              contTop = cr.top;
-              contHeight = container.clientHeight;
-            } catch { }
-          }
-
-          const rect = button.getBoundingClientRect();
-          const offsetCenter = (contHeight - rect.height) / 2;
-
-          let targetY =
-            container === window
-              ? window.scrollY + rect.top - offsetCenter
-              : container.scrollTop + (rect.top - contTop) - offsetCenter;
-
-          const maxScroll =
-            container === window
-              ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
-              : Math.max(0, container.scrollHeight - container.clientHeight);
-
-          targetY = Math.max(0, Math.min(targetY, maxScroll));
-
-          let finished = false;
-          const finish = () => {
-            const clickFinalTarget = () => {
-              const finalButton = resolveFinalEditButton(button);
-              if (!finalButton) return;
-              try {
-                if (typeof flashBorder === 'function') flashBorder(finalButton);
-              } catch { }
-              openEditButtonWithRetry(finalButton);
-            };
-
-            if (typeof window.requestAnimationFrame === 'function') {
-              window.requestAnimationFrame(() => setTimeout(clickFinalTarget, DELAY_SAFE_CLICK));
-            } else {
-              setTimeout(clickFinalTarget, DELAY_SAFE_CLICK);
-            }
-          };
-          const finishOnce = () => {
-            if (finished) return;
-            finished = true;
-            finish();
-          };
-
-          const animateWithGsap = () => {
-            try {
-              if (!window.gsap) return false;
-              const scrollElement =
-                container === window
-                  ? document.scrollingElement || document.documentElement
-                  : container;
-              const targetTurn = getEditTurn(button);
-              if (
-                scrollElement instanceof Element &&
-                targetTurn instanceof HTMLElement &&
-                typeof scrollToMessageTop === 'function' &&
-                typeof getMessageScrollOptions === 'function'
-              ) {
-                const { scrollOffset } = getMessageScrollOptions();
-                scrollToMessageTop(scrollElement, targetTurn, scrollOffset);
-                setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
-                return true;
-              }
-
-              if (
-                scrollElement instanceof Element &&
-                button instanceof HTMLElement &&
-                typeof animateMessageScrollTo === 'function'
-              ) {
-                animateMessageScrollTo(scrollElement, targetY, button, offsetCenter);
-                setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
-                return true;
-              }
-
-              const hasScrollTo =
-                (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
-                typeof ScrollToPlugin !== 'undefined';
-              if (!hasScrollTo) return false;
-
-              gsap.to(container, {
-                duration: GSAP_SCROLL_DURATION,
-                scrollTo: { y: targetY, autoKill: true },
-                ease: 'power4.out',
-                onComplete: finishOnce,
-                onInterrupt: finishOnce,
-              });
+        const animateWithGsap = () => {
+          try {
+            if (!window.gsap) return false;
+            const scrollElement =
+              container === window
+                ? document.scrollingElement || document.documentElement
+                : container;
+            const targetTurn = getEditTurn(button);
+            if (
+              scrollElement instanceof Element &&
+              targetTurn instanceof HTMLElement &&
+              typeof scrollToMessageTop === 'function' &&
+              typeof getMessageScrollOptions === 'function'
+            ) {
+              const { scrollOffset } = getMessageScrollOptions();
+              scrollToMessageTop(scrollElement, targetTurn, scrollOffset);
               setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
               return true;
-            } catch {
-              return false;
             }
-          };
 
-          if (!animateWithGsap()) {
-            try {
-              if (container === window) {
-                window.scrollTo({ top: targetY, behavior: 'smooth' });
-              } else if (typeof container.scrollTo === 'function') {
-                container.scrollTo({ top: targetY, behavior: 'smooth' });
-              } else {
-                container.scrollTop = targetY;
-              }
-            } catch {
-              if (container === window) window.scrollTo(0, targetY);
-              else container.scrollTop = targetY;
+            if (
+              scrollElement instanceof Element &&
+              button instanceof HTMLElement &&
+              typeof animateMessageScrollTo === 'function'
+            ) {
+              animateMessageScrollTo(scrollElement, targetY, button, offsetCenter);
+              setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
+              return true;
             }
-            setTimeout(finishOnce, DELAY_FALLBACK_FINISH);
+
+            const hasScrollTo =
+              (gsap.plugins && (gsap.plugins.scrollTo || gsap.plugins.ScrollToPlugin)) ||
+              typeof ScrollToPlugin !== 'undefined';
+            if (!hasScrollTo) return false;
+
+            gsap.to(container, {
+              duration: GSAP_SCROLL_DURATION,
+              scrollTo: { y: targetY, autoKill: true },
+              ease: 'power4.out',
+              onComplete: finishOnce,
+              onInterrupt: finishOnce,
+            });
+            setTimeout(finishOnce, GSAP_SCROLL_DURATION * 1000 + 150);
+            return true;
+          } catch {
+            return false;
           }
         };
 
+        if (!animateWithGsap()) {
+          try {
+            if (container === window) {
+              window.scrollTo({ top: targetY, behavior: 'smooth' });
+            } else if (typeof container.scrollTo === 'function') {
+              container.scrollTo({ top: targetY, behavior: 'smooth' });
+            } else {
+              container.scrollTop = targetY;
+            }
+          } catch {
+            if (container === window) window.scrollTo(0, targetY);
+            else container.scrollTop = targetY;
+          }
+          setTimeout(finishOnce, DELAY_FALLBACK_FINISH);
+        }
+      };
+
+      function run() {
         setTimeout(() => {
           try {
             const targetButton = pickEditTarget(getEditButtonData());
@@ -4919,212 +5706,520 @@ const delays = DELAYS;
             }
           } catch { }
         }, DELAY_INITIAL_SCAN);
-      },
-      [shortcuts.shortcutKeySendEdit]: () => {
+      }
+
+      return { run };
+    })();
+
+    function runEditMessageShortcut() {
+      EditMessageShortcut.run();
+    }
+
+    const SendEditShortcut = (() => {
+      const DELAY_BEFORE_CLICK = 250;
+      const COMPOSER_SCOPE_SELECTOR =
+        '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background';
+      const USER_TURN_SELECTOR =
+        'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], [data-turn="user"]';
+
+      let viewportHeight = 0;
+      let viewportWidth = 0;
+
+      const refreshViewportMetrics = () => {
+        viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      };
+
+      const getUserTurn = (el) => {
+        const turn = el?.closest?.(USER_TURN_SELECTOR);
+        return turn?.getAttribute?.('data-turn') === 'user' ? turn : null;
+      };
+
+      const isEligibleEditSendButton = (btn) => {
+        if (!btn || btn.disabled) return false;
+        if (btn.closest(COMPOSER_SCOPE_SELECTOR)) return false;
+        if (btn.closest('[aria-hidden="true"]')) return false;
+        const style = window.getComputedStyle(btn);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return false;
+        }
+        const rect = btn.getBoundingClientRect();
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.bottom > 0 &&
+          rect.right > 0 &&
+          rect.top < viewportHeight &&
+          rect.left < viewportWidth &&
+          isAboveComposer(rect, btn)
+        );
+      };
+
+      const getButtonLabel = (btn) =>
+        (btn?.textContent || btn?.innerText || btn?.getAttribute?.('aria-label') || '').trim();
+
+      const getFocusedEditField = () => {
+        const roots = [];
+        if (document.activeElement instanceof Element) roots.push(document.activeElement);
+
         try {
-          // Centralized timing constant
-          const DELAY_BEFORE_CLICK = 250; // was 500ms
+          const selection = window.getSelection?.();
+          for (const node of [selection?.anchorNode, selection?.focusNode]) {
+            const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+            if (element instanceof Element) roots.push(element);
+          }
+        } catch { }
 
-          const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-          const COMPOSER_SCOPE_SELECTOR =
-            '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background';
-          const USER_TURN_SELECTOR =
-            'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], [data-turn="user"]';
-          const getUserTurn = (el) => {
-            const turn = el?.closest?.(USER_TURN_SELECTOR);
-            return turn?.getAttribute?.('data-turn') === 'user' ? turn : null;
-          };
+        return (
+          roots
+            .map((root) => root.closest?.('textarea, input, [contenteditable="true"]'))
+            .filter((field) => field instanceof Element && field.isConnected)
+            .find((field) => {
+              if (!getUserTurn(field) || field.closest(COMPOSER_SCOPE_SELECTOR)) return false;
 
-          const isVisible = (btn) => {
-            if (!btn || btn.disabled) return false;
-            if (btn.closest(COMPOSER_SCOPE_SELECTOR)) return false;
-            if (btn.closest('[aria-hidden="true"]')) return false;
-            const style = window.getComputedStyle(btn);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
-              return false;
-            const rect = btn.getBoundingClientRect();
-            return (
-              rect.width > 0 &&
-              rect.height > 0 &&
-              rect.bottom > 0 &&
-              rect.right > 0 &&
-              rect.top < viewportHeight &&
-              rect.left < viewportWidth &&
-              isAboveComposer(rect, btn)
-            );
-          };
+              const rect = field.getBoundingClientRect();
+              return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                rect.bottom > 0 &&
+                rect.right > 0 &&
+                rect.top < viewportHeight &&
+                rect.left < viewportWidth &&
+                isAboveComposer(rect, field)
+              );
+            }) || null
+        );
+      };
 
-          const getButtonLabel = (btn) =>
-            (btn?.textContent || btn?.innerText || btn?.getAttribute?.('aria-label') || '').trim();
+      const findFocusedEditSendButton = () => {
+        const editField = getFocusedEditField();
+        if (!editField) return null;
 
-          const getFocusedEditField = () => {
-            const roots = [];
-            if (document.activeElement instanceof Element) roots.push(document.activeElement);
+        const editCard =
+          editField.closest('.bg-token-main-surface-tertiary') ||
+          editField.closest('.rounded-3xl') ||
+          editField.closest('[data-message-id]') ||
+          getUserTurn(editField);
+        if (!editCard) return null;
 
-            try {
-              const selection = window.getSelection?.();
-              for (const node of [selection?.anchorNode, selection?.focusNode]) {
-                const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-                if (element instanceof Element) roots.push(element);
-              }
-            } catch { }
+        const rows = Array.from(
+          new Set([
+            ...Array.from(editCard.querySelectorAll('div.flex.justify-end.gap-2')),
+            ...Array.from(editCard.querySelectorAll('div.flex.justify-end')),
+          ]),
+        );
+        const buttons = rows
+          .flatMap((row) => Array.from(row.querySelectorAll('button')))
+          .filter(isEligibleEditSendButton);
+        if (!buttons.length) return null;
 
-            return (
-              roots
-                .map((root) =>
-                  root.closest?.('textarea, input, [contenteditable="true"]'),
-                )
-                .filter((field) => field instanceof Element && field.isConnected)
-                .find((field) => {
-                  if (!getUserTurn(field) || field.closest(COMPOSER_SCOPE_SELECTOR)) return false;
+        return (
+          buttons.find((btn) => btn.classList.contains('btn-primary')) ||
+          buttons.reduce((rightMost, current) => {
+            const rightRect = rightMost.getBoundingClientRect();
+            const currentRect = current.getBoundingClientRect();
+            if (currentRect.top > rightRect.top + 4) return current;
+            return currentRect.right >= rightRect.right ? current : rightMost;
+          })
+        );
+      };
 
-                  const rect = field.getBoundingClientRect();
-                  return (
-                    rect.width > 0 &&
-                    rect.height > 0 &&
-                    rect.bottom > 0 &&
-                    rect.right > 0 &&
-                    rect.top < viewportHeight &&
-                    rect.left < viewportWidth &&
-                    isAboveComposer(rect, field)
-                  );
-                }) || null
-            );
-          };
+      const findEditSendButton = (row) => {
+        if (!row) return null;
+        const buttons = Array.from(row.querySelectorAll('button'));
+        if (!buttons.length) return null;
 
-          const findFocusedEditSendButton = () => {
-            const editField = getFocusedEditField();
-            if (!editField) return null;
+        const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
+        if (!hasCancel) return null;
+
+        const sendBtn =
+          buttons.find((btn) => /send/i.test(getButtonLabel(btn))) || buttons[1] || buttons[0];
+
+        return sendBtn || null;
+      };
+
+      const findTextareaEditSendButtons = () =>
+        Array.from(document.querySelectorAll('textarea'))
+          .map((ta) => {
+            if (!getUserTurn(ta) || ta.closest(COMPOSER_SCOPE_SELECTOR)) return null;
 
             const editCard =
-              editField.closest('.bg-token-main-surface-tertiary') ||
-              editField.closest('.rounded-3xl') ||
-              editField.closest('[data-message-id]') ||
-              getUserTurn(editField);
+              ta.closest('.bg-token-main-surface-tertiary') ||
+              ta.closest('.rounded-3xl') ||
+              ta.closest('[data-message-id]') ||
+              ta.parentElement;
             if (!editCard) return null;
 
-            const rows = Array.from(
-              new Set([
-                ...Array.from(editCard.querySelectorAll('div.flex.justify-end.gap-2')),
-                ...Array.from(editCard.querySelectorAll('div.flex.justify-end')),
-              ]),
+            const buttonRow =
+              editCard.querySelector('div.flex.justify-end.gap-2') ||
+              editCard.querySelector('div.flex.justify-end');
+            if (!buttonRow) return null;
+
+            return findEditSendButton(buttonRow);
+          })
+          .filter(Boolean);
+
+      const findFallbackEditSendButtons = () =>
+        Array.from(document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'))
+          .map((row) => {
+            if (row.closest(COMPOSER_SCOPE_SELECTOR)) return null;
+            const scope = row.closest(
+              '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]',
             );
-            const buttons = rows
-              .flatMap((row) => Array.from(row.querySelectorAll('button')))
-              .filter(isVisible);
-            if (!buttons.length) return null;
+            if (!scope) return null;
+            if (!getUserTurn(scope)) return null;
+            if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
+            return findEditSendButton(row);
+          })
+          .filter(Boolean);
 
-            return (
-              buttons.find((btn) => btn.classList.contains('btn-primary')) ||
-              buttons.reduce((rightMost, current) => {
-                const rightRect = rightMost.getBoundingClientRect();
-                const currentRect = current.getBoundingClientRect();
-                if (currentRect.top > rightRect.top + 4) return current;
-                return currentRect.right >= rightRect.right ? current : rightMost;
-              })
-            );
-          };
+      const chooseBottomMostEditSendButton = (buttons) =>
+        buttons.reduce((bottomMost, current) => {
+          const bottomRect = bottomMost.getBoundingClientRect();
+          const currentRect = current.getBoundingClientRect();
+          return currentRect.top >= bottomRect.top ? current : bottomMost;
+        });
 
-          const findEditSendButton = (row) => {
-            if (!row) return null;
-            const buttons = Array.from(row.querySelectorAll('button'));
-            if (!buttons.length) return null;
+      const flashAndClickSendEditButton = (btn) => {
+        if (window.gsap) flashBorder(btn);
+        setTimeout(() => {
+          safeClick(btn);
+        }, DELAY_BEFORE_CLICK);
+      };
 
-            const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
-            if (!hasCancel) return null;
-
-            const sendBtn =
-              buttons.find((btn) => /send/i.test(getButtonLabel(btn))) || buttons[1] || buttons[0];
-
-            return sendBtn || null;
-          };
+      function run() {
+        try {
+          refreshViewportMetrics();
 
           const focusedSendButton = findFocusedEditSendButton();
           if (focusedSendButton) {
-            if (window.gsap) flashBorder(focusedSendButton);
-            setTimeout(() => {
-              safeClick(focusedSendButton);
-            }, DELAY_BEFORE_CLICK);
+            flashAndClickSendEditButton(focusedSendButton);
             return;
           }
 
-          // Prefer send buttons tied to active edit textareas (ChatGPT now renders edits with a textarea)
-          const textareaSendButtons = Array.from(document.querySelectorAll('textarea'))
-            .map((ta) => {
-              if (!getUserTurn(ta) || ta.closest(COMPOSER_SCOPE_SELECTOR)) return null;
-
-              // Scope to the edit card around the textarea
-              const editCard =
-                ta.closest('.bg-token-main-surface-tertiary') ||
-                ta.closest('.rounded-3xl') ||
-                ta.closest('[data-message-id]') ||
-                ta.parentElement;
-              if (!editCard) return null;
-
-              const buttonRow =
-                editCard.querySelector('div.flex.justify-end.gap-2') ||
-                editCard.querySelector('div.flex.justify-end');
-              if (!buttonRow) return null;
-
-              return findEditSendButton(buttonRow);
-            })
-            .filter(Boolean);
-
-          // Fallback: only consider edit rows that contain an editable field + Cancel/Send
-          const fallbackButtons = Array.from(
-            document.querySelectorAll('div.flex.justify-end.gap-2, div.flex.justify-end'),
-          )
-            .map((row) => {
-              if (row.closest(COMPOSER_SCOPE_SELECTOR)) return null;
-              const scope = row.closest(
-                '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]',
-              );
-              if (!scope) return null;
-              if (!getUserTurn(scope)) return null;
-              if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
-              return findEditSendButton(row);
-            })
-            .filter(Boolean);
-
           const candidateButtons = Array.from(
-            new Set([...textareaSendButtons, ...fallbackButtons]),
+            new Set([...findTextareaEditSendButtons(), ...findFallbackEditSendButtons()]),
           );
-
-          const visibleSendButtons = candidateButtons.filter(isVisible);
+          const visibleSendButtons = candidateButtons.filter(isEligibleEditSendButton);
 
           if (!visibleSendButtons.length) return;
 
-          // The lowest visible one (last in DOM order)
-          const btn = visibleSendButtons.reduce((bottomMost, current) => {
-            const bottomRect = bottomMost.getBoundingClientRect();
-            const currentRect = current.getBoundingClientRect();
-            return currentRect.top >= bottomRect.top ? current : bottomMost;
-          });
-
-          if (window.gsap) flashBorder(btn);
-
-          setTimeout(() => {
-            safeClick(btn);
-          }, DELAY_BEFORE_CLICK);
+          flashAndClickSendEditButton(chooseBottomMostEditSendButton(visibleSendButtons));
         } catch {
           // Fail silently
         }
+      }
+
+      return { run };
+    })();
+
+    function runSendEditShortcut() {
+      SendEditShortcut.run();
+    }
+
+    const SHORTCUT_ICON_TOKENS = {
+      addPhotosFiles: ['M4.33496 12.5V7.5C4.33496', '#712359'],
+      askToChangeResponseInputMenu: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
+      branchInNewChatMenuItem: ['M3.32996 10H8.01173C8.7455', '#03583c'],
+      createImage: ['M9.38759 8.53403C10.0712', '#266724'],
+      dontSearchTheWebMenuItem: ['#9254a2'],
+      moreDotsMenuButton: ['M15.498 8.50159C16.3254', '#f6d0e2'],
+      newGptConversationMenuItem: ['M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
+      readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
+      regenerateMenuButton: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
+      searchWeb: ['M10 2.125C14.3492', '#6b0d8c'],
+      thinkingMenuButton: ['#127a53', '#c9d737'],
+      toggleCanvas: ['M12.0303 4.11328C13.4406', '#cf3864'],
+    };
+
+    const LEGACY_THINKING_MENU_ITEM_BY_OPTION_ID = {
+      'thinking-extended': '#143e56',
+      'thinking-standard': '#fec800',
+      'thinking-light': '#407870',
+      'thinking-heavy': '#3c5754',
+    };
+
+    const BOTTOM_BAR_CONTAINER_SELECTOR = '#bottomBarContainer';
+    const OPEN_RADIX_MENU_SELECTOR = 'div[role="menu"][data-state="open"]';
+
+    function flashShortcutTarget(el) {
+      if (window.gsap && typeof flashBorder === 'function') flashBorder(el);
+    }
+
+    function activateMenuItemWithKeyboardThenClick(el) {
+      try {
+        el.focus();
+      } catch {}
+      try {
+        el.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
+        );
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+      } catch {}
+      try {
+        el.click();
+      } catch {}
+    }
+
+    function activateOpenMenuItem(el) {
+      if (!(el instanceof Element)) return false;
+      flashShortcutTarget(el);
+      activateMenuItemWithKeyboardThenClick(el);
+      return true;
+    }
+
+    function findOpenReadAloudMenuItem() {
+      const readAloudSelector = withPrefix(
+        svgSelectorForTokens(SHORTCUT_ICON_TOKENS.readAloudMenuItem),
+        `${OPEN_RADIX_MENU_SELECTOR} div[role="menuitem"]`,
+      );
+      return document.querySelector(readAloudSelector)?.closest('div[role="menuitem"]') || null;
+    }
+
+    function runReadAloudShortcut() {
+      const stopInOpenMenu = document.querySelector(
+        `${OPEN_RADIX_MENU_SELECTOR} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
+      );
+      if (activateOpenMenuItem(stopInOpenMenu)) return;
+
+      if (activateOpenMenuItem(findOpenReadAloudMenuItem())) return;
+
+      clickLowestSvgThenSubItemSvg(
+        SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
+        SHORTCUT_ICON_TOKENS.readAloudMenuItem,
+        BOTTOM_BAR_CONTAINER_SELECTOR,
+      );
+    }
+
+    function runBranchInNewChatShortcut() {
+      clickLowestSvgThenSubItemSvg(
+        SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
+        SHORTCUT_ICON_TOKENS.branchInNewChatMenuItem,
+        BOTTOM_BAR_CONTAINER_SELECTOR,
+      );
+    }
+
+    function runRegenerateTryAgainShortcut() {
+      clickLowestSvgThenSubItemSvg(
+        SHORTCUT_ICON_TOKENS.regenerateMenuButton,
+        SHORTCUT_ICON_TOKENS.regenerateMenuButton,
+      );
+    }
+
+    function runRegenerateWithDifferentModelShortcut() {
+      clickLowestSvgThenSubItemSvg(
+        SHORTCUT_ICON_TOKENS.regenerateMenuButton,
+        SHORTCUT_ICON_TOKENS.dontSearchTheWebMenuItem,
+      );
+    }
+
+    function runRegenerateAskToChangeResponseShortcut() {
+      runRadixMenuActionFocusInputByName(
+        SHORTCUT_ICON_TOKENS.askToChangeResponseInputMenu,
+        'contextual-retry-dropdown-input',
+        {
+          caret: 'end',
+          selectAll: false,
+        },
+      );
+    }
+
+    async function runIconToolbarShortcut(iconTokenKey) {
+      await runActionByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);
+    }
+
+    function runLegacyThinkingEffortShortcut(optionId) {
+      if (window.__cspRunThinkingEffortAction?.(optionId)) return;
+      delayCall(
+        clickLowestSvgThenSubItemSvg,
+        350,
+        SHORTCUT_ICON_TOKENS.thinkingMenuButton,
+        LEGACY_THINKING_MENU_ITEM_BY_OPTION_ID[optionId],
+      );
+    }
+
+    function runProThinkingEffortShortcut(optionId) {
+      window.__cspRunProThinkingEffortAction?.(optionId);
+    }
+
+    function runTemporaryChatShortcut() {
+      const root = document.querySelector('#conversation-header-actions') || document;
+      const el =
+        root.querySelector('button svg use[href*="#28a8a0"]')?.closest('button') ||
+        root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button');
+      if (!el) return;
+      smartClick(el);
+    }
+
+    function runNewGptConversationShortcut() {
+      window.clickGptHeaderThenSubItemSvg(SHORTCUT_ICON_TOKENS.newGptConversationMenuItem, {
+        fallbackText: 'New chat',
+      });
+    }
+
+    const DictationShortcut = (() => {
+      let toggleInProgress = false;
+
+      const SPRITE_IDS = {
+        cancel: '#85f94b',
+        dictate: '#29f921',
+        send: '#01bab7',
+        submitDictation: '#fa1dbd',
+      };
+
+      function getComposerRoot() {
+        return (
+          document.getElementById('thread-bottom-container') ||
+          document.querySelector('form[data-type="unified-composer"]') ||
+          document.getElementById('composer-background') ||
+          document.body
+        );
+      }
+
+      function findClickableBySpriteId(root, spriteId) {
+        const safe = escapeAttributeSelectorFragment(spriteId);
+        const use = root.querySelector(`svg use[href*="${safe}"]`);
+        if (!use) return null;
+        return (
+          use.closest('button, [role="button"], a, [tabindex]') ||
+          use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
+          null
+        );
+      }
+
+      function findFirstClickable(root, ...selectors) {
+        for (const selector of selectors) {
+          if (!selector) continue;
+          const el = root.querySelector(selector);
+          if (el) return el;
+        }
+        return null;
+      }
+
+      function scrollAndFlashComposerControl(el) {
+        if (!el) return false;
+        try {
+          el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+        } catch {}
+        flashBorder(el);
+        return true;
+      }
+
+      function clickComposerControl(el) {
+        if (!scrollAndFlashComposerControl(el)) return false;
+        smartClick(el);
+        return true;
+      }
+
+      function runToggle() {
+        if (toggleInProgress) return;
+        toggleInProgress = true;
+        setTimeout(() => {
+          toggleInProgress = false;
+        }, 300);
+
+        const composerRoot = getComposerRoot();
+
+        // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
+        // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
+        const submitDictationBtn =
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation) ||
+          findFirstClickable(composerRoot, 'button[aria-label="Submit dictation"]');
+        if (clickComposerControl(submitDictationBtn)) return;
+
+        // Otherwise start dictation (avoid Voice Mode button).
+        const dictateBtn =
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate) ||
+          findFirstClickable(composerRoot, 'button[aria-label="Dictate button"]');
+        if (clickComposerControl(dictateBtn)) return;
+
+        // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
+        const submitBtn =
+          findFirstClickable(
+            composerRoot,
+            '#composer-submit-button',
+            'button[data-testid="send-button"]',
+            'button[aria-label="Send prompt"]',
+          ) ||
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.send) ||
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation);
+        clickComposerControl(submitBtn);
+      }
+
+      async function runCancel() {
+        const composerRoot = getComposerRoot();
+        const btn =
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel) ||
+          composerRoot.querySelector('button[aria-label="Stop dictation"]');
+
+        // Only stop if Stop dictation is currently available; otherwise no-op.
+        if (!btn) return;
+
+        scrollAndFlashComposerControl(btn);
+        await sleep(DELAYS.beforeFinalClick);
+        smartClick(btn);
+      }
+
+      return {
+        runCancel,
+        runToggle,
+      };
+    })();
+
+    // @note Alt shortcut action registry
+    const altShortcutActions = {
+      shortcutKeyScrollUpOneMessage: () => {
+        const upButton = document.getElementById('upButton');
+        if (upButton) {
+          upButton.click();
+          // feedbackAnimation is already called inside the click handler, so this is redundant.
+        } else {
+          goUpOneMessage(); // Call the scroll function directly, no feedback since no button.
+        }
       },
-      [shortcuts.shortcutKeyNewConversation]: function newConversation() {
+      shortcutKeyScrollDownOneMessage: () => {
+        const downButton = document.getElementById('downButton');
+        if (downButton) {
+          downButton.click(); // feedback is triggered in the click handler
+        } else {
+          goDownOneMessage(); // function is available even when button is hidden
+        }
+      },
+      shortcutKeyScrollUpTwoMessages: () => {
+        const upButton = document.getElementById('upButton');
+        goUpTwoMessages(upButton || null);
+      },
+      shortcutKeyScrollDownTwoMessages: () => {
+        const downButton = document.getElementById('downButton');
+        goDownTwoMessages(downButton || null);
+      },
+      shortcutKeyCopyAllCodeBlocks: copyCode,
+      shortcutKeyToggleCodeboxWrap: () => {
+        window.toggleCodeboxWrap?.();
+      },
+      shortcutKeyCopyLowest: () => {
+        const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
+        copyFromLowestButton(copyPath, {
+          delayBeforeClick: 350,
+          delayClipboardRead: 350,
+        });
+      },
+      shortcutKeyEdit: runEditMessageShortcut,
+      shortcutKeySendEdit: runSendEditShortcut,
+      shortcutKeyNewConversation: function newConversation() {
         triggerNativeNewConversationButton();
       },
-      [shortcuts.shortcutKeySearchConversationHistory]: () => {
+      shortcutKeySearchConversationHistory: () => {
         triggerNativeSearchConversationButton();
       },
-      [shortcuts.shortcutKeyClickNativeScrollToBottom]: () => {
+      shortcutKeyClickNativeScrollToBottom: () => {
         // native scroll to bottom
         const el = getScrollableContainer();
         if (!el) return;
 
         animateBoundaryScrollTo(el, 'bottom');
       },
-      [shortcuts.shortcutKeyScrollToTop]: () => {
+      shortcutKeyScrollToTop: () => {
         // native scroll to top
         const el = getScrollableContainer();
         if (!el) return;
@@ -5132,7 +6227,7 @@ const delays = DELAYS;
         animateBoundaryScrollTo(el, 'top');
       },
       // @note Toggle Sidebar Function
-      [shortcuts.shortcutKeyToggleSidebar]: function toggleSidebar() {
+      shortcutKeyToggleSidebar: function toggleSidebar() {
         // —— Directional snap logic ——
         const slimBarEl = document.getElementById('stage-sidebar-tiny-bar');
         const largeSidebarEl = document.querySelector(
@@ -5152,1754 +6247,66 @@ const delays = DELAYS;
         // If still nothing, just exit
         setTimeout(() => { }, 30);
       },
-      [shortcuts.shortcutKeyActivateInput]: function activateInput() {
+      shortcutKeyActivateInput: function activateInput() {
         triggerDirectComposerActivation();
       },
-      [shortcuts.shortcutKeySearchWeb]: async () => {
-        // Unique config for this action
-        const ICON_PATH_PREFIX = ['M10 2.125C14.3492', '#6b0d8c']; // globe icon prefix
-        await runActionByIcon(ICON_PATH_PREFIX);
-      },
-      [shortcuts.shortcutKeyPreviousThread]: (opts = {}) => {
-        const SCROLL_ANCHOR_PCT =
-          typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-
-        // Centralized timing constants
-        const DELAY_INITIAL = 25; // was 50
-        const DELAY_POST_CLICK = 175; // was 350
-        const SCROLL_DURATION = 0.2; // was 0.6s
-
-        const getScrollableContainer =
-          typeof window.getScrollableContainer === 'function'
-            ? window.getScrollableContainer
-            : () => window;
-
-        const composerRect = () => {
-          const el = document.getElementById('composer-background');
-          return el ? el.getBoundingClientRect() : null;
-        };
-
-        const scrollToAnchor = (container, target, onComplete) => {
-          if (!window.gsap || !target) return onComplete?.();
-
-          const rect = target.getBoundingClientRect();
-          const contRect =
-            container === window
-              ? { top: 0, height: window.innerHeight }
-              : {
-                top: container.getBoundingClientRect().top,
-                height: container.clientHeight,
-              };
-
-          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-          const current = container === window ? window.scrollY : container.scrollTop;
-          let targetY =
-            container === window
-              ? current + rect.top - anchorPx
-              : container.scrollTop + (rect.top - contRect.top) - anchorPx;
-
-          const maxScroll =
-            container === window
-              ? (document.scrollingElement || document.documentElement).scrollHeight -
-              window.innerHeight
-              : container.scrollHeight - container.clientHeight;
-          targetY = Math.max(0, Math.min(targetY, maxScroll));
-
-          gsap.to(container, {
-            duration: SCROLL_DURATION,
-            scrollTo: { y: targetY, autoKill: false },
-            ease: 'power4.out',
-            onComplete,
-          });
-        };
-
-        function isButtonCentered(container, btn) {
-          if (!window.gsap || !btn) return false;
-          const rect = btn.getBoundingClientRect();
-          const contRect =
-            container === window
-              ? { top: 0, height: window.innerHeight }
-              : {
-                top: container.getBoundingClientRect().top,
-                height: container.clientHeight,
-              };
-
-          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-          const currentScroll = container === window ? window.scrollY : container.scrollTop;
-          const btnTop =
-            container === window
-              ? rect.top + window.scrollY
-              : rect.top - contRect.top + container.scrollTop;
-          const targetY = btnTop - anchorPx;
-          const delta = Math.abs(currentScroll - targetY);
-          return delta < 2; // threshold
-        }
-
-        const getMsgId = (btn) => btn.closest('[data-message-id]')?.getAttribute('data-message-id');
-
-        const relaunchHover = (wrapper) => {
-          if (!wrapper) return;
-          wrapper.classList.add('force-hover');
-          ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
-            wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
-          });
-        };
-
-        const collectCandidates = () => {
-          const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
-            .map((el) => el.previousElementSibling)
-            .filter((el) => el?.tagName === 'BUTTON');
-          const iconSelectors = [
-            'button[aria-label="Previous response"]',
-            withPrefix(svgSelectorForTokens(['M11.5292 3.7793', '#8ee2e9']), 'button'),
-          ];
-          const iconBtns = iconSelectors.flatMap((sel) =>
-            Array.from(document.querySelectorAll(sel)).map(
-              (node) => node.closest('button') || node,
-            ),
-          );
-          return [...divBtns, ...iconBtns].filter(Boolean);
-        };
-
-        const isOverlapComposer = (rect) => {
-          const comp = composerRect();
-          return comp
-            ? !(
-              rect.bottom < comp.top ||
-              rect.top > comp.bottom ||
-              rect.right < comp.left ||
-              rect.left > comp.right
-            )
-            : false;
-        };
-
-        const chooseTarget = (buttons) => {
-          const scrollY = window.scrollY;
-          const viewH = window.innerHeight;
-          const BOTTOM_BUFFER = 85;
-
-          const withMeta = buttons.map((btn) => {
-            const rect = btn.getBoundingClientRect();
-            return {
-              btn,
-              rect,
-              absBottom: rect.bottom + scrollY,
-              fullyVisible:
-                rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
-            };
-          });
-
-          const fully = withMeta.filter((m) => m.fullyVisible);
-          if (fully.length) {
-            return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-          }
-          const above = withMeta.filter((m) => m.rect.bottom <= 0);
-          if (above.length) {
-            return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-          }
-          return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
-        };
-
-        const recenter = (msgId) => {
-          if (!msgId) return;
-          const container = getScrollableContainer();
-          const target = document.querySelector(`[data-message-id="${msgId}"] button`);
-          if (!target) return;
-          scrollToAnchor(container, target);
-        };
-
-        setTimeout(() => {
-          try {
-            const all = collectCandidates();
-            if (!all.length) return;
-
-            let target = chooseTarget(all);
-            const container = getScrollableContainer();
-
-            if (opts.previewOnly && target && isButtonCentered(container, target)) {
-              const idx = all.indexOf(target);
-              let found = false;
-              for (let i = idx - 1; i >= 0; --i) {
-                if (!isButtonCentered(container, all[i])) {
-                  target = all[i];
-                  found = true;
-                  break;
-                }
-              }
-              if (!found && all.length > 1) {
-                target = all[all.length - 1];
-              }
-            }
-
-            if (!target) return;
-            const msgId = getMsgId(target);
-
-            scrollToAnchor(container, target, () => {
-              flashBorder(target);
-              relaunchHover(target.closest('[class*="group-hover"]'));
-
-              if (!opts.previewOnly) {
-                setTimeout(() => {
-                  target.click();
-                  setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
-                }, DELAY_POST_CLICK);
-              }
-            });
-          } catch (_) {
-            /* silent */
-          }
-        }, DELAY_INITIAL);
-      },
-      /*──────────────────────────────────────────────────────────────────────────────
-       *  NEXT‑THREAD shortcut – tracks ONE specific button through re‑render
-       *────────────────────────────────────────────────────────────────────────────*/
-      /* Thread‑Navigation “next” shortcut – full drop‑in replacement */
-      // Updated "Thread Navigation" shortcut implementation
-      // Fulfils mandatory sequence: select‑scroll‑highlight‑click‑pause‑recenter
-
-      // Export / attach to your shortcuts map
-      [shortcuts.shortcutKeyNextThread]: (opts = {}) => {
-        const SCROLL_ANCHOR_PCT =
-          typeof window.SCROLL_ANCHOR_PCT === 'number' ? window.SCROLL_ANCHOR_PCT : 80;
-
-        // Centralized timing constants (all halved)
-        const DELAY_INITIAL = 25; // was 50
-        const DELAY_POST_CLICK = 200; // was 350
-        const SCROLL_DURATION = 0.2; // was 0.6s
-
-        const getScrollableContainer =
-          typeof window.getScrollableContainer === 'function'
-            ? window.getScrollableContainer
-            : () => window;
-
-        const composerRect = () => {
-          const el = document.getElementById('composer-background');
-          return el ? el.getBoundingClientRect() : null;
-        };
-
-        const scrollToAnchor = (container, target, onComplete) => {
-          if (!window.gsap || !target) return onComplete?.();
-
-          const rect = target.getBoundingClientRect();
-          const contRect =
-            container === window
-              ? { top: 0, height: window.innerHeight }
-              : {
-                top: container.getBoundingClientRect().top,
-                height: container.clientHeight,
-              };
-
-          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-          const current = container === window ? window.scrollY : container.scrollTop;
-          let targetY =
-            container === window
-              ? current + rect.top - anchorPx
-              : container.scrollTop + (rect.top - contRect.top) - anchorPx;
-
-          const maxScroll =
-            container === window
-              ? (document.scrollingElement || document.documentElement).scrollHeight -
-              window.innerHeight
-              : container.scrollHeight - container.clientHeight;
-          targetY = Math.max(0, Math.min(targetY, maxScroll));
-
-          gsap.to(container, {
-            duration: SCROLL_DURATION,
-            scrollTo: { y: targetY, autoKill: false },
-            ease: 'power4.out',
-            onComplete,
-          });
-        };
-
-        function isButtonCentered(container, btn) {
-          if (!window.gsap || !btn) return false;
-          const rect = btn.getBoundingClientRect();
-          const contRect =
-            container === window
-              ? { top: 0, height: window.innerHeight }
-              : {
-                top: container.getBoundingClientRect().top,
-                height: container.clientHeight,
-              };
-
-          const anchorPx = (contRect.height * SCROLL_ANCHOR_PCT) / 100 - rect.height / 2;
-          const currentScroll = container === window ? window.scrollY : container.scrollTop;
-          const btnTop =
-            container === window
-              ? rect.top + window.scrollY
-              : rect.top - contRect.top + container.scrollTop;
-          const targetY = btnTop - anchorPx;
-          const delta = Math.abs(currentScroll - targetY);
-          return delta < 2; // threshold
-        }
-
-        const getMsgId = (btn) => btn.closest('[data-message-id]')?.getAttribute('data-message-id');
-
-        const relaunchHover = (wrapper) => {
-          if (!wrapper) return;
-          wrapper.classList.add('force-hover');
-          ['pointerover', 'pointerenter', 'mouseover'].forEach((evt) => {
-            wrapper.dispatchEvent(new MouseEvent(evt, { bubbles: true }));
-          });
-        };
-
-        const collectCandidates = () => {
-          const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
-            .map((el) => el.previousElementSibling)
-            .filter((el) => el?.tagName === 'BUTTON');
-          const iconSelectors = [
-            'button[aria-label="Next response"]',
-            withPrefix(svgSelectorForTokens(['M7.52925 3.7793', '#b140e7']), 'button'),
-          ];
-          const pathBtns = iconSelectors.flatMap((sel) =>
-            Array.from(document.querySelectorAll(sel)).map(
-              (node) => node.closest('button') || node,
-            ),
-          );
-
-          // Exclude "Thought for" buttons
-          const isExcluded = (btn) => {
-            const span = btn.querySelector('span');
-            if (!span) return false;
-            return /^Thought for\b/.test(span.textContent.trim());
-          };
-
-          return [...divBtns, ...pathBtns].filter(Boolean).filter((btn) => !isExcluded(btn));
-        };
-
-        const isOverlapComposer = (rect) => {
-          const comp = composerRect();
-          return comp
-            ? !(
-              rect.bottom < comp.top ||
-              rect.top > comp.bottom ||
-              rect.right < comp.left ||
-              rect.left > comp.right
-            )
-            : false;
-        };
-
-        const chooseTarget = (buttons) => {
-          const scrollY = window.scrollY;
-          const viewH = window.innerHeight;
-          const BOTTOM_BUFFER = 85;
-
-          const withMeta = buttons.map((btn) => {
-            const rect = btn.getBoundingClientRect();
-            return {
-              btn,
-              rect,
-              absBottom: rect.bottom + scrollY,
-              fullyVisible:
-                rect.top >= 0 && rect.bottom <= viewH - BOTTOM_BUFFER && !isOverlapComposer(rect),
-            };
-          });
-
-          const fully = withMeta.filter((m) => m.fullyVisible);
-          if (fully.length) {
-            return fully.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-          }
-          const above = withMeta.filter((m) => m.rect.bottom <= 0);
-          if (above.length) {
-            return above.reduce((a, b) => (a.rect.bottom > b.rect.bottom ? a : b)).btn;
-          }
-          return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
-        };
-
-        const recenter = (msgId) => {
-          if (!msgId) return;
-          const container = getScrollableContainer();
-          const target = document.querySelector(`[data-message-id="${msgId}"] button`);
-          if (!target) return;
-          scrollToAnchor(container, target);
-        };
-
-        setTimeout(() => {
-          try {
-            const all = collectCandidates();
-            if (!all.length) return;
-
-            let target = chooseTarget(all);
-            const container = getScrollableContainer();
-
-            if (opts.previewOnly && target && isButtonCentered(container, target)) {
-              const idx = all.indexOf(target);
-              for (let i = idx - 1; i >= 0; --i) {
-                if (!isButtonCentered(container, all[i])) {
-                  target = all[i];
-                  break;
-                }
-              }
-            }
-
-            if (!target) return;
-            const msgId = getMsgId(target);
-
-            scrollToAnchor(container, target, () => {
-              flashBorder(target);
-              relaunchHover(target.closest('[class*="group-hover"]'));
-
-              if (!opts.previewOnly) {
-                setTimeout(() => {
-                  target.click();
-                  setTimeout(() => recenter(msgId), DELAY_POST_CLICK);
-                }, DELAY_POST_CLICK);
-              }
-            });
-          } catch (_) {
-            /* silent */
-          }
-        }, DELAY_INITIAL);
-      },
-      [shortcuts.selectThenCopy]: (() => {
-        window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
-        const DEBUG = false;
-
-        // Copy HTML + Text (mirror 111s ordering: try async API first, then copy-event fallback)
-        async function writeClipboardHTMLAndText_Single(html, text) {
-          if (navigator.clipboard && window.ClipboardItem) {
-            try {
-              const item = new ClipboardItem({
-                'text/html': new Blob([html], { type: 'text/html' }),
-                'text/plain': new Blob([text], { type: 'text/plain' }),
-              });
-              await navigator.clipboard.write([item]);
-              return;
-            } catch (e) {
-              if (DEBUG) console.debug('Clipboard write fallback (single):', e);
-            }
-          }
-          document.addEventListener(
-            'copy',
-            (e) => {
-              e.clipboardData.setData('text/html', html);
-              e.clipboardData.setData('text/plain', text);
-              e.preventDefault();
-            },
-            { once: true },
-          );
-          document.execCommand('copy');
-        }
-
-        // Convert embedded newlines to <br> for user messages (HTML path)
-        function replaceNewlinesWithBr_UserPreWrap(root) {
-          try {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-            const toProcess = [];
-            for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-              if (n.nodeValue?.includes('\n')) toProcess.push(n);
-            }
-            for (const textNode of toProcess) {
-              const parts = textNode.nodeValue.split('\n');
-              const frag = document.createDocumentFragment();
-              parts.forEach((part, i) => {
-                if (part) frag.appendChild(document.createTextNode(part));
-                if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
-              });
-              textNode.parentNode.replaceChild(frag, textNode);
-            }
-          } catch (err) {
-            if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
-          }
-        }
-
-        // Normalize code blocks → <pre><code class="language-...">```lang ...```</code></pre>
-        function normalizeCodeBlocksInClone(root) {
-          const safeLang = (s) => {
-            const v = (s || '').trim();
-            return /^[a-z0-9+.#-]+$/i.test(v) ? v.toLowerCase() : '';
-          };
-          // Remove UI chrome (copy buttons/headers)
-          root
-            .querySelectorAll(
-              '.flex.items-center.text-token-text-secondary,[data-testid="copy-code-button"],button[aria-label*="Copy"],button[title*="Copy"]',
-            )
-            .forEach((el) => {
-              el.remove();
-            });
-
-          const preNodes = Array.from(root.querySelectorAll('pre'));
-          const codeBlocks = Array.from(
-            root.querySelectorAll(
-              'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
-            ),
-          ).filter((c) => !c.closest('pre'));
-          const blocks = [...preNodes, ...codeBlocks];
-
-          for (const node of blocks) {
-            const isPre = node.tagName === 'PRE';
-            const codeEl = isPre ? node.querySelector('code') || node : node;
-            let codeText = (codeEl?.innerText ?? node.innerText ?? '').replace(/\u00A0/g, ' ');
-            codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-            codeText = codeText.replace(/\r\n?/g, '\n').replace(/[ \t\u00A0\r\n]+$/g, '');
-
-            let lang = '';
-            if (codeEl) {
-              const cls = Array.from(codeEl.classList || []).find((c) =>
-                c.toLowerCase().startsWith('language-'),
-              );
-              if (cls) lang = cls.split('language-')[1];
-              if (!lang && codeEl.dataset?.language) lang = codeEl.dataset.language;
-            }
-            if (!lang && isPre) {
-              const hdr = node.querySelector('.flex.items-center.text-token-text-secondary');
-              const hdrText = hdr?.innerText?.trim();
-              if (hdrText) lang = hdrText;
-            }
-            lang = safeLang(lang);
-
-            const eol = '\r\n';
-            let fenced;
-            if (/^\s*```/.test(codeText)) {
-              fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-              if (!fenced.endsWith(eol)) fenced += eol;
-            } else {
-              fenced = `\`\`\`${lang || ''}${eol}${codeText}${eol}\`\`\`${eol}`;
-            }
-
-            const preNew = document.createElement('pre');
-            const codeNew = document.createElement('code');
-            if (lang) codeNew.className = `language-${lang}`;
-            codeNew.textContent = fenced;
-            preNew.appendChild(codeNew);
-            node.replaceWith(preNew);
-          }
-        }
-
-        // Strip data-* (prevents weird list detection in Word), keep real elements intact
-        function demotePTagsAndStripDataAttrs(root) {
-          for (const el of Array.from(root.querySelectorAll('*'))) {
-            for (const attr of Array.from(el.attributes)) {
-              if (
-                attr.name === 'data-start' ||
-                attr.name === 'data-end' ||
-                attr.name.startsWith('data-')
-              ) {
-                el.removeAttribute(attr.name);
-              }
-            }
-          }
-        }
-
-        // Split UL/OL so <pre> and following siblings don’t inherit bullets in Word
-        function splitListsAroundCodeBlocks_Word(root) {
-          ['ul', 'ol'].forEach((tag) => {
-            root.querySelectorAll(tag).forEach((list) => {
-              const lis = Array.from(list.children).filter((c) => c.tagName === 'LI');
-              if (!lis.some((li) => li.querySelector('pre'))) return;
-              const frag = document.createDocumentFragment();
-              let acc = document.createElement(tag);
-              const flushAcc = () => {
-                if (acc.children.length) frag.appendChild(acc);
-                acc = document.createElement(tag);
-              };
-              for (const li of lis) {
-                const firstPre = li.querySelector(':scope > pre') || li.querySelector('pre');
-                if (!firstPre) {
-                  acc.appendChild(li.cloneNode(true));
-                  continue;
-                }
-                const newLi = document.createElement('li');
-                for (const child of Array.from(li.childNodes)) {
-                  if (child === firstPre) break;
-                  newLi.appendChild(child.cloneNode(true));
-                }
-                if (newLi.childNodes.length) acc.appendChild(newLi);
-                flushAcc();
-                let started = false;
-                for (const child of Array.from(li.childNodes)) {
-                  if (child === firstPre) started = true;
-                  if (started) frag.appendChild(child.cloneNode(true));
-                }
-              }
-              flushAcc();
-              for (const n of Array.from(list.childNodes)) {
-                if (n.tagName !== 'LI') frag.appendChild(n.cloneNode(true));
-              }
-              list.replaceWith(frag);
-            });
-          });
-        }
-
-        function applyWordSpacingAndFont_Word(root) {
-          const fontStack = `'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif`;
-          const baseRules = [
-            `font-family:${fontStack}`,
-            'line-height:116%',
-            'mso-line-height-alt:116%',
-            'mso-line-height-rule:exactly',
-          ].join(';');
-          const base = root.getAttribute('style') || '';
-          root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
-          const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
-          root.querySelectorAll(selector).forEach((el) => {
-            const s = el.getAttribute('style') || '';
-            const rules = [
-              `font-family:${fontStack}`,
-              'margin-top:0pt',
-              'margin-bottom:8pt',
-              'line-height:116%',
-              'mso-margin-top-alt:0pt',
-              'mso-margin-bottom-alt:8pt',
-              'mso-line-height-alt:116%',
-              'mso-line-height-rule:exactly',
-            ].join(';');
-            el.setAttribute('style', s ? `${s};${rules}` : rules);
-          });
-        }
-
-        // Inline guard used by single-message copy: no extra paragraphs, no labels.
-        // Break Word's auto-list at paragraph starts and after <br> by inserting
-        // WORD JOINER (U+2060) between the number and the delimiter, plus NBSP after.
-        function inlineGuardFirstRuns_Word(root) {
-          const WJ = '\u2060'; // WORD JOINER
-          const NBSP = '\u00A0';
-          // Matches: (leading spaces)(1..3 digits or A-Z)(. or ))(at least one space)
-          const LIST_START_RE = /^(\s*)(\d{1,3}|[A-Za-z])([.)])\s+/;
-
-          function firstText(rootEl) {
-            const w = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
-              acceptNode(n) {
-                return (n.nodeValue || '').trim().length
-                  ? NodeFilter.FILTER_ACCEPT
-                  : NodeFilter.FILTER_SKIP;
-              },
-            });
-            return w.nextNode();
-          }
-
-          function neutralizeStart(textNode) {
-            const s = textNode.nodeValue || '';
-            if (!s) return;
-            if (LIST_START_RE.test(s)) {
-              textNode.nodeValue = s.replace(
-                LIST_START_RE,
-                (_, lead, num, punct) => `${lead}${num}${WJ}${punct}${NBSP}`,
-              );
-            }
-          }
-
-          // Paragraph-like blocks (but not inside real lists)
-          root.querySelectorAll('p, pre, blockquote, h1, h2, h3, h4, h5, h6, div').forEach((el) => {
-            if (el.closest('li, ol, ul')) return;
-            const t = firstText(el);
-            if (t) neutralizeStart(t);
-          });
-
-          // After each <br>, neutralize the next visual "line"
-          root.querySelectorAll('p, pre, blockquote, div').forEach((el) => {
-            if (el.closest('li, ol, ul')) return;
-            el.querySelectorAll('br').forEach((br) => {
-              let n = br.nextSibling;
-              while (
-                n &&
-                ((n.nodeType === 3 && !(n.nodeValue || '').trim()) ||
-                  (n.nodeType === 1 && n.tagName === 'BR'))
-              ) {
-                n = n.nextSibling;
-              }
-              if (!n) return;
-              if (n.nodeType === 3) {
-                neutralizeStart(n);
-              } else if (n.nodeType === 1) {
-                const t = firstText(n);
-                if (t) neutralizeStart(t);
-              }
-            });
-          });
-        }
-
-        // Plain text builder: convert each <pre> into a fenced block with CRLF line endings (matches 111s)
-        function buildPlainTextWithFences(root) {
-          const clone = root.cloneNode(true);
-          normalizeCodeBlocksInClone(clone);
-          for (const pre of Array.from(clone.querySelectorAll('pre'))) {
-            const codeEl = pre.querySelector('code');
-            let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
-            codeText = codeText
-              .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
-              .replace(/\r\n?/g, '\n')
-              .replace(/[ \t\u00A0\r\n]+$/g, '');
-            let lang = '';
-            if (codeEl) {
-              const cls = Array.from(codeEl.classList || []).find((c) =>
-                c.toLowerCase().startsWith('language-'),
-              );
-              if (cls) lang = cls.split('language-')[1];
-            }
-            const eol = '\r\n';
-            const out = codeText.trim().startsWith('```')
-              ? `\r\n${codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol)}\r\n`
-              : `\r\n\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
-            const container = document.createElement('div');
-            container.textContent = out;
-            pre.replaceWith(container);
-          }
-          // Mirror 111s: do not force-convert all non-code newlines; only code blocks are normalized to CRLF
-          return clone.innerText.replace(/\u00A0/g, ' ').trim();
-        }
-
-        // Build processed HTML + Text from one or more content elements in the same turn.
-        function buildProcessedClipboardPayload_Single(contentEls) {
-          const elements = Array.isArray(contentEls) ? contentEls.filter(Boolean) : [contentEls].filter(Boolean);
-          if (!elements.length) return { html: '', text: '' };
-          // Wrapper (acts like 111s turn wrapper — but no visible label)
-          const turnWrapper = document.createElement('div');
-          turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
-          // Preserve role tag (purely metadata)
-          const roleContainer = elements[0].closest?.('[data-message-author-role]');
-          turnWrapper.setAttribute(
-            'data-role',
-            roleContainer?.getAttribute?.('data-message-author-role') || 'assistant',
-          );
-
-          const textParts = [];
-          for (const contentEl of elements) {
-            const cloneForHtml = contentEl.cloneNode(true);
-
-            // Preserve user message hard line breaks visually
-            const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
-            if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
-
-            // Normalize DOM to Word-friendly HTML
-            normalizeCodeBlocksInClone(cloneForHtml);
-            demotePTagsAndStripDataAttrs(cloneForHtml);
-            splitListsAroundCodeBlocks_Word(cloneForHtml);
-
-            // 1) Body container (Word-friendly spacing + code/list normalization)
-            const bodyDiv = document.createElement('div');
-            bodyDiv.innerHTML = cloneForHtml.innerHTML;
-
-            applyWordSpacingAndFont_Word(bodyDiv);
-            splitListsAroundCodeBlocks_Word(bodyDiv);
-            inlineGuardFirstRuns_Word(bodyDiv);
-
-            turnWrapper.appendChild(bodyDiv);
-            textParts.push(buildPlainTextWithFences(contentEl));
-          }
-
-          const html =
-            '<div data-export="chatgpt-shortcuts-single-message">' +
-            turnWrapper.outerHTML +
-            '</div>';
-
-          const text = textParts.filter(Boolean).join('\n\n');
-
-          return { html, text };
-        }
-
-        // Copy processed payload built from one or more content elements
-        async function copyProcessedFromElements(contentEls) {
-          const { html, text } = buildProcessedClipboardPayload_Single(contentEls);
-          if (!html && !text) return;
-          await writeClipboardHTMLAndText_Single(html, text);
-        }
-
-        // Visual selection (for feedback) + processed copy
-        function doSelectAndCopy(contentEls, shouldCopy = true) {
-          try {
-            const elements = Array.isArray(contentEls)
-              ? contentEls.filter(Boolean)
-              : [contentEls].filter(Boolean);
-            if (!elements.length) return;
-            const selection = window.getSelection?.();
-            if (selection) selection.removeAllRanges();
-
-            const makeTextWalker = (root) =>
-              document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                acceptNode(node) {
-                  return node.nodeValue?.trim().length
-                    ? NodeFilter.FILTER_ACCEPT
-                    : NodeFilter.FILTER_SKIP;
-                },
-              });
-
-            const firstEl = elements[0];
-            const lastEl = elements[elements.length - 1];
-            const startWalker = makeTextWalker(firstEl);
-            const startNode = startWalker.nextNode();
-            let endNode = null;
-            if (startNode) {
-              const endWalker = makeTextWalker(lastEl);
-              for (let n = endWalker.nextNode(); n; n = endWalker.nextNode()) endNode = n;
-            }
-            const range = document.createRange();
-            if (startNode && endNode) {
-              range.setStart(startNode, 0);
-              range.setEnd(endNode, endNode.nodeValue.length);
-            } else {
-              range.selectNodeContents(firstEl);
-            }
-            if (selection) selection.addRange(range);
-
-            if (shouldCopy) void copyProcessedFromElements(elements);
-          } catch (err) {
-            if (DEBUG) console.debug('doSelectAndCopy failed:', err);
-          }
-        }
-
-        const TURN_SELECTOR_SELECT_COPY =
-          'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
-
-        function findRoleContainersFromTurn(turn, preferredRole = null) {
-          if (!turn) return [];
-          const selectors = preferredRole
-            ? [`[data-message-author-role="${preferredRole}"]`]
-            : ['[data-message-author-role="assistant"]', '[data-message-author-role="user"]'];
-          for (const selector of selectors) {
-            const matches = Array.from(turn.querySelectorAll(selector));
-            if (matches.length) return matches;
-          }
-          return [];
-        }
-
-        function findContentElsForTurn(turn, preferredRole = null) {
-          const seen = new Set();
-          return findRoleContainersFromTurn(turn, preferredRole)
-            .map((roleContainer) => findContentElForTurn(roleContainer))
-            .filter((contentEl) => {
-              if (!contentEl) return false;
-              if (!(contentEl.innerText || contentEl.textContent || '').trim()) return false;
-              if (seen.has(contentEl)) return false;
-              seen.add(contentEl);
-              return true;
-            });
-        }
-
-        function findPreferredRoleForTurn(turn) {
-          const dataTurn = turn?.getAttribute?.('data-turn');
-          if (dataTurn === 'assistant' || dataTurn === 'user') return dataTurn;
-          return findRoleContainersFromTurn(turn, 'assistant').length ? 'assistant' : 'user';
-        }
-
-        function findDirectContentEls(btn) {
-          const roleContainer = btn.closest?.('[data-message-author-role]');
-          if (!roleContainer) return [];
-          const contentEl = findContentElForTurn(roleContainer);
-          return contentEl && (contentEl.innerText || contentEl.textContent || '').trim()
-            ? [contentEl]
-            : [];
-        }
-
-        function getContentElsForCopyButton(btn) {
-          const turn = btn.closest(TURN_SELECTOR_SELECT_COPY);
-          const directContentEls = findDirectContentEls(btn);
-          if (directContentEls.length) return directContentEls;
-          return findContentElsForTurn(turn, findPreferredRoleForTurn(turn));
-        }
-
-        function turnHasRole(turn, role) {
-          return findRoleContainersFromTurn(turn, role).length > 0;
-        }
-
-        function getPrimaryContentElsForTurn(turn) {
-          return findContentElsForTurn(turn, findPreferredRoleForTurn(turn));
-        }
-
-        // Innermost visible text container for a given role container
-        function findContentElForTurn(roleContainer) {
-          if (!roleContainer) return null;
-          const isUser = roleContainer.getAttribute('data-message-author-role') === 'user';
-          if (isUser) {
-            return (
-              roleContainer.querySelector('.whitespace-pre-wrap') ||
-              roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
-              roleContainer
-            );
-          }
-          return (
-            roleContainer.querySelector('.whitespace-pre-wrap') ||
-            roleContainer.querySelector('.prose, .markdown, .markdown-new-styling') ||
-            roleContainer
-          );
-        }
-        // click handler uses processed copy
-        if (!window.__selectThenCopyCopyHandlerAttached) {
-          document.addEventListener('click', (e) => {
-            const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
-            if (!btn) return;
-            if (isCodeBoxCopyControl(btn)) return;
-
-            const contentEls = getContentElsForCopyButton(btn);
-            if (contentEls.length) {
-              // Always show selection AND copy processed HTML/Text
-              doSelectAndCopy(contentEls, true);
-            }
-          });
-          window.__selectThenCopyCopyHandlerAttached = true;
-        }
-        return () => {
-          setTimeout(() => {
-            try {
-              const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
-              const onlySelectUser = window.onlySelectUserCheckbox || false;
-              const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
-              const shouldCopy = !disableCopyAfterSelect;
-
-              const allConversationTurns = Array.from(
-                document.querySelectorAll(TURN_SELECTOR_SELECT_COPY),
-              );
-
-              const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-              const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-
-              const composerTop = getComposerTopEdge();
-
-              const visibleTurns = allConversationTurns.filter((el) => {
-                const rect = el.getBoundingClientRect();
-                const horizontallyVisible = rect.right > 0 && rect.left < viewportWidth;
-                const verticallyVisible = rect.bottom > 0 && rect.top < viewportHeight;
-                if (!(horizontallyVisible && verticallyVisible)) return false;
-                if (Number.isFinite(composerTop) && rect.top >= composerTop) return false;
-                return true;
-              });
-
-              const filteredVisibleTurns = visibleTurns.filter((el) => {
-                if (
-                  onlySelectAssistant &&
-                  !turnHasRole(el, 'assistant')
-                )
-                  return false;
-                if (onlySelectUser && !turnHasRole(el, 'user'))
-                  return false;
-                return true;
-              });
-
-              if (!filteredVisibleTurns.length) return;
-
-              filteredVisibleTurns.sort(
-                (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
-              );
-
-              const { lastSelectedIndex } = window.selectThenCopyState;
-              const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
-              const selectedTurn = filteredVisibleTurns[nextIndex];
-              if (!selectedTurn) return;
-
-              selectAndCopyMessage(selectedTurn, shouldCopy);
-              window.selectThenCopyState.lastSelectedIndex = nextIndex;
-
-              function selectAndCopyMessage(turn, shouldCopyParam) {
-                try {
-                  const isUser = turnHasRole(turn, 'user');
-                  const isAssistant = turnHasRole(turn, 'assistant');
-
-                  if (onlySelectUser && !isUser) return;
-                  if (onlySelectAssistant && !isAssistant) return;
-
-                  const contentEls = getPrimaryContentElsForTurn(turn);
-                  if (!contentEls.length) return;
-
-                  doSelectAndCopy(contentEls, !!shouldCopyParam);
-                } catch (err) {
-                  if (DEBUG) console.debug('selectAndCopyMessage failed:', err);
-                }
-              }
-            } catch (err) {
-              if (DEBUG) console.debug('outer selectThenCopy failure:', err);
-            }
-          }, 50);
-        };
-      })(),
-      [shortcuts.shortcutKeyToggleModelSelector]: () => {
-        window.toggleModelSelector();
-      },
-      // Regenerate: open the kebab/overflow menu, then click the "Regenerate" sub-item.
-      // Note: these two path prefixes can be the same (as in this case) or different for other actions.
-      [shortcuts.shortcutKeyRegenerateTryAgain]: () => {
-        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // sub-item icon path (prefix)
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyRegenerateWithDifferentModel]: () => {
-        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['#9254a2']; // legacy storage key now targets "Don't Search the Web"
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyRegenerateAskToChangeResponse]: () => {
-        const FIRST_BTN_PATH = ['M3.502 16.6663V13.3333C3.502', '#ec66f0']; // menu/overflow button icon path (prefix)
-        runRadixMenuActionFocusInputByName(FIRST_BTN_PATH, 'contextual-retry-dropdown-input', {
-          caret: 'end', // 'start' | 'end'
-          selectAll: false, // true to select existing text
+      shortcutKeySearchWeb: () => runIconToolbarShortcut('searchWeb'),
+      shortcutKeyPreviousThread: (opts = {}) => {
+        runThreadNavigationShortcut(opts, {
+          ariaLabel: 'Previous response',
+          excludeThoughtFor: true,
+          iconTokens: ['M11.5292 3.7793', '#8ee2e9'],
+          postClickDelay: 175,
+          wrapPreviewToLast: true,
         });
       },
-      [shortcuts.shortcutKeyMoreDotsReadAloud]: () => {
-        const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2'];
-        const SUB_ITEM_BTN_PATH = ['M9.75122 4.09203C9.75122', '#54f145'];
-        const EXCLUDE_ANCESTOR = '#bottomBarContainer';
-
-        const openMenuSel = 'div[role="menu"][data-state="open"]';
-
-        function activate(el) {
-          try {
-            el.focus();
-          } catch { }
-          try {
-            el.dispatchEvent(
-              new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
-            );
-            el.dispatchEvent(
-              new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }),
-            );
-          } catch { }
-          try {
-            el.click();
-          } catch { }
-        }
-
-        // 1) If a Stop item is visible in an open menu, click it (stop playback).
-        const stopInOpenMenu = document.querySelector(
-          `${openMenuSel} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
-        );
-        if (stopInOpenMenu) {
-          if (window.gsap && typeof flashBorder === 'function') flashBorder(stopInOpenMenu);
-          activate(stopInOpenMenu);
-          return;
-        }
-
-        // 2) If the Read Aloud sub-item is already exposed in an open menu, click it directly.
-        const readAloudSelector = withPrefix(
-          svgSelectorForTokens(SUB_ITEM_BTN_PATH),
-          `${openMenuSel} div[role="menuitem"]`,
-        );
-        const exposedReadAloudPath = document.querySelector(readAloudSelector);
-        if (exposedReadAloudPath) {
-          const item = exposedReadAloudPath.closest('div[role="menuitem"]');
-          if (item) {
-            if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
-            activate(item);
-            return;
-          }
-        }
-
-        // 3) Otherwise, open the menu on the lowest eligible "More dots" button and click Read Aloud.
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, EXCLUDE_ANCESTOR);
+      shortcutKeyNextThread: (opts = {}) => {
+        runThreadNavigationShortcut(opts, {
+          ariaLabel: 'Next response',
+          excludeThoughtFor: true,
+          iconTokens: ['M7.52925 3.7793', '#b140e7'],
+          postClickDelay: 200,
+          wrapPreviewToLast: false,
+        });
       },
-      [shortcuts.shortcutKeyMoreDotsBranchInNewChat]: () => {
-        const FIRST_BTN_PATH = ['M15.498 8.50159C16.3254', '#f6d0e2']; // menu button icon path (prefix)
-        const SUB_ITEM_BTN_PATH = ['M3.32996 10H8.01173C8.7455', '#03583c']; // sub-item icon path (prefix)
-        clickLowestSvgThenSubItemSvg(FIRST_BTN_PATH, SUB_ITEM_BTN_PATH, '#bottomBarContainer');
+      selectThenCopy: runSelectThenCopyShortcut,
+      shortcutKeyToggleModelSelector: () => {
+        window.toggleModelSelector();
       },
-      [shortcuts.shortcutKeyThinkingExtended]: () => {
-        if (window.__cspRunThinkingEffortAction?.('thinking-extended')) return;
-        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-        const SUB_ITEM_BTN_PATH = '#143e56';
-        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-
-      [shortcuts.shortcutKeyThinkingStandard]: () => {
-        if (window.__cspRunThinkingEffortAction?.('thinking-standard')) return;
-        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-        const SUB_ITEM_BTN_PATH = '#fec800';
-        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyThinkingLight]: () => {
-        if (window.__cspRunThinkingEffortAction?.('thinking-light')) return;
-        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-        const SUB_ITEM_BTN_PATH = '#407870';
-        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyThinkingHeavy]: () => {
-        if (window.__cspRunThinkingEffortAction?.('thinking-heavy')) return;
-        const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-        const SUB_ITEM_BTN_PATH = '#3c5754';
-        delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-      },
-      [shortcuts.shortcutKeyProStandard]: () => {
-        window.__cspRunProThinkingEffortAction?.('thinking-standard');
-      },
-      [shortcuts.shortcutKeyProExtended]: () => {
-        window.__cspRunProThinkingEffortAction?.('thinking-extended');
-      },
-      [shortcuts.shortcutKeyTemporaryChat]: () => {
-        const root = document.querySelector('#conversation-header-actions') || document;
-        const el =
-          root
-            .querySelector('button svg use[href*="#28a8a0"]')
-            ?.closest('button') || // Turn on
-          root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button'); // Turn off
-        if (!el) return;
-        smartClick(el);
-      },
-      [shortcuts.shortcutKeyStudy]: async () => {
+      shortcutKeyRegenerateTryAgain: runRegenerateTryAgainShortcut,
+      shortcutKeyRegenerateWithDifferentModel: runRegenerateWithDifferentModelShortcut,
+      shortcutKeyRegenerateAskToChangeResponse: runRegenerateAskToChangeResponseShortcut,
+      shortcutKeyMoreDotsReadAloud: runReadAloudShortcut,
+      shortcutKeyMoreDotsBranchInNewChat: runBranchInNewChatShortcut,
+      shortcutKeyThinkingExtended: () => runLegacyThinkingEffortShortcut('thinking-extended'),
+      shortcutKeyThinkingStandard: () => runLegacyThinkingEffortShortcut('thinking-standard'),
+      shortcutKeyThinkingLight: () => runLegacyThinkingEffortShortcut('thinking-light'),
+      shortcutKeyThinkingHeavy: () => runLegacyThinkingEffortShortcut('thinking-heavy'),
+      shortcutKeyProStandard: () => runProThinkingEffortShortcut('thinking-standard'),
+      shortcutKeyProExtended: () => runProThinkingEffortShortcut('thinking-extended'),
+      shortcutKeyTemporaryChat: runTemporaryChatShortcut,
+      shortcutKeyStudy: async () => {
         // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
-      [shortcuts.shortcutKeyCreateImage]: async () => {
-        const ICON_PATH_PREFIX = ['M9.38759 8.53403C10.0712', '#266724']; // image icon prefix
-        await runActionByIcon(ICON_PATH_PREFIX);
-      },
-      [shortcuts.shortcutKeyToggleCanvas]: async () => {
-        const ICON_PATH_PREFIX = ['M12.0303 4.11328C13.4406', '#cf3864']; // canvas icon prefix
-        await runActionByIcon(ICON_PATH_PREFIX);
-      },
-      [shortcuts.shortcutKeyAddPhotosFiles]: async () => {
-        const ICON_PATH_PREFIX = ['M4.33496 12.5V7.5C4.33496', '#712359']; // Add Photos & Files icon path prefix
-        await runActionByIcon(ICON_PATH_PREFIX);
-      },
-      [shortcuts.shortcutKeyToggleDictate]: () => {
-        if (dictateInProgress) return;
-        dictateInProgress = true;
-        setTimeout(() => {
-          dictateInProgress = false;
-        }, 300);
-
-        const composerRoot =
-          document.getElementById('thread-bottom-container') ||
-          document.querySelector('form[data-type="unified-composer"]') ||
-          document.getElementById('composer-background') ||
-          document.body;
-
-        const findClickableBySpriteId = (spriteId) => {
-          const safe = String(spriteId).replace(/(["\\])/g, '\\$1');
-          const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
-          if (!use) return null;
-          return (
-            use.closest('button, [role="button"], a, [tabindex]') ||
-            use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
-            null
-          );
-        };
-
-        const click = (el) => {
-          if (!el) return false;
-          try {
-            el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-          } catch { }
-          flashBorder(el);
-          smartClick(el);
-          return true;
-        };
-
-        const findFirstClickable = (...selectors) => {
-          for (const selector of selectors) {
-            if (!selector) continue;
-            const el = composerRoot.querySelector(selector);
-            if (el) return el;
-          }
-          return null;
-        };
-
-        // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
-        // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
-        const submitDictationBtn =
-          findClickableBySpriteId('#fa1dbd') ||
-          findFirstClickable('button[aria-label="Submit dictation"]');
-        if (click(submitDictationBtn)) return;
-
-        // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn =
-          findClickableBySpriteId('#29f921') ||
-          findFirstClickable('button[aria-label="Dictate button"]');
-        if (click(dictateBtn)) return;
-
-        // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
-        const submitBtn =
-          findFirstClickable(
-            '#composer-submit-button',
-            'button[data-testid="send-button"]',
-            'button[aria-label="Send prompt"]',
-          ) ||
-          findClickableBySpriteId('#01bab7') ||
-          findClickableBySpriteId('#fa1dbd');
-        click(submitBtn);
-      },
-      [shortcuts.shortcutKeyCancelDictation]: async () => {
-        // Prefer stable, language-agnostic selectors first; fall back to icon path if needed.
-        const composerRoot =
-          document.getElementById('thread-bottom-container') ||
-          document.querySelector('form[data-type="unified-composer"]') ||
-          document.getElementById('composer-background') ||
-          document.body;
-
-        const btn =
-          (() => {
-            const safe = String('#85f94b').replace(/(["\\])/g, '\\$1');
-            const use = composerRoot.querySelector(`svg use[href*="${safe}"]`);
-            return use?.closest('button, [role="button"], a, [tabindex]') || null;
-          })() || composerRoot.querySelector('button[aria-label="Stop dictation"]');
-
-        // Only stop if Stop dictation is currently available; otherwise no-op.
-        if (!btn) return;
-
-        try {
-          btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-        } catch { }
-        flashBorder(btn);
-        await sleep(DELAYS.beforeFinalClick);
-        smartClick(btn);
-      },
-      [shortcuts.shortcutKeyShare]: async () => {
+      shortcutKeyCreateImage: () => runIconToolbarShortcut('createImage'),
+      shortcutKeyToggleCanvas: () => runIconToolbarShortcut('toggleCanvas'),
+      shortcutKeyAddPhotosFiles: () => runIconToolbarShortcut('addPhotosFiles'),
+      shortcutKeyToggleDictate: DictationShortcut.runToggle,
+      shortcutKeyCancelDictation: DictationShortcut.runCancel,
+      shortcutKeyShare: async () => {
         await clickButtonByTestId('share-chat-button');
       },
-      [shortcuts.shortcutKeyThinkLonger]: async () => {
+      shortcutKeyThinkLonger: async () => {
         // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
-      [shortcuts.shortcutKeyNewGptConversation]: () => {
-        const SUB_ITEM_BTN_PATH = ['M2.6687 11.333V8.66699C2.6687', '#3a5c87']; // submenu New Conversation with GPT icon path prefix
-        window.clickGptHeaderThenSubItemSvg(SUB_ITEM_BTN_PATH, { fallbackText: 'New chat' });
-      },
-      // @note [shortcuts.selectThenCopyAllMessages]: (() => {
-      [shortcuts.selectThenCopyAllMessages]: (() => {
-        const DEBUG = false;
+      shortcutKeyNewGptConversation: runNewGptConversationShortcut,
+      selectThenCopyAllMessages: runSelectThenCopyAllMessagesShortcut,
+    }; // Close altShortcutActions registry
 
-        // Utility: copy HTML + text to clipboard with fallback
-        async function writeClipboardHTMLAndText_EntireConv(html, text) {
-          if (navigator.clipboard && window.ClipboardItem) {
-            try {
-              const item = new ClipboardItem({
-                'text/html': new Blob([html], { type: 'text/html' }),
-                'text/plain': new Blob([text], { type: 'text/plain' }),
-              });
-              await navigator.clipboard.write([item]);
-              return;
-            } catch (e) {
-              if (DEBUG) console.debug('Clipboard write fallback:', e);
-            }
-          }
-          document.addEventListener(
-            'copy',
-            (e) => {
-              e.clipboardData.setData('text/html', html);
-              e.clipboardData.setData('text/plain', text);
-              e.preventDefault();
-            },
-            { once: true },
-          );
-          document.execCommand('copy');
-        }
-
-        // Utility: create a single Range spanning all specified elements (for visual selection feedback)
-        function createSelectionRangeForEls_EntireConv(els) {
-          try {
-            const selection = window.getSelection?.();
-            if (!selection || !els.length) return null;
-            selection.removeAllRanges();
-
-            function makeTextWalker(root) {
-              return document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-                acceptNode(node) {
-                  return node.nodeValue?.trim().length
-                    ? NodeFilter.FILTER_ACCEPT
-                    : NodeFilter.FILTER_SKIP;
-                },
-              });
-            }
-
-            function findFirstTextNode(root) {
-              const w = makeTextWalker(root);
-              return w.nextNode();
-            }
-
-            function findLastTextNode(root) {
-              const w = makeTextWalker(root);
-              let last = null;
-              let n = w.nextNode();
-              while (n) {
-                last = n;
-                n = w.nextNode();
-              }
-              return last;
-            }
-
-            const firstEl = els[0];
-            const lastEl = els[els.length - 1];
-            const startNode = findFirstTextNode(firstEl) || firstEl;
-            const endNode = findLastTextNode(lastEl) || lastEl;
-
-            const range = document.createRange();
-            if (startNode.nodeType === Node.TEXT_NODE) {
-              range.setStart(startNode, 0);
-            } else {
-              range.setStart(startNode, 0);
-            }
-            if (endNode.nodeType === Node.TEXT_NODE) {
-              range.setEnd(endNode, endNode.nodeValue.length);
-            } else {
-              range.setEnd(endNode, endNode.childNodes.length);
-            }
-            return range;
-          } catch (err) {
-            if (DEBUG) console.debug('createSelectionRangeForEls_EntireConv error:', err);
-            return null;
-          }
-        }
-
-        // Convert newline characters to in user messages so paste targets keep line breaks.
-        // We conservatively transform all text nodes under the clone (user messages are plain text in a pre-wrap container).
-        function replaceNewlinesWithBr_UserPreWrap(root) {
-          try {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-            const toProcess = [];
-            let n = walker.nextNode();
-            while (n) {
-              if (n.nodeValue?.includes('\n')) toProcess.push(n);
-              n = walker.nextNode();
-            }
-            for (const textNode of toProcess) {
-              const parts = textNode.nodeValue.split('\n');
-              const frag = document.createDocumentFragment();
-              parts.forEach((part, i) => {
-                if (part) frag.appendChild(document.createTextNode(part));
-                if (i < parts.length - 1) frag.appendChild(document.createElement('br'));
-              });
-              textNode.parentNode.replaceChild(frag, textNode);
-            }
-          } catch (err) {
-            if (DEBUG) console.debug('replaceNewlinesWithBr_UserPreWrap failed:', err);
-          }
-        }
-
-        const TURN_SELECTOR_ENTIRE_CONV =
-          'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
-
-        // Identify the content elements for a user/assistant turn
-        function findContentElsForTurn_EntireConv(container) {
-          const assistantScopes = container.matches?.('[data-message-author-role="assistant"]')
-            ? [container]
-            : Array.from(container.querySelectorAll?.('[data-message-author-role="assistant"]') || []);
-          const userScopes = container.matches?.('[data-message-author-role="user"]')
-            ? [container]
-            : Array.from(container.querySelectorAll?.('[data-message-author-role="user"]') || []);
-          const scopes = assistantScopes.length ? assistantScopes : userScopes;
-          if (!scopes.length) {
-            return [
-              container.querySelector?.('.whitespace-pre-wrap') ||
-              container.querySelector?.('.prose, .markdown, .markdown-new-styling') ||
-              container,
-            ].filter(Boolean);
-          }
-          const seen = new Set();
-          return scopes
-            .map(
-              (scope) =>
-                scope.querySelector('.whitespace-pre-wrap') ||
-                scope.querySelector('.prose, .markdown, .markdown-new-styling') ||
-                scope,
-            )
-            .filter((contentEl) => {
-              if (!contentEl) return false;
-              const txt = (contentEl.innerText || contentEl.textContent || '').trim();
-              if (!txt) return false;
-              if (seen.has(contentEl)) return false;
-              seen.add(contentEl);
-              return true;
-            });
-        }
-
-        // Checkboxes or booleans -> forced boolean
-        function resolveFlag_EntireConv(v) {
-          return !!(v && typeof v === 'object' && 'checked' in v ? v.checked : v);
-        }
-
-        // Build the processed HTML + Text payload from DOM, honoring role filters and label settings
-        function buildProcessedClipboardPayload_EntireConv({
-          includeAssistant,
-          includeUser,
-          includeLabels,
-        }) {
-          // helper: infer language from code/pre UI
-          function inferLangFromPre(pre) {
-            let lang = '';
-            const codeEl = pre.querySelector('code');
-            if (codeEl) {
-              const cls = Array.from(codeEl.classList || []).find((c) =>
-                c.toLowerCase().startsWith('language-'),
-              );
-              if (cls) lang = cls.split('language-')[1];
-            }
-            if (!lang) {
-              // Try header label inside ChatGPT’s code block UI (e.g., "js")
-              const header = pre.querySelector('.flex.items-center.text-token-text-secondary');
-              const headerText = header?.innerText?.trim();
-              // hyphen placed at end to avoid escape (fixes biome noUselessEscapeInRegex)
-              if (headerText && /^[a-z0-9+.#-]+$/i.test(headerText)) {
-                lang = headerText.toLowerCase();
-              }
-            }
-            return lang;
-          }
-
-          // helper: simplify ChatGPT code block UI to <pre><code class="language-...">...</code></pre>
-          function normalizeCodeBlocksInClone(root) {
-            const preNodes = Array.from(root.querySelectorAll('pre'));
-            const codeBlocks = Array.from(
-              root.querySelectorAll(
-                'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
-              ),
-            ).filter((c) => !c.closest('pre'));
-            const blocks = [...preNodes, ...codeBlocks];
-            for (const node of blocks) {
-              const isPre = node.tagName === 'PRE';
-              const codeEl = isPre ? node.querySelector('code') || node : node;
-              let codeText = (codeEl?.innerText ?? node.innerText ?? '').replace(/\u00A0/g, ' ');
-              codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-              codeText = codeText.replace(/\r\n?/g, '\n');
-              codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
-              let lang = '';
-              if (isPre) {
-                lang = inferLangFromPre(node);
-                if (!lang && codeEl) {
-                  const cls1 = Array.from(codeEl.classList || []).find((c) =>
-                    c.toLowerCase().startsWith('language-'),
-                  );
-                  if (cls1) lang = cls1.split('language-')[1];
-                }
-              } else if (codeEl) {
-                const cls2 = Array.from(codeEl.classList || []).find((c) =>
-                  c.toLowerCase().startsWith('language-'),
-                );
-                if (cls2) lang = cls2.split('language-')[1];
-              }
-              const preNew = document.createElement('pre');
-              const codeNew = document.createElement('code');
-              if (lang) codeNew.className = `language-${lang}`;
-              // Use CRLF so Word keeps the closing fence on its own line (no $ markers)
-              const eol = '\r\n';
-              const fenceOpen = `\`\`\`${lang || ''}`;
-
-              // Emit clean fenced block only
-              let fenced;
-              if (/^\s*```/.test(codeText)) {
-                // Already fenced: normalize line endings and ensure trailing EOL
-                fenced = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-                if (!fenced.endsWith(eol)) fenced += eol;
-              } else {
-                fenced = `${fenceOpen}${eol}${codeText}${eol}\`\`\`${eol}`;
-              }
-
-              codeNew.textContent = fenced; // literal fenced text inside pre/code
-              preNew.appendChild(codeNew);
-
-              // Replace the original node with normalized pre/code
-              node.replaceWith(preNew);
-            }
-          }
-          // Strip Word-confusing data-* attributes (preserve <p> semantics for proper paragraph spacing)
-          function demotePTagsAndStripDataAttrs(root) {
-            for (const el of Array.from(root.querySelectorAll('*'))) {
-              for (const attr of Array.from(el.attributes)) {
-                if (
-                  attr.name === 'data-start' ||
-                  attr.name === 'data-end' ||
-                  attr.name.startsWith('data-')
-                ) {
-                  el.removeAttribute(attr.name);
-                }
-              }
-            }
-          }
-          // Add minimal list guard without altering margins (keeps After: 8pt intact)
-          function addListGuardStyles(el) {
-            const existing = el.getAttribute('style') || '';
-            const guard = 'list-style-type:none;';
-            el.setAttribute('style', existing ? `${existing};${guard}` : guard);
-          }
-          // Split UL/OL so code blocks and follow-up paragraphs don't inherit bullets in Word
-          function splitListsAroundCodeBlocks_Word(root) {
-            ['ul', 'ol'].forEach((tag) => {
-              root.querySelectorAll(tag).forEach((list) => {
-                const lis = Array.from(list.children).filter((c) => c.tagName === 'LI');
-                if (!lis.some((li) => li.querySelector('pre'))) return;
-                const frag = document.createDocumentFragment();
-                let acc = document.createElement(tag);
-                const flushAcc = () => {
-                  if (acc.children.length) frag.appendChild(acc);
-                  acc = document.createElement(tag);
-                };
-                for (const li of lis) {
-                  const firstPre = li.querySelector(':scope > pre') || li.querySelector('pre');
-                  if (!firstPre) {
-                    acc.appendChild(li.cloneNode(true));
-                    continue;
-                  }
-                  const newLi = document.createElement('li');
-                  for (const child of Array.from(li.childNodes)) {
-                    if (child === firstPre) break;
-                    newLi.appendChild(child.cloneNode(true));
-                  }
-                  if (newLi.childNodes.length) acc.appendChild(newLi);
-                  flushAcc();
-                  let started = false;
-                  for (const child of Array.from(li.childNodes)) {
-                    if (child === firstPre) started = true;
-                    if (started) frag.appendChild(child.cloneNode(true)); // move <pre> and any siblings after
-                  }
-                }
-                flushAcc();
-                for (const n of Array.from(list.childNodes)) {
-                  if (n.tagName !== 'LI') frag.appendChild(n.cloneNode(true));
-                }
-                list.replaceWith(frag);
-              });
-            });
-          }
-          // helper: build plain text where each <pre><code> becomes a fenced block
-          function buildPlainTextWithFences(root) {
-            const clone = root.cloneNode(true);
-
-            // Normalize first (HTML path already inserts fences)
-            normalizeCodeBlocksInClone(clone);
-
-            for (const pre of Array.from(clone.querySelectorAll('pre'))) {
-              const codeEl = pre.querySelector('code');
-              let codeText = (codeEl?.innerText ?? pre.innerText ?? '').replace(/\u00A0/g, ' ');
-
-              // Scrub zero-width/BOM and normalize line endings
-              codeText = codeText.replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '');
-              codeText = codeText.replace(/\r\n?/g, '\n');
-
-              // Trim only trailing whitespace/newlines so we control spacing around closing fence
-              codeText = codeText.replace(/[ \t\u00A0\r\n]+$/g, '');
-
-              const eol = '\r\n';
-              let out;
-
-              // Avoid double-wrapping if already fenced; normalize to CRLF
-              if (codeText.trim().startsWith('```')) {
-                const norm = codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol);
-                out = `${eol}${norm}${eol}`;
-              } else {
-                let lang = '';
-                if (codeEl) {
-                  const cls = Array.from(codeEl.classList || []).find((c) =>
-                    c.toLowerCase().startsWith('language-'),
-                  );
-                  if (cls) lang = cls.split('language-')[1];
-                }
-                out = `${eol}\`\`\`${lang}${eol}${codeText}${eol}\`\`\`${eol}`;
-              }
-
-              const container = document.createElement('div');
-              container.textContent = out;
-              pre.replaceWith(container);
-            }
-
-            return clone.innerText.replace(/\u00A0/g, ' ').trim();
-          }
-
-          // Get all conversation turns in DOM order
-          const allTurns = Array.from(document.querySelectorAll(TURN_SELECTOR_ENTIRE_CONV));
-
-          // Filter by role
-          const filteredTurns = allTurns.filter((turn) => {
-            const isAssistant = !!turn.querySelector('[data-message-author-role="assistant"]');
-            const isUser = !!turn.querySelector('[data-message-author-role="user"]');
-            if (isAssistant && includeAssistant) return true;
-            if (isUser && includeUser) return true;
-            return false;
-          });
-
-          // Map to content elements
-          const turnContentGroups = filteredTurns
-            .map((turn) => ({
-              els: findContentElsForTurn_EntireConv(turn),
-              turn,
-            }))
-            .filter(({ els }) => els.length);
-
-          // Nothing to copy
-          if (!turnContentGroups.length) return { html: '', text: '' };
-
-          // Build HTML + text blocks
-          const blocksHTML = [];
-          const blocksText = [];
-          const selectionEls = [];
-
-          for (const { els, turn } of turnContentGroups) {
-            const roleContainer = els[0]?.closest?.('[data-message-author-role]');
-            const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
-
-            // Determine label source
-            let nativeLabel = '';
-            try {
-              nativeLabel = (
-                turn.querySelector?.('h4.sr-only, h5.sr-only, h6.sr-only')?.textContent || ''
-              ).trim();
-            } catch (_) {
-              /* ignore */
-            }
-            const fallbackLabel = role === 'user' ? 'You said:' : 'ChatGPT said:';
-            const labelText = includeLabels ? nativeLabel || fallbackLabel : '';
-
-            // HTML block
-            const turnWrapper = document.createElement('div');
-            turnWrapper.setAttribute('data-role', role);
-
-            if (labelText) {
-              // Real blank paragraph before label for spacing in Word
-              const spacerP = document.createElement('p');
-              spacerP.setAttribute(
-                'style',
-                'margin-top:0pt;margin-bottom:8pt;line-height:116%;mso-line-height-alt:116%;mso-line-height-rule:exactly;',
-              );
-              spacerP.innerHTML = '&nbsp;';
-              turnWrapper.appendChild(spacerP);
-
-              // Label as a semantic Heading 2 so Word maps it to its built-in "Heading 2" style
-              // Keep zero-width space to suppress auto-numbering (no forced color)
-              const labelH = document.createElement('h1');
-              labelH.setAttribute(
-                'style',
-                [
-                  "font-family:'Calibri',Arial,sans-serif",
-                  'font-size:18pt',
-                  'font-weight:bold',
-                  'margin-top:0pt',
-                  'margin-bottom:8pt',
-                  'line-height:116%',
-                  'mso-line-height-alt:116%',
-                  'mso-line-height-rule:exactly',
-                ].join(';'),
-              );
-              labelH.innerHTML = `\u200B${labelText}`;
-              addListGuardStyles(labelH);
-              turnWrapper.appendChild(labelH);
-            }
-
-            const textParts = [];
-            for (const el of els) {
-              selectionEls.push(el);
-
-              // Clone content for HTML normalization
-              const cloneForHtml = el.cloneNode(true);
-
-              if (role === 'user') {
-                // Preserve user message line breaks visually
-                replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
-              }
-
-              // Normalize code blocks, strip list-bait attrs, and split lists around <pre>
-              normalizeCodeBlocksInClone(cloneForHtml);
-              demotePTagsAndStripDataAttrs(cloneForHtml);
-              splitListsAroundCodeBlocks_Word(cloneForHtml);
-
-              // Body content: inject first, then apply paragraph spacing/font to real <p> etc.
-              const bodyDiv = document.createElement('div');
-              bodyDiv.innerHTML = cloneForHtml.innerHTML;
-
-              // Apply Word-friendly spacing to real paragraphs (not divs)
-              (function applyWordSpacingAndFont_Word(root) {
-                if (!root) return;
-                const fontStack =
-                  "'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, system-ui, sans-serif";
-                const baseRules = [
-                  `font-family:${fontStack}`,
-                  'line-height:116%',
-                  'mso-line-height-alt:116%',
-                  'mso-line-height-rule:exactly',
-                ].join(';');
-
-                // Apply to container
-                const base = root.getAttribute('style') || '';
-                root.setAttribute('style', base ? `${base};${baseRules}` : baseRules);
-
-                // Apply to paragraph-like tags Word respects
-                const selector = 'p, pre, blockquote, li, h1, h2, h3, h4, h5, h6';
-                root.querySelectorAll(selector).forEach((el) => {
-                  const s = el.getAttribute('style') || '';
-                  const rules = [
-                    `font-family:${fontStack}`,
-                    'margin-top:0pt',
-                    'margin-bottom:8pt',
-                    'line-height:116%',
-                    'mso-margin-top-alt:0pt',
-                    'mso-margin-bottom-alt:8pt',
-                    'mso-line-height-alt:116%',
-                    'mso-line-height-rule:exactly',
-                  ].join(';');
-                  el.setAttribute('style', s ? `${s};${rules}` : rules);
-                });
-              })(bodyDiv);
-
-              turnWrapper.appendChild(bodyDiv);
-              textParts.push(buildPlainTextWithFences(el.cloneNode(true)));
-            }
-
-            blocksHTML.push(turnWrapper.outerHTML);
-
-            const contentText = textParts.filter(Boolean).join('\n\n');
-            const textBlock = labelText ? `${labelText}\n${contentText}` : contentText;
-            blocksText.push(textBlock);
-          }
-
-          const html =
-            '<div data-export="chatgpt-shortcuts-entire-conversation">' +
-            blocksHTML.join('') +
-            '</div>';
-          const text = blocksText.join('\n\n');
-
-          return { html, text, contentEls: selectionEls };
-        }
-
-        return () => {
-          setTimeout(() => {
-            try {
-              // RADIO LOGIC: prioritize "only" options. If neither is selected, include both.
-              const onlyAssistant = resolveFlag_EntireConv(
-                window.selectThenCopyAllMessagesOnlyAssistant || false,
-              );
-              const onlyUser = resolveFlag_EntireConv(
-                window.selectThenCopyAllMessagesOnlyUser || false,
-              );
-
-              let includeAssistant = true;
-              let includeUser = true;
-              if (onlyAssistant) {
-                includeAssistant = true;
-                includeUser = false;
-              } else if (onlyUser) {
-                includeAssistant = false;
-                includeUser = true;
-              } else {
-                includeAssistant = true;
-                includeUser = true;
-              }
-
-              // LABEL LOGIC:
-              // - If includeLabelsAndSeparatorsCheckbox is checked => omit labels
-              // - If doNotIncludeLabelsCheckbox is true => omit labels
-              // - Otherwise => include labels
-              const omitViaSeparators = resolveFlag_EntireConv(
-                window.includeLabelsAndSeparatorsCheckbox,
-              );
-              const omitViaDoNotInclude = resolveFlag_EntireConv(window.doNotIncludeLabelsCheckbox);
-              const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
-
-              // Build processed clipboard payload directly from DOM (robust), not from selection
-              const { html, text, contentEls } = buildProcessedClipboardPayload_EntireConv({
-                includeAssistant,
-                includeUser,
-                includeLabels,
-              });
-
-              if (!html && !text) return;
-
-              // Create a visual selection spanning first->last message (for user feedback)
-              if (contentEls?.length) {
-                const range = createSelectionRangeForEls_EntireConv(contentEls);
-                // Use optional chaining to safely access Selection API
-                const selection = window.getSelection?.();
-                if (selection && range) {
-                  selection.removeAllRanges();
-                  selection.addRange(range);
-                }
-              }
-
-              // Programmatically write the processed HTML/Text (this enforces role filtering + label rules)
-              void writeClipboardHTMLAndText_EntireConv(html, text);
-            } catch (err) {
-              if (DEBUG) console.debug('selectThenCopyAllMessages error:', err);
-            }
-          }, 50);
-        };
-      })(),
-    }; // Close keyFunctionMapping object @note Bottom of keyFunctionMapping
-
-    // Assign the functions to the window object for global access
-    window.toggleSidebar = keyFunctionMappingAlt[shortcuts.shortcutKeyToggleSidebar];
-    window.newConversation = keyFunctionMappingAlt[shortcuts.shortcutKeyNewConversation];
-    window.globalScrollToBottom =
-      keyFunctionMappingAlt[shortcuts.shortcutKeyClickNativeScrollToBottom];
+    // Runtime bridge: popup/debug hooks invoke these core shortcut actions directly.
+    window.toggleSidebar = altShortcutActions.shortcutKeyToggleSidebar;
+    window.newConversation = altShortcutActions.shortcutKeyNewConversation;
+    window.globalScrollToBottom = altShortcutActions.shortcutKeyClickNativeScrollToBottom;
 
     // Robust helper for all shortcut styles, including number keys!
     function matchesShortcutKey(setting, event) {
@@ -6951,38 +6358,22 @@ const delays = DELAYS;
       {
         storageKey: 'shortcutKeyThinkingExtended',
         optionId: 'thinking-extended',
-        fallback: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#143e56';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
+        fallback: () => runLegacyThinkingEffortShortcut('thinking-extended'),
       },
       {
         storageKey: 'shortcutKeyThinkingStandard',
         optionId: 'thinking-standard',
-        fallback: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#fec800';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
+        fallback: () => runLegacyThinkingEffortShortcut('thinking-standard'),
       },
       {
         storageKey: 'shortcutKeyThinkingLight',
         optionId: 'thinking-light',
-        fallback: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#407870';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
+        fallback: () => runLegacyThinkingEffortShortcut('thinking-light'),
       },
       {
         storageKey: 'shortcutKeyThinkingHeavy',
         optionId: 'thinking-heavy',
-        fallback: () => {
-          const FIRST_BTN_PATH = ['#127a53', '#c9d737'];
-          const SUB_ITEM_BTN_PATH = '#3c5754';
-          delayCall(clickLowestSvgThenSubItemSvg, 350, FIRST_BTN_PATH, SUB_ITEM_BTN_PATH);
-        },
+        fallback: () => runLegacyThinkingEffortShortcut('thinking-heavy'),
       },
     ];
     const PRO_THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
@@ -7003,15 +6394,72 @@ const delays = DELAYS;
       return shortcutDefaults[storageKey] || '';
     };
 
-    const shortcutActionByEffectiveCode = new Map();
-    const rebuildShortcutActionLookup = () => {
-      shortcutActionByEffectiveCode.clear();
-      Object.keys(shortcutDefaults).forEach((storageKey) => {
-        const value = getEffectiveShortcutSetting(storageKey);
-        if (hasUsableShortcutSetting(value)) shortcutActionByEffectiveCode.set(String(value), storageKey);
-      });
+    const getModelPickerAssignedIndexForDigit = (digit) => {
+      const utils = window.ShortcutUtils || {};
+      const getModelCodes =
+        typeof utils.getModelPickerCodesCache === 'function' ? utils.getModelPickerCodesCache : null;
+      const codeEquals = typeof utils.codeEquals === 'function' ? utils.codeEquals : null;
+      const modelCodes = getModelCodes ? getModelCodes() : [];
+      if (!Array.isArray(modelCodes) || !codeEquals) return -1;
+      return modelCodes.findIndex((code) => codeEquals(code, `Digit${digit}`));
     };
-    rebuildShortcutActionLookup();
+
+    const ALT_SHORTCUT_ACTION_KEYS = Object.keys(altShortcutActions);
+    const isModelToggleShortcutEvent = (event) =>
+      matchesShortcutKey(getEffectiveShortcutSetting('shortcutKeyToggleModelSelector'), event);
+
+    const findMatchedAltShortcutActionKey = (event) => {
+      // Later registry entries intentionally win duplicate assignments, matching the
+      // previous computed-key object behavior after property overwrites.
+      for (let i = ALT_SHORTCUT_ACTION_KEYS.length - 1; i >= 0; i -= 1) {
+        const storageKey = ALT_SHORTCUT_ACTION_KEYS[i];
+        if (matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event)) return storageKey;
+      }
+      return '';
+    };
+
+    const runAltShortcutAction = (storageKey, event, options = {}) => {
+      const action = altShortcutActions[storageKey];
+      if (typeof action !== 'function') return false;
+      event.preventDefault();
+      recordShortcutUsage(storageKey);
+      action({ previewOnly: false, event, ...options });
+      return true;
+    };
+
+    const runPreviewThreadShortcut = (storageKey, event) => {
+      if (!matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event)) return false;
+      return runAltShortcutAction(storageKey, event, { previewOnly: true });
+    };
+
+    const runModelPickerDigitShortcut = (event, keyIdentifier) => {
+      if (!/^\d$/.test(keyIdentifier)) return false;
+
+      const modelAssignedIndex = getModelPickerAssignedIndexForDigit(keyIdentifier);
+      if (modelAssignedIndex === -1 || window.useAltForModelSwitcherRadio !== true) return false;
+
+      event.preventDefault();
+      recordShortcutUsage(`modelPickerSlot:${modelAssignedIndex + 1}`);
+
+      if (typeof window.switchModelByIndex === 'function') {
+        window.switchModelByIndex(modelAssignedIndex);
+        return true;
+      }
+
+      document.dispatchEvent(
+        new CustomEvent('modelPickerNumber', {
+          detail: { index: modelAssignedIndex, event },
+        }),
+      );
+      return true;
+    };
+
+    const runMatchedAltShortcut = (event) => {
+      const matchedStorageKey = findMatchedAltShortcutActionKey(event);
+      if (!matchedStorageKey) return false;
+      return runAltShortcutAction(matchedStorageKey, event);
+    };
+
     flushUsageAnalytics('content-start');
 
     const runDynamicThinkingEffortShortcut = (event) => {
@@ -7049,172 +6497,91 @@ const delays = DELAYS;
         ...(window.CSP_SHORTCUTS_EFFECTIVE || {}),
         ...shortcutPatch,
       };
-      rebuildShortcutActionLookup();
     });
+
+    const shouldIgnoreShortcutEvent = (event) =>
+      event.isComposing || // IME active (Hindi, Japanese)
+      event.keyCode === 229 || // Generic composition keyCode
+      ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
+      event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
+      ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key); // JIS IME-specific keys
+
+    const getShortcutKeyIdentifier = (event) =>
+      // Canonical key: use layout-aware key for text, keep exact for special keys.
+      event.key.length === 1 ? event.key.toLowerCase() : event.key;
+
+    const handleAltShortcutEvent = (event, keyIdentifier, isCtrlPressed) => {
+      if (!isCtrlPressed && isModelToggleShortcutEvent(event)) {
+        return runAltShortcutAction('shortcutKeyToggleModelSelector', event);
+      }
+
+      if (runModelPickerDigitShortcut(event, keyIdentifier)) return true;
+
+      if (
+        isCtrlPressed &&
+        runPreviewThreadShortcut('shortcutKeyPreviousThread', event)
+      ) {
+        return true;
+      }
+
+      if (isCtrlPressed && runPreviewThreadShortcut('shortcutKeyNextThread', event)) {
+        return true;
+      }
+
+      if (runDynamicThinkingEffortShortcut(event)) return true;
+      if (runDynamicProThinkingEffortShortcut(event)) return true;
+
+      return runMatchedAltShortcut(event);
+    };
+
+    const handleCtrlShortcutEvent = (event, keyIdentifier) => {
+      if (
+        window.useControlForModelSwitcherRadio === true &&
+        isModelToggleShortcutEvent(event)
+      ) {
+        return runAltShortcutAction('shortcutKeyToggleModelSelector', event);
+      }
+
+      const ctrlShortcut =
+        keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
+      if (!ctrlShortcut) return false;
+
+      const enabled = isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code);
+      if (!enabled) return false;
+
+      const isBackspace = keyIdentifier === 'Backspace' || event.code === 'Backspace';
+      if (isBackspace) {
+        // Only intercept if a visible Stop button exists; otherwise let native deletion happen.
+        const stopBtn = getVisibleStopButton();
+        if (!stopBtn) return false;
+
+        event.preventDefault();
+        try {
+          recordShortcutUsage('shortcutKeyClickStopButton');
+          ctrlShortcut();
+        } catch (e) {
+          console.error('Backspace handler failed:', e);
+        }
+        return true;
+      }
+
+      event.preventDefault();
+      recordShortcutUsage('shortcutKeyClickSendButton');
+      ctrlShortcut();
+      return true;
+    };
 
     document.addEventListener(
       'keydown',
       (event) => {
-        if (
-          event.isComposing || // IME active (Hindi, Japanese)
-          event.keyCode === 229 || // Generic composition keyCode
-          ['Control', 'Meta', 'Alt', 'AltGraph'].includes(event.key) || // Modifier keys
-          event.getModifierState?.('AltGraph') || // AltGr pressed (ES, EU)
-          ['Henkan', 'Muhenkan', 'KanaMode'].includes(event.key) // JIS IME-specific keys
-        ) {
-          return;
-        }
+        if (shouldIgnoreShortcutEvent(event)) return;
 
         const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
         const isAltPressed = event.altKey;
+        const keyIdentifier = getShortcutKeyIdentifier(event);
 
-        // Canonical key: use layout-aware key for text, keep exact for special keys
-        const keyIdentifier = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-
-        // Handle Alt+Key and Alt+Ctrl+Key (for preview mode in previousThread)
-        if (isAltPressed) {
-        // Always open menu for Alt+W (or whatever your toggle key is)
-        if (!isCtrlPressed && matchesShortcutKey(modelToggleSetting, event)) {
-          event.preventDefault();
-          recordShortcutUsage('shortcutKeyToggleModelSelector');
-          window.toggleModelSelector();
-          return;
-        }
-
-        // If this is a digit (1-9 or 0), decide whether to intercept for model switching.
-        if (/^\d$/.test(keyIdentifier)) {
-          const digit = keyIdentifier; // '0'..'9'
-
-          // Get model codes cache safely (may be provided by ShortcutUtils)
-          const modelCodes =
-            window.ShortcutUtils &&
-              typeof window.ShortcutUtils.getModelPickerCodesCache === 'function'
-              ? window.ShortcutUtils.getModelPickerCodesCache()
-              : [];
-
-          // Find a model slot assigned to that digit (normalizes Digit/Numpad via codeEquals)
-          const modelAssignedIndex =
-            window.ShortcutUtils && typeof window.ShortcutUtils.codeEquals === 'function'
-              ? modelCodes.findIndex((c) => window.ShortcutUtils.codeEquals(c, `Digit${digit}`))
-              : -1;
-
-          if (modelAssignedIndex !== -1) {
-            // There is a model assigned to this digit.
-            // Intercept it only if the model picker is configured to use Alt.
-            if (window.useAltForModelSwitcherRadio === true) {
-              // Intercept only when Alt is the chosen modifier for model switching.
-              event.preventDefault();
-              recordShortcutUsage(`modelPickerSlot:${modelAssignedIndex + 1}`);
-              // Prefer an existing switch function; otherwise dispatch a custom event that other code can listen to.
-              if (typeof window.switchModelByIndex === 'function') {
-                window.switchModelByIndex(modelAssignedIndex);
-              } else {
-                document.dispatchEvent(
-                  new CustomEvent('modelPickerNumber', {
-                    detail: { index: modelAssignedIndex, event },
-                  }),
-                );
-              }
-              return;
-            }
-            // If model picker uses Control, DO NOT intercept Alt+digit: let Alt mappings handle it.
-          } else {
-            // No model assigned to this digit: do NOT intercept — let Alt+digit fall through to other Alt handlers.
-          }
-        }
-
-        // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyPreviousThread
-        if (
-          isCtrlPressed &&
-          matchesShortcutKey(shortcuts.shortcutKeyPreviousThread, event) &&
-          keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]
-        ) {
-          event.preventDefault();
-          recordShortcutUsage('shortcutKeyPreviousThread');
-          keyFunctionMappingAlt[shortcuts.shortcutKeyPreviousThread]({
-            previewOnly: true,
-            event,
-          });
-          return;
-        }
-
-        // Special handling: Alt+Ctrl+Key for previewOnly on shortcutKeyNextThread
-        if (
-          isCtrlPressed &&
-          matchesShortcutKey(shortcuts.shortcutKeyNextThread, event) &&
-          keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]
-        ) {
-          event.preventDefault();
-          recordShortcutUsage('shortcutKeyNextThread');
-          keyFunctionMappingAlt[shortcuts.shortcutKeyNextThread]({
-            previewOnly: true,
-            event,
-          });
-          return;
-        }
-
-        // Normal Alt+Key shortcut: handle mapped Alt shortcuts.
-        // Note: digit keys that *were assigned to models* above were already handled and returned;
-        // digit keys not assigned to models are allowed here and will be handled by keyFunctionMappingAlt.
-        if (runDynamicThinkingEffortShortcut(event)) return;
-        if (runDynamicProThinkingEffortShortcut(event)) return;
-
-        const matchedAltKey = Object.keys(keyFunctionMappingAlt).find((k) =>
-          matchesShortcutKey(k, event),
-        );
-        if (matchedAltKey) {
-          event.preventDefault();
-          recordShortcutUsage(shortcutActionByEffectiveCode.get(matchedAltKey) || matchedAltKey);
-          keyFunctionMappingAlt[matchedAltKey]({ previewOnly: false, event });
-          return;
-        }
-        }
-
-        // Handle Ctrl/Command‑based shortcuts (model‑menu toggle only, plus mapped Ctrl shortcuts)
-        if (isCtrlPressed && !isAltPressed) {
-        // If user chose Ctrl/Cmd for the model switcher, only intercept the toggle key (e.g. Ctrl + W).
-        if (
-          window.useControlForModelSwitcherRadio === true &&
-          matchesShortcutKey(modelToggleSetting, event)
-        ) {
-          event.preventDefault();
-          recordShortcutUsage('shortcutKeyToggleModelSelector');
-          window.toggleModelSelector(); // open / close the menu
-          return; // allow Ctrl/Cmd + 1‑5 to fall through to the IIFE
-        }
-
-        // … everything else (Ctrl + Enter, Ctrl + Backspace, etc.)
-        const ctrlShortcut =
-          keyFunctionMappingCtrl[keyIdentifier] || keyFunctionMappingCtrl[event.code];
-
-        if (ctrlShortcut) {
-          const enabled = isCtrlShortcutEnabled(keyIdentifier) || isCtrlShortcutEnabled(event.code);
-
-          if (!enabled) return;
-
-          const isBackspace = keyIdentifier === 'Backspace' || event.code === 'Backspace';
-
-          if (isBackspace) {
-            // Only intercept if a visible Stop button exists; otherwise let native deletion happen.
-            const stopBtn = getVisibleStopButton();
-            if (stopBtn) {
-              event.preventDefault();
-              try {
-                recordShortcutUsage('shortcutKeyClickStopButton');
-                ctrlShortcut(); // will click the stop button
-              } catch (e) {
-                console.error('Backspace handler failed:', e);
-              }
-            }
-            // If no visible stop button: do nothing -> native Ctrl+Backspace behavior
-          } else {
-            // Non-Backspace Ctrl shortcuts behave as before
-            event.preventDefault();
-            recordShortcutUsage('shortcutKeyClickSendButton');
-            ctrlShortcut();
-          }
-        }
-        }
+        if (isAltPressed && handleAltShortcutEvent(event, keyIdentifier, isCtrlPressed)) return;
+        if (isCtrlPressed && !isAltPressed) handleCtrlShortcutEvent(event, keyIdentifier);
       },
       { capture: true },
     );
@@ -7604,6 +6971,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     return textRow instanceof Element ? textRow : null;
   };
 
+  // Runtime bridge: bottom-bar relocation reuses the live disclaimer finder.
   window.__cspFindLiveDisclaimerNode = (root) => findLiveDisclaimerNode(root);
 
   const isDisclaimerCandidate = (node) => getDisclaimerContainer(node) instanceof Element;
@@ -7686,6 +7054,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     scheduleDisclaimerRefresh();
   };
 
+  // Runtime bridge: route/layout features can force-install or refresh disclaimer hiding.
   window.__cspEnsureDisclaimerHider = () => {
     if (window.__cspDisclaimerHiderInstalled) {
       scheduleDisclaimerRefresh();
@@ -7762,6 +7131,97 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     SELECTORS.MODEL_SWITCHER_BUTTON,
   ];
 
+  const EXCLUDED_ROUTE_RULES = [
+    { hostname: 'chatgpt.com', pathPrefix: '/gpts' },
+    { hostname: 'chatgpt.com', pathPrefix: '/codex' },
+    { hostname: 'chatgpt.com', pathPrefix: '/g/' },
+    { hostname: 'sora.chatgpt.com' },
+    { hostname: 'chatgpt.com', pathPrefix: '/library/' },
+  ];
+
+  const STATIC_BUTTON_IDS = {
+    sidebar: 'static-sidebar-btn',
+    newChat: 'static-newchat-btn',
+  };
+  const STATIC_BUTTON_KEEP_IDS = new Set(Object.values(STATIC_BUTTON_IDS));
+  const STATIC_BUTTON_CLASS =
+    'text-token-text-secondary focus-visible:bg-token-surface-hover ' +
+    'enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary ' +
+    'h-10 rounded-lg px-2 focus-visible:outline-0';
+  const STATIC_BUTTON_STYLE = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '36px',
+    padding: '8px',
+  };
+
+  const ROOT_STYLE = {
+    display: 'block',
+    position: '',
+    left: '',
+    top: '',
+    bottom: '',
+    width: '100%',
+    padding: '0',
+    margin: '0',
+    minHeight: 'unset',
+    lineHeight: '1',
+    fontSize: '12px',
+    boxSizing: 'border-box',
+    opacity: '1',
+    transition: 'opacity 0.18s ease',
+    zIndex: '',
+    pointerEvents: '',
+  };
+
+  const SHELL_SLOT_STYLES = {
+    lane: {
+      width: '100%',
+      boxSizing: 'border-box',
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    },
+    row: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      width: '100%',
+      maxWidth: '100%',
+      margin: '0',
+      padding: '0 12px',
+      minHeight: '36px',
+      lineHeight: '1',
+      fontSize: '12px',
+      boxSizing: 'border-box',
+      opacity: '1',
+      transition: 'opacity 0.18s ease',
+    },
+    left: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '2px',
+      minWidth: '0',
+      flex: '0 1 auto',
+    },
+    center: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '6px',
+      minWidth: '0',
+      flex: '1 1 auto',
+    },
+    right: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '2px',
+      minWidth: '0',
+      marginLeft: 'auto',
+      flex: '0 1 auto',
+    },
+  };
+
   function setReadyState(ready) {
     const isReady = Boolean(ready);
     document.documentElement?.classList.toggle(READY_CLASS, isReady);
@@ -7779,14 +7239,10 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   function isExcludedTopBarToBottomPath() {
     const hostname = location.hostname.replace(/^www\./, '');
     const pathname = location.pathname;
-
-    const isGpts = hostname === 'chatgpt.com' && pathname.startsWith('/gpts');
-    const isCodex = hostname === 'chatgpt.com' && pathname.startsWith('/codex');
-    const isG = hostname === 'chatgpt.com' && pathname.startsWith('/g/');
-    const isSora = hostname === 'sora.chatgpt.com';
-    const isLibrary = hostname === 'chatgpt.com' && pathname.startsWith('/library/');
-
-    return isGpts || isCodex || isG || isSora || isLibrary;
+    return EXCLUDED_ROUTE_RULES.some(
+      (rule) =>
+        hostname === rule.hostname && (!rule.pathPrefix || pathname.startsWith(rule.pathPrefix)),
+    );
   }
 
   function coerceStoredNumber(value, fallback) {
@@ -7805,12 +7261,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     };
   }
 
-  function injectBottomBarStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+  function getBottomBarCss() {
+    return `
       .${READY_CLASS} .draggable.sticky.top-0,
       .${READY_CLASS} #page-header {
         opacity: 0 !important;
@@ -7913,6 +7365,14 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         margin-bottom: 4px;
       }
     `;
+  }
+
+  function injectBottomBarStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = getBottomBarCss();
     (document.head || document.documentElement).appendChild(style);
   }
 
@@ -8180,24 +7640,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         root.id = 'bottomBarContainer';
       }
 
-      Object.assign(root.style, {
-        display: 'block',
-        position: '',
-        left: '',
-        top: '',
-        bottom: '',
-        width: '100%',
-        padding: '0',
-        margin: '0',
-        minHeight: 'unset',
-        lineHeight: '1',
-        fontSize: '12px',
-        boxSizing: 'border-box',
-        opacity: '1',
-        transition: 'opacity 0.18s ease',
+      Object.assign(root.style, ROOT_STYLE, {
         visibility: state.revealed ? '' : 'hidden',
-        zIndex: '',
-        pointerEvents: '',
       });
 
       root.dataset.pending = state.revealed ? 'false' : 'true';
@@ -8298,54 +7742,11 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       const root = createRoot();
 
-      state.lane = ensureSlot('bottomBarLane', {
-        width: '100%',
-        boxSizing: 'border-box',
-        paddingLeft: '0px',
-        paddingRight: '0px',
-      });
-
-      state.row = ensureSlot('bottomBarRow', {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        width: '100%',
-        maxWidth: '100%',
-        margin: '0',
-        padding: '0 12px',
-        minHeight: '36px',
-        lineHeight: '1',
-        fontSize: '12px',
-        boxSizing: 'border-box',
-        opacity: '1',
-        transition: 'opacity 0.18s ease',
-      });
-
-      state.left = ensureSlot('bottomBarLeft', {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '2px',
-        minWidth: '0',
-        flex: '0 1 auto',
-      });
-
-      state.center = ensureSlot('bottomBarCenter', {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '6px',
-        minWidth: '0',
-        flex: '1 1 auto',
-      });
-
-      state.right = ensureSlot('bottomBarRight', {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '2px',
-        minWidth: '0',
-        marginLeft: 'auto',
-        flex: '0 1 auto',
-      });
+      state.lane = ensureSlot('bottomBarLane', SHELL_SLOT_STYLES.lane);
+      state.row = ensureSlot('bottomBarRow', SHELL_SLOT_STYLES.row);
+      state.left = ensureSlot('bottomBarLeft', SHELL_SLOT_STYLES.left);
+      state.center = ensureSlot('bottomBarCenter', SHELL_SLOT_STYLES.center);
+      state.right = ensureSlot('bottomBarRight', SHELL_SLOT_STYLES.right);
 
       if (state.lane.parentElement !== root) root.appendChild(state.lane);
       if (state.row.parentElement !== state.lane) state.lane.appendChild(state.row);
@@ -8430,11 +7831,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     function syncLeftSlotContent(left, node) {
       if (!(left instanceof Element)) return null;
 
-      const keep = new Set(['static-sidebar-btn', 'static-newchat-btn']);
-
       Array.from(left.children).forEach((child) => {
         if (child === node) return;
-        if (keep.has(child.dataset.id)) return;
+        if (STATIC_BUTTON_KEEP_IDS.has(child.dataset.id)) return;
         child.remove();
       });
 
@@ -8442,7 +7841,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       node.style.marginLeft = 'calc(36px - 1em)';
 
-      const newChatButton = left.querySelector('button[data-id="static-newchat-btn"]');
+      const newChatButton = left.querySelector(`button[data-id="${STATIC_BUTTON_IDS.newChat}"]`);
       const alreadyPositioned =
         node.parentElement === left &&
         (!newChatButton || newChatButton.nextElementSibling === node);
@@ -8562,11 +7961,11 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         return 'anchor_mismatch';
       }
 
-      if (!state.left.querySelector('button[data-id="static-sidebar-btn"]')) {
+      if (!state.left.querySelector(`button[data-id="${STATIC_BUTTON_IDS.sidebar}"]`)) {
         return 'static_sidebar_missing';
       }
 
-      if (!state.left.querySelector('button[data-id="static-newchat-btn"]')) {
+      if (!state.left.querySelector(`button[data-id="${STATIC_BUTTON_IDS.newChat}"]`)) {
         return 'static_newchat_missing';
       }
 
@@ -8835,48 +8234,46 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   // -------------------- Static buttons --------------------
 
   function injectStaticButtons(leftContainer) {
-    let btnSidebar = leftContainer.querySelector('button[data-id="static-sidebar-btn"]');
-    if (!btnSidebar) {
-      btnSidebar = createStaticButton({
-        label: 'Static Toggle Sidebar',
-        svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
-        activate: () => window.triggerNativeSidebarToggleButton?.(),
-      });
+    const btnSidebar = ensureStaticButton(leftContainer, {
+      id: STATIC_BUTTON_IDS.sidebar,
+      label: 'Static Toggle Sidebar',
+      svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8.85720 3H15.1428C16.2266 2.99999 17.1007 2.99998 17.8086 3.05782C18.5375 3.11737 19.1777 3.24318 19.77 3.54497C20.7108 4.02433 21.4757 4.78924 21.955 5.73005C22.2568 6.32234 22.3826 6.96253 22.4422 7.69138C22.5 8.39925 22.5 9.27339 22.5 10.3572V13.6428C22.5 14.7266 22.5 15.6008 22.4422 16.3086C22.3826 17.0375 22.2568 17.6777 21.955 18.27C21.4757 19.2108 20.7108 19.9757 19.77 20.455C19.1777 20.7568 18.5375 20.8826 17.8086 20.9422C17.1008 21 16.2266 21 15.1428 21H8.85717C7.77339 21 6.89925 21 6.19138 20.9422C5.46253 20.8826 4.82234 20.7568 4.23005 20.455C3.28924 19.9757 2.52433 19.2108 2.04497 18.27C1.74318 17.6777 1.61737 17.0375 1.55782 16.3086C1.49998 15.6007 1.49999 14.7266 1.5 13.6428V10.3572C1.49999 9.27341 1.49998 8.39926 1.55782 7.69138C1.61737 6.96253 1.74318 6.32234 2.04497 5.73005C2.52433 4.78924 3.28924 4.02433 4.23005 3.54497C4.82234 3.24318 5.46253 3.11737 6.19138 3.05782C6.89926 2.99998 7.77341 2.99999 8.85719 3ZM6.35424 5.05118C5.74907 5.10062 5.40138 5.19279 5.13803 5.32698C4.57354 5.6146 4.1146 6.07354 3.82698 6.63803C3.69279 6.90138 3.60062 7.24907 3.55118 7.85424C3.50078 8.47108 3.5 9.26339 3.5 10.4V13.6C3.5 14.7366 3.50078 15.5289 3.55118 16.1458C3.60062 16.7509 3.69279 17.0986 3.82698 17.362C4.1146 17.9265 4.57354 18.3854 5.13803 18.673C5.40138 18.8072 5.74907 18.8994 6.35424 18.9488C6.97108 18.9992 7.76339 19 8.9 19H9.5V5H8.9C7.76339 5 6.97108 5.00078 6.35424 5.05118ZM11.5 5V19H15.1C16.2366 19 17.0289 18.9992 17.6458 18.9488C18.2509 18.8994 18.5986 18.8072 18.862 18.673C19.4265 18.3854 19.8854 17.9265 20.173 17.362C20.3072 17.0986 20.3994 16.7509 20.4488 16.1458C20.4992 15.5289 20.5 14.7366 20.5 13.6V10.4C20.5 9.26339 20.4992 8.47108 20.4488 7.85424C20.3994 7.24907 20.3072 6.90138 20.173 6.63803C19.8854 6.07354 19.4265 5.6146 18.862 5.32698C18.5986 5.19279 18.2509 5.10062 17.6458 5.05118C17.0289 5.00078 16.2366 5 15.1 5H11.5ZM5 8.5C5 7.94772 5.44772 7.5 6 7.5H7C7.55229 7.5 8 7.94772 8 8.5C8 9.05229 7.55229 9.5 7 9.5H6C5.44772 9.5 5 9.05229 5 8.5ZM5 12C5 11.4477 5.44772 11 6 11H7C7.55229 11 8 11.4477 8 12C8 12.5523 7.55229 13 7 13H6C5.44772 13 5 12.5523 5 12Z"/></svg>',
+      activate: () => window.triggerNativeSidebarToggleButton?.(),
+    });
+    const btnNewChat = ensureStaticButton(leftContainer, {
+      id: STATIC_BUTTON_IDS.newChat,
+      label: 'Static New Chat',
+      svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
+      activate: () => window.triggerNativeNewConversationButton?.(),
+    });
+    mountStaticButtons(leftContainer, btnSidebar, btnNewChat);
+  }
+
+  function ensureStaticButton(container, config) {
+    return (
+      container.querySelector(`button[data-id="${config.id}"]`) ||
+      createStaticButton(config)
+    );
+  }
+
+  function mountStaticButtons(leftContainer, btnSidebar, btnNewChat) {
+    if (btnSidebar.parentElement !== leftContainer || leftContainer.firstElementChild !== btnSidebar) {
       leftContainer.insertBefore(btnSidebar, leftContainer.firstChild);
     }
-
-    let btnNewChat = leftContainer.querySelector('button[data-id="static-newchat-btn"]');
-    if (!btnNewChat) {
-      btnNewChat = createStaticButton({
-        label: 'Static New Chat',
-        svg: '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.6730 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287ZM18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708ZM11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"/></svg>',
-        activate: () => window.triggerNativeNewConversationButton?.(),
-      });
+    if (btnNewChat.parentElement !== leftContainer || btnSidebar.nextElementSibling !== btnNewChat) {
       leftContainer.insertBefore(btnNewChat, btnSidebar.nextSibling);
     }
   }
 
-  function createStaticButton({ label, svg, activate }) {
+  function createStaticButton({ id, label, svg, activate }) {
     const btn = document.createElement('button');
     btn.setAttribute('aria-label', label);
-    btn.setAttribute(
-      'data-id',
-      label.toLowerCase().includes('sidebar') ? 'static-sidebar-btn' : 'static-newchat-btn',
-    );
+    btn.setAttribute('data-id', id);
 
     btn.innerHTML = svg;
-    btn.className =
-      'text-token-text-secondary focus-visible:bg-token-surface-hover ' +
-      'enabled:hover:bg-token-surface-hover disabled:text-token-text-quaternary ' +
-      'h-10 rounded-lg px-2 focus-visible:outline-0';
+    btn.className = STATIC_BUTTON_CLASS;
 
-    Object.assign(btn.style, {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '36px',
-      padding: '8px',
-    });
+    Object.assign(btn.style, STATIC_BUTTON_STYLE);
 
     btn.onclick = (e) => {
       e.preventDefault();
@@ -9313,7 +8710,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
 (() => {
   // Shared, mutable ref so live updates affect all closures without reassignment
   const KEY_CODES = [];
-  const MAX_SLOTS = window.ModelLabels.MAX_SLOTS;
+  const ModelLabels = window.ModelLabels || {};
+  const MAX_SLOTS = ModelLabels.MAX_SLOTS || 15;
   const ModelPickerSelectors = window.CSPModelPickerSelectors || {};
   const LEGACY_MODEL_MENU_BTN_SELECTOR =
     ModelPickerSelectors.LEGACY_MODEL_MENU_BUTTON_SELECTOR ||
@@ -9327,6 +8725,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const MODEL_MENU_SELECTOR =
     ModelPickerSelectors.MODEL_MENU_SELECTOR ||
     '[data-radix-menu-content][data-state="open"][role="menu"]';
+  const MODEL_CONFIGURE_MENU_ITEM_SELECTOR =
+    ModelPickerSelectors.MODEL_CONFIGURE_MENU_ITEM_SELECTOR ||
+    '[data-testid="model-configure-modal"]';
+  const MODEL_CONFIGURE_DIALOG_SELECTOR =
+    ModelPickerSelectors.MODEL_CONFIGURE_DIALOG_SELECTOR || '[role="dialog"]';
+  const MODEL_SELECTION_LABEL_ID =
+    ModelPickerSelectors.MODEL_SELECTION_LABEL_ID || 'model-selection-label';
+  const THINKING_EFFORT_SELECTION_LABEL_ID =
+    ModelPickerSelectors.THINKING_EFFORT_SELECTION_LABEL_ID ||
+    'thinking-effort-selection-label';
   const COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR =
     ModelPickerSelectors.COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR ||
     '[data-testid="composer-intelligence-picker-content"]';
@@ -9357,18 +8765,14 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     'thinking-light',
     'thinking-heavy',
   ];
-  const escapeSelectorValue = (value) => {
-    try {
-      return CSS?.escape ? CSS.escape(String(value)) : String(value);
-    } catch {
-      return String(value);
-    }
-  };
   const getModelActionSlots = () =>
     typeof window.ModelLabels?.getActionSlots === 'function'
       ? window.ModelLabels.getActionSlots()
       : [];
-  const isUsablyVisibleElement = (el) => {
+  const isUsablyVisibleModelElement = (el) => {
+    if (typeof ModelPickerSelectors.isUsablyVisibleElement === 'function') {
+      return ModelPickerSelectors.isUsablyVisibleElement(el, window);
+    }
     if (!(el instanceof Element) || !el.isConnected) return false;
     try {
       const style = window.getComputedStyle?.(el);
@@ -9382,7 +8786,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     }
     const candidates = Array.from(document.querySelectorAll(MENU_BTN_SELECTOR));
     if (!candidates.length) return null;
-    const visible = candidates.filter(isUsablyVisibleElement);
+    const visible = candidates.filter(isUsablyVisibleModelElement);
     return (
       visible.find((el) => el.matches(LEGACY_MODEL_MENU_BTN_SELECTOR)) ||
       visible.find((el) => el.matches(COMPOSER_MODEL_MENU_BTN_SELECTOR)) ||
@@ -9390,6 +8794,21 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       candidates[0] ||
       null
     );
+  };
+  const getOpenModelMenuCandidates = (trigger = getModelMenuButton()) => {
+    if (typeof ModelPickerSelectors.getOpenModelMenuCandidates === 'function') {
+      return ModelPickerSelectors.getOpenModelMenuCandidates(document, window, trigger);
+    }
+
+    const triggerId = trigger?.id || '';
+    return Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))
+      .filter(isUsablyVisibleModelElement)
+      .filter((menu) => {
+        if (triggerId && menu.getAttribute('aria-labelledby') === triggerId) return true;
+        if (menu.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR)) return true;
+        if (menu.querySelector(MODEL_CONFIGURE_MENU_ITEM_SELECTOR)) return true;
+        return !!menu.querySelector('[data-testid^="model-switcher-"]');
+      });
   };
   const getModelActionBySlot = (slot) => {
     const staticAction =
@@ -9547,132 +8966,178 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const SCRAPE_HIDDEN_ELEMENTS = new Set();
   const PREPARED_SESSION_HIDDEN_ELEMENTS = new Set();
   let PREPARED_MODEL_CONFIG_SESSION = null;
-  const hideLiveScrapeElement = (el) => {
-    if (!SCRAPE_HIDE_UI_ACTIVE || !(el instanceof Element) || SCRAPE_HIDDEN_ELEMENTS.has(el))
-      return;
-    SCRAPE_HIDDEN_ELEMENTS.add(el);
-    if (!el.hasAttribute('data-csp-scrape-inline-visibility'))
-      el.setAttribute('data-csp-scrape-inline-visibility', el.style.visibility || '');
-    if (!el.hasAttribute('data-csp-scrape-inline-pointer-events'))
-      el.setAttribute('data-csp-scrape-inline-pointer-events', el.style.pointerEvents || '');
-    el.style.setProperty('visibility', 'hidden', 'important');
-    el.style.setProperty('pointer-events', 'none', 'important');
-  };
-  const clearHiddenLiveScrapeElements = () => {
-    SCRAPE_HIDDEN_ELEMENTS.forEach((el) => {
-      if (!(el instanceof Element)) return;
-      const prevVisibility = el.getAttribute('data-csp-scrape-inline-visibility');
-      const prevPointerEvents = el.getAttribute('data-csp-scrape-inline-pointer-events');
-      if (prevVisibility != null) {
-        if (prevVisibility) el.style.visibility = prevVisibility;
-        else el.style.removeProperty('visibility');
-        el.removeAttribute('data-csp-scrape-inline-visibility');
+  const ModelPickerScrapeSession = (() => {
+    function hideLiveElement(el) {
+      if (!SCRAPE_HIDE_UI_ACTIVE || !(el instanceof Element) || SCRAPE_HIDDEN_ELEMENTS.has(el)) {
+        return;
       }
-      if (prevPointerEvents != null) {
-        if (prevPointerEvents) el.style.pointerEvents = prevPointerEvents;
-        else el.style.removeProperty('pointer-events');
-        el.removeAttribute('data-csp-scrape-inline-pointer-events');
+      SCRAPE_HIDDEN_ELEMENTS.add(el);
+      if (!el.hasAttribute('data-csp-scrape-inline-visibility')) {
+        el.setAttribute('data-csp-scrape-inline-visibility', el.style.visibility || '');
       }
-    });
-    SCRAPE_HIDDEN_ELEMENTS.clear();
-  };
-  const hidePreparedSessionElement = (el) => {
-    if (!(el instanceof Element) || PREPARED_SESSION_HIDDEN_ELEMENTS.has(el)) return;
-    PREPARED_SESSION_HIDDEN_ELEMENTS.add(el);
-    if (!el.hasAttribute('data-csp-prepared-inline-visibility'))
-      el.setAttribute('data-csp-prepared-inline-visibility', el.style.visibility || '');
-    if (!el.hasAttribute('data-csp-prepared-inline-pointer-events'))
-      el.setAttribute('data-csp-prepared-inline-pointer-events', el.style.pointerEvents || '');
-    el.style.setProperty('visibility', 'hidden', 'important');
-    el.style.setProperty('pointer-events', 'none', 'important');
-  };
-  const clearPreparedSessionHiddenElements = () => {
-    PREPARED_SESSION_HIDDEN_ELEMENTS.forEach((el) => {
-      if (!(el instanceof Element)) return;
-      const prevVisibility = el.getAttribute('data-csp-prepared-inline-visibility');
-      const prevPointerEvents = el.getAttribute('data-csp-prepared-inline-pointer-events');
-      if (prevVisibility != null) {
-        if (prevVisibility) el.style.visibility = prevVisibility;
-        else el.style.removeProperty('visibility');
-        el.removeAttribute('data-csp-prepared-inline-visibility');
+      if (!el.hasAttribute('data-csp-scrape-inline-pointer-events')) {
+        el.setAttribute('data-csp-scrape-inline-pointer-events', el.style.pointerEvents || '');
       }
-      if (prevPointerEvents != null) {
-        if (prevPointerEvents) el.style.pointerEvents = prevPointerEvents;
-        else el.style.removeProperty('pointer-events');
-        el.removeAttribute('data-csp-prepared-inline-pointer-events');
-      }
-    });
-    PREPARED_SESSION_HIDDEN_ELEMENTS.clear();
-  };
-  const withTemporarilyHiddenModelUi = async (enabled, task) => {
-    const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
-    if (enabled) SCRAPE_HIDE_UI_ACTIVE = true;
-    try {
-      return await task();
-    } finally {
-      SCRAPE_HIDE_UI_ACTIVE = previousHideState;
-      if (!SCRAPE_HIDE_UI_ACTIVE) clearHiddenLiveScrapeElements();
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
     }
-  };
-  const getPreparedModelConfigSession = () => {
-    const session = PREPARED_MODEL_CONFIG_SESSION;
-    const combobox = session?.combobox;
-    const dialog = combobox?.closest?.('[role="dialog"]');
-    if (
-      !(combobox instanceof Element) ||
-      !combobox.isConnected ||
-      !(dialog instanceof Element) ||
-      !dialog.isConnected
-    ) {
+
+    function restoreElements(elements, visibilityAttr, pointerEventsAttr) {
+      elements.forEach((el) => {
+        if (!(el instanceof Element)) return;
+        const prevVisibility = el.getAttribute(visibilityAttr);
+        const prevPointerEvents = el.getAttribute(pointerEventsAttr);
+        if (prevVisibility != null) {
+          if (prevVisibility) el.style.visibility = prevVisibility;
+          else el.style.removeProperty('visibility');
+          el.removeAttribute(visibilityAttr);
+        }
+        if (prevPointerEvents != null) {
+          if (prevPointerEvents) el.style.pointerEvents = prevPointerEvents;
+          else el.style.removeProperty('pointer-events');
+          el.removeAttribute(pointerEventsAttr);
+        }
+      });
+      elements.clear();
+    }
+
+    function clearLiveElements() {
+      restoreElements(
+        SCRAPE_HIDDEN_ELEMENTS,
+        'data-csp-scrape-inline-visibility',
+        'data-csp-scrape-inline-pointer-events',
+      );
+    }
+
+    function hidePreparedElement(el) {
+      if (!(el instanceof Element) || PREPARED_SESSION_HIDDEN_ELEMENTS.has(el)) return;
+      PREPARED_SESSION_HIDDEN_ELEMENTS.add(el);
+      if (!el.hasAttribute('data-csp-prepared-inline-visibility')) {
+        el.setAttribute('data-csp-prepared-inline-visibility', el.style.visibility || '');
+      }
+      if (!el.hasAttribute('data-csp-prepared-inline-pointer-events')) {
+        el.setAttribute('data-csp-prepared-inline-pointer-events', el.style.pointerEvents || '');
+      }
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+    }
+
+    function clearPreparedElements() {
+      restoreElements(
+        PREPARED_SESSION_HIDDEN_ELEMENTS,
+        'data-csp-prepared-inline-visibility',
+        'data-csp-prepared-inline-pointer-events',
+      );
+    }
+
+    async function withHiddenUi(enabled, task) {
+      const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+      if (enabled) SCRAPE_HIDE_UI_ACTIVE = true;
+      try {
+        return await task();
+      } finally {
+        SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+        if (!SCRAPE_HIDE_UI_ACTIVE) clearLiveElements();
+      }
+    }
+
+    async function withCatalogUi(hideUi, task) {
+      const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+      SCRAPE_HIDE_UI_ACTIVE = !!hideUi;
+      try {
+        return await task();
+      } finally {
+        SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+        clearLiveElements();
+      }
+    }
+
+    function getPrepared() {
+      const session = PREPARED_MODEL_CONFIG_SESSION;
+      const combobox = session?.combobox;
+      const dialog = combobox?.closest?.(MODEL_CONFIGURE_DIALOG_SELECTOR);
+      if (
+        !(combobox instanceof Element) ||
+        !combobox.isConnected ||
+        !(dialog instanceof Element) ||
+        !dialog.isConnected
+      ) {
+        PREPARED_MODEL_CONFIG_SESSION = null;
+        clearPreparedElements();
+        return null;
+      }
+      return session;
+    }
+
+    function setPrepared(combobox, activeConfigId) {
+      if (!(combobox instanceof Element) || !combobox.isConnected) {
+        PREPARED_MODEL_CONFIG_SESSION = null;
+        return null;
+      }
+      const dialog = combobox.closest?.(MODEL_CONFIGURE_DIALOG_SELECTOR);
+      if (dialog) hidePreparedElement(dialog);
+      PREPARED_MODEL_CONFIG_SESSION = {
+        combobox,
+        activeConfigId: normalizeActiveModelConfigId(activeConfigId),
+        preparedAt: Date.now(),
+      };
+      return PREPARED_MODEL_CONFIG_SESSION;
+    }
+
+    function clearPrepared() {
       PREPARED_MODEL_CONFIG_SESSION = null;
-      clearPreparedSessionHiddenElements();
-      return null;
+      clearPreparedElements();
     }
-    return session;
-  };
-  const setPreparedModelConfigSession = (combobox, activeConfigId) => {
-    if (!(combobox instanceof Element) || !combobox.isConnected) {
+
+    async function releasePrepared() {
+      const session = getPrepared();
       PREPARED_MODEL_CONFIG_SESSION = null;
-      return null;
+      if (!session) {
+        clearLiveElements();
+        return false;
+      }
+      const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
+      SCRAPE_HIDE_UI_ACTIVE = true;
+      try {
+        const dialog = session.combobox.closest(MODEL_CONFIGURE_DIALOG_SELECTOR);
+        const closeButton =
+          dialog?.querySelector?.('[data-testid="close-button"]') ||
+          (await waitForButtonByTestIdSafe('close-button', { timeout: 200, interval: 25 }));
+        if (closeButton) smartClickSafe(closeButton);
+        await sleepAsync(40);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        SCRAPE_HIDE_UI_ACTIVE = previousHideState;
+        clearPreparedElements();
+        if (!SCRAPE_HIDE_UI_ACTIVE) clearLiveElements();
+      }
     }
-    const dialog = combobox.closest?.('[role="dialog"]');
-    if (dialog) hidePreparedSessionElement(dialog);
-    PREPARED_MODEL_CONFIG_SESSION = {
-      combobox,
-      activeConfigId: normalizeActiveModelConfigId(activeConfigId),
-      preparedAt: Date.now(),
+
+    return {
+      clearLiveElements,
+      clearPrepared,
+      getPrepared,
+      hideLiveElement,
+      releasePrepared,
+      setPrepared,
+      withCatalogUi,
+      withHiddenUi,
     };
-    return PREPARED_MODEL_CONFIG_SESSION;
-  };
-  const releasePreparedModelConfigSession = async () => {
-    const session = getPreparedModelConfigSession();
-    PREPARED_MODEL_CONFIG_SESSION = null;
-    if (!session) {
-      clearHiddenLiveScrapeElements();
-      return false;
-    }
-    const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
-    SCRAPE_HIDE_UI_ACTIVE = true;
-    try {
-      const dialog = session.combobox.closest('[role="dialog"]');
-      const closeButton =
-        dialog?.querySelector?.('[data-testid="close-button"]') ||
-        (await waitForButtonByTestIdSafe('close-button', { timeout: 200, interval: 25 }));
-      if (closeButton) smartClickSafe(closeButton);
-      await sleepAsync(40);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      SCRAPE_HIDE_UI_ACTIVE = previousHideState;
-      clearPreparedSessionHiddenElements();
-      if (!SCRAPE_HIDE_UI_ACTIVE) clearHiddenLiveScrapeElements();
-    }
-  };
+  })();
+
+  const hideLiveScrapeElement = ModelPickerScrapeSession.hideLiveElement;
+  const clearHiddenLiveScrapeElements = ModelPickerScrapeSession.clearLiveElements;
+  const withTemporarilyHiddenModelUi = ModelPickerScrapeSession.withHiddenUi;
+  const getPreparedModelConfigSession = ModelPickerScrapeSession.getPrepared;
+  const setPreparedModelConfigSession = ModelPickerScrapeSession.setPrepared;
+  const clearPreparedModelConfigSession = ModelPickerScrapeSession.clearPrepared;
+  const releasePreparedModelConfigSession = ModelPickerScrapeSession.releasePrepared;
 
   const normModelTid = (tid) =>
-    typeof window.ModelLabels?.normTid === 'function'
-      ? window.ModelLabels.normTid(tid)
+    typeof ModelLabels.normTid === 'function'
+      ? ModelLabels.normTid(tid)
       : String(tid || '')
         .toLowerCase()
         .trim();
@@ -9685,23 +9150,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const hasExpandedModelMenuTrigger = () =>
     getModelMenuButton()?.getAttribute('aria-expanded') === 'true';
 
-  const hasOpenModelMenuCandidate = () => {
-    const triggerId = getModelMenuButton()?.id || '';
-    if (
-      triggerId &&
-      document.querySelector(
-        `${MODEL_MENU_SELECTOR}[aria-labelledby="${escapeSelectorValue(triggerId)}"]`,
-      )
-    ) {
-      return true;
-    }
-
-    return !!document.querySelector(
-      `${MODEL_MENU_SELECTOR} ${COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR}, ` +
-      `${MODEL_MENU_SELECTOR} [data-testid="model-configure-modal"], ` +
-      `${MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`,
-    );
-  };
+  const hasOpenModelMenuCandidate = () => getOpenModelMenuCandidates().length > 0;
 
   const isModelMenuLikelyActive = () =>
     hasExpandedModelMenuTrigger() || hasOpenModelMenuCandidate();
@@ -9712,7 +9161,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
   const isKnownModelMenuItem = (item) => {
     if (!(item instanceof Element)) return false;
     const tid = normModelTid(item.getAttribute('data-testid'));
-    return !!tid && (tid.startsWith('model-switcher-') || tid === 'model-configure-modal');
+    return !!tid && (tid.startsWith('model-switcher-') || item.matches(MODEL_CONFIGURE_MENU_ITEM_SELECTOR));
   };
 
   const isModelSubmenuTriggerItem = (item) => {
@@ -9767,9 +9216,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     if (triggerId && labelledby === triggerId) return true;
 
     if (
-      items.some(
-        (item) => normModelTid(item.getAttribute('data-testid')) === 'model-configure-modal',
-      )
+      items.some((item) => item.matches(MODEL_CONFIGURE_MENU_ITEM_SELECTOR))
     ) {
       return true;
     }
@@ -9990,12 +9437,17 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return false;
       };
 
-      // Style for shortcut labels
-      (() => {
-        if (document.getElementById('__altHintStyle')) return;
-        const style = document.createElement('style');
-        style.id = '__altHintStyle';
-        style.textContent = `
+      const ModelPickerHints = (() => {
+        const STYLE_ID = '__altHintStyle';
+        const HINT_CLASS = 'alt-hint';
+        let scheduleToken = 0;
+        let observedOpenSurfaceCount = 0;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement('style');
+          style.id = STYLE_ID;
+          style.textContent = `
                 @keyframes csp-alt-hint-fade-in {
                     from {
                         opacity: 0;
@@ -10006,7 +9458,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                         transform: translateY(0);
                     }
                 }
-                .alt-hint {
+                .${HINT_CLASS} {
                     font-size: 10px;
                     opacity: .55;
                     margin-left: 6px;
@@ -10016,42 +9468,314 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
                     align-items: center;
                     animation: csp-alt-hint-fade-in 140ms ease-out;
                 }`;
-        document.head.appendChild(style);
+          document.head.appendChild(style);
+        }
+
+        function removeAllLabels() {
+          document.querySelectorAll(`.${HINT_CLASS}`).forEach((el) => {
+            el.remove();
+          });
+        }
+
+        function addLabel(el, labelText) {
+          if (!el || el.querySelector(`.${HINT_CLASS}`)) return;
+          if (!labelText || labelText === '—') return;
+          const target = el.querySelector('.flex.items-center') || el.querySelector('.flex') || el;
+          const span = document.createElement('span');
+          span.className = HINT_CLASS;
+          span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
+          (target || el).appendChild(span);
+        }
+
+        function getExpectedPrimaryHintTexts(primaryPairs) {
+          return primaryPairs.map(({ action }) => {
+            const slot = action?.slot;
+            return slot == null ? '' : `${MOD_KEY_TEXT}+${displayFromCode(KEY_CODES[slot])}`;
+          });
+        }
+
+        function primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts) {
+          for (let i = 0; i < primaryPairs.length; ++i) {
+            const actual =
+              primaryPairs[i]?.item?.el?.querySelector(`.${HINT_CLASS}`)?.textContent?.trim() || '';
+            if ((expectedHintTexts[i] || '') !== actual) return false;
+          }
+          return true;
+        }
+
+        function isOpenVisibleListbox(listbox) {
+          return (
+            listbox instanceof Element &&
+            listbox.getAttribute('role') === 'listbox' &&
+            listbox.getAttribute('data-state') === 'open' &&
+            isUsablyVisibleModelElement(listbox)
+          );
+        }
+
+        function applyConfigureListboxHints() {
+          const combobox = findConfigureCombobox();
+          const listbox = getControlledListboxForCombobox(combobox);
+          if (!isOpenVisibleListbox(listbox)) return false;
+          const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+          let applied = false;
+          options.forEach((option) => {
+            const action = getConfigureActionForOption(option, listbox);
+            const slot = Number(action?.slot);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+            const label = displayFromCode(KEY_CODES[slot]);
+            if (!label || label === '—') return;
+            addLabel(option, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function applyThinkingEffortListboxHints() {
+          const combobox = findThinkingEffortCombobox();
+          const listbox = getControlledListboxForCombobox(combobox);
+          if (!isOpenVisibleListbox(listbox)) return false;
+          const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
+          let applied = false;
+          options.forEach((option) => {
+            const optionId = getThinkingEffortIdForOption(option);
+            const label = displayFromCode(getThinkingEffortStorageCode(optionId));
+            if (!label || label === '—') return;
+            addLabel(option, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function applyModelSelectorThinkingEffortMenuHints() {
+          const menu = getOpenThinkingEffortMenu();
+          if (!(menu instanceof Element)) return false;
+          let applied = false;
+          Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`)).forEach(
+            (item) => {
+              const optionId = getThinkingEffortIdForMenuItem(item);
+              const label = displayFromCode(getThinkingEffortStorageCode(optionId));
+              if (!label || label === '—') return;
+              addLabel(item, label);
+              applied = true;
+            },
+          );
+          return applied;
+        }
+
+        function applyModelVersionSubmenuHints() {
+          const menu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
+          if (!(menu instanceof Element)) return false;
+          let applied = false;
+          getModelVersionMenuItems(menu).forEach((item, index) => {
+            const action = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
+            const slot = Number(action?.slot);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+            const label = displayFromCode(KEY_CODES[slot]);
+            if (!label || label === '—') return;
+            addLabel(item, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function applyConfigureFrontendRowHints() {
+          const dialog = findConfigureDialog();
+          if (!(dialog instanceof Element) || !isUsablyVisibleModelElement(dialog)) return false;
+          let applied = false;
+          ['instant', 'thinking', 'pro'].forEach((actionId) => {
+            const action = getModelActionById(actionId);
+            const row = findConfigureFrontendRowForAction(action, dialog);
+            const slot = Number(action?.slot);
+            if (!row || !Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+            const label = displayFromCode(KEY_CODES[slot]);
+            if (!label || label === '—') return;
+            addLabel(row, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function applyOpenSelectListboxHints() {
+          let applied = false;
+          applied = applyConfigureFrontendRowHints() || applied;
+          applied = applyConfigureListboxHints() || applied;
+          applied = applyThinkingEffortListboxHints() || applied;
+          applied = applyModelSelectorThinkingEffortMenuHints() || applied;
+          applied = applyModelVersionSubmenuHints() || applied;
+          return applied;
+        }
+
+        function apply(state = getVisibleModelMenuState()) {
+          const primaryPairs = getPrimaryMenuActionPairs(state);
+          const selectHintsApplied = applyOpenSelectListboxHints();
+          if (!primaryPairs.length) return selectHintsApplied;
+          const expectedHintTexts = getExpectedPrimaryHintTexts(primaryPairs);
+          if (primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts)) {
+            syncActiveConfigFromMenuState(state, { persist: true });
+            ModelPickerNameCache.maybePersistFromOpenMenus();
+            return true;
+          }
+          removeAllLabels();
+          for (const { item, action } of primaryPairs) {
+            const slot = action?.slot;
+            if (slot == null) continue;
+            addLabel(item.el, displayFromCode(KEY_CODES[slot]));
+          }
+          applyOpenSelectListboxHints();
+          syncActiveConfigFromMenuState(state, { persist: true });
+          // Persist labels -> names once menus are present; submenu must be open for full set.
+          ModelPickerNameCache.maybePersistFromOpenMenus();
+          return true;
+        }
+
+        function schedule({ retries = 0, interval = DELAY_APPLY_HINTS_OBSERVER_MS } = {}) {
+          const token = ++scheduleToken;
+          const run = () => {
+            if (token !== scheduleToken) return;
+            const applied = apply();
+            if (applied || retries <= 0) return;
+            retries -= 1;
+            setTimeout(() => requestAnimationFrame(run), interval);
+          };
+          requestAnimationFrame(run);
+        }
+
+        function scheduleAfterMenuInteraction(event) {
+          if (event.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN_SELECTOR))) {
+            setTimeout(() => schedule({ retries: 12, interval: DELAY_APPLY_HINTS_AFTER_MAIN_MS }), 0);
+          }
+
+          const target = event.target instanceof Element ? event.target : null;
+          const modelVersionMenu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
+          const clickedModelVersionItem =
+            modelVersionMenu instanceof Element
+              ? getModelVersionMenuItems(modelVersionMenu).find(
+                (item) => item === target || item.contains(target),
+              )
+              : null;
+          if (clickedModelVersionItem) {
+            const itemIndex = getModelVersionMenuItems(modelVersionMenu).indexOf(clickedModelVersionItem);
+            const clickedAction = getModelNameActionForMenuItem(
+              clickedModelVersionItem,
+              itemIndex,
+              window.__modelCatalog,
+            );
+            if (clickedAction?.id) {
+              setTimeout(() => {
+                persistActiveModelConfigId(clickedAction.id);
+              }, 0);
+            }
+          }
+
+          const clickedPrimaryItem = target?.closest(
+            '[data-radix-menu-content][role="menu"] > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
+            '[data-radix-menu-content][role="menu"] > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])',
+          );
+          if (clickedPrimaryItem) {
+            const state = getVisibleModelMenuState();
+            const clickedPair = getPrimaryMenuActionPairs(state).find(
+              (pair) => pair.item.el === clickedPrimaryItem,
+            );
+            const clickedAction = clickedPair?.action || null;
+            if (clickedAction) {
+              setTimeout(() => {
+                if (clickedAction.id === 'configure') return;
+                if (clickedAction.actionKind === 'configure-option') {
+                  persistActiveModelConfigId(clickedAction.id);
+                  return;
+                }
+                syncActiveConfigFromMenuState(state, { persist: true });
+              }, 60);
+            }
+          }
+
+          const clickedConfigureOption = target?.closest('[role="option"][data-radix-collection-item]');
+          if (clickedConfigureOption) {
+            const listbox = clickedConfigureOption.closest('[role="listbox"]');
+            const configureListbox = getControlledListboxForCombobox(findConfigureCombobox());
+            if (listbox && listbox === configureListbox) {
+              const inferredConfigId = inferActiveConfigFromConfigureOption(
+                clickedConfigureOption,
+                listbox,
+              );
+              if (inferredConfigId) {
+                setTimeout(() => {
+                  persistActiveModelConfigId(inferredConfigId);
+                }, 0);
+              }
+            }
+          }
+
+          const clickedCombobox = target?.closest('button[role="combobox"][aria-controls]');
+          if (clickedCombobox) {
+            setTimeout(() => schedule({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }), 0);
+          }
+
+          const submenuTriggerClicked = target?.closest(
+            '[role="menuitem"][data-has-submenu], ' +
+            '[role="menuitem"][aria-haspopup="menu"], ' +
+            '[role="menuitem"][aria-controls]',
+          );
+          if (submenuTriggerClicked) {
+            setTimeout(() => schedule({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }), 0);
+          }
+        }
+
+        function getOpenSelectListboxCount() {
+          return [findConfigureCombobox(), findThinkingEffortCombobox()]
+            .map(getControlledListboxForCombobox)
+            .filter(isOpenVisibleListbox).length;
+        }
+
+        function getOpenConfigureDialogCount() {
+          return findConfigureDialog() ? 1 : 0;
+        }
+
+        function isConfigureUiLikelyActive() {
+          return !!findConfigureDialog() || getOpenSelectListboxCount() > 0;
+        }
+
+        function scheduleWhenOpenSurfaceCountChanges() {
+          if (!isModelMenuLikelyActive() && !isConfigureUiLikelyActive()) {
+            observedOpenSurfaceCount = 0;
+            return;
+          }
+          const count =
+            getOpenModelMenus().length + getOpenConfigureDialogCount() + getOpenSelectListboxCount();
+          if (count !== observedOpenSurfaceCount) {
+            observedOpenSurfaceCount = count;
+            setTimeout(() => schedule({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS }), 0);
+          }
+        }
+
+        function installInteractionListeners() {
+          document.addEventListener('click', scheduleAfterMenuInteraction);
+
+          const observer = new MutationObserver(scheduleWhenOpenSurfaceCountChanges);
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+          });
+
+          if (isModelMenuLikelyActive()) {
+            schedule({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS });
+          }
+        }
+
+        return {
+          apply,
+          applyOpenSelectListboxHints,
+          ensureStyle,
+          installInteractionListeners,
+          schedule,
+        };
       })();
 
-      const removeAllLabels = () => {
-        document.querySelectorAll('.alt-hint').forEach((el) => {
-          el.remove();
-        });
-      };
+      ModelPickerHints.ensureStyle();
 
-      const addLabel = (el, labelText) => {
-        if (!el || el.querySelector('.alt-hint')) return;
-        if (!labelText || labelText === '—') return;
-        const target = el.querySelector('.flex.items-center') || el.querySelector('.flex') || el;
-        const span = document.createElement('span');
-        span.className = 'alt-hint';
-        span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
-        (target || el).appendChild(span);
-      };
+      // --- Model-name cache: live menu labels -> popup/overlay storage ---
 
-      const getExpectedPrimaryHintTexts = (primaryPairs) =>
-        primaryPairs.map(({ action }) => {
-          const slot = action?.slot;
-          return slot == null ? '' : `${MOD_KEY_TEXT}+${displayFromCode(KEY_CODES[slot])}`;
-        });
-
-      const primaryHintsAlreadyApplied = (primaryPairs, expectedHintTexts) => {
-        for (let i = 0; i < primaryPairs.length; ++i) {
-          const actual = primaryPairs[i]?.item?.el?.querySelector('.alt-hint')?.textContent?.trim() || '';
-          if ((expectedHintTexts[i] || '') !== actual) return false;
-        }
-        return true;
-      };
-
-      // --- Ultra-light model-name capture: piggybacks on applyHints ---
-
-      function __cspTextNoHint(el) {
+      function getModelTextWithoutHints(el) {
         if (!(el instanceof Element)) return window.ModelLabels.textNoHint(el);
         const clone = el.cloneNode(true);
         clone
@@ -10062,12 +9786,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return window.ModelLabels.textNoHint(clone);
       }
 
-      const __cspIsSubmenuTrigger = (el) => isModelSubmenuTriggerItem(el);
-      const __cspNormTid = (tid) => window.ModelLabels.normTid(tid);
       const inferActiveConfigFromMenuState = (state = getVisibleModelMenuState()) => {
         const items = getPrimaryMenuItems(state).map((item) => ({
           testId: item.el.getAttribute('data-testid') || '',
-          text: __cspTextNoHint(item.el),
+          text: getModelTextWithoutHints(item.el),
         }));
         const header = state.main?.querySelector('.__menu-label')?.textContent?.trim() || '';
         return typeof window.ModelLabels?.inferActiveConfigFromMenuState === 'function'
@@ -10082,30 +9804,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (persist) return persistActiveModelConfigId(inferred);
         return setCachedActiveModelConfigId(inferred);
       };
-      // Collect up to MAX_SLOTS names across all open model menus (main first, then submenus).
-      function __cspCollectModelNamesN() {
-        const CAP = MAX_SLOTS;
-        const menus = getVisibleModelMenuState().menus.filter(Boolean);
 
-        if (!menus.length) return null;
+      const ModelPickerNameCache = (() => {
+        let lastPersistedSignature = '';
+        let lastPersistedAt = 0;
 
-        const out = [];
-        for (const menu of menus) {
-          const items = Array.from(menu.querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
-          for (const it of items) {
-            if (out.length >= CAP) break;
-            out.push(__cspTextNoHint(it));
-          }
-          if (out.length >= CAP) break;
-        }
-        return out.map((s) => (s || '').trim());
-      }
-      // Saver: derive canonical labels from DOM (data-testid + structure), not localized text
-      const __cspSaveModelNames = (() => {
-        let lastSig = '';
-        let lastWrite = 0;
-
-        // Single source of truth (shared/model-picker-labels.js)
         const TESTID_CANON = window.ModelLabels.TESTID_CANON;
         const MAIN_CANON_BY_INDEX = window.ModelLabels.MAIN_CANON_BY_INDEX;
         const mapSubmenuLabel = window.ModelLabels.mapSubmenuLabel;
@@ -10114,9 +9817,26 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             ? window.ModelLabels.canonFromTid
             : (tid) => (tid && TESTID_CANON[tid]) || '';
 
-        function pickMainMenuLabel(item, index) {
-          const tid = __cspNormTid(item.getAttribute('data-testid'));
-          const domLabel = __cspTextNoHint(item);
+        function collectOpenMenuNames() {
+          const menus = getVisibleModelMenuState().menus.filter(Boolean);
+
+          if (!menus.length) return null;
+
+          const names = [];
+          for (const menu of menus) {
+            const items = Array.from(menu.querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
+            for (const item of items) {
+              if (names.length >= MAX_SLOTS) break;
+              names.push(getModelTextWithoutHints(item));
+            }
+            if (names.length >= MAX_SLOTS) break;
+          }
+          return names.map((name) => (name || '').trim());
+        }
+
+        function pickPrimaryMenuLabel(item, index) {
+          const tid = normModelTid(item.getAttribute('data-testid'));
+          const domLabel = getModelTextWithoutHints(item);
           const canonLabel = canonFromTid(tid) || '';
 
           // Main-menu rows now change their visible labels without keeping tid parity.
@@ -10127,9 +9847,8 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           return '';
         }
 
-        function __cspCanonicalLabelsFromDOM() {
-          const CAP = MAX_SLOTS;
-          const names = Array(CAP).fill('');
+        function buildCanonicalLabelsFromOpenMenus() {
+          const names = Array(MAX_SLOTS).fill('');
           const menus = getVisibleModelMenuState().menus.filter(Boolean);
 
           if (!menus.length) return { names, observedCount: 0, complete: false };
@@ -10141,15 +9860,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           const main = menus[0];
           if (main) {
             const mainItems = Array.from(main.querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
-            for (let i = 0; i < mainItems.length && idx < CAP; i++) {
+            for (let i = 0; i < mainItems.length && idx < MAX_SLOTS; i++) {
               const item = mainItems[i];
               let label = '';
 
-              if (__cspIsSubmenuTrigger(item)) {
+              if (isModelSubmenuTriggerItem(item)) {
                 label = '→'; // canonical for submenu trigger (not a model)
                 hasSubmenuTrigger = true;
               } else {
-                label = pickMainMenuLabel(item, i);
+                label = pickPrimaryMenuLabel(item, i);
               }
 
               names[idx++] = (label || '').trim();
@@ -10157,15 +9876,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           }
 
           // Any additional open menus (submenus) in order
-          for (let m = 1; m < menus.length && idx < CAP; m++) {
+          for (let m = 1; m < menus.length && idx < MAX_SLOTS; m++) {
             const subItems = Array.from(menus[m].querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
             for (const item of subItems) {
-              if (idx >= CAP) break;
-              const tid = __cspNormTid(item.getAttribute('data-testid'));
+              if (idx >= MAX_SLOTS) break;
+              const tid = normModelTid(item.getAttribute('data-testid'));
               let label = canonFromTid(tid) || '';
               if (!label) {
                 const primary = item.querySelector('.flex.items-center.gap-1') || item;
-                const txt = __cspTextNoHint(primary);
+                const txt = getModelTextWithoutHints(primary);
                 label = mapSubmenuLabel(txt) || txt;
               }
               names[idx++] = (label || '').trim();
@@ -10177,124 +9896,132 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           // - a submenu trigger exists and we currently have submenu content open
           const complete = !hasSubmenuTrigger || menus.length > 1;
 
-          while (names.length < CAP) names.push('');
+          while (names.length < MAX_SLOTS) names.push('');
           for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
           return { names, observedCount: idx, complete };
         }
 
-        function __cspMergeAndPersist(candidates, meta) {
+        function mergeAndPersistNames(candidates, meta) {
           const now = Date.now();
           try {
-            const CAP = MAX_SLOTS;
             const observedCount = Math.max(
               0,
               Math.min(
-                CAP,
+                MAX_SLOTS,
                 Number(meta && meta.observedCount != null ? meta.observedCount : 0) || 0,
               ),
             );
             const complete = !!meta?.complete;
             chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-              const prevArr = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
-              while (prevArr.length < CAP) prevArr.push('');
-              const merged = Array.from({ length: CAP }, (_, i) => {
+              const prevArr = Array.isArray(prev) ? prev.slice(0, MAX_SLOTS) : Array(MAX_SLOTS).fill('');
+              while (prevArr.length < MAX_SLOTS) prevArr.push('');
+              const merged = Array.from({ length: MAX_SLOTS }, (_, i) => {
                 if (complete && i >= observedCount) return '';
                 const nv = (candidates[i] || '').trim();
                 const pv = (prevArr[i] || '').trim();
                 return nv || pv || '';
               });
               const sig = merged.join('|');
-              if (sig === lastSig && now - lastWrite < 1000) return;
-              lastSig = sig;
-              lastWrite = now;
+              if (sig === lastPersistedSignature && now - lastPersistedAt < 1000) return;
+              lastPersistedSignature = sig;
+              lastPersistedAt = now;
               chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => { });
             });
           } catch (_) { }
         }
 
-        return (arrN) => {
-          const CAP = MAX_SLOTS;
-          const dom = __cspCanonicalLabelsFromDOM();
-          const domNames = dom && Array.isArray(dom.names) ? dom.names : Array(CAP).fill('');
-          const fallback = Array.isArray(arrN) ? arrN.slice(0, CAP) : Array(CAP).fill('');
-          while (fallback.length < CAP) fallback.push('');
+        function persistFromOpenMenus(fallbackNames) {
+          const dom = buildCanonicalLabelsFromOpenMenus();
+          const domNames = dom && Array.isArray(dom.names) ? dom.names : Array(MAX_SLOTS).fill('');
+          const fallback = Array.isArray(fallbackNames)
+            ? fallbackNames.slice(0, MAX_SLOTS)
+            : Array(MAX_SLOTS).fill('');
+          while (fallback.length < MAX_SLOTS) fallback.push('');
 
-          const candidates = Array.from({ length: CAP }, (_, i) => {
+          const candidates = Array.from({ length: MAX_SLOTS }, (_, i) => {
             const d = (domNames[i] || '').trim();
             const f = (fallback[i] || '').trim();
             return d || f || '';
           });
 
           if (!candidates.some(Boolean)) return;
-          __cspMergeAndPersist(candidates, dom);
+          mergeAndPersistNames(candidates, dom);
+        }
+
+        function maybePersistFromOpenMenus() {
+          const names = collectOpenMenuNames();
+          if (names) persistFromOpenMenus(names);
+        }
+
+        function persistRange(startIdx, values, rangeCount) {
+          const start = Math.max(0, Math.min(MAX_SLOTS - 1, Number(startIdx) || 0));
+          const count = Math.max(0, Math.min(MAX_SLOTS - start, Number(rangeCount) || 0));
+          if (!count) return;
+
+          const incoming = Array.isArray(values) ? values.slice(0, count) : [];
+          const normalizeName =
+            typeof window.ModelLabels?.normalizeStoredActionName === 'function'
+              ? window.ModelLabels.normalizeStoredActionName
+              : (_slot, value) => (value ?? '').toString().trim();
+
+          chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
+            const next = Array.isArray(prev) ? prev.slice(0, MAX_SLOTS) : Array(MAX_SLOTS).fill('');
+            while (next.length < MAX_SLOTS) next.push('');
+            for (let i = 0; i < count; i++) next[start + i] = '';
+            for (let i = 0; i < incoming.length; i++) {
+              next[start + i] = normalizeName(start + i, incoming[i]) || '';
+            }
+            chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => { });
+          });
+        }
+
+        return {
+          collectOpenMenuNames,
+          maybePersistFromOpenMenus,
+          persistFromOpenMenus,
+          persistRange,
         };
       })();
 
-      function __cspMaybePersistModelNames() {
-        const arr = __cspCollectModelNamesN();
-        if (arr) __cspSaveModelNames(arr);
-      }
-
-      const __cspPersistModelNameRange = (startIdx, values, rangeCount) => {
-        const CAP = MAX_SLOTS;
-        const start = Math.max(0, Math.min(CAP - 1, Number(startIdx) || 0));
-        const count = Math.max(0, Math.min(CAP - start, Number(rangeCount) || 0));
-        if (!count) return;
-
-        const incoming = Array.isArray(values) ? values.slice(0, count) : [];
-        const normalizeName =
-          typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-            ? window.ModelLabels.normalizeStoredActionName
-            : (_slot, value) => (value ?? '').toString().trim();
-
-        chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-          const next = Array.isArray(prev) ? prev.slice(0, CAP) : Array(CAP).fill('');
-          while (next.length < CAP) next.push('');
-          for (let i = 0; i < count; i++) next[start + i] = '';
-          for (let i = 0; i < incoming.length; i++) {
-            next[start + i] = normalizeName(start + i, incoming[i]) || '';
+      function handleModelPickerRuntimeMessage(msg, _sender, sendResponse) {
+        if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
+          const names = ModelPickerNameCache.collectOpenMenuNames();
+          if (names) ModelPickerNameCache.persistFromOpenMenus(names);
+          sendResponse({ modelNames: Array.isArray(names) ? names : null });
+          return;
+        }
+        if (msg && msg.type === 'CSP_SCRAPE_MODEL_CATALOG') {
+          void scrapeModelCatalogOnce({
+            hideUi: msg.hideUi !== false,
+            keepPreparedSession: msg.keepPreparedSession !== false,
+          }).then((result) => {
+            sendResponse(result);
+          });
+          return true;
+        }
+        if (msg && msg.type === 'CSP_RELEASE_MODEL_CONFIG_SESSION') {
+          void releasePreparedModelConfigSession().then(() => {
+            sendResponse({ ok: true });
+          });
+          return true;
+        }
+        if (msg && msg.type === 'CSP_TRIGGER_MODEL_ACTION') {
+          const action = getModelActionById(msg.actionId);
+          if (!action) {
+            sendResponse({ ok: false, error: 'UNKNOWN_ACTION' });
+            return;
           }
-          chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => { });
-        });
-      };
+          executeModelAction(action, {
+            hideUi: msg.hideUi === true,
+            preferPreparedSession: msg.preferPreparedSession === true,
+          });
+          sendResponse({ ok: true });
+        }
+      }
 
       // Respond to popup requests for live names (ensures freshness on popup open)
       try {
-        chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-          if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
-            const arr = __cspCollectModelNamesN();
-            if (arr) __cspSaveModelNames(arr);
-            sendResponse({ modelNames: Array.isArray(arr) ? arr : null });
-            return;
-          }
-          if (msg && msg.type === 'CSP_SCRAPE_MODEL_CATALOG') {
-            void scrapeModelCatalogOnce({
-              hideUi: msg.hideUi !== false,
-              keepPreparedSession: msg.keepPreparedSession !== false,
-            }).then((result) => {
-              sendResponse(result);
-            });
-            return true;
-          }
-          if (msg && msg.type === 'CSP_RELEASE_MODEL_CONFIG_SESSION') {
-            void releasePreparedModelConfigSession().then(() => {
-              sendResponse({ ok: true });
-            });
-            return true;
-          }
-          if (msg && msg.type === 'CSP_TRIGGER_MODEL_ACTION') {
-            const action = getModelActionById(msg.actionId);
-            if (!action) {
-              sendResponse({ ok: false, error: 'UNKNOWN_ACTION' });
-              return;
-            }
-            executeModelAction(action, {
-              hideUi: msg.hideUi === true,
-              preferPreparedSession: msg.preferPreparedSession === true,
-            });
-            sendResponse({ ok: true });
-          }
-        });
+        chrome.runtime.onMessage.addListener(handleModelPickerRuntimeMessage);
       } catch (_) { }
 
       // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS.
@@ -10314,7 +10041,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (!(row instanceof Element)) return '';
         const candidates = Array.from(row.querySelectorAll('.text-token-text-tertiary.text-xs'));
         for (const candidate of candidates) {
-          const value = __cspTextNoHint(candidate).replace(/\s+/g, ' ').trim();
+          const value = getModelTextWithoutHints(candidate).replace(/\s+/g, ' ').trim();
           if (/^\d+(?:\.\d+)?$/.test(value)) return value;
         }
         return '';
@@ -10340,7 +10067,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             : null;
         const mapMenuLabelToFrontendActionId = () => {
           if (!mapFrontendLabel) return '';
-          const label = __cspTextNoHint(item);
+          const label = getModelTextWithoutHints(item);
           return (
             mapFrontendLabel(label, activeModelConfigId) ||
             mapFrontendLabel(label, DEFAULT_ACTIVE_MODEL_CONFIG_ID) ||
@@ -10348,7 +10075,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           );
         };
         const tid = normModelTid(item.getAttribute('data-testid'));
-        if (tid === 'model-configure-modal') return 'configure';
+        if (item.matches(MODEL_CONFIGURE_MENU_ITEM_SELECTOR)) return 'configure';
         if (isCurrentModelSubmenuTriggerItem(item)) return 'configure';
         if (
           item.hasAttribute('data-model-picker-thinking-effort-menu-item') ||
@@ -10439,20 +10166,16 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return ordered.sort((a, b) => rawItems.indexOf(a.item) - rawItems.indexOf(b.item));
       }
 
-      function findMainItemByTestId(testId, state = getVisibleModelMenuState()) {
-        const tid = normModelTid(testId);
-        return getPrimaryMenuItems(state).find(
-          (item) => normModelTid(item.el.getAttribute('data-testid')) === tid,
-        );
-      }
       function findConfigureMenuItem(state = getVisibleModelMenuState()) {
-        const fromState = findMainItemByTestId('model-configure-modal', state)?.el;
+        const fromState = getPrimaryMenuItems(state).find((item) =>
+          item.el.matches(MODEL_CONFIGURE_MENU_ITEM_SELECTOR),
+        )?.el;
         if (fromState instanceof Element) return fromState;
         const roots = [state.main, ...getOpenModelMenus(), document].filter(Boolean);
         for (const root of roots) {
           const match = Array.from(
-            root.querySelectorAll?.('[data-testid="model-configure-modal"]') || [],
-          ).find(isUsablyVisibleElement);
+            root.querySelectorAll?.(MODEL_CONFIGURE_MENU_ITEM_SELECTOR) || [],
+          ).find(isUsablyVisibleModelElement);
           if (match) return match;
         }
         return null;
@@ -10611,7 +10334,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (isCurrentModelSubmenuTriggerItem(state.submenuTrigger)) {
             return { el: state.submenuTrigger, menu: 'main', idx: -1 };
           }
-          const stateItem = findMainItemByTestId('model-configure-modal', state);
+          const stateItem = getPrimaryMenuItems(state).find((item) =>
+            item.el.matches(MODEL_CONFIGURE_MENU_ITEM_SELECTOR),
+          );
           if (stateItem) return stateItem;
           const configureEl = findConfigureMenuItem(state);
           return configureEl ? { el: configureEl, menu: 'main', idx: -1 } : null;
@@ -10638,7 +10363,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (!(label instanceof Element)) return null;
 
         const roots = [
-          label.closest('[role="dialog"]'),
+          label.closest(MODEL_CONFIGURE_DIALOG_SELECTOR),
           label.closest('[data-state="open"]'),
           label.parentElement,
           label.parentElement?.parentElement,
@@ -10658,9 +10383,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         }
         return null;
       };
-      const findConfigureCombobox = () => findComboboxByLabelId('model-selection-label');
+      const findConfigureCombobox = () => findComboboxByLabelId(MODEL_SELECTION_LABEL_ID);
       const findThinkingEffortCombobox = () =>
-        findComboboxByLabelId('thinking-effort-selection-label');
+        findComboboxByLabelId(THINKING_EFFORT_SELECTION_LABEL_ID);
 
       const waitForConfigureCombobox = async () =>
         waitForAsync(findConfigureCombobox, { timeout: 2500, interval: 30 });
@@ -10748,11 +10473,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const options = Array.from(listbox.querySelectorAll(':scope [role="option"]')).slice(0, 4);
         if (!options.length) return;
         const labels = options.map((option) => getConfigureOptionLabel(option));
-        __cspPersistModelNameRange(3, labels, 4);
+        ModelPickerNameCache.persistRange(3, labels, 4);
       };
       const findConfigureDialog = () => {
         const combobox = findConfigureCombobox();
-        const dialog = combobox?.closest('[role="dialog"]');
+        const dialog = combobox?.closest(MODEL_CONFIGURE_DIALOG_SELECTOR);
         return dialog instanceof Element ? dialog : null;
       };
       const hideOpenModelUiForScrape = (state = getVisibleModelMenuState()) => {
@@ -10783,7 +10508,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           row.querySelector('.flex.items-center.gap-1') ||
           row.querySelector('.truncate') ||
           row;
-        return __cspTextNoHint(primary);
+        return getModelTextWithoutHints(primary);
       };
       const getFrontendActionIdFromRowLabel = (row) => {
         const label = getConfigureFrontendRowLabel(row);
@@ -10931,7 +10656,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           : String(id || '').trim();
       const getThinkingEffortIdForMenuItem = (item) => {
         if (!(item instanceof Element)) return '';
-        return mapThinkingEffortLabelToId(__cspTextNoHint(item));
+        return mapThinkingEffortLabelToId(getModelTextWithoutHints(item));
       };
       const getThinkingEffortIdForOption = (option) => {
         if (!(option instanceof Element)) return '';
@@ -10964,7 +10689,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return (
           Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR))
             .filter((menu) => {
-              if (!isUsablyVisibleElement(menu)) return false;
+              if (!isUsablyVisibleModelElement(menu)) return false;
               if (triggerId && menu.getAttribute('aria-labelledby') === triggerId) return true;
               if (triggerId && strictTrigger) return false;
               return Array.from(
@@ -10997,7 +10722,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return (
           typeof window.ModelLabels?.mapFrontendLabelToActionId === 'function' &&
           window.ModelLabels.mapFrontendLabelToActionId(
-            __cspTextNoHint(menuItem),
+            getModelTextWithoutHints(menuItem),
             DEFAULT_ACTIVE_MODEL_CONFIG_ID,
           ) === 'pro'
         );
@@ -11161,6 +10886,58 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           ? window.ModelLabels.sortThinkingEffortIds(ids)
           : Array.from(new Set(ids));
       };
+      const DYNAMIC_SCRAPE_SLOT_START = 8;
+      const isDynamicScrapeAction = (action) =>
+        action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
+      const createScrapeSlotAllocator = (actions, startSlot = DYNAMIC_SCRAPE_SLOT_START) => {
+        let nextDynamicSlot = startSlot;
+        const usedSlots = new Set();
+        const reservedCatalogSlots = new Set(
+          actions
+            .filter((action) => action?.fromCatalog)
+            .map((action) => Number(action.slot))
+            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+        );
+
+        return (action) => {
+          const isDynamic = isDynamicScrapeAction(action);
+          let slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
+          if (isDynamic && !action?.fromCatalog) slot = -1;
+          if (slot >= 0 && !usedSlots.has(slot)) {
+            usedSlots.add(slot);
+            return slot;
+          }
+          if (!isDynamic) return -1;
+          while (
+            nextDynamicSlot < MAX_SLOTS &&
+            (usedSlots.has(nextDynamicSlot) || reservedCatalogSlots.has(nextDynamicSlot))
+          ) {
+            nextDynamicSlot += 1;
+          }
+          if (nextDynamicSlot >= MAX_SLOTS) return -1;
+          slot = nextDynamicSlot;
+          usedSlots.add(slot);
+          nextDynamicSlot += 1;
+          return slot;
+        };
+      };
+      const buildAvailableScrapeActions = (elements, actions, getLabel) => {
+        const takeSlot = createScrapeSlotAllocator(actions);
+        return elements
+          .map((element, index) => {
+            const action = actions[index];
+            if (!action?.id) return null;
+            const slot = takeSlot(action);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+            return {
+              ...action,
+              slot,
+              label: getLabel(element, index, action),
+            };
+          })
+          .filter(Boolean);
+      };
       const deriveFlatModelNamesFromCatalog = (catalog) => {
         const names = Array(MAX_SLOTS).fill('');
         const configureOptions = Array.isArray(catalog?.configureOptions)
@@ -11207,6 +10984,17 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         });
         return names.slice(0, MAX_SLOTS);
       };
+      const persistScrapedModelCatalog = (catalog, { activeModelConfigId = '' } = {}) => {
+        const modelNames = deriveFlatModelNamesFromCatalog(catalog);
+        const values = {
+          [MODEL_CATALOG_STORAGE_KEY]: catalog,
+          modelNames,
+          modelNamesAt: catalog.scrapedAt,
+        };
+        if (activeModelConfigId) values.activeModelConfigId = activeModelConfigId;
+        chrome.storage.sync.set(values, () => {});
+        return modelNames;
+      };
       const selectConfigureOptionDuringScrape = async (combobox, targetAction) => {
         if (!(combobox instanceof Element) || !targetAction) return null;
         let listbox = await waitForConfigureListboxQuick(combobox);
@@ -11225,13 +11013,13 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const getModelVersionMenuItems = (menu) =>
         menu instanceof Element
           ? getDirectModelMenuItems(menu).filter((item) =>
-              isLikelyModelVersionLabel(__cspTextNoHint(item)),
+              isLikelyModelVersionLabel(getModelTextWithoutHints(item)),
             )
           : [];
       const getModelVersionMenuItemLabel = (item) => {
         if (!(item instanceof Element)) return '';
         const primary = item.querySelector('.truncate') || item;
-        return __cspTextNoHint(primary).replace(/\s+/g, ' ').trim();
+        return getModelTextWithoutHints(primary).replace(/\s+/g, ' ').trim();
       };
       const getModelNameActionForMenuItem = (
         item,
@@ -11271,7 +11059,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         if (
           controlled instanceof Element &&
           controlled.matches(MODEL_MENU_SELECTOR) &&
-          isUsablyVisibleElement(controlled) &&
+          isUsablyVisibleModelElement(controlled) &&
           isLikelyModelVersionMenuElement(controlled)
         ) {
           return controlled;
@@ -11280,7 +11068,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const triggerId = trigger?.id || '';
         const parentMenu = trigger?.closest?.('[data-radix-menu-content]') || null;
         const menus = Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).filter(
-          (menu) => menu instanceof Element && isUsablyVisibleElement(menu),
+          (menu) => menu instanceof Element && isUsablyVisibleModelElement(menu),
         );
         return (
           menus.find(
@@ -11347,7 +11135,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return getDirectModelMenuItems(main)
           .filter((item) => !isModelSubmenuTriggerItem(item))
           .map((item) => {
-            const label = __cspTextNoHint(item).replace(/\s+/g, ' ').trim();
+            const label = getModelTextWithoutHints(item).replace(/\s+/g, ' ').trim();
             if (!label || typeof window.ModelLabels?.mapFrontendLabelToActionId !== 'function') {
               return null;
             }
@@ -11412,51 +11200,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const modelNameActions = modelNameItems.map((item, index) =>
           getModelNameActionForMenuItem(item, index, window.__modelCatalog, modelNameLabels),
         );
-        let nextDynamicModelNameSlot = 8;
-        const usedModelNameSlots = new Set();
-        const reservedCatalogSlots = new Set(
-          modelNameActions
-            .filter((action) => action?.fromCatalog)
-            .map((action) => Number(action.slot))
-            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+        const availableModelNames = buildAvailableScrapeActions(
+          modelNameItems,
+          modelNameActions,
+          getModelVersionMenuItemLabel,
         );
-        const takeModelNameSlot = (action) => {
-          const isDynamic =
-            action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
-          let slot = Number(action?.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
-          if (isDynamic && !action?.fromCatalog) slot = -1;
-          if (slot >= 0 && !usedModelNameSlots.has(slot)) {
-            usedModelNameSlots.add(slot);
-            return slot;
-          }
-          if (!isDynamic) return -1;
-          while (
-            nextDynamicModelNameSlot < MAX_SLOTS &&
-            (usedModelNameSlots.has(nextDynamicModelNameSlot) ||
-              reservedCatalogSlots.has(nextDynamicModelNameSlot))
-          ) {
-            nextDynamicModelNameSlot += 1;
-          }
-          if (nextDynamicModelNameSlot >= MAX_SLOTS) return -1;
-          slot = nextDynamicModelNameSlot;
-          usedModelNameSlots.add(slot);
-          nextDynamicModelNameSlot += 1;
-          return slot;
-        };
-        const availableModelNames = modelNameItems
-          .map((item, index) => {
-            const action = modelNameActions[index];
-            if (!action?.id) return null;
-            const slot = takeModelNameSlot(action);
-            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-            return {
-              ...action,
-              slot,
-              label: getModelVersionMenuItemLabel(item),
-            };
-          })
-          .filter(Boolean);
         if (!availableModelNames.length) return { ok: false, error: 'MODEL_OPTIONS_UNRESOLVED' };
 
         const activeIndex = modelNameItems.findIndex(
@@ -11502,16 +11250,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           thinkingEffortIds: [],
           frontendByConfig,
         };
-        const modelNames = deriveFlatModelNamesFromCatalog(catalog);
-        chrome.storage.sync.set(
-          {
-            [MODEL_CATALOG_STORAGE_KEY]: catalog,
-            modelNames,
-            modelNamesAt: catalog.scrapedAt,
-            activeModelConfigId: initialActiveConfigId,
-          },
-          () => {},
-        );
+        const modelNames = persistScrapedModelCatalog(catalog, {
+          activeModelConfigId: initialActiveConfigId,
+        });
         setCachedActiveModelConfigId(initialActiveConfigId);
 
         return {
@@ -11521,10 +11262,9 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           activeModelConfigId: initialActiveConfigId,
         };
       };
-      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) => {
-        const previousHideState = SCRAPE_HIDE_UI_ACTIVE;
-        SCRAPE_HIDE_UI_ACTIVE = !!hideUi;
-        try {
+      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) =>
+        ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
+          try {
           const integratedResult = await scrapeIntegratedModelCatalogOnce();
           if (!integratedResult?.fallback) return integratedResult;
 
@@ -11559,51 +11299,11 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           const optionActions = optionElements.map((option) =>
             getConfigureActionForOption(option, listbox),
           );
-          let nextDynamicConfigureSlot = 8;
-          const usedConfigureSlots = new Set();
-          const reservedCatalogSlots = new Set(
-            optionActions
-              .filter((action) => action?.fromCatalog)
-              .map((action) => Number(action.slot))
-              .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+          const availableOptions = buildAvailableScrapeActions(
+            optionElements,
+            optionActions,
+            getConfigureOptionLabel,
           );
-          const takeConfigureOptionSlot = (action) => {
-            const isDynamic =
-              action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
-            let slot = Number(action?.slot);
-            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
-            if (isDynamic && !action?.fromCatalog) slot = -1;
-            if (slot >= 0 && !usedConfigureSlots.has(slot)) {
-              usedConfigureSlots.add(slot);
-              return slot;
-            }
-            if (!isDynamic) return -1;
-            while (
-              nextDynamicConfigureSlot < MAX_SLOTS &&
-              (usedConfigureSlots.has(nextDynamicConfigureSlot) ||
-                reservedCatalogSlots.has(nextDynamicConfigureSlot))
-            ) {
-              nextDynamicConfigureSlot += 1;
-            }
-            if (nextDynamicConfigureSlot >= MAX_SLOTS) return -1;
-            slot = nextDynamicConfigureSlot;
-            usedConfigureSlots.add(slot);
-            nextDynamicConfigureSlot += 1;
-            return slot;
-          };
-          const availableOptions = optionElements
-            .map((option, index) => {
-              const action = optionActions[index];
-              if (!action?.id) return null;
-              const slot = takeConfigureOptionSlot(action);
-              if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-              return {
-                ...action,
-                slot,
-                label: getConfigureOptionLabel(option),
-              };
-            })
-            .filter(Boolean);
 
           const scrapeOrder = availableOptions
             .slice()
@@ -11656,15 +11356,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             thinkingEffortIds,
             frontendByConfig,
           };
-          const modelNames = deriveFlatModelNamesFromCatalog(catalog);
-          chrome.storage.sync.set(
-            {
-              [MODEL_CATALOG_STORAGE_KEY]: catalog,
-              modelNames,
-              modelNamesAt: catalog.scrapedAt,
-            },
-            () => { },
-          );
+          const modelNames = persistScrapedModelCatalog(catalog);
 
           if (keepPreparedSession) {
             clearHiddenLiveScrapeElements();
@@ -11677,7 +11369,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             try {
               smartClickSafe(closeButton);
             } catch { }
-            PREPARED_MODEL_CONFIG_SESSION = null;
+            clearPreparedModelConfigSession();
           }
 
           return {
@@ -11686,13 +11378,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             modelNames,
             activeModelConfigId: initialActiveConfigId,
           };
-        } catch (error) {
-          return { ok: false, error: error?.message || 'SCRAPE_FAILED' };
-        } finally {
-          SCRAPE_HIDE_UI_ACTIVE = previousHideState;
-          clearHiddenLiveScrapeElements();
-        }
-      };
+          } catch (error) {
+            return { ok: false, error: error?.message || 'SCRAPE_FAILED' };
+          }
+        });
 
       const getConfigureClickTargets = (configureItem) => {
         if (!(configureItem instanceof Element)) return [];
@@ -11820,7 +11509,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const opened = await openComboboxListbox(combobox);
         if (!opened?.listbox) return false;
 
-        applyOpenSelectListboxHints();
+        ModelPickerHints.applyOpenSelectListboxHints();
         flashBottomBar();
         return true;
       };
@@ -11907,7 +11596,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (!(item instanceof Element)) return false;
 
           if (!hideUi) {
-            applyHints();
+            ModelPickerHints.apply();
             if (window.gsap) flashMenuItem(item);
           }
           await sleepAsync(hideUi ? 0 : DELAY_ACTIVATE_TARGET_MS);
@@ -12137,6 +11826,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           return hideUi ? false : runLegacyThinkingEffortOptionAction(option.id);
         });
       };
+      // Runtime bridge: Alt shortcut map delegates thinking-effort actions to model-picker routing.
       window.__cspRunThinkingEffortAction = (optionId, options = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
@@ -12151,6 +11841,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           return runConfigureProThinkingEffortOptionAction(option, { hideUi });
         });
       };
+      // Runtime bridge: Alt shortcut map delegates Pro thinking actions to model-picker routing.
       window.__cspRunProThinkingEffortAction = (optionId, options = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
@@ -12158,184 +11849,54 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return true;
       };
 
-      let hintScheduleToken = 0;
+      // Runtime bridge: outer listeners refresh model-picker labels when key assignments change.
+      window.__mp_applyHints = (options = {}) => ModelPickerHints.schedule(options);
 
-      const isOpenVisibleListbox = (listbox) =>
-        listbox instanceof Element &&
-        listbox.getAttribute('role') === 'listbox' &&
-        listbox.getAttribute('data-state') === 'open' &&
-        isUsablyVisibleElement(listbox);
-
-      const applyConfigureListboxHints = () => {
-        const combobox = findConfigureCombobox();
-        const listbox = getControlledListboxForCombobox(combobox);
-        if (!isOpenVisibleListbox(listbox)) return false;
-        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
-        let applied = false;
-        options.forEach((option) => {
-          const action = getConfigureActionForOption(option, listbox);
-          const slot = Number(action?.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
-          const label = displayFromCode(KEY_CODES[slot]);
-          if (!label || label === '—') return;
-          addLabel(option, label);
-          applied = true;
-        });
-        return applied;
-      };
-
-      const applyThinkingEffortListboxHints = () => {
-        const combobox = findThinkingEffortCombobox();
-        const listbox = getControlledListboxForCombobox(combobox);
-        if (!isOpenVisibleListbox(listbox)) return false;
-        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
-        let applied = false;
-        options.forEach((option) => {
-          const optionId = getThinkingEffortIdForOption(option);
-          const label = displayFromCode(getThinkingEffortStorageCode(optionId));
-          if (!label || label === '—') return;
-          addLabel(option, label);
-          applied = true;
-        });
-        return applied;
-      };
-
-      const applyModelSelectorThinkingEffortMenuHints = () => {
-        const menu = getOpenThinkingEffortMenu();
-        if (!(menu instanceof Element)) return false;
-        let applied = false;
-        Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`)).forEach(
-          (item) => {
-            const optionId = getThinkingEffortIdForMenuItem(item);
-            const label = displayFromCode(getThinkingEffortStorageCode(optionId));
-            if (!label || label === '—') return;
-            addLabel(item, label);
-            applied = true;
-          },
-        );
-        return applied;
-      };
-
-      const applyModelVersionSubmenuHints = () => {
-        const menu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
-        if (!(menu instanceof Element)) return false;
-        let applied = false;
-        getModelVersionMenuItems(menu).forEach((item, index) => {
-          const action = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
-          const slot = Number(action?.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
-          const label = displayFromCode(KEY_CODES[slot]);
-          if (!label || label === '—') return;
-          addLabel(item, label);
-          applied = true;
-        });
-        return applied;
-      };
-
-      const applyConfigureFrontendRowHints = () => {
-        const dialog = findConfigureDialog();
-        if (!(dialog instanceof Element) || !isUsablyVisibleElement(dialog)) return false;
-        let applied = false;
-        ['instant', 'thinking', 'pro'].forEach((actionId) => {
-          const action = getModelActionById(actionId);
-          const row = findConfigureFrontendRowForAction(action, dialog);
-          const slot = Number(action?.slot);
-          if (!row || !Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
-          const label = displayFromCode(KEY_CODES[slot]);
-          if (!label || label === '—') return;
-          addLabel(row, label);
-          applied = true;
-        });
-        return applied;
-      };
-
-      const applyOpenSelectListboxHints = () => {
-        let applied = false;
-        applied = applyConfigureFrontendRowHints() || applied;
-        applied = applyConfigureListboxHints() || applied;
-        applied = applyThinkingEffortListboxHints() || applied;
-        applied = applyModelSelectorThinkingEffortMenuHints() || applied;
-        applied = applyModelVersionSubmenuHints() || applied;
-        return applied;
-      };
-
-      const applyHints = (state = getVisibleModelMenuState()) => {
-        const primaryPairs = getPrimaryMenuActionPairs(state);
-        const selectHintsApplied = applyOpenSelectListboxHints();
-        if (!primaryPairs.length) return selectHintsApplied;
-        const expectedHintTexts = getExpectedPrimaryHintTexts(primaryPairs);
-        if (primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts)) {
-          syncActiveConfigFromMenuState(state, { persist: true });
-          __cspMaybePersistModelNames();
-          return true;
+      const ModelPickerActionRunner = (() => {
+        function createCompletion(options) {
+          let completed = false;
+          return (ok = true) => {
+            if (completed) return;
+            completed = true;
+            if (typeof options.onComplete === 'function') {
+              try {
+                options.onComplete(ok);
+              } catch {}
+            }
+          };
         }
-        removeAllLabels();
-        for (const { item, action } of primaryPairs) {
-          const slot = action?.slot;
-          if (slot == null) continue;
-          addLabel(item.el, displayFromCode(KEY_CODES[slot]));
-        }
-        applyOpenSelectListboxHints();
-        syncActiveConfigFromMenuState(state, { persist: true });
-        // Persist labels -> names once menus are present (submenu must be open for full set)
-        __cspMaybePersistModelNames();
-        return true;
-      };
-      const scheduleHints = ({ retries = 0, interval = DELAY_APPLY_HINTS_OBSERVER_MS } = {}) => {
-        const token = ++hintScheduleToken;
-        const run = () => {
-          if (token !== hintScheduleToken) return;
-          const applied = applyHints();
-          if (applied || retries <= 0) return;
-          retries -= 1;
-          setTimeout(() => requestAnimationFrame(run), interval);
-        };
-        requestAnimationFrame(run);
-      };
 
-      // Expose a minimal hook so outer listeners can refresh labels when keys change
-      window.__mp_applyHints = (options = {}) => scheduleHints(options);
+        function waitForMenuActionTarget(nextAction, done, options = {}) {
+          ensureMainMenuOpen();
 
-      const openMenuForAction = (nextAction, done, options = {}) => {
-        ensureMainMenuOpen();
-
-        let mainPolls = 0;
-        let lastState = null;
-        const waitForReadyState = () => {
-          const state = getVisibleModelMenuState();
-          if (state?.menus?.length || state?.items?.length) lastState = state;
-          const target = getTargetMenuItemForAction(nextAction, state);
-          if (!target) {
-            if (
-              options.allowIntegratedEffortFallback !== false &&
-              shouldFallbackToLatestForMissingLiveEffort(nextAction, state)
-            ) {
-              done({ state, target: null });
+          let mainPolls = 0;
+          let lastState = null;
+          const waitForReadyState = () => {
+            const state = getVisibleModelMenuState();
+            if (state?.menus?.length || state?.items?.length) lastState = state;
+            const target = getTargetMenuItemForAction(nextAction, state);
+            if (!target) {
+              if (
+                options.allowIntegratedEffortFallback !== false &&
+                shouldFallbackToLatestForMissingLiveEffort(nextAction, state)
+              ) {
+                done({ state, target: null });
+                return;
+              }
+              if (mainPolls++ > 50) {
+                done(lastState ? { state: lastState, target: null } : null);
+                return;
+              }
+              setTimeout(waitForReadyState, 30);
               return;
             }
-            if (mainPolls++ > 50) return done(lastState ? { state: lastState, target: null } : null);
-            setTimeout(waitForReadyState, 30);
-            return;
-          }
-          done({ state, target });
-        };
+            done({ state, target });
+          };
 
-        waitForReadyState();
-      };
+          waitForReadyState();
+        }
 
-      const executeModelAction = (action, options = {}) => {
-        if (!action) return false;
-        let completed = false;
-        const complete = (ok = true) => {
-          if (completed) return;
-          completed = true;
-          if (typeof options.onComplete === 'function') {
-            try {
-              options.onComplete(ok);
-            } catch {}
-          }
-        };
-        const activateDirectModelTarget = (ready) => {
+        function activateDirectModelTarget(action, ready, complete) {
           const targetEl = ready?.target?.el;
           if (!targetEl) return false;
           const directPair = getPrimaryMenuActionPairs(ready?.state || getVisibleModelMenuState()).find(
@@ -12349,113 +11910,142 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             complete(true);
           }, DELAY_ACTIVATE_TARGET_MS);
           return true;
-        };
-        if (action.actionKind === 'configure-option' && options.preferPreparedSession) {
-          const preparedSession = getPreparedModelConfigSession();
-          if (preparedSession) {
-            void runConfigureOptionAction(action, {
-              hideUi: options.hideUi === true,
-              preferPreparedSession: true,
-            }).then((result) => complete(result !== false));
-            return true;
-          }
         }
-        const alreadyOpen = ensureMainMenuOpen();
-        setTimeout(
-          () => {
-            openMenuForAction(action, (ready) => {
-              if (!ready?.target) {
-                if (
-                  options.skipIntegratedEffortFallback !== true &&
-                  shouldFallbackToLatestForMissingLiveEffort(action, ready?.state || null)
-                ) {
-                  void runIntegratedEffortFallbackAction(action, {
-                    hideUi: options.hideUi === true,
-                    initialState: ready?.state || null,
-                    sourceSlot: options.sourceSlot,
-                  }).then((result) => complete(result !== false));
-                  return;
-                }
-                if (
-                  action.actionKind === 'main-row' ||
-                  action.actionKind === 'configure-frontend-row'
-                ) {
-                  void runConfigureFrontendRowAction(action).then((result) =>
-                    complete(result !== false),
-                  );
-                } else {
-                  complete(false);
-                }
-                return;
-              }
-              if (action.actionKind === 'configure-option') {
-                if (!options.hideUi) applyHints();
-                void (async () => {
-                  if (
-                    await runIntegratedModelNameAction(action, {
-                      hideUi: options.hideUi === true,
-                      initialState: ready.state,
-                    })
-                  ) {
-                    complete(true);
-                    return;
-                  }
-                  await runConfigureOptionAction(action, {
-                    hideUi: options.hideUi === true,
-                    initialState: ready.state,
-                    preferPreparedSession: options.preferPreparedSession === true,
-                  });
-                  complete(true);
-                })();
-                return;
-              }
-              if (action.actionKind === 'configure-open') {
-                if (!options.hideUi) applyHints();
-                void runConfigureOpenAction({ initialState: ready.state }).then((result) =>
-                  complete(result !== false),
-                );
-                return;
-              }
-              applyHints();
-              if (action.actionKind === 'configure-frontend-row') {
-                if (activateDirectModelTarget(ready)) return;
-                void runConfigureFrontendRowAction(action).then((result) =>
-                  complete(result !== false),
-                );
-                return;
-              }
-              const targetEl = ready.target?.el;
-              if (!targetEl) {
-                complete(false);
-                return;
-              }
-              if (window.gsap) flashMenuItem(targetEl);
-              setTimeout(() => {
-                activateMenuItem(targetEl);
-                flashBottomBar();
-                const stateAfterClick = getVisibleModelMenuState();
-                const clickedPair = getPrimaryMenuActionPairs(stateAfterClick).find(
-                  (pair) => pair.item.el === targetEl,
-                );
-                const clickedAction = clickedPair?.action || null;
-                if (clickedAction?.id === 'configure') {
-                  complete(true);
-                  return;
-                }
-                if (clickedAction?.actionKind === 'configure-option') {
-                  persistActiveModelConfigId(clickedAction.id);
-                  complete(true);
-                  return;
-                }
-                syncActiveConfigFromMenuState(ready.state, { persist: true });
-                complete(true);
-              }, DELAY_ACTIVATE_TARGET_MS);
-              }, { allowIntegratedEffortFallback: options.skipIntegratedEffortFallback !== true });
+
+        function dispatchPreparedConfigureOptionIfAvailable(action, options, complete) {
+          if (action.actionKind !== 'configure-option' || !options.preferPreparedSession) return false;
+          if (!getPreparedModelConfigSession()) return false;
+          void runConfigureOptionAction(action, {
+            hideUi: options.hideUi === true,
+            preferPreparedSession: true,
+          }).then((result) => complete(result !== false));
+          return true;
+        }
+
+        function dispatchIntegratedEffortFallbackIfNeeded(action, ready, options, complete) {
+          if (options.skipIntegratedEffortFallback === true) return false;
+          if (!shouldFallbackToLatestForMissingLiveEffort(action, ready?.state || null)) return false;
+          void runIntegratedEffortFallbackAction(action, {
+            hideUi: options.hideUi === true,
+            initialState: ready?.state || null,
+            sourceSlot: options.sourceSlot,
+          }).then((result) => complete(result !== false));
+          return true;
+        }
+
+        function dispatchMissingTargetAction(action, ready, options, complete) {
+          if (dispatchIntegratedEffortFallbackIfNeeded(action, ready, options, complete)) return;
+          if (action.actionKind === 'main-row' || action.actionKind === 'configure-frontend-row') {
+            void runConfigureFrontendRowAction(action).then((result) => complete(result !== false));
+            return;
+          }
+          complete(false);
+        }
+
+        async function dispatchConfigureOptionAction(action, ready, options, complete) {
+          if (!options.hideUi) ModelPickerHints.apply();
+          if (
+            await runIntegratedModelNameAction(action, {
+              hideUi: options.hideUi === true,
+              initialState: ready.state,
+            })
+          ) {
+            complete(true);
+            return;
+          }
+          await runConfigureOptionAction(action, {
+            hideUi: options.hideUi === true,
+            initialState: ready.state,
+            preferPreparedSession: options.preferPreparedSession === true,
+          });
+          complete(true);
+        }
+
+        function dispatchConfigureOpenAction(ready, options, complete) {
+          if (!options.hideUi) ModelPickerHints.apply();
+          void runConfigureOpenAction({ initialState: ready.state }).then((result) =>
+            complete(result !== false),
+          );
+        }
+
+        function activateVisibleMenuTarget(ready, complete) {
+          const targetEl = ready.target?.el;
+          if (!targetEl) {
+            complete(false);
+            return;
+          }
+          if (window.gsap) flashMenuItem(targetEl);
+          setTimeout(() => {
+            activateMenuItem(targetEl);
+            flashBottomBar();
+            const stateAfterClick = getVisibleModelMenuState();
+            const clickedPair = getPrimaryMenuActionPairs(stateAfterClick).find(
+              (pair) => pair.item.el === targetEl,
+            );
+            const clickedAction = clickedPair?.action || null;
+            if (clickedAction?.id === 'configure') {
+              complete(true);
+              return;
+            }
+            if (clickedAction?.actionKind === 'configure-option') {
+              persistActiveModelConfigId(clickedAction.id);
+              complete(true);
+              return;
+            }
+            syncActiveConfigFromMenuState(ready.state, { persist: true });
+            complete(true);
+          }, DELAY_ACTIVATE_TARGET_MS);
+        }
+
+        function dispatchReadyAction(action, ready, options, complete) {
+          if (!ready?.target) {
+            dispatchMissingTargetAction(action, ready, options, complete);
+            return;
+          }
+          if (action.actionKind === 'configure-option') {
+            void dispatchConfigureOptionAction(action, ready, options, complete);
+            return;
+          }
+          if (action.actionKind === 'configure-open') {
+            dispatchConfigureOpenAction(ready, options, complete);
+            return;
+          }
+
+          ModelPickerHints.apply();
+          if (action.actionKind === 'configure-frontend-row') {
+            if (activateDirectModelTarget(action, ready, complete)) return;
+            void runConfigureFrontendRowAction(action).then((result) => complete(result !== false));
+            return;
+          }
+          activateVisibleMenuTarget(ready, complete);
+        }
+
+        function execute(action, options = {}) {
+          if (!action) return false;
+          const complete = createCompletion(options);
+          if (dispatchPreparedConfigureOptionIfAvailable(action, options, complete)) return true;
+
+          const alreadyOpen = ensureMainMenuOpen();
+          setTimeout(
+            () => {
+              waitForMenuActionTarget(
+                action,
+                (ready) => dispatchReadyAction(action, ready, options, complete),
+                { allowIntegratedEffortFallback: options.skipIntegratedEffortFallback !== true },
+              );
             },
-          alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
-        );
-        return true;
-      };
+            alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
+          );
+          return true;
+        }
+
+        return {
+          execute,
+        };
+      })();
+
+      const executeModelAction = (action, options = {}) =>
+        ModelPickerActionRunner.execute(action, options);
       // --- KEY HANDLING ---
       function runModelPickerShortcutSlot(slot, options = {}) {
         const idx = Number(slot);
@@ -12499,124 +12089,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         true,
       );
 
-      // Keep click-to-open labels, but also observe DOM so labels appear *when* submenu mounts
-      document.addEventListener('click', (e) => {
-        if (e.composedPath().some((n) => n instanceof Element && n.matches(MENU_BTN_SELECTOR))) {
-          setTimeout(
-            () => scheduleHints({ retries: 12, interval: DELAY_APPLY_HINTS_AFTER_MAIN_MS }),
-            0,
-          );
-        }
-        const t = e.target instanceof Element ? e.target : null;
-        const modelVersionMenu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
-        const clickedModelVersionItem =
-          modelVersionMenu instanceof Element
-            ? getModelVersionMenuItems(modelVersionMenu).find((item) => item === t || item.contains(t))
-            : null;
-        if (clickedModelVersionItem) {
-          const itemIndex = getModelVersionMenuItems(modelVersionMenu).indexOf(clickedModelVersionItem);
-          const clickedAction = getModelNameActionForMenuItem(
-            clickedModelVersionItem,
-            itemIndex,
-            window.__modelCatalog,
-          );
-          if (clickedAction?.id) {
-            setTimeout(() => {
-              persistActiveModelConfigId(clickedAction.id);
-            }, 0);
-          }
-        }
-        const clickedPrimaryItem = t?.closest(
-          '[data-radix-menu-content][role="menu"] > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
-          '[data-radix-menu-content][role="menu"] > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])',
-        );
-        if (clickedPrimaryItem) {
-          const state = getVisibleModelMenuState();
-          const clickedPair = getPrimaryMenuActionPairs(state).find(
-            (pair) => pair.item.el === clickedPrimaryItem,
-          );
-          const clickedAction = clickedPair?.action || null;
-          if (clickedAction) {
-            setTimeout(() => {
-              if (clickedAction.id === 'configure') return;
-              if (clickedAction.actionKind === 'configure-option') {
-                persistActiveModelConfigId(clickedAction.id);
-                return;
-              }
-              syncActiveConfigFromMenuState(state, { persist: true });
-            }, 60);
-          }
-        }
-        const clickedConfigureOption = t?.closest('[role="option"][data-radix-collection-item]');
-        if (clickedConfigureOption) {
-          const listbox = clickedConfigureOption.closest('[role="listbox"]');
-          const configureListbox = getControlledListboxForCombobox(findConfigureCombobox());
-          if (listbox && listbox === configureListbox) {
-            const inferredConfigId = inferActiveConfigFromConfigureOption(
-              clickedConfigureOption,
-              listbox,
-            );
-            if (inferredConfigId) {
-              setTimeout(() => {
-                persistActiveModelConfigId(inferredConfigId);
-              }, 0);
-            }
-          }
-        }
-        const clickedCombobox = t?.closest('button[role="combobox"][aria-controls]');
-        if (clickedCombobox) {
-          setTimeout(
-            () => scheduleHints({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }),
-            0,
-          );
-        }
-        const submenuTriggerClicked = t?.closest(
-          '[role="menuitem"][data-has-submenu], ' +
-          '[role="menuitem"][aria-haspopup="menu"], ' +
-          '[role="menuitem"][aria-controls]',
-        );
-        if (submenuTriggerClicked) {
-          setTimeout(
-            () => scheduleHints({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }),
-            0,
-          );
-        }
-      });
-
-      // Observe for open Radix menus; when the count of open menus changes, refresh labels
-      (() => {
-        let lastCount = 0;
-        const getOpenSelectListboxCount = () =>
-          [findConfigureCombobox(), findThinkingEffortCombobox()]
-            .map(getControlledListboxForCombobox)
-            .filter(isOpenVisibleListbox).length;
-        const getConfigureDialogCount = () => (findConfigureDialog() ? 1 : 0);
-        const isConfigureUiLikelyActive = () =>
-          !!findConfigureDialog() || getOpenSelectListboxCount() > 0;
-        const obs = new MutationObserver(() => {
-          if (!isModelMenuLikelyActive() && !isConfigureUiLikelyActive()) {
-            lastCount = 0;
-            return;
-          }
-          const count =
-            getOpenModelMenus().length + getConfigureDialogCount() + getOpenSelectListboxCount();
-          if (count !== lastCount) {
-            lastCount = count;
-            setTimeout(
-              () => scheduleHints({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS }),
-              0,
-            );
-          }
-        });
-        obs.observe(document.documentElement, {
-          childList: true,
-          subtree: true,
-        });
-      })();
-
-      if (isModelMenuLikelyActive()) {
-        scheduleHints({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS });
-      }
+      ModelPickerHints.installInteractionListeners();
     },
   );
 
@@ -12714,7 +12187,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     tick();
   };
 
-  // Opens current single-level menus and older submenu layouts when present.
+  // Runtime bridge: keyboard dispatcher opens current single-level menus and older submenu layouts.
   window.toggleModelSelector = () => {
     const btn = getModelMenuButton();
     if (!btn) return;
@@ -12739,6 +12212,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = nextActiveModelConfigId;
     }
     if (changes.modelCatalog) {
+      // Runtime bridge: overlay and shortcuts share the latest scraped model catalog.
       window.__modelCatalog =
         changes.modelCatalog.newValue && typeof changes.modelCatalog.newValue === 'object'
           ? changes.modelCatalog.newValue
@@ -12911,11 +12385,12 @@ setTimeout(() => {
         ];
         for (const sel of selectors) {
           const el = document.querySelector(sel);
-          if (el && isVisible(el)) return true;
+          if (el && hasVisibleComputedStyle(el)) return true;
         }
         return false;
       }
-      function isVisible(el) {
+      // Overlay detection only needs computed visibility, not viewport or composer bounds.
+      function hasVisibleComputedStyle(el) {
         if (!el) return false;
         const style = window.getComputedStyle(el);
         return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
@@ -13165,6 +12640,7 @@ setTimeout(() => {
         }
       });
 
+      // Feature-owned override for the early runtime bridge above. Keep timing/state local here.
       window.flashSlimSidebarBar = (dur = 2500) => {
         if (!bar || !isFeatureEnabled()) return;
         if (overlayIsOpen()) {
@@ -14240,6 +13716,7 @@ ${groupMarkup.join('')}`;
               : buildDefaultCodes().slice(0, MAX);
 
             while (codes.length < MAX) codes.push('');
+            // Runtime bridge: shortcuts overlay reads hydrated model names/codes from the content scope.
             window.__modelCatalog =
               res.modelCatalog && typeof res.modelCatalog === 'object' ? res.modelCatalog : null;
             window.MODEL_NAMES = names;
@@ -14308,831 +13785,4 @@ ${groupMarkup.join('')}`;
   };
 
   document.addEventListener('keydown', onKeyDown, { capture: true });
-})();
-
-// ==================================================
-// @note Click-to-copy inline code (gated by settings)
-// ==================================================
-
-(() => {
-  const STYLE_ID = 'csp-inline-code-copy-style';
-  let styleEl = null;
-  let listening = false;
-
-  const ensureStyle = () => {
-    if (styleEl) return;
-    styleEl = document.createElement('style');
-    styleEl.id = STYLE_ID;
-    styleEl.textContent = 'pre code{cursor:auto} code{cursor:pointer}';
-    document.head.appendChild(styleEl);
-  };
-
-  const removeStyle = () => {
-    styleEl?.remove();
-    styleEl = null;
-  };
-
-  const onClick = (e) => {
-    const el = e.target.closest('code');
-    if (!el || el.closest('pre')) return;
-
-    const txt = el.textContent.trim();
-    if (!txt) return;
-
-    const fallback = () => {
-      const ta = Object.assign(document.createElement('textarea'), { value: txt });
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    };
-
-    (navigator.clipboard?.writeText(txt) || Promise.reject()).catch(fallback);
-    el.animate([{ opacity: 1 }, { opacity: 0.6 }, { opacity: 1 }], { duration: 200 });
-  };
-
-  const detach = () => {
-    if (!listening) return;
-    document.removeEventListener('click', onClick, true);
-    listening = false;
-    removeStyle();
-  };
-
-  const applySetting = (enabled) => {
-    const isOn = Boolean(enabled);
-    window._clickToCopyInlineCodeEnabled = isOn;
-    window.clickToCopyInlineCodeEnabled = isOn;
-
-    if (!isOn) {
-      detach();
-      return;
-    }
-
-    ensureStyle();
-    if (!listening) {
-      document.addEventListener('click', onClick, { capture: true });
-      listening = true;
-    }
-  };
-
-  chrome.storage.sync.get(
-    { clickToCopyInlineCodeEnabled: false },
-    ({ clickToCopyInlineCodeEnabled }) => {
-      applySetting(clickToCopyInlineCodeEnabled);
-    },
-  );
-
-  chrome.storage.onChanged.addListener((chg, area) => {
-    if (area !== 'sync' || !('clickToCopyInlineCodeEnabled' in chg)) return;
-    applySetting(chg.clickToCopyInlineCodeEnabled.newValue);
-  });
-})();
-
-// ===============================================
-// Highlight bold text in custom color (gated via MV3 setting)
-// Content script IIFE for ChatGPT Custom Shortcuts Pro
-// ===============================================
-(() => {
-  // biome-ignore lint/suspicious/noRedundantUseStrict: IIFE strict mode needed
-  'use strict';
-
-  const STYLE_ID = 'csp-color-bold-text-style';
-  const DEFAULT_LIGHT_COLOR = '#2037e6';
-  const DEFAULT_DARK_COLOR = '#4da3ff';
-
-  const host = () => document.head || document.documentElement;
-
-  const buildCSS = (lightColor, darkColor) => `
-    .light b, .light strong { color: ${lightColor} !important; }
-    .dark  b, .dark  strong { color: ${darkColor} !important; }
-  `;
-
-  const enable = (lightColor, darkColor) => {
-    const css = buildCSS(lightColor || DEFAULT_LIGHT_COLOR, darkColor || DEFAULT_DARK_COLOR);
-    let s = document.getElementById(STYLE_ID);
-    if (s) {
-      s.textContent = css;
-    } else {
-      s = document.createElement('style');
-      s.id = STYLE_ID;
-      s.textContent = css;
-      host().appendChild(s);
-    }
-  };
-
-  const disable = () => {
-    const s = document.getElementById(STYLE_ID);
-    if (s) s.remove();
-  };
-
-  const apply = (on, lightColor, darkColor) => {
-    if (on) {
-      enable(lightColor, darkColor);
-    } else {
-      disable();
-    }
-  };
-
-  // Initial load
-  chrome.storage.sync.get(
-    {
-      colorBoldTextEnabled: false,
-      colorBoldTextLightColor: DEFAULT_LIGHT_COLOR,
-      colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
-    },
-    ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
-      apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
-    },
-  );
-
-  // Listen for changes
-  chrome.storage.onChanged.addListener((chg, area) => {
-    if (area !== 'sync') return;
-
-    const relevantKeys = [
-      'colorBoldTextEnabled',
-      'colorBoldTextLightColor',
-      'colorBoldTextDarkColor',
-    ];
-    if (!relevantKeys.some((key) => key in chg)) return;
-
-    chrome.storage.sync.get(
-      {
-        colorBoldTextEnabled: false,
-        colorBoldTextLightColor: DEFAULT_LIGHT_COLOR,
-        colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
-      },
-      ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
-        apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
-      },
-    );
-  });
-})();
-
-// ==========================================================
-// Hide pasted files in the ChatGPT Library (gated by setting)
-// ==========================================================
-
-(() => {
-  const STORAGE_KEY = 'hidePastedLibraryFilesEnabled';
-  const STYLE_ID = 'csp-library-hide-pasted-style';
-  const CONTROL_ATTR = 'data-csp-library-pasted-toggle';
-  const HIDDEN_ATTR = 'data-csp-library-pasted-hidden';
-  const LABEL_KEY = 'label_hide_pasted_library_files';
-  const TOOLTIP_KEY = 'tt_hide_pasted_library_files';
-  const TOP_CONTROLS_SELECTOR = '[data-testid="artifacts-surface-top-controls"]';
-  const PAGE_ROOT_SELECTOR = 'main#main';
-  const CONTROL_SETTLE_MS = 260;
-  const HIDE_FILENAME_TOKENS = Object.freeze([
-    'pasted',
-    'pegado',
-    '貼り付けられた',
-    'вставлен',
-    'insertion',
-    'चिपकाया',
-  ]);
-
-  const state = {
-    enabled: false,
-    contextInvalidated: false,
-    onLibraryRoute: false,
-    controlRefreshToken: 0,
-    topControlsObserver: null,
-    topControlsObservationRoot: null,
-    resultsObserver: null,
-    resultsObservationRoot: null,
-  };
-
-  const debounce =
-    typeof createDebounce === 'function'
-      ? createDebounce
-      : (fn, wait = 80) => {
-          let timer = null;
-          return (...args) => {
-            if (timer) window.clearTimeout(timer);
-            timer = window.setTimeout(() => {
-              timer = null;
-              fn(...args);
-            }, wait);
-          };
-        };
-
-  const isContextInvalidatedError = (err) =>
-    /context invalidated/i.test(String(err?.message || err || '')) ||
-    /Extension context invalidated/i.test(String(err?.message || err || ''));
-
-  const markContextInvalidated = (err) => {
-    if (state.contextInvalidated) return;
-    state.contextInvalidated = true;
-    state.onLibraryRoute = false;
-    console.warn(
-      '[CSP] Hide Pasted Files disabled in this tab because the extension was reloaded. Refresh the page to re-enable it.',
-      err,
-    );
-    try {
-      state.controlRefreshToken += 1;
-      state.topControlsObserver?.disconnect();
-      state.topControlsObserver = null;
-      state.topControlsObservationRoot = null;
-      state.resultsObserver?.disconnect();
-      state.resultsObserver = null;
-      state.resultsObservationRoot = null;
-      document.querySelectorAll(`[${CONTROL_ATTR}="true"]`).forEach((el) => {
-        el.remove();
-      });
-      document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
-        el.removeAttribute(HIDDEN_ATTR);
-      });
-    } catch {}
-  };
-
-  const isExtensionAlive = () => {
-    try {
-      return !state.contextInvalidated && !!chrome?.runtime?.id && !!chrome?.storage?.sync && !!chrome?.storage?.local;
-    } catch {
-      return false;
-    }
-  };
-  if (!isExtensionAlive()) return;
-
-  const getMessage = (key, fallback) => {
-    try {
-      return chrome?.i18n?.getMessage?.(key) || fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
-  const storageGetSync = (defaults, callback) => {
-    if (!isExtensionAlive()) {
-      callback(defaults || {});
-      return;
-    }
-    try {
-      chrome.storage.sync.get(defaults, (items = {}) => {
-        if (!isExtensionAlive()) {
-          callback(defaults || {});
-          return;
-        }
-        if (chrome.runtime.lastError) {
-          if (isContextInvalidatedError(chrome.runtime.lastError)) {
-            markContextInvalidated(chrome.runtime.lastError);
-          }
-          callback(defaults || {});
-          return;
-        }
-        callback(items || {});
-      });
-    } catch (err) {
-      if (isContextInvalidatedError(err)) {
-        markContextInvalidated(err);
-      }
-      callback(defaults || {});
-    }
-  };
-
-  const storageSetSync = (items) => {
-    if (!isExtensionAlive()) return;
-    try {
-      chrome.storage.sync.set(items, () => {
-        if (!isExtensionAlive()) return;
-        if (chrome.runtime.lastError && isContextInvalidatedError(chrome.runtime.lastError)) {
-          markContextInvalidated(chrome.runtime.lastError);
-        }
-      });
-    } catch (err) {
-      if (isContextInvalidatedError(err)) {
-        markContextInvalidated(err);
-      }
-    }
-  };
-
-  const isLibraryRoute = () => {
-    const hostname = location.hostname.replace(/^www\./, '');
-    const pathname = location.pathname || '';
-    return hostname === 'chatgpt.com' && (pathname === '/library' || pathname.startsWith('/library/'));
-  };
-
-  const normalizeFilenameText = (value) => String(value || '').normalize('NFKC').toLocaleLowerCase();
-  const shouldHideFilename = (name) => {
-    const normalizedName = normalizeFilenameText(name);
-    return HIDE_FILENAME_TOKENS.some((token) => normalizedName.includes(normalizeFilenameText(token)));
-  };
-
-  const getPageRoot = () => document.querySelector(PAGE_ROOT_SELECTOR);
-
-  const getTopControls = () => document.querySelector(TOP_CONTROLS_SELECTOR);
-
-  const getTopControlsObservationRoot = () => document.body || document.documentElement;
-
-  const getControlNode = () => document.querySelector(`[${CONTROL_ATTR}="true"]`);
-
-  const afterTwoPaints = (fn) => {
-    const raf = window.requestAnimationFrame?.bind(window);
-    if (typeof raf !== 'function') {
-      window.setTimeout(() => window.setTimeout(fn, 16), 16);
-      return;
-    }
-    raf(() => raf(fn));
-  };
-
-  const getControlAnchor = () => {
-    const topControls = getTopControls();
-    if (!(topControls instanceof Element) || !topControls.isConnected) return null;
-
-    const actionGroup = findActionGroup(topControls);
-    if (!(actionGroup instanceof Element) || !actionGroup.isConnected) return null;
-
-    const filterButton = actionGroup.querySelector('button[aria-haspopup="menu"]');
-    if (!(filterButton instanceof HTMLElement) || !filterButton.isConnected) return null;
-
-    return { topControls, actionGroup, filterButton };
-  };
-
-  const sameControlAnchor = (left, right) =>
-    !!left &&
-    !!right &&
-    left.topControls === right.topControls &&
-    left.actionGroup === right.actionGroup &&
-    left.filterButton === right.filterButton;
-
-  const ensureStyle = () => {
-    if (document.getElementById(STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
-[${CONTROL_ATTR}="true"] {
-  display: inline-flex;
-  align-items: center;
-  margin-inline-end: 1em;
-  flex: 0 0 auto;
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-button="true"] {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  color: var(--token-icon-tertiary, var(--token-text-secondary, inherit));
-  cursor: pointer;
-  display: inline-flex;
-  gap: 6px;
-  height: 36px;
-  justify-content: center;
-  padding: 0 12px;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease,
-    opacity 0.16s ease;
-  white-space: nowrap;
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-button="true"]:hover {
-  background: var(--token-bg-tertiary, rgba(127, 127, 127, 0.12));
-  color: var(--token-text-primary, inherit);
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-button="true"][aria-pressed="true"] {
-  background: var(--token-bg-tertiary, rgba(127, 127, 127, 0.12));
-  color: var(--token-text-primary, inherit);
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-button="true"]:focus-visible {
-  outline: 2px solid var(--token-ring, var(--token-text-primary, currentColor));
-  outline-offset: 2px;
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-label="true"] {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 16px;
-  white-space: nowrap;
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-icon="true"] {
-  align-items: center;
-  display: inline-flex;
-  height: 16px;
-  justify-content: center;
-  width: 16px;
-}
-
-[${CONTROL_ATTR}="true"] [data-csp-library-pasted-icon="true"] svg {
-  fill: none;
-  height: 16px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.6;
-  width: 16px;
-}
-
-[${HIDDEN_ATTR}] {
-  display: none !important;
-}
-`;
-    (document.head || document.documentElement).appendChild(style);
-  };
-
-  const getTooltipText = () =>
-    getMessage(
-      TOOLTIP_KEY,
-      'Hide files in the Library whose names contain "Pasted". Turn it off to show them again.',
-    );
-
-  const getLabelText = () => getMessage(LABEL_KEY, 'Hide Pasted Files');
-
-  const getIconMarkup = (enabled) =>
-    enabled
-      ? `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-  <path d="M1.5 8c1.8-2.7 4-4 6.5-4s4.7 1.3 6.5 4c-1.8 2.7-4 4-6.5 4S3.3 10.7 1.5 8Z"></path>
-  <path d="M3 13 13 3"></path>
-</svg>`
-      : `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-  <path d="M1.5 8c1.8-2.7 4-4 6.5-4s4.7 1.3 6.5 4c-1.8 2.7-4 4-6.5 4S3.3 10.7 1.5 8Z"></path>
-  <circle cx="8" cy="8" r="2.1"></circle>
-</svg>`;
-
-  const updateControlState = () => {
-    const control = getControlNode();
-    if (!(control instanceof Element)) return;
-
-    const button = control.querySelector('[data-csp-library-pasted-button="true"]');
-    if (button instanceof HTMLButtonElement) {
-      button.setAttribute('aria-label', getTooltipText());
-      button.setAttribute('aria-pressed', state.enabled ? 'true' : 'false');
-      button.setAttribute('title', getTooltipText());
-    }
-
-    const label = control.querySelector('[data-csp-library-pasted-label="true"]');
-    if (label) {
-      label.textContent = getLabelText();
-    }
-
-    const icon = control.querySelector('[data-csp-library-pasted-icon="true"]');
-    if (icon instanceof HTMLElement) {
-      icon.innerHTML = getIconMarkup(state.enabled);
-    }
-
-    control.setAttribute('title', getTooltipText());
-  };
-
-  const findActionGroup = (topControls) => {
-    if (!(topControls instanceof Element)) return null;
-
-    return Array.from(topControls.children).find(
-      (child) =>
-        child instanceof Element &&
-        child.querySelector('button[aria-haspopup="menu"]') &&
-        child.querySelector('button[aria-pressed]'),
-    );
-  };
-
-  const createControl = () => {
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute(CONTROL_ATTR, 'true');
-    wrapper.setAttribute('title', getTooltipText());
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className =
-      'relative flex h-9 items-center justify-center gap-1.5 rounded-full px-3 transition-colors focus-visible:ring-token-ring focus-visible:ring-2 focus-visible:outline-none';
-    button.setAttribute('data-csp-library-pasted-button', 'true');
-    button.addEventListener('click', () => {
-      const nextEnabled = !state.enabled;
-      setEnabled(nextEnabled);
-      storageSetSync({ [STORAGE_KEY]: nextEnabled });
-    });
-
-    const icon = document.createElement('span');
-    icon.setAttribute('data-csp-library-pasted-icon', 'true');
-    icon.setAttribute('aria-hidden', 'true');
-
-    const label = document.createElement('span');
-    label.setAttribute('data-csp-library-pasted-label', 'true');
-    label.textContent = getLabelText();
-    label.setAttribute('dir', 'auto');
-
-    button.append(icon, label);
-    wrapper.append(button);
-    updateControlState();
-    return wrapper;
-  };
-
-  const injectLibraryToggle = (anchor = getControlAnchor()) => {
-    if (!state.onLibraryRoute || !anchor) return false;
-
-    const { actionGroup, filterButton } = anchor;
-    const existingControls = Array.from(document.querySelectorAll(`[${CONTROL_ATTR}="true"]`));
-    existingControls.forEach((node) => {
-      if (node.parentElement !== actionGroup) node.remove();
-    });
-
-    let control = actionGroup.querySelector(`[${CONTROL_ATTR}="true"]`);
-    if (!(control instanceof Element)) {
-      control = createControl();
-      actionGroup.insertBefore(control, filterButton);
-    } else if (control.nextElementSibling !== filterButton) {
-      actionGroup.insertBefore(control, filterButton);
-    }
-
-    updateControlState();
-    return true;
-  };
-
-  const readText = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
-
-  const getBridgeFileRoot = (bridgeButton) =>
-    bridgeButton.closest('[data-page-table-selectable-row="true"]') || bridgeButton.closest('[role="button"]');
-
-  const collectLibraryItems = () => {
-    const root = getPageRoot();
-    if (!(root instanceof Element)) return [];
-
-    const out = [];
-    const seen = new Set();
-
-    root.querySelectorAll('[data-testid^="artifact-card-title-container-"]').forEach((titleContainer) => {
-      const button = titleContainer.closest('button[type="button"]');
-      const itemRoot = button?.parentElement;
-      if (!(itemRoot instanceof HTMLElement) || seen.has(itemRoot)) return;
-
-      seen.add(itemRoot);
-      out.push({
-        itemRoot,
-        filename: readText(titleContainer.querySelector('span') || titleContainer),
-      });
-    });
-
-    root.querySelectorAll('button[data-testid^="artifact-checkbox-bridge-file_"]').forEach((bridgeButton) => {
-      const itemRoot = getBridgeFileRoot(bridgeButton);
-      if (!(itemRoot instanceof HTMLElement) || seen.has(itemRoot)) return;
-
-      seen.add(itemRoot);
-      out.push({
-        itemRoot,
-        filename: readText(itemRoot.querySelector('.text-token-text-primary')),
-      });
-    });
-
-    return out;
-  };
-
-  const restoreHiddenItems = () => {
-    document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
-      el.removeAttribute(HIDDEN_ATTR);
-    });
-  };
-
-  const applyLibraryFilter = () => {
-    if (!state.onLibraryRoute) {
-      restoreHiddenItems();
-      return;
-    }
-
-    if (getControlNode()) {
-      updateControlState();
-    } else {
-      scheduleControlRefresh();
-    }
-
-    const items = collectLibraryItems();
-    if (!items.length) {
-      if (!state.enabled) restoreHiddenItems();
-      return;
-    }
-
-    // Hide/show the existing item nodes instead of rebuilding the Library DOM.
-    items.forEach(({ itemRoot, filename }) => {
-      if (state.enabled && shouldHideFilename(filename)) {
-        itemRoot.setAttribute(HIDDEN_ATTR, '');
-        return;
-      }
-
-      itemRoot.removeAttribute(HIDDEN_ATTR);
-    });
-
-    if (!state.enabled) restoreHiddenItems();
-  };
-
-  const runControlRefresh = debounce((requestToken) => {
-    if (!state.onLibraryRoute || requestToken !== state.controlRefreshToken) return;
-
-    const anchor = getControlAnchor();
-    if (!anchor) return;
-
-    afterTwoPaints(() => {
-      if (!state.onLibraryRoute || requestToken !== state.controlRefreshToken) return;
-
-      const settledAnchor = getControlAnchor();
-      if (!sameControlAnchor(anchor, settledAnchor)) {
-        scheduleControlRefresh();
-        return;
-      }
-
-      injectLibraryToggle(settledAnchor);
-    });
-  }, CONTROL_SETTLE_MS);
-
-  const scheduleControlRefresh = () => {
-    state.controlRefreshToken += 1;
-    runControlRefresh(state.controlRefreshToken);
-  };
-
-  const scheduleFilterRefresh = debounce(() => {
-    if (!state.onLibraryRoute || !state.enabled) return;
-    applyLibraryFilter();
-    ensureResultsObserver();
-  }, 70);
-
-  const teardownResultsObserver = () => {
-    state.resultsObserver?.disconnect();
-    state.resultsObserver = null;
-    state.resultsObservationRoot = null;
-  };
-
-  const ensureResultsObserver = () => {
-    if (!state.onLibraryRoute || !state.enabled) return;
-
-    const root = getPageRoot();
-    if (!(root instanceof Node)) return;
-    if (state.resultsObserver && state.resultsObservationRoot === root) return;
-
-    teardownResultsObserver();
-
-    state.resultsObserver = new MutationObserver((mutations) => {
-      if (!state.onLibraryRoute || !state.enabled || !mutations.length) return;
-      scheduleFilterRefresh();
-    });
-
-    state.resultsObserver.observe(root, { childList: true, subtree: true });
-    state.resultsObservationRoot = root;
-  };
-
-  const teardownTopControlsObserver = () => {
-    state.topControlsObserver?.disconnect();
-    state.topControlsObserver = null;
-    state.topControlsObservationRoot = null;
-  };
-
-  const ensureTopControlsObserver = () => {
-    if (!state.onLibraryRoute) return;
-
-    const root = getTopControlsObservationRoot();
-    if (!(root instanceof Node)) return;
-    if (state.topControlsObserver && state.topControlsObservationRoot === root) return;
-
-    teardownTopControlsObserver();
-
-    state.topControlsObserver = new MutationObserver((mutations) => {
-      if (!state.onLibraryRoute || !mutations.length) return;
-
-      const nextRoot = getTopControlsObservationRoot();
-      if (nextRoot instanceof Node && nextRoot !== state.topControlsObservationRoot) {
-        ensureTopControlsObserver();
-        if (state.enabled) ensureResultsObserver();
-        scheduleControlRefresh();
-        return;
-      }
-
-      const controlMissing = !getControlNode();
-      const controlAnchorPresent = !!getControlAnchor();
-      const touchesTopControls = mutations.some(
-        (mutation) => {
-          const target = mutation.target;
-          if (
-            target instanceof Element &&
-            (target.matches(TOP_CONTROLS_SELECTOR) || !!target.closest(TOP_CONTROLS_SELECTOR))
-          ) {
-            return true;
-          }
-
-          return (
-            Array.from(mutation.addedNodes).some(
-              (node) =>
-                node instanceof Element &&
-                (node.matches(TOP_CONTROLS_SELECTOR) || !!node.querySelector(TOP_CONTROLS_SELECTOR)),
-            ) ||
-            Array.from(mutation.removedNodes).some(
-              (node) =>
-                node instanceof Element &&
-                (node.matches(TOP_CONTROLS_SELECTOR) || !!node.querySelector(TOP_CONTROLS_SELECTOR)),
-            )
-          );
-        },
-      );
-
-      if ((controlMissing && controlAnchorPresent) || touchesTopControls) scheduleControlRefresh();
-    });
-
-    state.topControlsObserver.observe(root, { childList: true, subtree: true });
-    state.topControlsObservationRoot = root;
-  };
-
-  const teardownLibraryRoute = () => {
-    state.onLibraryRoute = false;
-    state.controlRefreshToken += 1;
-    teardownTopControlsObserver();
-    teardownResultsObserver();
-    restoreHiddenItems();
-    getControlNode()?.remove();
-  };
-
-  const refreshRouteState = () => {
-    if (state.contextInvalidated) return;
-    if (!isLibraryRoute()) {
-      teardownLibraryRoute();
-      return;
-    }
-
-    state.onLibraryRoute = true;
-    ensureStyle();
-    scheduleControlRefresh();
-    ensureTopControlsObserver();
-
-    if (state.enabled) {
-      applyLibraryFilter();
-      ensureResultsObserver();
-      return;
-    }
-
-    teardownResultsObserver();
-    restoreHiddenItems();
-  };
-
-  const scheduleRouteRefresh = debounce(refreshRouteState, 40);
-
-  const kickRouteRefresh = () => {
-    if (state.contextInvalidated) return;
-    scheduleRouteRefresh();
-    window.requestAnimationFrame?.(() => {
-      window.requestAnimationFrame?.(() => {
-        scheduleRouteRefresh();
-      });
-    });
-    window.setTimeout(scheduleRouteRefresh, 180);
-  };
-
-  const setEnabled = (enabled) => {
-    state.enabled = enabled === true;
-    window[STORAGE_KEY] = state.enabled;
-    updateControlState();
-
-    if (!state.onLibraryRoute) return;
-
-    if (!state.enabled) {
-      teardownResultsObserver();
-      restoreHiddenItems();
-      return;
-    }
-
-    applyLibraryFilter();
-    ensureResultsObserver();
-  };
-
-  document.addEventListener(
-    'click',
-    (event) => {
-      const anchor = event.target.closest?.('a[href]');
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-
-      let targetPath = '';
-      try {
-        targetPath = new URL(anchor.href, location.origin).pathname || '';
-      } catch {
-        return;
-      }
-
-      if (!state.onLibraryRoute && targetPath !== '/library' && !targetPath.startsWith('/library/')) {
-        return;
-      }
-
-      kickRouteRefresh();
-    },
-    { capture: true },
-  );
-
-  window.addEventListener('popstate', kickRouteRefresh);
-  window.addEventListener('hashchange', kickRouteRefresh);
-
-  storageGetSync({ [STORAGE_KEY]: false }, (data) => {
-    setEnabled(data?.[STORAGE_KEY] === true);
-    kickRouteRefresh();
-  });
-
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (!isExtensionAlive()) return;
-      if (area !== 'sync' || !(STORAGE_KEY in changes)) return;
-      setEnabled(changes[STORAGE_KEY]?.newValue === true);
-      kickRouteRefresh();
-    });
-  } catch (err) {
-    if (isContextInvalidatedError(err)) {
-      markContextInvalidated(err);
-    }
-  }
 })();

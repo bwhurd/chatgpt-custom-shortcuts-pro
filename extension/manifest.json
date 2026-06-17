@@ -3,7 +3,7 @@
   "name": "__MSG_app_name__",
   "default_locale": "en",
   "description": "__MSG_app_description__",
-  "version": "4.5.4.7",
+  "version": "4.5.4.17",
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -35,7 +35,8 @@
         "shared/model-picker-selectors.js",
         "shared/model-picker-labels.js",
         "settings-schema.js",
-        "content.js"
+        "content.js",
+        "content-gated-ui-features.js"
       ],
       "run_at": "document_idle"
     }
