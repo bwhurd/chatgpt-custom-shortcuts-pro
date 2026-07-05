@@ -475,17 +475,17 @@
     byIconToken('composer-canvas-action', '#cf3864', {
       uiStateRefs: ['composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('dictate-start-button', ['#29f921', 'aria-label="Start dictation"'], {
-      identifier: 'svg-token=#29f921|aria-label=Start dictation',
-      matchGroups: [['#29f921'], ['aria-label="Start dictation"'], ['aria-label="Dictate button"']],
+    byIconToken('dictate-start-button', ['#33d595', '#29f921'], {
+      identifier: 'svg-token=#33d595|#29f921',
+      matchGroups: [['#33d595'], ['#29f921']],
       uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
     }),
-    manualTarget('dictate-submit-button', 'svg-token=#fa1dbd|aria-label=Submit dictation', {
-      searchNeedles: ['#fa1dbd', 'aria-label="Submit dictation"'],
+    manualTarget('dictate-submit-button', 'svg-token=#fa1dbd', {
+      searchNeedles: ['#fa1dbd'],
       notes: 'Only available after dictation has already started.',
     }),
-    manualTarget('cancel-dictation-button', 'svg-token=#85f94b|aria-label=Cancel dictation', {
-      searchNeedles: ['#85f94b', 'aria-label="Cancel dictation"', 'aria-label="Stop dictation"'],
+    manualTarget('cancel-dictation-button', 'svg-token=#85f94b', {
+      searchNeedles: ['#85f94b'],
       notes: 'Only available while dictation is active.',
     }),
     byTestId('share-chat-button', 'share-chat-button', {

@@ -3246,53 +3246,6 @@ const clickElementLikeUser = (el) => {
 
   /* ===== End clickLowestSvgThenSubItemSvg Reusable Radix menu helpers ===== */
 
-  /* ===== Extra helpers: click sub-item by id or id prefix ===== */
-
-  function findLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { prefix = true } = {}) {
-    const selector = prefix ? `[id^="${safeEsc(idOrPrefix)}"]` : `#${safeEsc(idOrPrefix)}`;
-    const candidates = Array.from(document.querySelectorAll(selector));
-    const items = candidates
-      .map(
-        (el) => el.closest('div[role="menuitem"],button[role="menuitem"],[role="menuitem"]') || el,
-      )
-      .filter(isFullyVisibleAboveComposer);
-    return items.length ? items[items.length - 1] : null;
-  }
-
-  function clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, options = {}, attempt = 0) {
-    const { delays = DEFAULT_MENU_DELAYS, prefix = true } = options;
-    const item = findLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { prefix });
-    if (item) {
-      if (window.gsap && typeof flashBorder === 'function') flashBorder(item);
-      setTimeout(() => item.click(), delays.ITEM_CLICK);
-      return true;
-    }
-    if (attempt < delays.MAX_RETRY_ATTEMPTS) {
-      setTimeout(
-        () => clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, options, attempt + 1),
-        delays.RETRY_INTERVAL,
-      );
-    }
-    return false;
-  }
-
-  // biome-ignore lint/correctness/noUnusedVariables: allow unused function for now
-  function clickLowestSvgThenSubItemById(firstBtnPathPrefix, idOrPrefix, options = {}) {
-    const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
-    const btn = lowestVisibleFromPaths(MENU_SELECTORS.buttonPath(firstBtnPathPrefix), 'button');
-    if (!btn) return false;
-
-    if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
-    const waitMs = openRadixMenuIfNeeded(btn, delays);
-
-    setTimeout(() => {
-      clickLowestVisibleMenuItemByIdOrPrefix(idOrPrefix, { ...options, delays });
-    }, waitMs);
-
-    return true;
-  }
-  /* ===== End extra helpers ===== */
-
   /* ===== Helpers: Regenerate, “Ask to change response" Helpers focus a Radix dropdown input ===== */
 
   function placeCaret(input, { caret = 'end', selectAll = false } = {}) {
@@ -4467,8 +4420,33 @@ const clickElementLikeUser = (el) => {
       });
     }
 
-    function getNormalizedCodeText(node, codeEl) {
-      return (codeEl?.innerText ?? node.innerText ?? '')
+    function collectCopyCodeBlockMeta(root) {
+      const preNodes = Array.from(root?.querySelectorAll?.('pre') || []);
+      const codeBlocks = Array.from(
+        root?.querySelectorAll?.(
+          'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
+        ) || [],
+      ).filter((codeEl) => !codeEl.closest('pre'));
+
+      return [...preNodes, ...codeBlocks].map((node) => {
+        const isPre = node.tagName === 'PRE';
+        const codeEl = isPre ? node.querySelector('code') || node : node;
+        return {
+          codeEl,
+          language: inferCodeBlockLanguage(node, codeEl),
+          node,
+        };
+      });
+    }
+
+    function getNormalizedCodeText(node, codeEl, sourceNode = node, sourceCodeEl = codeEl) {
+      const sourceText =
+        sourceCodeEl?.innerText ??
+        sourceNode?.innerText ??
+        codeEl?.innerText ??
+        node?.innerText ??
+        '';
+      return sourceText
         .replace(/\u00A0/g, ' ')
         .replace(/\u200B|\u200C|\u200D|\u2060|\uFEFF/gu, '')
         .replace(/\r\n?/g, '\n')
@@ -4485,28 +4463,21 @@ const clickElementLikeUser = (el) => {
       return `\`\`\`${language || ''}${eol}${codeText}${eol}\`\`\`${eol}`;
     }
 
-    function normalizeCodeBlocksInClone(root) {
-      const preNodes = Array.from(root.querySelectorAll('pre'));
-      const codeBlocks = Array.from(
-        root.querySelectorAll(
-          'code[class*="whitespace-pre"], code.whitespace-pre, code[class*="whitespace-pre!"]',
-        ),
-      ).filter((codeEl) => !codeEl.closest('pre'));
-      const blockMeta = [...preNodes, ...codeBlocks].map((node) => {
-        const isPre = node.tagName === 'PRE';
-        const codeEl = isPre ? node.querySelector('code') || node : node;
-        return {
-          codeEl,
-          language: inferCodeBlockLanguage(node, codeEl),
-          node,
-        };
-      });
+    function normalizeCodeBlocksInClone(root, sourceRoot = root) {
+      const blockMeta = collectCopyCodeBlockMeta(root);
+      const sourceBlockMeta = sourceRoot === root ? blockMeta : collectCopyCodeBlockMeta(sourceRoot);
 
       removeCopyExportCodeChrome(root);
 
-      for (const { codeEl, language, node } of blockMeta) {
+      for (const [index, { codeEl, language, node }] of blockMeta.entries()) {
         if (!root.contains(node)) continue;
-        const codeText = getNormalizedCodeText(node, codeEl);
+        const sourceMeta = sourceBlockMeta[index] || {};
+        const codeText = getNormalizedCodeText(
+          node,
+          codeEl,
+          sourceMeta.node || node,
+          sourceMeta.codeEl || codeEl,
+        );
         const preNew = document.createElement('pre');
         const codeNew = document.createElement('code');
         if (language) codeNew.className = `language-${language}`;
@@ -4649,22 +4620,40 @@ const clickElementLikeUser = (el) => {
       });
     }
 
+    function getAttachedCopyInnerText(el) {
+      if (!document.body) return el?.textContent || '';
+
+      const host = document.createElement('div');
+      host.setAttribute('aria-hidden', 'true');
+      host.setAttribute(
+        'style',
+        [
+          'position:fixed',
+          'left:-100000px',
+          'top:0',
+          'width:10000px',
+          'max-width:none',
+          'height:auto',
+          'overflow:visible',
+          'opacity:0',
+          'pointer-events:none',
+          'z-index:-1',
+        ].join(';'),
+      );
+
+      try {
+        host.appendChild(el);
+        document.body.appendChild(host);
+        return el?.innerText || el?.textContent || '';
+      } finally {
+        host.remove();
+      }
+    }
+
     function buildPlainTextWithFences(root) {
       const clone = root.cloneNode(true);
-      normalizeCodeBlocksInClone(clone);
-      for (const pre of Array.from(clone.querySelectorAll('pre'))) {
-        const codeEl = pre.querySelector('code');
-        const codeText = getNormalizedCodeText(pre, codeEl);
-        const language = safeCodeLanguage(languageFromCodeClass(codeEl));
-        const eol = '\r\n';
-        const out = codeText.trim().startsWith('```')
-          ? `${eol}${codeText.replace(/\r\n?/g, '\n').replace(/\n/g, eol)}${eol}`
-          : `${eol}\`\`\`${language}${eol}${codeText}${eol}\`\`\`${eol}`;
-        const container = document.createElement('div');
-        container.textContent = out;
-        pre.replaceWith(container);
-      }
-      return clone.innerText.replace(/\u00A0/g, ' ').trim();
+      normalizeCodeBlocksInClone(clone, root);
+      return getAttachedCopyInnerText(clone).replace(/\u00A0/g, ' ').trim();
     }
 
     function getThreadNavigationScrollAnchorPct() {
@@ -4896,7 +4885,7 @@ const clickElementLikeUser = (el) => {
         const isUser = !!contentEl.closest?.('[data-message-author-role="user"]');
         if (isUser) replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
 
-        normalizeCodeBlocksInClone(cloneForHtml);
+        normalizeCodeBlocksInClone(cloneForHtml, contentEl);
         demotePTagsAndStripDataAttrs(cloneForHtml);
         splitListsAroundCodeBlocks_Word(cloneForHtml);
 
@@ -5072,7 +5061,7 @@ const clickElementLikeUser = (el) => {
             replaceNewlinesWithBr_UserPreWrap(cloneForHtml);
           }
 
-          normalizeCodeBlocksInClone(cloneForHtml);
+          normalizeCodeBlocksInClone(cloneForHtml, el);
           demotePTagsAndStripDataAttrs(cloneForHtml);
           splitListsAroundCodeBlocks_Word(cloneForHtml);
 
@@ -6061,10 +6050,10 @@ const clickElementLikeUser = (el) => {
       let toggleInProgress = false;
 
       const SPRITE_IDS = {
-        cancel: '#85f94b',
-        dictate: '#29f921',
-        send: '#01bab7',
-        submitDictation: '#fa1dbd',
+        cancel: ['#85f94b'],
+        dictate: ['#33d595', '#29f921'],
+        send: ['#01bab7'],
+        submitDictation: ['#fa1dbd'],
       };
 
       function getComposerRoot() {
@@ -6076,15 +6065,18 @@ const clickElementLikeUser = (el) => {
         );
       }
 
-      function findClickableBySpriteId(root, spriteId) {
-        const safe = escapeAttributeSelectorFragment(spriteId);
-        const use = root.querySelector(`svg use[href*="${safe}"]`);
-        if (!use) return null;
-        return (
-          use.closest('button, [role="button"], a, [tabindex]') ||
-          use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
-          null
-        );
+      function findClickableBySpriteId(root, spriteIdOrIds) {
+        for (const spriteId of getIconTokenList(spriteIdOrIds)) {
+          const safe = escapeAttributeSelectorFragment(spriteId);
+          const use = root.querySelector(`svg use[href*="${safe}"]`);
+          if (!use) continue;
+          const clickable =
+            use.closest('button, [role="button"], a, [tabindex]') ||
+            use.closest('svg')?.closest('button, [role="button"], a, [tabindex]') ||
+            null;
+          if (clickable) return clickable;
+        }
+        return null;
       }
 
       function findFirstClickable(root, ...selectors) {
@@ -6122,15 +6114,14 @@ const clickElementLikeUser = (el) => {
 
         // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
         // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
-        const submitDictationBtn =
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation) ||
-          findFirstClickable(composerRoot, 'button[aria-label="Submit dictation"]');
+        const submitDictationBtn = findClickableBySpriteId(
+          composerRoot,
+          SPRITE_IDS.submitDictation,
+        );
         if (clickComposerControl(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn =
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate) ||
-          findFirstClickable(composerRoot, 'button[aria-label="Dictate button"]');
+        const dictateBtn = findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate);
         if (clickComposerControl(dictateBtn)) return;
 
         // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
@@ -6139,7 +6130,6 @@ const clickElementLikeUser = (el) => {
             composerRoot,
             '#composer-submit-button',
             'button[data-testid="send-button"]',
-            'button[aria-label="Send prompt"]',
           ) ||
           findClickableBySpriteId(composerRoot, SPRITE_IDS.send) ||
           findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation);
@@ -6149,10 +6139,9 @@ const clickElementLikeUser = (el) => {
       async function runCancel() {
         const composerRoot = getComposerRoot();
         const btn =
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel) ||
-          composerRoot.querySelector('button[aria-label="Stop dictation"]');
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel);
 
-        // Only stop if Stop dictation is currently available; otherwise no-op.
+        // Only stop if the active dictation cancel control is currently available; otherwise no-op.
         if (!btn) return;
 
         scrollAndFlashComposerControl(btn);
@@ -8870,8 +8859,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       ].includes(String(value || '').trim())
         ? String(value || '').trim()
         : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
-  // biome-ignore lint/correctness/noUnusedVariables: retain local cache mirror during model-picker cleanup
-  let ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   let LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   const getDefaultModelPickerCodes = () =>
     typeof window.ModelLabels?.defaultKeyCodes === 'function'
@@ -8913,27 +8900,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         }
         return null;
       };
-  // biome-ignore lint/correctness/noUnusedVariables: retain compatibility helper for follow-on model picker work
-  const clickButtonByTestIdSafe =
-    typeof clickButtonByTestId === 'function'
-      ? clickButtonByTestId
-      : async (
-        testId,
-        { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
-      ) => {
-        const target = await waitForAsync(
-          () => {
-            const matches = Array.from(root.querySelectorAll(`[data-testid="${testId}"]`));
-            if (!matches.length) return null;
-            return pick(matches) || matches[0] || null;
-          },
-          { timeout, interval },
-        );
-        if (!target) return;
-        if (typeof flashBorder === 'function') flashBorder(target);
-        await sleepAsync(90);
-        smartClickSafe(target);
-      };
   const waitForButtonByTestIdSafe = async (
     testId,
     { timeout = 2000, interval = 50, pick = (nodes) => nodes[0], root = document } = {},
@@ -8948,7 +8914,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     );
   const setCachedActiveModelConfigId = (value) => {
     const next = normalizeActiveModelConfigId(value);
-    ACTIVE_MODEL_CONFIG_ID = next;
     window.__activeModelConfigId = next;
     return next;
   };
@@ -10024,12 +9989,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         chrome.runtime.onMessage.addListener(handleModelPickerRuntimeMessage);
       } catch (_) { }
 
-      // Get all menu items (main menu + open submenu) in order, capped at MAX_SLOTS.
-      // biome-ignore lint/correctness/noUnusedVariables: preserve menu-order helper during model menu iteration work
-      function getOrderedMenuItems() {
-        return getVisibleModelMenuState().items.slice(0, MAX_SLOTS);
-      }
-
       function getModelVersionFromSwitcherTestId(testId) {
         const tid = normModelTid(testId);
         const match = tid.match(/^model-switcher-gpt-(\d+)(?:-(\d+))?(?:-(?:instant|thinking))?$/);
@@ -10467,14 +10426,6 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return getConfigureActionForOption(option, listbox)?.id || null;
       };
 
-      // biome-ignore lint/correctness/noUnusedVariables: preserve configure-option scrape helper for follow-up wiring
-      const captureConfigureOptionLabels = (listbox) => {
-        if (!(listbox instanceof Element)) return;
-        const options = Array.from(listbox.querySelectorAll(':scope [role="option"]')).slice(0, 4);
-        if (!options.length) return;
-        const labels = options.map((option) => getConfigureOptionLabel(option));
-        ModelPickerNameCache.persistRange(3, labels, 4);
-      };
       const findConfigureDialog = () => {
         const combobox = findConfigureCombobox();
         const dialog = combobox?.closest(MODEL_CONFIGURE_DIALOG_SELECTOR);

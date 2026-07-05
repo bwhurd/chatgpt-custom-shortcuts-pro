@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { execFileSync } = require('node:child_process');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { readFileSync, statSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 
 const fix = process.argv.includes('--write');
@@ -53,8 +53,19 @@ function normalizeText(text) {
   return `${normalizedLines.map((line) => line.replace(/[ \t]+$/g, '')).join('\n')}\n`;
 }
 
+function existsAsFile(filePath) {
+  try {
+    return statSync(filePath).isFile();
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 const changed = [];
-for (const filePath of trackedFiles().filter(isTextFile)) {
+for (const filePath of trackedFiles().filter(
+  (filePath) => isTextFile(filePath) && existsAsFile(filePath),
+)) {
   const original = readFileSync(filePath, 'utf8');
   const normalized = normalizeText(original);
   if (original === normalized) continue;

@@ -1872,13 +1872,12 @@ async function prepareDictationActiveProbeState(page, fixtureUrl) {
   await prepareNewConversationProbeState(page, fixtureUrl);
   await page.context().grantPermissions(['microphone'], { origin: 'https://chatgpt.com' }).catch(() => {});
   await clickEnabledButton(page, [
-    'button[aria-label="Start dictation"]',
-    'button[aria-label="Dictate button"]',
+    'button:has(svg use[href*="#33d595"])',
     'button:has(svg use[href*="#29f921"])',
   ]);
   await page.waitForTimeout(700);
   await waitForLiveProbeTargetPresence(page, {
-    matchGroups: [['aria-label="Cancel dictation"'], ['aria-label="Stop dictation"'], ['#85f94b']],
+    matchGroups: [['#85f94b']],
   });
 }
 

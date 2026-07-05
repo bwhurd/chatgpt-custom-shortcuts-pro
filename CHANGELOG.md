@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.05.2026
+- Fixed: Join + Copy All Messages preserves line breaks inside copied code blocks.
+
 #### 06.14.2026
 - Changed: Legacy message arrows shift left when ChatGPT's prompt rail gets crowded.
 

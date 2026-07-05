@@ -2,15 +2,15 @@
 
 ## Goal
 
-- [ ] Keep `extension/content.js` IIFE-based and `window`-bridged, but reduce repetition enough that future edits stay organized, reusable, and easy to review.
-- [ ] Prefer systematic helper consolidation over cosmetic reshuffling. A pass should remove repeated logic, make behavior easier to trace, or clearly lower future bug risk.
+- [x] Keep `extension/content.js` IIFE-based and `window`-bridged, but reduce repetition enough that future edits stay organized, reusable, and easy to review.
+- [x] Prefer systematic helper consolidation over cosmetic reshuffling. A pass should remove repeated logic, make behavior easier to trace, or clearly lower future bug risk.
 
 ## Stopping criteria
 
-- [ ] Stop adding implementation passes when the remaining work is mostly local naming, comment cleanup, formatting, or file-length reduction without a clear behavior-maintenance payoff.
-- [ ] Treat the refactor as complete when the main shortcut registry is a readable storage-key-to-function map, the known duplicated helper families are canonicalized or intentionally documented as behavior-specific, and any remaining large IIFE is either already organized around a clear controller/module boundary or would require a separate feature-spec rewrite.
-- [ ] Cap the closeout at five ambitious implementation passes after the model-picker name-cache pass; stop earlier if the next candidate does not meet the same impact bar as copy/export, edit/send-edit, thread navigation, shortcut action launchers, or model-name cache.
-- [ ] Do not create new refactor work for isolated helper renames, line-count reduction, moving already-cohesive IIFEs, or cosmetic section shuffling.
+- [x] Stop adding implementation passes when the remaining work is mostly local naming, comment cleanup, formatting, or file-length reduction without a clear behavior-maintenance payoff.
+- [x] Treat the refactor as complete when the main shortcut registry is a readable storage-key-to-function map, the known duplicated helper families are canonicalized or intentionally documented as behavior-specific, and any remaining large IIFE is either already organized around a clear controller/module boundary or would require a separate feature-spec rewrite.
+- [x] Cap the closeout at five ambitious implementation passes after the model-picker name-cache pass; stop earlier if the next candidate does not meet the same impact bar as copy/export, edit/send-edit, thread navigation, shortcut action launchers, or model-name cache.
+- [x] Do not create new refactor work for isolated helper renames, line-count reduction, moving already-cohesive IIFEs, or cosmetic section shuffling.
 
 ## Ambitious closeout pass division
 
@@ -30,14 +30,14 @@
   - Scope: bottom-bar shell creation, static sidebar/new-chat button SVGs, style injection, slot syncing, observer relevance helpers, and non-critical helper startup.
   - Goal: keep the controller readable by extracting static assets/styles and separating shell/slot mechanics from observer/repair policy.
   - Do not change bottom-bar layout, opacity, hover fade, injected controls, header hiding, disclaimer hiding, or route exclusions.
-- [ ] Pass 5: final high-impact audit and closeout.
+- [x] Pass 5: final high-impact audit and closeout.
   - Scope: only remaining clusters that are still clearly tangled or repeated after passes 1-4.
   - Goal: either do one final meaningful cleanup or archive/close the plan with validation and manual smoke-test notes.
   - Do not perform cosmetic-only cleanup to use the pass.
 
 ## Current posture
 
-- [ ] Completed pass detail through the fourth implementation pass is archived in `plans/Done-0064-contentjs-maintainability-refactor-completed-passes.md`.
+- [x] Completed pass detail through the fourth implementation pass is archived in `plans/Done-0064-contentjs-maintainability-refactor-completed-passes.md`.
 - [ ] The previous remaining "bridge closeout" is useful final polish, but it does not meet the high-impact refactor bar by itself.
 - [x] The fifth implementation pass consolidated the copy/export helper family before returning to bridge/export cleanup.
 - [x] The sixth implementation pass consolidated duplicated previous/next thread navigation behavior.
@@ -45,7 +45,7 @@
 - [x] The thread-navigation `Thought for` exclusion was tightened to catch direct button text like `Thought for 9s`, not only child spans.
 - [x] The final bridge/export closeout pass documented the remaining intentional `window.*` bridge clusters.
 - [x] A fresh high-impact audit rejected "extract the model-picker IIFE into another file" as mostly packaging; the larger maintainability issue is the main IIFE shortcut dispatcher, where a huge action object is keyed by initial shortcut values instead of stable storage-key action names.
-- [ ] Similar helpers must stay separate when they encode different behavior, especially animation cues, visual selection feedback, menu opening, visibility predicates, and scroll anchoring.
+- [x] Similar helpers stayed separate when they encode different behavior, especially animation cues, visual selection feedback, menu opening, visibility predicates, and scroll anchoring.
 
 ## Investigation findings
 
@@ -318,6 +318,21 @@
 - [x] Centralized route exclusion checks in `EXCLUDED_ROUTE_RULES` without changing the excluded hosts or path prefixes.
 - [x] Did not change bottom-bar layout, opacity, hover fade timing, injected controls, header hiding, disclaimer hiding, text ellipsis behavior, observer relevance, route exclusions, login-page gating, storage setting names, animation constants, manifest ordering, build packaging, or Chrome permissions.
 - [x] Validated with `node --check extension/content.js`, `npx biome check extension/content.js`, `node tests/validate-keys.js`, and `git diff --check`.
+
+## Completed implementation pass - final audit and closeout
+
+- [x] Audited the remaining `content.js` surface after the four ambitious closeout passes against the stop rule.
+- [x] Found no remaining behavior-safe, high-impact refactor candidate in the current plan scope:
+  - main shortcut registry is now storage-key oriented
+  - copy/export, edit/send-edit, thread navigation, shortcut action launchers, model picker, and top-bar relocation have named helper/controller boundaries
+  - remaining large sections are either already cohesive IIFEs/controllers or would need a separate feature-spec rewrite
+- [x] Cleaned up stale unused scaffolding left by earlier passes instead of creating more architecture work:
+  - removed the unused id-prefix submenu helper chain
+  - removed the unused model-picker test-id click compatibility helper
+  - removed unused model-picker menu-order and Configure Models label-capture placeholders
+  - removed the unused local active-model mirror while preserving `window.__activeModelConfigId` and persisted active-config tracking
+- [x] Did not change shortcut bindings, selectors, action routing, storage keys, popup contracts, model catalog behavior, animation/visual cue timing, manifest ordering, build packaging, or Chrome permissions.
+- [x] Validated with `node --check extension/content.js`, `npx biome check extension/content.js`, `node tests/validate-keys.js`, focused model-picker fixture tests, and `git diff --check`.
 
 ## Completed implementation pass - model-picker action runner cleanup
 
