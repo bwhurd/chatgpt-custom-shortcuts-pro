@@ -6329,19 +6329,9 @@ const clickElementLikeUser = (el) => {
       return event.key && event.key.toLowerCase() === setting.toLowerCase();
     }
 
-    function recordShortcutUsage(actionId) {
-      if (!actionId || typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
-      try {
-        chrome.runtime.sendMessage({ type: 'csp.analytics.recordShortcut', actionId });
-      } catch {}
-    }
+    function recordShortcutUsage(_actionId) {}
 
-    function flushUsageAnalytics(reason) {
-      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
-      try {
-        chrome.runtime.sendMessage({ type: 'csp.analytics.flush', reason });
-      } catch {}
-    }
+    function flushUsageAnalytics(_reason) {}
 
     const THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
       {
@@ -6881,18 +6871,23 @@ const clickElementLikeUser = (el) => {
 // ==================================================
 (() => {
   const STYLE_ID = 'csp-hide-disclaimer-style';
-
-  if (document.getElementById(STYLE_ID)) return;
-
-  const styleEl = document.createElement('style');
-  styleEl.id = STYLE_ID;
-  styleEl.textContent = `
+  const STYLE_TEXT = `
 div[data-id="hide-this-warning"],
 div[class*="view-transition-name:var(--vt-disclaimer)"] {
-    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 `;
-  document.head.appendChild(styleEl);
+
+  let styleEl = document.getElementById(STYLE_ID);
+  if (!(styleEl instanceof HTMLStyleElement)) {
+    styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
+    document.head.appendChild(styleEl);
+  }
+
+  styleEl.textContent = STYLE_TEXT;
 })();
 
 (() => {
@@ -6972,6 +6967,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     const txt = container.textContent.trim().replace(/\s+/g, ' ');
     if (containsImportantRoot(txt)) {
       container.setAttribute('data-id', 'hide-this-warning');
+      if (container instanceof HTMLElement) {
+        container.style.removeProperty('display');
+      }
     }
   };
 
@@ -7266,7 +7264,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin-top: 2px !important;
-        margin-bottom: -15px !important;
+        margin-bottom: -35px !important;
         overflow-anchor: none !important;
         min-height: 36px !important;
         box-sizing: border-box !important;
@@ -7282,12 +7280,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       }
 
       div[data-id="hide-this-warning"] {
+        visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
-        position: absolute !important;
-        width: 1px !important;
-        height: 1px !important;
-        overflow: hidden !important;
       }
 
       #bottomBarContainer button[data-testid="open-sidebar-button"] {
@@ -7357,12 +7352,13 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   }
 
   function injectBottomBarStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
+    let style = document.getElementById(STYLE_ID);
+    if (!(style instanceof HTMLStyleElement)) {
+      style = document.createElement('style');
+      style.id = STYLE_ID;
+      (document.head || document.documentElement).appendChild(style);
+    }
     style.textContent = getBottomBarCss();
-    (document.head || document.documentElement).appendChild(style);
   }
 
   function findHeaderModelButton() {
@@ -7894,7 +7890,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       );
 
       adjustBottomBarTextScaling(shell.bottomBar);
-      hideStaleDisclaimer();
+      window.__cspEnsureDisclaimerHider?.();
 
       if (shell.bottomBar instanceof HTMLElement) {
         shell.bottomBar.style.visibility = '';
@@ -7922,7 +7918,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       );
 
       adjustBottomBarTextScaling(shell.bottomBar);
-      hideStaleDisclaimer();
+      window.__cspEnsureDisclaimerHider?.();
       applyReadyState(shouldHideTopHeader());
     }
 
@@ -8323,19 +8319,6 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     });
   }
 
-  function hideStaleDisclaimer() {
-    const warning =
-      window.__cspFindLiveDisclaimerNode?.() ||
-      document.querySelector('[data-id="hide-this-warning"]') ||
-      document.querySelector(
-        'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs',
-      );
-
-    if (warning instanceof HTMLElement) {
-      warning.style.display = 'none';
-    }
-  }
-
   // -------------------- Remove Composer Button Labels (deferred) --------------------
 
   function initStripComposerLabels() {
@@ -8443,17 +8426,14 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     { moveTopBarToBottomCheckbox: false },
     ({ moveTopBarToBottomCheckbox: enabled }) => {
       if (enabled) return; // Feature runs ONLY if NOT enabled
-      const DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN = true;
 
       (() => {
         setTimeout(function injectNoBottomBarStyles() {
           const style = document.createElement('style');
           style.textContent = `
-${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
-                        form.w-full[data-type="unified-composer"] {
-                            margin-bottom: -1em;
-                        }
-`}
+form.w-full[data-type="unified-composer"] {
+    margin-bottom: -1em;
+}
 
 .bg-token-bg-elevated-secondary.sticky.bottom-0
   .group.__menu-item:not([data-testid]) .truncate:contains("View plans") {
@@ -8784,6 +8764,10 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       null
     );
   };
+  const getVisibleModelMenuButton = () => {
+    const button = getModelMenuButton();
+    return isUsablyVisibleModelElement(button) ? button : null;
+  };
   const getOpenModelMenuCandidates = (trigger = getModelMenuButton()) => {
     if (typeof ModelPickerSelectors.getOpenModelMenuCandidates === 'function') {
       return ModelPickerSelectors.getOpenModelMenuCandidates(document, window, trigger);
@@ -8927,6 +8911,13 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
     return next;
   };
   const MODEL_CATALOG_STORAGE_KEY = 'modelCatalog';
+  const MODEL_SWITCHER_PILL_NOT_FOUND_ERROR = 'MODEL_SWITCHER_PILL_NOT_FOUND';
+  const createNoModelSwitcherResult = (reason = 'model-switcher-unavailable') => ({
+    ok: false,
+    error: MODEL_SWITCHER_PILL_NOT_FOUND_ERROR,
+    noModelSwitcher: true,
+    reason,
+  });
   let SCRAPE_HIDE_UI_ACTIVE = false;
   const SCRAPE_HIDDEN_ELEMENTS = new Set();
   const PREPARED_SESSION_HIDDEN_ELEMENTS = new Set();
@@ -9956,12 +9947,34 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           return;
         }
         if (msg && msg.type === 'CSP_SCRAPE_MODEL_CATALOG') {
+          logModelRefreshDebug('message:catalog-scrape:start', {
+            hideUi: msg.hideUi !== false,
+            keepPreparedSession: msg.keepPreparedSession !== false,
+          });
           void scrapeModelCatalogOnce({
             hideUi: msg.hideUi !== false,
             keepPreparedSession: msg.keepPreparedSession !== false,
-          }).then((result) => {
-            sendResponse(result);
-          });
+          })
+            .then((result) => {
+              logModelRefreshDebug('message:catalog-scrape:result', {
+                result: {
+                  ok: !!result?.ok,
+                  error: result?.error || '',
+                  noModelSwitcher: result?.noModelSwitcher === true,
+                  reason: result?.reason || '',
+                },
+                menu: getModelRefreshDebugMenuSummary(),
+              });
+              sendResponse(result);
+            })
+            .catch((error) => {
+              const result = { ok: false, error: error?.message || 'SCRAPE_EXCEPTION' };
+              logModelRefreshDebug('message:catalog-scrape:exception', {
+                result,
+                menu: getModelRefreshDebugMenuSummary(),
+              });
+              sendResponse(result);
+            });
           return true;
         }
         if (msg && msg.type === 'CSP_RELEASE_MODEL_CONFIG_SESSION') {
@@ -10138,6 +10151,75 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           if (match) return match;
         }
         return null;
+      }
+
+      function isUnavailableModelMenuItem(item) {
+        return (
+          item instanceof Element &&
+          (item.hasAttribute('data-disabled') ||
+            item.getAttribute('aria-disabled') === 'true' ||
+            item.hasAttribute('disabled') ||
+            item.matches(':disabled'))
+        );
+      }
+
+      function isModelMenuWithoutSwitchingSurface(
+        state = getVisibleModelMenuState(),
+        { ignoreModelSubmenuTrigger = false } = {},
+      ) {
+        const main = state?.main;
+        if (!(main instanceof Element)) return false;
+        if (findConfigureMenuItem(state)) return false;
+
+        const items = getDirectModelMenuItems(main);
+        if (!items.length) return false;
+        const hasDirectModelVersion = items.some((item) =>
+          isLikelyModelVersionLabel(getModelTextWithoutHints(item)),
+        );
+        if (hasDirectModelVersion) return false;
+
+        if (!ignoreModelSubmenuTrigger) {
+          const hasModelSubmenuTrigger = items.some(
+            (item) => isCurrentModelSubmenuTriggerItem(item) && !isUnavailableModelMenuItem(item),
+          );
+          if (hasModelSubmenuTrigger) return false;
+        }
+
+        const visibleModelVersionMenu = getOpenModelVersionSubmenu(state.submenuTrigger);
+        return !(visibleModelVersionMenu instanceof Element);
+      }
+
+      function getModelRefreshDebugMenuSummary(state = getVisibleModelMenuState()) {
+        const main = state?.main;
+        const items = main instanceof Element ? getDirectModelMenuItems(main) : [];
+        const text =
+          main instanceof Element ? getModelTextWithoutHints(main).replace(/\s+/g, ' ').trim() : '';
+        return {
+          debugRev: 'model-refresh-structural-no-switching-v5',
+          hasMain: main instanceof Element,
+          hasComposerContent:
+            main instanceof Element && !!main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR),
+          hasConfigure: !!findConfigureMenuItem(state),
+          isModelMenuWithoutSwitchingSurface: isModelMenuWithoutSwitchingSurface(state),
+          itemCount: items.length,
+          itemTexts: items.map((item) => getModelTextWithoutHints(item).replace(/\s+/g, ' ').trim()),
+          text,
+        };
+      }
+
+      function logModelRefreshDebug(stage, details = {}) {
+        try {
+          console.log(
+            '[CSP_MODEL_REFRESH_DEBUG]',
+            JSON.stringify({
+              stage,
+              at: Date.now(),
+              ...details,
+            }),
+          );
+        } catch {
+          console.log('[CSP_MODEL_REFRESH_DEBUG]', stage);
+        }
       }
 
       function displayFromCode(code) {
@@ -11138,14 +11220,41 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         const isIntegratedMenu =
           state.main instanceof Element &&
           !!state.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+        logModelRefreshDebug('integrated:menu-state', {
+          isIntegratedMenu,
+          menu: getModelRefreshDebugMenuSummary(state),
+        });
         if (!isIntegratedMenu) return { fallback: true };
 
         const opened = await openModelVersionSubmenu(state);
         const submenu = opened?.menu || null;
-        if (!(submenu instanceof Element)) return { ok: false, error: 'MODEL_SUBMENU_NOT_FOUND' };
+        if (!(submenu instanceof Element)) {
+          const noSwitcher = isModelMenuWithoutSwitchingSurface(state, {
+            ignoreModelSubmenuTrigger: true,
+          });
+          logModelRefreshDebug('integrated:missing-submenu', {
+            noSwitcher,
+            menu: getModelRefreshDebugMenuSummary(state),
+          });
+          return noSwitcher
+            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
+            : { ok: false, error: 'MODEL_SUBMENU_NOT_FOUND' };
+        }
 
         const modelNameItems = getModelVersionMenuItems(submenu);
-        if (!modelNameItems.length) return { ok: false, error: 'MODEL_SUBMENU_OPTIONS_NOT_FOUND' };
+        if (!modelNameItems.length) {
+          const currentState = getVisibleModelMenuState();
+          const noSwitcher = isModelMenuWithoutSwitchingSurface(currentState, {
+            ignoreModelSubmenuTrigger: true,
+          });
+          logModelRefreshDebug('integrated:missing-submenu-options', {
+            noSwitcher,
+            menu: getModelRefreshDebugMenuSummary(currentState),
+          });
+          return noSwitcher
+            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
+            : { ok: false, error: 'MODEL_SUBMENU_OPTIONS_NOT_FOUND' };
+        }
 
         const modelNameLabels = modelNameItems.map(getModelVersionMenuItemLabel);
         const modelNameActions = modelNameItems.map((item, index) =>
@@ -11156,7 +11265,19 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
           modelNameActions,
           getModelVersionMenuItemLabel,
         );
-        if (!availableModelNames.length) return { ok: false, error: 'MODEL_OPTIONS_UNRESOLVED' };
+        if (!availableModelNames.length) {
+          const currentState = getVisibleModelMenuState();
+          const noSwitcher = isModelMenuWithoutSwitchingSurface(currentState, {
+            ignoreModelSubmenuTrigger: true,
+          });
+          logModelRefreshDebug('integrated:unresolved-options', {
+            noSwitcher,
+            menu: getModelRefreshDebugMenuSummary(currentState),
+          });
+          return noSwitcher
+            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
+            : { ok: false, error: 'MODEL_OPTIONS_UNRESOLVED' };
+        }
 
         const activeIndex = modelNameItems.findIndex(
           (item) =>
@@ -11216,10 +11337,15 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
       const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) =>
         ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
           try {
+          await releasePreparedModelConfigSession();
+          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
+
           const integratedResult = await scrapeIntegratedModelCatalogOnce();
           if (!integratedResult?.fallback) return integratedResult;
 
           await releasePreparedModelConfigSession();
+          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
+
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 120 : 180);
           const menuReady = await waitForMainMenuActionTarget(getModelActionById('configure'));
@@ -11228,7 +11354,18 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
             await collectThinkingEffortIdsFromModelSelectorMenu(state);
           hideOpenModelUiForScrape(getVisibleModelMenuState());
           const configureItem = findConfigureMenuItem(state);
-          if (!configureItem) return { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
+          if (!state.main || !configureItem) {
+            const noSwitcher = isModelMenuWithoutSwitchingSurface(state, {
+              ignoreModelSubmenuTrigger: true,
+            });
+            logModelRefreshDebug('legacy:missing-configure', {
+              noSwitcher,
+              menu: getModelRefreshDebugMenuSummary(state),
+            });
+            return noSwitcher
+              ? createNoModelSwitcherResult('model-menu-without-switching-surface')
+              : { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
+          }
 
           const combobox = await openConfigureDialogFromMenuItem(configureItem);
           if (!combobox) return { ok: false, error: 'CONFIGURE_DIALOG_NOT_FOUND' };
@@ -12014,15 +12151,7 @@ ${DISABLE_LEGACY_NO_BOTTOM_BAR_COMPOSER_PULLDOWN ? '' : `
         return true;
       }
 
-      const recordModelPickerSlotUsage = (index) => {
-        if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
-        try {
-          chrome.runtime.sendMessage({
-            type: 'csp.analytics.recordShortcut',
-            actionId: `modelPickerSlot:${index + 1}`,
-          });
-        } catch {}
-      };
+      const recordModelPickerSlotUsage = (_index) => {};
       window.addEventListener(
         'keydown',
         (e) => {

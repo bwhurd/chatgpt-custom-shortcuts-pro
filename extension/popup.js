@@ -290,17 +290,21 @@ const queryCurrentChatGptTab = async () => {
 };
 const sendModelMessageToTab = async (message) => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const markDeliveredResponse = (response) =>
+    response && typeof response === 'object'
+      ? { ...response, fromChatGptTab: true }
+      : { ok: false, error: 'EMPTY_RESPONSE', fromChatGptTab: true };
   const trySendToTab = async (tabId) => {
     if (!tabId) return { ok: false, error: 'NO_CHATGPT_TAB' };
     try {
       const response = await chrome.tabs.sendMessage(tabId, message);
-      return response && typeof response === 'object' ? response : { ok: false };
+      return markDeliveredResponse(response);
     } catch (error) {
       if (/Receiving end does not exist/i.test(String(error?.message || ''))) {
         try {
           await wait(250);
           const retry = await chrome.tabs.sendMessage(tabId, message);
-          return retry && typeof retry === 'object' ? retry : { ok: false };
+          return markDeliveredResponse(retry);
         } catch (retryError) {
           return { ok: false, error: retryError?.message || error?.message || 'SEND_FAILED' };
         }
@@ -312,11 +316,11 @@ const sendModelMessageToTab = async (message) => {
   if (!POPUP_SOURCE_TAB_ID) {
     const tab = await queryCurrentChatGptTab();
     const direct = await trySendToTab(tab?.id || 0);
-    if (direct?.ok) return direct;
+    if (direct?.fromChatGptTab) return direct;
   }
   if (POPUP_SOURCE_TAB_ID > 0) {
     const direct = await trySendToTab(POPUP_SOURCE_TAB_ID);
-    if (direct?.ok) return direct;
+    if (direct?.fromChatGptTab) return direct;
   }
   try {
     const response = await chrome.runtime.sendMessage({
@@ -485,11 +489,26 @@ const setModelCatalogCache = (catalog, source = 'storage') => {
   });
   return window.__modelCatalog;
 };
+const MODEL_CATALOG_NO_SWITCHER_ERROR = 'MODEL_SWITCHER_PILL_NOT_FOUND';
 const getModelCatalogScrapeState = () => String(window.__modelCatalogScrapeState || 'idle').trim() || 'idle';
 const isModelCatalogScrapeLoading = () => getModelCatalogScrapeState() === 'loading';
+const isModelCatalogNoSwitcherVisible = () => getModelCatalogScrapeState() === 'no-switcher';
 const isModelCatalogRefreshPromptVisible = () => !!window.__modelCatalogRefreshPromptVisible;
+const isModelCatalogNoSwitcherResult = (result) =>
+  !!result &&
+  (result.noModelSwitcher === true ||
+    result.error === MODEL_CATALOG_NO_SWITCHER_ERROR);
+const isDeliveredModelCatalogUnavailableResult = (result) => {
+  if (!result?.fromChatGptTab) return false;
+  return [
+    'MODEL_SUBMENU_NOT_FOUND',
+    'MODEL_SUBMENU_OPTIONS_NOT_FOUND',
+    'MODEL_OPTIONS_UNRESOLVED',
+    'CONFIGURE_ITEM_NOT_FOUND',
+  ].includes(String(result.error || '').trim());
+};
 const setModelCatalogScrapeState = (value, source = 'popup') => {
-  const next = ['loading', 'ready', 'failed'].includes(String(value || '').trim())
+  const next = ['loading', 'ready', 'failed', 'no-switcher'].includes(String(value || '').trim())
     ? String(value || '').trim()
     : 'idle';
   if (window.__modelCatalogScrapeState === next) return next;
@@ -1153,8 +1172,15 @@ document.addEventListener('DOMContentLoaded', () => {
             keepPreparedSession: true,
           });
           if (!result?.ok) {
+            if (
+              isModelCatalogNoSwitcherResult(result) ||
+              isDeliveredModelCatalogUnavailableResult(result)
+            ) {
+              setModelCatalogScrapeState('no-switcher', 'popup:catalog-scrape:no-switcher');
+              return result;
+            }
             setModelCatalogScrapeState('failed', 'popup:catalog-scrape:failed');
-            return null;
+            return result || null;
           }
 
           if (typeof result.activeModelConfigId === 'string') {
@@ -4820,6 +4846,9 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   const getModelCatalogRefreshPromptText = () =>
     chrome?.i18n?.getMessage?.('label_modelPickerManualRefreshPrompt') ||
     'Click to update the model list.\n\nNote: Model menus on the webpage may briefly flash in the background. This is normal.';
+  const getModelCatalogNoSwitcherPromptText = () =>
+    chrome?.i18n?.getMessage?.('label_modelPickerNoSwitcherPrompt') ||
+    'Log in with Plus or Pro to show model switching shortcuts. Open ChatGPT, then click here to refresh.';
   const getModelCatalogRefreshTooltipText = () =>
     chrome?.i18n?.getMessage?.('label_modelPickerManualRefreshTooltip') ||
     'Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected.';
@@ -5115,6 +5144,11 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
     setModelCatalogRefreshPromptVisible(false, `${source}:hide-prompt`);
     renderAll({ allowPendingRebuild: true });
     const result = await startScrape();
+    if (isModelCatalogNoSwitcherResult(result) || isDeliveredModelCatalogUnavailableResult(result)) {
+      setModelCatalogRefreshPromptVisible(false, `${source}:no-switcher`);
+      renderAll({ allowPendingRebuild: true });
+      return result;
+    }
     if (!result?.ok) {
       setModelCatalogRefreshPromptVisible(true, `${source}:retry-prompt`);
       renderAll({ allowPendingRebuild: true });
@@ -5143,15 +5177,23 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
 
     const isLoading = isModelCatalogScrapeLoading();
     const isPromptVisible = isModelCatalogRefreshPromptVisible();
+    const isNoSwitcherVisible = isModelCatalogNoSwitcherVisible();
     const headerButton = document.getElementById('mp-refresh-models-button');
     if (headerButton) {
       headerButton.disabled = isLoading;
       headerButton.setAttribute('aria-disabled', isLoading ? 'true' : 'false');
     }
-    overlay.classList.toggle('mp-grid-loading-overlay-prompt', isPromptVisible && !isLoading);
+    overlay.classList.toggle(
+      'mp-grid-loading-overlay-prompt',
+      (isPromptVisible || isNoSwitcherVisible) && !isLoading,
+    );
     overlay.classList.toggle('mp-grid-loading-overlay-loading', isLoading);
+    overlay.classList.toggle('mp-grid-loading-overlay-no-switcher', isNoSwitcherVisible && !isLoading);
+    section.classList.toggle('mp-grid-no-switcher-state', isNoSwitcherVisible && !isLoading);
     if (promptButton) {
-      promptButton.textContent = getModelCatalogRefreshPromptText();
+      promptButton.textContent = isNoSwitcherVisible
+        ? getModelCatalogNoSwitcherPromptText()
+        : getModelCatalogRefreshPromptText();
       promptButton.disabled = isLoading;
     }
     if (isLoading) {
@@ -5164,7 +5206,7 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       }
       return;
     }
-    if (isPromptVisible) {
+    if (isPromptVisible || isNoSwitcherVisible) {
       clearCatalogLoadingVisualTimers();
       modelCatalogLoadingVisibleSince = 0;
       section.classList.add('mp-grid-loading-state');
@@ -6439,12 +6481,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       } catch (_) {}
     }
   });
-})();
-
-(() => {
-  try {
-    chrome.runtime.sendMessage({ type: 'csp.analytics.flush', reason: 'popup-open' });
-  } catch {}
 })();
 
 /* Sync Settings Button js IIFE */

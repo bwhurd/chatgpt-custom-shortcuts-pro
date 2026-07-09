@@ -57,6 +57,7 @@ const excludedArchivePaths = new Set([
   'lib/DevScrapeNarrow.js',
   'shared/shortcut-action-metadata.js',
 ]);
+const excludedArchivePrefixes = ['vendor/aptabase-browser/'];
 
 function addDirectoryRecursive(sourceDir, archivePrefix) {
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
@@ -64,6 +65,7 @@ function addDirectoryRecursive(sourceDir, archivePrefix) {
     const entryPath = path.join(sourceDir, entry.name);
     const archiveName = path.posix.join(archivePrefix, entry.name);
     if (excludedArchivePaths.has(archiveName)) return;
+    if (excludedArchivePrefixes.some((prefix) => archiveName.startsWith(prefix))) return;
     if (entry.isDirectory()) {
       addDirectoryRecursive(entryPath, archiveName);
       return;
@@ -89,10 +91,6 @@ const includeItems = [
   'vendor',
   'shared',
   'background.js',
-  'analytics.js',
-  'usage-report.html',
-  'usage-report.css',
-  'usage-report.js',
   'content.js',
   'content-gated-ui-features.js',
   'popup.js',

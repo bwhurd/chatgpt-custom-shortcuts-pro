@@ -1978,6 +1978,15 @@ span.dup-key {
   opacity: 1;
 }
 
+#model-picker-grid.mp-grid-no-switcher-state {
+  min-height: 4.5rem;
+}
+
+#model-picker-grid.mp-grid-no-switcher-state .mp-grid-group,
+#model-picker-grid.mp-grid-no-switcher-state #mp-effort-grid {
+  display: none;
+}
+
 #model-picker-grid .mp-grid-loading-overlay {
   position: absolute;
   inset: 0;
@@ -1997,6 +2006,11 @@ span.dup-key {
   opacity: 0;
   transition: opacity 180ms ease;
   pointer-events: none;
+}
+
+#model-picker-grid.mp-grid-no-switcher-state .mp-grid-loading-overlay {
+  position: relative;
+  min-height: 4.5rem;
 }
 
 #model-picker-grid .mp-grid-loading-overlay.mp-grid-loading-overlay-visible {
@@ -2062,6 +2076,15 @@ span.dup-key {
 
 #model-picker-grid .mp-grid-loading-overlay.mp-grid-loading-overlay-prompt .mp-grid-refresh-prompt {
   display: block;
+}
+
+#model-picker-grid
+  .mp-grid-loading-overlay.mp-grid-loading-overlay-no-switcher
+  .mp-grid-refresh-prompt {
+  max-width: 26rem;
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
 
 #model-picker-grid

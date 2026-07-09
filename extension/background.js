@@ -1,9 +1,3 @@
-try {
-  importScripts('vendor/aptabase-browser/index.global.js', 'analytics.js');
-} catch (error) {
-  console.warn('[CSP] Anonymous usage analytics scripts did not load.', error);
-}
-
 // CloudAuth background broker — runs the interactive OAuth so popup can close safely
 (() => {
   if (globalThis.__cloudAuthBG) return;
@@ -179,17 +173,21 @@ try {
     }
   };
   const relayToChatGptTab = async (payload, preferredTabId = 0) => {
+    const markDeliveredResponse = (response) =>
+      response && typeof response === 'object'
+        ? { ...response, fromChatGptTab: true }
+        : { ok: false, error: 'EMPTY_RESPONSE', fromChatGptTab: true };
     const tabId = await resolveChatGptTabId(preferredTabId);
     if (!tabId) return { ok: false, error: 'NO_CHATGPT_TAB' };
     try {
       const response = await chrome.tabs.sendMessage(tabId, payload);
-      return response && typeof response === 'object' ? response : { ok: false };
+      return markDeliveredResponse(response);
     } catch (error) {
       if (/Receiving end does not exist/i.test(String(error?.message || ''))) {
         await new Promise((resolve) => setTimeout(resolve, 250));
         try {
           const retry = await chrome.tabs.sendMessage(tabId, payload);
-          return retry && typeof retry === 'object' ? retry : { ok: false };
+          return markDeliveredResponse(retry);
         } catch (retryError) {
           return { ok: false, error: retryError?.message || error?.message || 'SEND_FAILED' };
         }

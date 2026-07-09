@@ -6,8 +6,20 @@
 - Keep collection local-first, background-owned, and easy to inspect or remove.
 - Never collect chats, prompts, responses, page content, URLs, browsing history, account info, model names, clipboard contents, or actual shortcut key values.
 
+## Current Status
+
+- Usage analytics collection is temporarily disabled for the Chrome Web Store release path as of July 5, 2026.
+- The shipped package must not include the Aptabase SDK, usage report page, `analytics.js`, or the `https://cgcsp.chordstash.com` CSP endpoint while the Web Store data practices are set back to no Location or User activity collection.
+- `Privacy-Policy.md` should state the current no-analytics posture while this pause is active.
+
 ## Wiring
 
+- Current no-analytics release wiring:
+  - `extension/background.js` does not import the Aptabase SDK or `extension/analytics.js`.
+  - `extension/content.js` keeps analytics helper calls as no-ops so shortcut behavior stays unchanged.
+  - `extension/popup.js` does not request analytics flushes on open.
+  - `scripts/build-zip.js` excludes `analytics.js`, `usage-report.*`, and `vendor/aptabase-browser/`.
+- Historical analytics wiring, for reference if this is reintroduced:
 - `extension/background.js` loads the local Aptabase SDK and `extension/analytics.js` with `importScripts`.
 - `extension/analytics.js` owns the whitelist, local 7-day buckets, summary generation, Aptabase flush, and local report data.
 - `extension/content.js` sends `csp.analytics.recordShortcut` only after an extension shortcut action matches; unmatched keypresses are not recorded.
@@ -16,6 +28,8 @@
 
 ## Storage And Network
 
+- Current no-analytics releases must not write `chrome.storage.local` usage counters or send network requests to `cgcsp.chordstash.com`.
+- Historical analytics details, for reference if collection is reintroduced:
 - Local counters live only in `chrome.storage.local` under `csp_usage_analytics_v1`.
 - Counters are daily buckets retained for 7 days and are not synced to Chrome Sync or Google Drive.
 - `ANALYTICS_APP_KEY` in `extension/analytics.js` controls network delivery. The production self-hosted public client key is `A-SH-7581694567`.
@@ -49,6 +63,13 @@
 
 ## Validation
 
+- For the current no-analytics release path:
+  - Run `node --check extension/background.js extension/content.js extension/popup.js scripts/build-zip.js`.
+  - Run `npx biome check extension/background.js extension/content.js extension/popup.js scripts/build-zip.js`.
+  - Run `node scripts/build-zip.js`, then inspect the generated zip and confirm it has no `analytics.js`, no `usage-report.*`, no `vendor/aptabase-browser/`, no `A-SH-7581694567`, and no `https://cgcsp.chordstash.com`.
+  - Compare Chrome permission warnings for the old `4.5.4.1` manifest and the new manifest; they should remain identical.
+  - In the Chrome Web Store privacy practices, remove Location and User activity only when the uploaded package and privacy policy match this no-analytics state. Keep Authentication information if Cloud Sync remains available because it uses Google tokens.
+- Historical analytics validation, for reference if collection is reintroduced:
 - Run `node --check` on touched extension JavaScript files.
 - Run `npx biome check` on touched extension JavaScript and report files.
 - Run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenUsageAnalyticsReport.ps1` after editing the report opener.

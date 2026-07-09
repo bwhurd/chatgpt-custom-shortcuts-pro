@@ -524,6 +524,9 @@
   "label_modelPickerManualRefreshTooltip": {
     "message": "Click to update the model list.\n\nThe model menus will briefly \nflash in the background. \nThis is normal and expected."
   },
+  "label_modelPickerNoSwitcherPrompt": {
+    "message": "Log in with Plus or Pro to show model switching shortcuts. Open ChatGPT, then click here to refresh."
+  },
   "label_blank_placeholder": {
     "message": "Blank placeholder for grid alignment"
   },
