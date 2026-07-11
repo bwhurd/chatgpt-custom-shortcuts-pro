@@ -321,7 +321,9 @@
 
     const node = primary.cloneNode(true);
     node
-      .querySelectorAll('.alt-hint, .text-xs, .not-group-data-disabled\\:text-token-text-tertiary')
+      .querySelectorAll(
+        '.alt-hint, .text-xs, .text-token-text-tertiary, .not-group-data-disabled\\:text-token-text-tertiary',
+      )
       .forEach((n) => {
         n.remove();
       });
@@ -937,7 +939,11 @@
     ];
   };
   const mapFrontendLabelToActionId = (label, activeConfigId = DEFAULT_ACTIVE_CONFIG_ID) => {
-    const text = normalizeMenuText(label);
+    const rawText = normalizeMenuText(label);
+    const text = rawText.replace(
+      /^(instant|thinking|medium|high|pro)\s*(?:(?:gpt)[-\s]*)?\d+(?:\.\d+)?$/,
+      '$1',
+    );
     if (!text) return '';
     if (text === 'instant') return 'instant';
     if (text === 'thinking' || text === 'medium') return 'thinking';

@@ -134,6 +134,10 @@ Thinking effort shortcuts must support both current account surfaces:
 - Configure-dialog route: `#thinking-effort-selection-label` plus controlled `role="listbox"` options
 - Model-selector route: `data-model-picker-thinking-effort-action` opens a `role="menu"` with `menuitemradio` Standard/Extended options
 
+For the integrated first-level model menu, map the semantic effort label even when ChatGPT appends a model-version badge inside the same row (for example, `Instant` plus `5.5`). The badge is metadata, not part of the effort label; catalog refresh, popup first-row rendering, and exposed-menu shortcut hints must continue to recognize the effort option.
+
+Duplicate shortcut checks must iterate the exact slot numbers in the current catalog-backed presentation groups. Refreshed dynamic model rows use sparse slots, so action count must never be treated as a contiguous `modelPickerKeyCodes` boundary.
+
 Keep the older assistant icon fallback as a last resort for accounts that still expose that route.
 
 The Configure Models path should stay language-agnostic:

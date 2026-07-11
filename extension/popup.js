@@ -172,6 +172,23 @@ const getPreferredModelViewLabelsBySlot = () => {
   });
   return labels;
 };
+const getCurrentModelActionSlotIndices = () => {
+  const groups = getPopupModelPresentationGroups(
+    getVisualActiveModelConfigId(),
+    window.MODEL_NAMES || [],
+    window.__modelCatalog || null,
+  );
+  return Array.from(
+    new Set(
+      groups
+        .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+        .map((action) => Number(action?.slot))
+        .filter(
+          (slot) => Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS,
+        ),
+    ),
+  );
+};
 const normalizeModelPickerCodesForComparison = (codes) => {
   const out = Array.isArray(codes) ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
   while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
@@ -779,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seen = new Set();
 
     const modelCodes = window.ShortcutUtils.getModelPickerCodesCache(); // 10 codes
-    const visibleModelSlotCount = Math.min(getModelActionSlots().length, modelCodes.length);
+    const currentModelSlots = getCurrentModelActionSlotIndices();
 
     // Prefer codes from dataset; fallback to char->code
     const popupCodes = {};
@@ -799,10 +816,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!c2) return;
       // Find which model slot this collides with (Digit/Numpad normalized)
       let collideIdx = -1;
-      for (let i = 0; i < visibleModelSlotCount; i++) {
-        const mc = modelCodes[i];
+      for (const slot of currentModelSlots) {
+        const mc = modelCodes[slot];
         if (mc && window.ShortcutUtils.codeEquals(mc, c2)) {
-          collideIdx = i;
+          collideIdx = slot;
           break;
         }
       }
@@ -1314,14 +1331,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelCodes = getModelPickerCodesCache();
     const MODEL_NAMES_SAFE = window.MODEL_NAMES || [];
     const viewLabelsBySlot = getPreferredModelViewLabelsBySlot();
-    const visibleModelSlotCount = Math.min(getModelActionSlots().length, modelCodes.length);
     const modelMod =
       typeof getModelPickerModifier === 'function' ? getModelPickerModifier() : 'alt';
     const ownerType = selfOwner?.type ?? null;
     const selfMod = ownerType === 'shortcut' ? getPopupShortcutModifier(selfOwner?.id) : null;
 
     // 1) Model slots
-    modelCodes.slice(0, visibleModelSlotCount).forEach((c, i) => {
+    getCurrentModelActionSlotIndices().forEach((i) => {
+      const c = modelCodes[i];
       if (!c) return;
       const isSelfModel = ownerType === 'model' && selfOwner.idx === i;
       if (isSelfModel) return;

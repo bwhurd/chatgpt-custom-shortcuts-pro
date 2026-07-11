@@ -9,6 +9,8 @@
 
 ## Investigation findings
 
+- [x] Post-refresh duplicate detection used `getModelActionSlots().length` as a contiguous array boundary even though refreshed model actions use sparse persisted slots; a displayed second-row action at slot 8, 9, or 10 could therefore be omitted from a prefix scan of `modelPickerKeyCodes`.
+- [x] Live refresh on 2026-07-10 confirmed that ChatGPT now renders the first-level Instant row as `Instant` plus a separate `5.5` badge in the same `menuitemradio`; the shared extractor's `textContent` concatenated the adjacent spans as `Instant5.5`, and its older tertiary-text selector did not remove the badge, so the exact frontend-label mapper discarded Instant while still accepting `Medium` and `High`.
 - [x] The new first-level scrape is `data-testid="composer-intelligence-picker-content"` inside the same open Radix menu shape already used by the extension.
 - [x] The first-level menu contains thinking effort radio rows (`Instant`, `Medium`, `High`) and one submenu trigger row with `aria-haspopup="menu"` / `data-has-submenu` for `GPT-5.5`.
 - [x] The new second-level scrape is a sibling open Radix `role="menu"` controlled by that submenu trigger and contains model `menuitemradio` rows such as `5.5`, `5.4`, `5.3`, and `o3`.
@@ -48,6 +50,8 @@
 
 ## Implementation plan
 
+- [x] Build the conflict-check slot set from the current catalog-backed presentation groups and iterate those exact sparse slot indices in both direct assignment checks and Alt-mode collision checks.
+- [x] Strip ChatGPT's current generic tertiary-text badge class during shared menu-label extraction and normalize a trailing numeric/GPT model-version badge—with or without DOM-inserted whitespace—before mapping first-level integrated effort labels, so refresh extraction and exposed-menu shortcut labeling both recognize every available row.
 - [x] Add selectors/helpers for the composer intelligence menu and its model submenu trigger:
   - Recognize `data-testid="composer-intelligence-picker-content"` as the current primary model menu.
   - Recognize visible first-level `aria-haspopup="menu"` / `data-has-submenu` rows as model submenu triggers even without `data-testid`.

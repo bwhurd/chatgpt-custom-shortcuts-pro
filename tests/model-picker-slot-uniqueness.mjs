@@ -149,6 +149,21 @@ assert.equal(
   'pro',
   'plain Configure dialog Pro row labels should map to the Pro frontend action',
 );
+assert.equal(
+  ModelLabels.mapFrontendLabelToActionId('Instant 5.5', ModelLabels.DEFAULT_ACTIVE_CONFIG_ID),
+  'instant',
+  'integrated Instant rows should ignore a trailing model-version badge',
+);
+assert.equal(
+  ModelLabels.mapFrontendLabelToActionId('Instant5.5', ModelLabels.DEFAULT_ACTIVE_CONFIG_ID),
+  'instant',
+  'integrated Instant rows should tolerate adjacent label and badge text nodes',
+);
+assert.equal(
+  ModelLabels.mapFrontendLabelToActionId('Medium GPT-5.6', ModelLabels.DEFAULT_ACTIVE_CONFIG_ID),
+  'thinking',
+  'integrated effort rows should ignore a trailing GPT-prefixed model-version badge',
+);
 
 const proPrimaryCatalog = {
   configureOptions: [{ id: 'configure-latest', slot: 3, label: 'Latest • 5.5' }],

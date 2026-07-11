@@ -6,6 +6,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.10.2026
+- Fixed: Model refresh recognizes Instant options that include a model-version badge.
+- Fixed: Duplicate shortcut detection includes refreshed models in sparse grid slots.
+
 #### 07.05.2026
 - Fixed: Join + Copy All Messages preserves line breaks inside copied code blocks.
 - Fixed: Model chooser refresh works better for users on free accounts.
