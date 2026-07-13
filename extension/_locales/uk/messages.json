@@ -221,9 +221,6 @@
   "tt_toggle_create_image": {
     "message": "Увімкнути інструмент створення зображень."
   },
-  "tt_toggle_canvas": {
-    "message": "Перемкнути робочу область «Полотно»."
-  },
   "tt_add_photos_files": {
     "message": "Прикріпіть зображення чи файли до повідомлення."
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "Створити зображення"
   },
-  "label_toggle_canvas": {
-    "message": "Полотно"
+  "label_deep_research": {
+    "message": "Поглиблене дослідження"
   },
   "label_add_photos_files": {
     "message": "Додати фото й файли"

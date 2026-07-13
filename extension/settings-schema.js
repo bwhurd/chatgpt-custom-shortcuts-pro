@@ -70,6 +70,7 @@
       'shortcutKeyRegenerateAddDetails',
       'shortcutKeyShowShortcuts',
       'shortcutKeyStudy',
+      'shortcutKeyToggleCanvas',
       'shortcutKeyThinkLonger',
     ],
     // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
@@ -129,7 +130,7 @@
 
       shortcutKeySearchWeb: 'label_search_web',
       shortcutKeyCreateImage: 'label_toggle_create_image',
-      shortcutKeyToggleCanvas: 'label_toggle_canvas',
+      shortcutKeyDeepResearch: 'label_deep_research',
       shortcutKeyAddPhotosFiles: 'label_add_photos_files',
     },
 
@@ -220,7 +221,7 @@
         keys: [
           'shortcutKeySearchWeb',
           'shortcutKeyCreateImage',
-          'shortcutKeyToggleCanvas',
+          'shortcutKeyDeepResearch',
           'shortcutKeyAddPhotosFiles',
         ],
       },

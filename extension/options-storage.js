@@ -31,6 +31,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyStudy: '',
   shortcutKeyCreateImage: '',
   shortcutKeyToggleCanvas: '',
+  shortcutKeyDeepResearch: '',
   shortcutKeyAddPhotosFiles: '',
   shortcutKeyThinkLonger: '',
   copyAllUserSeparator: '\n\n--- --- ---\n\n',

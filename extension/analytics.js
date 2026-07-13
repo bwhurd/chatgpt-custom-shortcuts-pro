@@ -36,6 +36,7 @@
     shortcutKeyStudy: '',
     shortcutKeyCreateImage: '',
     shortcutKeyToggleCanvas: '',
+    shortcutKeyDeepResearch: '',
     shortcutKeyAddPhotosFiles: '',
     shortcutKeyThinkLonger: '',
     shortcutKeyCopyAllCodeBlocks: ']',

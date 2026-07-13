@@ -75,6 +75,15 @@ const SUPPLEMENTAL_SETTINGS = [
     },
   },
   {
+    key: 'shortcutKeyToggleCanvas',
+    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+      schemaDeprecatedShortcut: true,
+    },
+  },
+  {
     key: 'shortcutKeyThinkLonger',
     reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {

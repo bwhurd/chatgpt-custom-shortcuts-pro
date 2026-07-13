@@ -2540,6 +2540,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyStudy: NBSP,
     shortcutKeyCreateImage: NBSP,
     shortcutKeyToggleCanvas: NBSP,
+    shortcutKeyDeepResearch: NBSP,
     shortcutKeyToggleDictate: 'KeyY',
     shortcutKeyCancelDictation: NBSP,
     shortcutKeyShare: NBSP,

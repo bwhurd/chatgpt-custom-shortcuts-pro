@@ -227,9 +227,6 @@
   "tt_toggle_create_image": {
     "message": "Toggle the image creation tool."
   },
-  "tt_toggle_canvas": {
-    "message": "Toggle the canvas workspace tool."
-  },
   "tt_add_photos_files": {
     "message": "Attach images or files to a message."
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "Create Image Tool"
   },
-  "label_toggle_canvas": {
-    "message": "Canvas Tool"
+  "label_deep_research": {
+    "message": "Deep Research Tool"
   },
   "label_add_photos_files": {
     "message": "Add Photos + Files Tool"

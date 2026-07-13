@@ -221,9 +221,6 @@
   "tt_toggle_create_image": {
     "message": "Activa la herramienta de creación de imágenes."
   },
-  "tt_toggle_canvas": {
-    "message": "Activa el espacio de trabajo de lienzo."
-  },
   "tt_add_photos_files": {
     "message": "Adjunta imágenes o archivos a un mensaje."
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "Crear imagen"
   },
-  "label_toggle_canvas": {
-    "message": "Lienzo"
+  "label_deep_research": {
+    "message": "Investigación profunda"
   },
   "label_add_photos_files": {
     "message": "Añadir fotos y archivos"

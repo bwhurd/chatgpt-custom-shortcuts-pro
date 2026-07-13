@@ -221,9 +221,6 @@
   "tt_toggle_create_image": {
     "message": "छवि बनाने वाला टूल ऑन/ऑफ करें."
   },
-  "tt_toggle_canvas": {
-    "message": "कैनवस कार्यक्षेत्र ऑन/ऑफ करें."
-  },
   "tt_add_photos_files": {
     "message": "संदेश में चित्र या फाइलें संलग्न करें."
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "छवि बनाएँ"
   },
-  "label_toggle_canvas": {
-    "message": "कैनवस"
+  "label_deep_research": {
+    "message": "गहन शोध"
   },
   "label_add_photos_files": {
     "message": "फ़ोटो + फ़ाइलें जोड़ें"

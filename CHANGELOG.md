@@ -6,6 +6,13 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.13.2026
+- Fixed: Upload, Create Image, and Web Search shortcuts work again.
+- Added: Deep Research shortcut.
+- Removed: Canvas shortcut because the tool is no longer available.
+- Fixed: Previous and Next Thread shortcuts target response navigation buttons reliably.
+- Fixed: Control+Alt thread previews scroll in the correct direction and loop through all responses.
+
 #### 07.10.2026
 - Fixed: Model refresh recognizes Instant options that include a model-version badge.
 - Fixed: Duplicate shortcut detection includes refreshed models in sparse grid slots.

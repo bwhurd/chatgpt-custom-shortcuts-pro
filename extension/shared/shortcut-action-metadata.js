@@ -463,17 +463,19 @@
       matchGroups: [['#28a8a0'], ['#6eabdf']],
       notes: 'Only exposed on a blank new conversation, not the fixed conversation fixture.',
     }),
-    byIconToken('composer-web-search-action', '#6b0d8c', {
+    byIconToken('composer-web-search-action', ['#6d72eb', '#6b0d8c'], {
+      matchGroups: [['#6d72eb'], ['#6b0d8c']],
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-study-action', '#1fa93b', {
       uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('composer-create-image-action', '#266724', {
+    byIconToken('composer-create-image-action', ['#ccfd18', '#266724'], {
+      matchGroups: [['#ccfd18'], ['#266724']],
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('composer-canvas-action', '#cf3864', {
-      uiStateRefs: ['composer-add-files-and-more-more-submenu'],
+    byIconToken('composer-deep-research-action', '#46f45a', {
+      uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('dictate-start-button', ['#33d595', '#29f921'], {
       identifier: 'svg-token=#33d595|#29f921',
@@ -1011,22 +1013,17 @@
         notes: 'No-token direct menu target click used when no shortcut key is assigned.',
       }),
     }),
+    notApplicable('shortcutKeyToggleCanvas', {
+      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
+    }),
     defineShortcutAction({
-      actionId: 'shortcutKeyToggleCanvas',
-      targetRefs: [
-        'composer-plus-button',
-        'composer-more-submenu-trigger',
-        'composer-canvas-action',
-      ],
-      uiStateRefs: targetStateRefs(
-        'composer-plus-button',
-        'composer-more-submenu-trigger',
-        'composer-canvas-action',
-      ),
-      activationProbe: directMenuTargetProbe('composer-canvas-action', {
-        setup: 'composer-more-submenu',
-        uiStateRefs: ['composer-add-files-and-more-more-submenu'],
-        notes: 'No-token direct submenu target click used when no shortcut key is assigned.',
+      actionId: 'shortcutKeyDeepResearch',
+      targetRefs: ['composer-plus-button', 'composer-deep-research-action'],
+      uiStateRefs: targetStateRefs('composer-plus-button', 'composer-deep-research-action'),
+      activationProbe: directMenuTargetProbe('composer-deep-research-action', {
+        setup: 'composer-plus-menu',
+        uiStateRefs: ['composer-add-files-and-more-menu'],
+        notes: 'No-token direct menu target click used when no shortcut key is assigned.',
       }),
     }),
     defineShortcutAction({

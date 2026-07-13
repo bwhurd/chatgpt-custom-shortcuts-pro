@@ -221,9 +221,6 @@
   "tt_toggle_create_image": {
     "message": "画像作成ツールを切替。"
   },
-  "tt_toggle_canvas": {
-    "message": "キャンバス作業スペースを切替。"
-  },
   "tt_add_photos_files": {
     "message": "メッセージに画像やファイルを添付。"
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "画像を作成"
   },
-  "label_toggle_canvas": {
-    "message": "キャンバス"
+  "label_deep_research": {
+    "message": "ディープリサーチ"
   },
   "label_add_photos_files": {
     "message": "写真 + ファイルを追加"

@@ -221,9 +221,6 @@
   "tt_toggle_create_image": {
     "message": "Переключить инструмент создания изображений."
   },
-  "tt_toggle_canvas": {
-    "message": "Переключить рабочее пространство «Холст»."
-  },
   "tt_add_photos_files": {
     "message": "Прикрепить к сообщению изображения или файлы."
   },
@@ -365,8 +362,8 @@
   "label_toggle_create_image": {
     "message": "Создать изображение"
   },
-  "label_toggle_canvas": {
-    "message": "Холст"
+  "label_deep_research": {
+    "message": "Глубокое исследование"
   },
   "label_add_photos_files": {
     "message": "Добавить фото и файлы"

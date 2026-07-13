@@ -385,7 +385,14 @@ async function resetFixturePage(page, fixtureUrl) {
 
 async function closeOpenMenus(page) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const menuCount = await page.locator('[data-radix-menu-content][data-state="open"][role="menu"]').count();
+    const menuCount = await page
+      .locator(
+        [
+          '[data-radix-menu-content][data-state="open"][role="menu"]',
+          'div.popover:has(div.__menu-item[tabindex])',
+        ].join(', '),
+      )
+      .count();
     if (!menuCount) return;
     await page.keyboard.press('Escape').catch(() => {});
     await page.waitForTimeout(250);
@@ -556,6 +563,7 @@ async function getLatestOpenMenuHtml(page) {
     (await page
       .evaluate(() => {
         const selectors = [
+          'div.popover:has(div.__menu-item[tabindex])',
           '[data-radix-menu-content][data-state="open"][role="menu"]',
           '[data-radix-menu-content][role="menu"]',
           '[data-radix-popper-content-wrapper] [role="menu"]',
@@ -818,7 +826,15 @@ async function openComposerPlusMenu(page) {
     await button.click({ force: true }).catch(() => {});
     await page.waitForTimeout(350);
     const html = await getLatestOpenMenuHtml(page);
-    if (html && (html.includes('#712359') || html.includes('Recent files') || html.includes('#f6d0e2'))) {
+    if (
+      html &&
+      (html.includes('#712359') ||
+        html.includes('#ccfd18') ||
+        html.includes('#6d72eb') ||
+        html.includes('#46f45a') ||
+        html.includes('Recent files') ||
+        html.includes('#f6d0e2'))
+    ) {
       return html;
     }
   }
@@ -827,7 +843,15 @@ async function openComposerPlusMenu(page) {
 }
 
 function isComposerPlusMenuHtml(html) {
-  return Boolean(html) && (html.includes('#712359') || html.includes('Recent files') || html.includes('#f6d0e2'));
+  return (
+    Boolean(html) &&
+    (html.includes('#712359') ||
+      html.includes('#ccfd18') ||
+      html.includes('#6d72eb') ||
+      html.includes('#46f45a') ||
+      html.includes('Recent files') ||
+      html.includes('#f6d0e2'))
+  );
 }
 
 function isComposerMoreSubmenuHtml(html) {
@@ -2493,7 +2517,9 @@ async function clickLiveProbeTarget(page, target) {
       );
     };
     const candidates = Array.from(
-      document.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button, a'),
+      document.querySelectorAll(
+        'div.__menu-item[tabindex], [role="menuitem"], [role="menuitemradio"], button, a',
+      ),
     ).filter(isVisible);
     const targetNode =
       candidates.find((node) => matchesNeedles(node.outerHTML)) ||

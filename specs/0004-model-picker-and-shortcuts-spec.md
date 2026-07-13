@@ -118,9 +118,19 @@ New runtime shortcut actions must add an explicit metadata row in `extension/sha
 
 Activation probe metadata is the source of truth for future live shortcut checks. Use executable modes only for no-token-safe probes whose expected target can be verified deterministically, such as `click-target` for a stable button or `focus-target` for the composer input. Stateful, multi-step, token-spending, native-dialog, manual-only, or not-applicable shortcuts must be explicitly classified instead of left for the runner to guess.
 
+### Response thread navigation contract
+
+- Resolve a response navigator structurally as a `div.tabular-nums` counter with button siblings on both sides; do not identify it from localized text or a bare `<` / `>` glyph.
+- Alt+Previous and Alt+Next scroll to and click the lowest visible enabled button for their direction. Disabled direction buttons are not actionable fallbacks.
+- Ctrl+Alt+Previous and Ctrl+Alt+Next are scroll-only previews: they never click a response button.
+- Repeated Ctrl+Alt+Previous moves upward through navigator groups and wraps from the top group to the bottom group.
+- Repeated Ctrl+Alt+Next moves downward through navigator groups and wraps from the bottom group to the top group.
+- Preview traversal must tolerate scroll-boundary clamping. Do not infer the current preview solely from exact pixel centering.
+- ChatGPT may mount additional navigator groups only after directional scrolling. At a mounted-list edge, scan to that direction's real scroll boundary and rescan before deciding to wrap.
+
 If a report shows a shortcut as static `PARTIAL` but the same action has a passing live probe, treat that as a resolved state-specific target rather than a broken shortcut. The Dashboard and Top Follow-Up sections should be used for routine repair priority; the Details tab preserves static scrape diagnostics for deeper investigation.
 
-Removed ChatGPT features should stay inert for existing installs while disappearing from user-facing shortcut grids. `shortcutKeyStudy` and `shortcutKeyThinkLonger` are legacy storage/default keys only; keep them explicit as `not-applicable` metadata and do not show them in `popup.html` or overlay schema unless ChatGPT restores those features.
+Removed ChatGPT features should stay inert for existing installs while disappearing from user-facing shortcut grids. `shortcutKeyStudy`, `shortcutKeyToggleCanvas`, and `shortcutKeyThinkLonger` are legacy storage/default keys only; keep them explicit as `not-applicable` metadata and do not show them in `popup.html` or overlay schema unless ChatGPT restores those features.
 
 ## Runtime model switching
 

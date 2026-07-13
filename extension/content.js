@@ -2813,32 +2813,24 @@ const clickElementLikeUser = (el) => {
   }
 
   const PLUS_BTN_SEL = '[data-testid="composer-plus-btn"]';
-
-  // "More" submenu trigger (match by icon path, not text)
-  const MORE_ICON_PATH_PREFIX = 'M15.498 8.50159';
-  const MORE_TRIGGER_SEL = `div[role="menuitem"][aria-haspopup="menu"] svg path[d^="${MORE_ICON_PATH_PREFIX}"], div[role="menuitem"][aria-haspopup="menu"] svg use[href*="#f6d0e2"]`;
+  const COMPOSER_TOOL_ITEM_SELECTOR = [
+    'div.__menu-item[tabindex]',
+    'div[role="menuitem"]',
+    'div[role="menuitemradio"]',
+    'div[role="menuitemcheckbox"]',
+  ].join(', ');
+  const COMPOSER_TOOL_MENU_CUE_TOKENS = [
+    '#712359',
+    '#ccfd18',
+    '#6d72eb',
+    '#46f45a',
+    '#266724',
+    '#6b0d8c',
+  ];
 
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
   const smartClick = clickElementLikeUser;
-
-  const sendKey = (el, key, code = key, keyCode = 0) => {
-    const opts = {
-      key,
-      code,
-      keyCode,
-      which: keyCode || undefined,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    };
-    try {
-      el.dispatchEvent(new KeyboardEvent('keydown', opts));
-    } catch { }
-    try {
-      el.dispatchEvent(new KeyboardEvent('keyup', opts));
-    } catch { }
-  };
 
   const waitFor = async (getter, { timeout = 3000, interval = 50 } = {}) => {
     const start = Date.now();
@@ -2854,162 +2846,44 @@ const clickElementLikeUser = (el) => {
     return poll();
   };
 
-  // Helper: synthesize a small cluster of hover-like events to hint UI state.
-  const dispatchHoverEvents = (el) => {
-    const fire = (type, Ctor) => {
-      try {
-        const rect = el.getBoundingClientRect();
-        el.dispatchEvent(
-          new Ctor(type, {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            clientX: rect.left + rect.width / 2,
-            clientY: rect.top + rect.height / 2,
-          }),
-        );
-      } catch {
-        /* ignore */
-      }
-    };
-    if ('PointerEvent' in window) {
-      fire('pointerover', PointerEvent);
-      fire('pointerenter', PointerEvent);
-      fire('pointermove', PointerEvent);
-    }
-    fire('mouseover', MouseEvent);
-    fire('mouseenter', MouseEvent);
-    fire('mousemove', MouseEvent);
-  };
-
-  // Helper: progressively try to expand a submenu using keys/clicks.
-  const attemptExpand = async (el, delays) => {
-    sendKey(el, 'ArrowRight', 'ArrowRight', 39);
-    await sleep(delays.betweenKeyAttempts);
-    if (el.getAttribute('aria-expanded') !== 'true') {
-      sendKey(el, 'Enter', 'Enter', 13);
-      await sleep(delays.betweenKeyAttempts);
-    }
-    if (el.getAttribute('aria-expanded') !== 'true') {
-      sendKey(el, ' ', 'Space', 32);
-      await sleep(delays.betweenKeyAttempts);
-    }
-    if (el.getAttribute('aria-expanded') !== 'true') {
-      smartClick(el);
-    }
-  };
-
-  // Helper: resolve the currently-open submenu element.
-  const resolveOpenSubmenu = (submenuId) => {
-    if (submenuId) {
-      const el = document.getElementById(submenuId);
-      if (el && el.getAttribute('data-state') === 'open') return el;
-    }
-    const open = getOpenMenus();
-    return open.length ? open[open.length - 1] : null;
-  };
-
-  const openSubmenu = async (triggerEl, delays = DELAYS) => {
-    if (!triggerEl) return null;
-
-    const ariaControls = triggerEl.getAttribute('aria-controls') || '';
-    const submenuId = ariaControls ? ariaControls : null;
-
-    flashBorder(triggerEl);
-    await sleep(delays.beforeSubmenuInteract);
-
-    try {
-      triggerEl.focus({ preventScroll: true });
-    } catch {
-      /* ignore */
-    }
-
-    dispatchHoverEvents(triggerEl);
-    await attemptExpand(triggerEl, delays);
-
-    const submenuEl = await waitFor(() => resolveOpenSubmenu(submenuId), {
-      timeout: delays.waitSubmenuEl,
-    });
-
-    return submenuEl;
-  };
-
-  const openComposerMenuAndMore = async (delays = DELAYS) => {
-    const composer = document.querySelector('form[data-type="unified-composer"]');
-    const plusBtn = composer?.querySelector(PLUS_BTN_SEL) || document.querySelector(PLUS_BTN_SEL);
-
-    if (!plusBtn) return false;
-
-    flashBorder(plusBtn);
-    smartClick(plusBtn);
-
-    await waitFor(() => getOpenMenus().length > 0, {
-      timeout: delays.waitMenuOpen,
-    }); // 1500ms
-    await sleep(delays.afterPlusClick);
-
-    let menus = getOpenMenus();
-    let topMenu = menus[menus.length - 1];
-
-    const moreTrigger = await waitFor(
-      () => {
-        menus = getOpenMenus();
-        topMenu = menus[menus.length - 1];
-        if (!topMenu) return null;
-        const path = topMenu.querySelector(MORE_TRIGGER_SEL);
-        if (path) return path.closest('div[role="menuitem"][aria-haspopup="menu"]');
-        return topMenu.querySelector('div[role="menuitem"][aria-haspopup="menu"]');
-      },
-      { timeout: delays.waitSubmenuOpen },
-    );
-
-    if (moreTrigger) {
-      await openSubmenu(moreTrigger, delays);
-      await sleep(delays.afterSubmenuOpen);
-    }
-
-    return true;
-  };
-
   const buildIconSelector = buildSvgSelectorForIconTokens;
 
-  const findMenuItemByPath = (iconTokens, { rootMenus } = {}) => {
-    // Match both menuitem and menuitemradio for maximum compatibility
-    const sel = `div[role="menuitem"], div[role="menuitemradio"]`;
+  const findComposerToolItemByIcon = (iconTokens) => {
     const iconSelector = buildIconSelector(iconTokens);
-    const menus = rootMenus?.length ? rootMenus : getOpenMenus();
-    for (const menu of menus) {
-      // Find all possible menu items
-      const items = Array.from(menu.querySelectorAll(sel));
-      // For each item, check if its icon matches the prefix
-      for (const item of items) {
-        const path = item.querySelector(iconSelector);
-        if (path) return item;
-      }
-    }
-    return null;
+    const items = Array.from(document.querySelectorAll(iconSelector))
+      .map((icon) => icon.closest(COMPOSER_TOOL_ITEM_SELECTOR))
+      .filter((item, index, all) => item && all.indexOf(item) === index)
+      .filter((item) => {
+        const style = getComputedStyle(item);
+        const rect = item.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.pointerEvents !== 'none' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      });
+    items.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+    return items[items.length - 1] || null;
   };
 
   const runActionByIcon = async (iconPathPrefix, delays = DELAYS) => {
-    const opened = await openComposerMenuAndMore(delays);
-    if (!opened) return;
-    const item = await waitFor(
-      () => {
-        const menus = getOpenMenus();
-        if (!menus.length) return null;
+    let item = findComposerToolItemByIcon(iconPathPrefix);
+    if (!item) {
+      const composer = document.querySelector('form[data-type="unified-composer"]');
+      const plusBtn = composer?.querySelector(PLUS_BTN_SEL) || document.querySelector(PLUS_BTN_SEL);
+      if (!plusBtn) return;
 
-        // Prefer top-most open menu first (likely the submenu), but also search the parent
-        const [maybeSubmenu, maybeRoot] =
-          menus.length > 1 ? [menus[menus.length - 1], menus[menus.length - 2]] : [menus[0], null];
+      if (!findComposerToolItemByIcon(COMPOSER_TOOL_MENU_CUE_TOKENS)) {
+        flashBorder(plusBtn);
+        smartClick(plusBtn);
+      }
 
-        const foundSub = findMenuItemByPath(iconPathPrefix, { rootMenus: [maybeSubmenu] });
-        if (foundSub) return foundSub;
-        return maybeRoot ? findMenuItemByPath(iconPathPrefix, { rootMenus: [maybeRoot] }) : null;
-      },
-      {
+      item = await waitFor(() => findComposerToolItemByIcon(iconPathPrefix), {
         timeout: delays.waitActionItem,
-      },
-    );
+      });
+    }
     if (!item) return;
     flashBorder(item);
     await sleep(delays.beforeFinalClick);
@@ -3914,6 +3788,7 @@ const clickElementLikeUser = (el) => {
     shortcutKeyStudy: '',
     shortcutKeyCreateImage: '',
     shortcutKeyToggleCanvas: '',
+    shortcutKeyDeepResearch: '',
     shortcutKeyToggleDictate: 'KeyY',
     shortcutKeyCancelDictation: '',
     shortcutKeyShare: '',
@@ -4706,17 +4581,45 @@ const clickElementLikeUser = (el) => {
       });
     }
 
-    function isThreadNavigationButtonCentered(container, btn) {
-      if (!window.gsap || !btn) return false;
-      const scrollAnchorPct = getThreadNavigationScrollAnchorPct();
-      const rect = btn.getBoundingClientRect();
-      const contRect = getThreadNavigationContainerRect(container);
-      const anchorPx = (contRect.height * scrollAnchorPct) / 100 - rect.height / 2;
-      const currentScroll = container === window ? window.scrollY : container.scrollTop;
-      const btnTop =
-        container === window ? rect.top + window.scrollY : rect.top - contRect.top + container.scrollTop;
-      const targetY = btnTop - anchorPx;
-      return Math.abs(currentScroll - targetY) < 2;
+    const THREAD_NAVIGATION_BOUNDARY_SETTLE_DELAY = 140;
+    const threadNavigationPreviewState = {
+      inFlight: false,
+      targetKey: null,
+    };
+
+    function getThreadNavigationGroup(btn) {
+      const parent = btn?.parentElement;
+      const counter = parent
+        ? Array.from(parent.children).find(
+          (child) =>
+            child.classList?.contains('tabular-nums') &&
+            child.previousElementSibling?.tagName === 'BUTTON' &&
+            child.nextElementSibling?.tagName === 'BUTTON',
+        )
+        : null;
+      return counter ? parent : btn?.closest('[data-testid^="conversation-turn-"]') || btn;
+    }
+
+    function getThreadNavigationTargetKey(btn) {
+      const turnId = btn
+        ?.closest('[data-testid^="conversation-turn-"]')
+        ?.getAttribute('data-testid');
+      return turnId || getThreadNavigationGroup(btn);
+    }
+
+    function resetThreadNavigationPreviewState() {
+      threadNavigationPreviewState.inFlight = false;
+      threadNavigationPreviewState.targetKey = null;
+    }
+
+    function trackThreadNavigationPreviewTarget(target) {
+      threadNavigationPreviewState.inFlight = true;
+      threadNavigationPreviewState.targetKey = getThreadNavigationTargetKey(target);
+    }
+
+    function completeThreadNavigationPreviewTarget(target) {
+      if (threadNavigationPreviewState.targetKey !== getThreadNavigationTargetKey(target)) return;
+      threadNavigationPreviewState.inFlight = false;
     }
 
     function relaunchThreadNavigationHover(wrapper) {
@@ -4727,26 +4630,16 @@ const clickElementLikeUser = (el) => {
       });
     }
 
-    function getThreadNavigationButtonLabel(btn) {
-      return [
-        btn.textContent,
-        btn.getAttribute?.('aria-label'),
-        btn.getAttribute?.('title'),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function isThoughtForThreadNavigationButton(btn) {
-      return /^Thought for\b/i.test(getThreadNavigationButtonLabel(btn));
-    }
-
     function collectThreadNavigationCandidates(config) {
-      const divBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
-        .map((el) => el.previousElementSibling)
-        .filter((el) => el?.tagName === 'BUTTON');
+      const counterSibling =
+        config.direction === 'previous' ? 'previousElementSibling' : 'nextElementSibling';
+      const structuralBtns = Array.from(document.querySelectorAll('div.tabular-nums'))
+        .filter(
+          (counter) =>
+            counter.previousElementSibling?.tagName === 'BUTTON' &&
+            counter.nextElementSibling?.tagName === 'BUTTON',
+        )
+        .map((counter) => counter[counterSibling]);
       const iconSelectors = [
         `button[aria-label="${config.ariaLabel}"]`,
         withPrefix(svgSelectorForTokens(config.iconTokens), 'button'),
@@ -4756,10 +4649,14 @@ const clickElementLikeUser = (el) => {
           (node) => node.closest('button') || node,
         ),
       );
-      const candidates = [...divBtns, ...iconBtns].filter(Boolean);
-      return config.excludeThoughtFor
-        ? candidates.filter((btn) => !isThoughtForThreadNavigationButton(btn))
-        : candidates;
+      return Array.from(new Set([...structuralBtns, ...iconBtns].filter(Boolean))).sort((a, b) => {
+        if (a === b) return 0;
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+    }
+
+    function isThreadNavigationButtonActionable(btn) {
+      return !btn.disabled && btn.getAttribute('aria-disabled') !== 'true';
     }
 
     function isThreadNavigationOverComposer(rect) {
@@ -4800,14 +4697,122 @@ const clickElementLikeUser = (el) => {
       return withMeta.reduce((a, b) => (a.absBottom > b.absBottom ? a : b)).btn;
     }
 
-    function chooseThreadNavigationPreviewTarget(target, buttons, container, config) {
-      if (!target || !isThreadNavigationButtonCentered(container, target)) return target;
+    function getAdjacentThreadNavigationTarget(buttons, targetKey, direction) {
+      const currentIndex = buttons.findIndex(
+        (button) => getThreadNavigationTargetKey(button) === targetKey,
+      );
+      if (currentIndex < 0) return null;
 
-      const idx = buttons.indexOf(target);
-      for (let index = idx - 1; index >= 0; --index) {
-        if (!isThreadNavigationButtonCentered(container, buttons[index])) return buttons[index];
+      const nextIndex = currentIndex + (direction === 'previous' ? -1 : 1);
+      return nextIndex >= 0 && nextIndex < buttons.length ? buttons[nextIndex] : null;
+    }
+
+    function getThreadNavigationWrapTarget(buttons, direction) {
+      return direction === 'previous' ? buttons[buttons.length - 1] : buttons[0];
+    }
+
+    function chooseThreadNavigationPreviewTarget(initialTarget, buttons, config) {
+      if (!initialTarget || buttons.length < 2) return { scanBoundary: null, target: initialTarget };
+
+      if (!threadNavigationPreviewState.targetKey) {
+        return { scanBoundary: null, target: initialTarget };
       }
-      return config.wrapPreviewToLast && buttons.length > 1 ? buttons[buttons.length - 1] : target;
+
+      const adjacentTarget = getAdjacentThreadNavigationTarget(
+        buttons,
+        threadNavigationPreviewState.targetKey,
+        config.direction,
+      );
+      return adjacentTarget
+        ? { scanBoundary: null, target: adjacentTarget }
+        : {
+          scanBoundary: config.direction === 'previous' ? 'top' : 'bottom',
+          target: null,
+        };
+    }
+
+    function scrollThreadNavigationContainerToBoundary(container, boundary, options = {}) {
+      const maxScroll =
+        container === window
+          ? (document.scrollingElement || document.documentElement).scrollHeight - window.innerHeight
+          : container.scrollHeight - container.clientHeight;
+      const targetY = boundary === 'top' ? 0 : Math.max(0, maxScroll);
+
+      if (!window.gsap) {
+        if (container === window) window.scrollTo(0, targetY);
+        else container.scrollTop = targetY;
+        options.onComplete?.();
+        return;
+      }
+
+      gsap.to(container, {
+        duration: options.scrollDuration ?? 0.2,
+        scrollTo: { y: targetY, autoKill: false },
+        ease: 'power4.out',
+        onComplete: options.onComplete,
+      });
+    }
+
+    function scrollThreadNavigationPreviewTarget(container, target, scrollDuration) {
+      if (!target) {
+        threadNavigationPreviewState.inFlight = false;
+        return;
+      }
+
+      trackThreadNavigationPreviewTarget(target);
+      scrollThreadNavigationTargetToAnchor(container, target, {
+        onComplete: () => {
+          flashBorder(target);
+          relaunchThreadNavigationHover(target.closest('[class*="group-hover"]'));
+          completeThreadNavigationPreviewTarget(target);
+        },
+        scrollDuration,
+      });
+    }
+
+    function runThreadNavigationBoundaryScan(container, config, scrollDuration) {
+      const currentTargetKey = threadNavigationPreviewState.targetKey;
+      const scanBoundary = config.direction === 'previous' ? 'top' : 'bottom';
+      const wrapBoundary = config.direction === 'previous' ? 'bottom' : 'top';
+      threadNavigationPreviewState.inFlight = true;
+
+      const settleThenResolve = (afterScan) => {
+        setTimeout(afterScan, THREAD_NAVIGATION_BOUNDARY_SETTLE_DELAY);
+      };
+      const scrollToWrappedTarget = () => {
+        scrollThreadNavigationContainerToBoundary(container, wrapBoundary, {
+          onComplete: () => {
+            settleThenResolve(() => {
+              const wrappedCandidates = collectThreadNavigationCandidates(config);
+              scrollThreadNavigationPreviewTarget(
+                container,
+                getThreadNavigationWrapTarget(wrappedCandidates, config.direction),
+                scrollDuration,
+              );
+            });
+          },
+          scrollDuration,
+        });
+      };
+
+      scrollThreadNavigationContainerToBoundary(container, scanBoundary, {
+        onComplete: () => {
+          settleThenResolve(() => {
+            const scannedCandidates = collectThreadNavigationCandidates(config);
+            const adjacentTarget = getAdjacentThreadNavigationTarget(
+              scannedCandidates,
+              currentTargetKey,
+              config.direction,
+            );
+            if (adjacentTarget) {
+              scrollThreadNavigationPreviewTarget(container, adjacentTarget, scrollDuration);
+              return;
+            }
+            scrollToWrappedTarget();
+          });
+        },
+        scrollDuration,
+      });
     }
 
     function getThreadNavigationMessageId(btn) {
@@ -4829,15 +4834,32 @@ const clickElementLikeUser = (el) => {
 
       setTimeout(() => {
         try {
+          if (opts.previewOnly && threadNavigationPreviewState.inFlight) return;
+
           const all = collectThreadNavigationCandidates(config);
-          if (!all.length) return;
+          const candidates = opts.previewOnly
+            ? all
+            : all.filter(isThreadNavigationButtonActionable);
+          if (!candidates.length) return;
 
           const container = getThreadNavigationScrollableContainer();
-          let target = chooseThreadNavigationTarget(all);
+          let target = chooseThreadNavigationTarget(candidates);
 
           if (opts.previewOnly) {
-            target = chooseThreadNavigationPreviewTarget(target, all, container, config);
+            const previewChoice = chooseThreadNavigationPreviewTarget(
+              target,
+              candidates,
+              config,
+            );
+            if (previewChoice.scanBoundary) {
+              runThreadNavigationBoundaryScan(container, config, scrollDuration);
+              return;
+            }
+            target = previewChoice.target;
+            scrollThreadNavigationPreviewTarget(container, target, scrollDuration);
+            return;
           }
+          resetThreadNavigationPreviewState();
 
           if (!target) return;
           const msgId = getThreadNavigationMessageId(target);
@@ -4847,19 +4869,18 @@ const clickElementLikeUser = (el) => {
               flashBorder(target);
               relaunchThreadNavigationHover(target.closest('[class*="group-hover"]'));
 
-              if (!opts.previewOnly) {
-                setTimeout(() => {
-                  target.click();
-                  setTimeout(
-                    () => recenterThreadNavigationTarget(msgId, scrollDuration),
-                    postClickDelay,
-                  );
-                }, postClickDelay);
-              }
+              setTimeout(() => {
+                target.click();
+                setTimeout(
+                  () => recenterThreadNavigationTarget(msgId, scrollDuration),
+                  postClickDelay,
+                );
+              }, postClickDelay);
             },
             scrollDuration,
           });
         } catch (_) {
+          if (opts.previewOnly) threadNavigationPreviewState.inFlight = false;
           /* silent */
         }
       }, initialDelay);
@@ -5907,18 +5928,18 @@ const clickElementLikeUser = (el) => {
     }
 
     const SHORTCUT_ICON_TOKENS = {
-      addPhotosFiles: ['M4.33496 12.5V7.5C4.33496', '#712359'],
+      addPhotosFiles: ['#712359', 'M4.33496 12.5V7.5C4.33496'],
       askToChangeResponseInputMenu: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
       branchInNewChatMenuItem: ['M3.32996 10H8.01173C8.7455', '#03583c'],
-      createImage: ['M9.38759 8.53403C10.0712', '#266724'],
+      createImage: ['#ccfd18', '#266724', 'M9.38759 8.53403C10.0712'],
+      deepResearch: ['#46f45a'],
       dontSearchTheWebMenuItem: ['#9254a2'],
       moreDotsMenuButton: ['M15.498 8.50159C16.3254', '#f6d0e2'],
       newGptConversationMenuItem: ['M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
       regenerateMenuButton: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
-      searchWeb: ['M10 2.125C14.3492', '#6b0d8c'],
+      searchWeb: ['#6d72eb', '#6b0d8c', 'M10 2.125C14.3492'],
       thinkingMenuButton: ['#127a53', '#c9d737'],
-      toggleCanvas: ['M12.0303 4.11328C13.4406', '#cf3864'],
     };
 
     const LEGACY_THINKING_MENU_ITEM_BY_OPTION_ID = {
@@ -6243,19 +6264,17 @@ const clickElementLikeUser = (el) => {
       shortcutKeyPreviousThread: (opts = {}) => {
         runThreadNavigationShortcut(opts, {
           ariaLabel: 'Previous response',
-          excludeThoughtFor: true,
+          direction: 'previous',
           iconTokens: ['M11.5292 3.7793', '#8ee2e9'],
           postClickDelay: 175,
-          wrapPreviewToLast: true,
         });
       },
       shortcutKeyNextThread: (opts = {}) => {
         runThreadNavigationShortcut(opts, {
           ariaLabel: 'Next response',
-          excludeThoughtFor: true,
+          direction: 'next',
           iconTokens: ['M7.52925 3.7793', '#b140e7'],
           postClickDelay: 200,
-          wrapPreviewToLast: false,
         });
       },
       selectThenCopy: runSelectThenCopyShortcut,
@@ -6278,7 +6297,10 @@ const clickElementLikeUser = (el) => {
         // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
       shortcutKeyCreateImage: () => runIconToolbarShortcut('createImage'),
-      shortcutKeyToggleCanvas: () => runIconToolbarShortcut('toggleCanvas'),
+      shortcutKeyToggleCanvas: async () => {
+        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
+      },
+      shortcutKeyDeepResearch: () => runIconToolbarShortcut('deepResearch'),
       shortcutKeyAddPhotosFiles: () => runIconToolbarShortcut('addPhotosFiles'),
       shortcutKeyToggleDictate: DictationShortcut.runToggle,
       shortcutKeyCancelDictation: DictationShortcut.runCancel,
@@ -13347,7 +13369,7 @@ ${groupMarkup.join('')}`;
             'shortcutKeySearchWeb',
             'shortcutKeyStudy',
             'shortcutKeyCreateImage',
-            'shortcutKeyToggleCanvas',
+            'shortcutKeyDeepResearch',
             'shortcutKeyAddPhotosFiles',
             'shortcutKeyThinkLonger',
           ],
