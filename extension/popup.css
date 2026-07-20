@@ -1531,7 +1531,7 @@ span.dup-key {
 }
 
 .p-segmented-controls {
-  --color-segmented: #4b4a4a;
+  --color-segmented: #003f7a;
   --color-lighter-segment: #d2e3f9;
   background: var(--p-segmented-bg);
   border: 1px solid var(--color-segmented);
@@ -1616,12 +1616,47 @@ span.dup-key {
   font-weight: bold;
 }
 
-.p-segmented-controls.p-segmented-radius a.active {
+.p-segmented-controls.p-segmented-radius :is(a, button).active {
   color: #fff;
 }
 
-.p-segmented-controls.p-segmented-radius a:not(.active) {
+.p-segmented-controls.p-segmented-radius :is(a, button):not(.active) {
   color: #4f4e4e;
+}
+
+.mp-model-catalog-heading {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+}
+
+.p-segmented-controls.mp-model-catalog-profile-selector {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  width: auto;
+  height: 22px;
+  left: -12px;
+  margin: 0;
+  position: absolute;
+  top: -2px;
+  white-space: nowrap;
+}
+
+.p-segmented-controls:is(#mp-model-switcher-modifier-selector, .mp-model-catalog-profile-selector)
+  :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 11px;
+  font-family: var(--popup-font-stack);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1;
+  text-transform: none;
 }
 
 .ios-searchbar {

@@ -22,23 +22,33 @@
 
       <!-- ((( Models Picker Grid ))) -->
 
-      <div class="blank-row section-header" role="heading" aria-level="2" style="position: relative; display: flex; align-items: center; justify-content: space-between;
-            height: 26px; line-height: 26px;">
+      <div class="blank-row section-header" role="heading" aria-level="2" style="position: relative; display: flex; align-items: flex-start; justify-content: space-between;
+            height: 44px; line-height: 26px;">
 
-        <span class="i18n" data-i18n="section_switch_models"
-          style="margin-left: 0; position: relative; top: 6px;">Effort</span>
+        <div class="mp-model-catalog-heading">
+          <span class="i18n" data-i18n="section_switch_models"
+            style="margin-left: 0; position: relative; top: 24px;">Effort</span>
+          <div id="mp-model-catalog-profile-selector"
+            class="p-segmented-controls p-segmented-radius mp-model-catalog-profile-selector" role="tablist"
+            aria-label="Model list version">
+            <button type="button" class="active i18n" role="tab" aria-selected="true"
+              data-i18n="label_modelCatalogLatest" data-model-catalog-profile="latest">Latest Models</button>
+            <button type="button" class="i18n" role="tab" aria-selected="false" tabindex="-1"
+              data-i18n="label_modelCatalogLegacy" data-model-catalog-profile="legacy">Legacy Models</button>
+          </div>
+        </div>
 
         <div class="mp-refresh-controls">
-          <div class="p-segmented-controls p-segmented-radius" style="height: 18px; width: auto; display: inline-flex; align-items: center;
-  transform: translate(8px, 0px); white-space: nowrap;">
+          <div id="mp-model-switcher-modifier-selector" class="p-segmented-controls p-segmented-radius" style="height: 22px; width: auto; display: inline-flex; align-items: center;
+  transform: translate(8px, -11px); white-space: nowrap;">
 
             <a href="#" class="active" data-target="useAltForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
-    padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
+    padding: 0 11px; font-size: 14px; line-height: 1; text-transform: none;">
               <span class="i18n" data-i18n="label_use_alt">Use Alt</span>
             </a>
 
             <a href="#" data-target="useControlForModelSwitcherRadio" style="height: 100%; display: inline-flex; align-items: center;
-    padding: 0 10px; font-size: 12px; line-height: 1; text-transform: none;">
+    padding: 0 11px; font-size: 14px; line-height: 1; text-transform: none;">
               <span class="i18n" data-i18n="label_use_control">Use Control</span>
             </a>
           </div>

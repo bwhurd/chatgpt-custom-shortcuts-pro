@@ -65,7 +65,62 @@ const OPTIONS_DEFAULTS = {
   selectThenCopyAllMessagesOnlyAssistant: false,
   selectThenCopyAllMessagesOnlyUser: false,
   doNotIncludeLabelsCheckbox: false,
-  modelNames: ['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3'],
+  modelNames: [
+    'Light',
+    'Medium',
+    '',
+    'GPT-5.6 Sol',
+    '',
+    '',
+    '',
+    'High',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
+    'GPT-5.5',
+    'Extra High',
+    'Max',
+    'Toggle Speed (Normal / Fast)',
+    'Reset to default',
+  ],
+  modelCatalog: null,
+  modelCatalogLatest: null,
+  modelNamesLatest: [
+    'Light',
+    'Medium',
+    '',
+    'GPT-5.6 Sol',
+    '',
+    '',
+    '',
+    'High',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
+    'GPT-5.5',
+    'Extra High',
+    'Max',
+    'Toggle Speed (Normal / Fast)',
+    'Reset to default',
+  ],
+  modelNamesLatestAt: '',
+  modelCatalogLegacy: null,
+  modelNamesLegacy: [
+    'Instant',
+    'Medium',
+    '',
+    '5.5',
+    '',
+    '',
+    'o3',
+    'High',
+    '5.4',
+    '5.3',
+    '',
+    '',
+    '',
+    '',
+    '',
+  ],
+  modelNamesLegacyAt: '',
   activeModelConfigId: 'configure-latest',
   showLegacyArrowButtonsCheckbox: false,
 
@@ -91,23 +146,24 @@ const OPTIONS_DEFAULTS = {
   disableCopyAfterSelectCheckbox: false,
 
   // Model picker — up to 15 slots.
-  // Current picker defaults: Instant, Medium, High, then 5.5 / 5.4 / 5.3 / o3.
+  // Current pill defaults mirror the popup's two six-column rows:
+  // effort actions use F1-F5; model/utility actions use 1-9 by visual position.
   modelPickerKeyCodes: [
+    'F1',
+    'F2',
+    '',
     'Digit1',
-    'Digit2',
+    '',
     '',
     'Digit4',
-    '',
-    '',
-    'Digit7',
+    'F3',
+    'Digit2',
     'Digit3',
+    'Digit4',
+    'F4',
+    'F5',
     'Digit5',
     'Digit6',
-    '',
-    '',
-    '',
-    '',
-    '',
   ],
 
   // === Radios ===
@@ -208,6 +264,75 @@ if (typeof OptionsSync === 'undefined') {
           fifteen[i] = typeof v === 'string' ? v : '';
         });
         stored.modelPickerKeyCodes = fifteen;
+      },
+
+      // 3.1) Reseed only untouched prior defaults so both catalog views receive
+      // the shared F-key effort row and numeric model/utility row.
+      (stored, defaults) => {
+        const arr = Array.isArray(stored.modelPickerKeyCodes)
+          ? stored.modelPickerKeyCodes.slice(0, 15)
+          : [];
+        while (arr.length < 15) arr.push('');
+        const legacyIntegratedDefaults = [
+          'Digit1',
+          'Digit2',
+          '',
+          'Digit4',
+          '',
+          '',
+          'Digit7',
+          'Digit3',
+          'Digit5',
+          'Digit6',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ];
+        const priorPillDefaults = [
+          'Digit1',
+          'Digit2',
+          '',
+          'KeyQ',
+          '',
+          '',
+          '',
+          'Digit3',
+          'KeyW',
+          'KeyE',
+          'KeyR',
+          'Digit4',
+          'Digit5',
+          'KeyT',
+          'KeyY',
+        ];
+        if (
+          arr.every((value, index) => value === legacyIntegratedDefaults[index]) ||
+          arr.every((value, index) => value === priorPillDefaults[index])
+        ) {
+          stored.modelPickerKeyCodes = defaults.modelPickerKeyCodes.slice();
+        }
+      },
+
+      // 3.2) Split the last generic scrape into its matching popup profile.
+      // The generic keys remain the current-page runtime contract.
+      (stored) => {
+        const catalog =
+          stored.modelCatalog && typeof stored.modelCatalog === 'object'
+            ? stored.modelCatalog
+            : null;
+        if (!catalog) return;
+        const profile =
+          catalog.pillMenu === true || catalog.selectorShape === 'pill-three-submenu'
+            ? 'Latest'
+            : 'Legacy';
+        const catalogKey = `modelCatalog${profile}`;
+        const namesKey = `modelNames${profile}`;
+        const namesAtKey = `modelNames${profile}At`;
+        if (!stored[catalogKey]) stored[catalogKey] = catalog;
+        if (Array.isArray(stored.modelNames)) stored[namesKey] = stored.modelNames.slice(0, 15);
+        if (stored.modelNamesAt) stored[namesAtKey] = stored.modelNamesAt;
       },
 
       // 3.5) Keep the legacy sidebar-scroll toggle inert while the feature is disabled.

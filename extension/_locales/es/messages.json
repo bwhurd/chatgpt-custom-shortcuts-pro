@@ -479,6 +479,12 @@
   "section_switch_models": {
     "message": "Cambiar modelo"
   },
+  "label_modelCatalogLatest": {
+    "message": "Modelos nuevos"
+  },
+  "label_modelCatalogLegacy": {
+    "message": "Modelos previos"
+  },
   "section_model_picker_tweaks": {
     "message": "Elegir modelo"
   },

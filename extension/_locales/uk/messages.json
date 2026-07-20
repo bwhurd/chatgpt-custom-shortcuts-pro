@@ -479,6 +479,12 @@
   "section_switch_models": {
     "message": "Змінити модель"
   },
+  "label_modelCatalogLatest": {
+    "message": "Нові моделі"
+  },
+  "label_modelCatalogLegacy": {
+    "message": "Старі моделі"
+  },
   "section_model_picker_tweaks": {
     "message": "Вибір моделі"
   },

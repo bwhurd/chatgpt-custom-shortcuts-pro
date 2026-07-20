@@ -31,6 +31,28 @@
   const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
     '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR = '[role="group"] > [role="menuitemradio"]';
+  const PILL_RESET_MENU_ITEM_SELECTOR = '[role="menuitem"][class*="_ResetToDefault"]';
+
+  function normalizePillMenuLabel(value) {
+    return String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isLikelyPillModelLabel(value) {
+    const text = normalizePillMenuLabel(value);
+    return /^(?:gpt[-\s]*)?\d+(?:\.\d+)?(?:\b|$)/i.test(text) || /^o\d+(?:\b|$)/i.test(text);
+  }
+
+  function classifyPillSubmenuLabels(labels) {
+    const normalized = (Array.isArray(labels) ? labels : [])
+      .map(normalizePillMenuLabel)
+      .filter(Boolean);
+    if (normalized.length >= 2 && normalized.every(isLikelyPillModelLabel)) return 'model';
+    if (normalized.length === 2) return 'speed';
+    if (normalized.length >= 3) return 'effort';
+    return '';
+  }
 
   function unique(values) {
     return [...new Set((values || []).filter(Boolean))];
@@ -156,6 +178,10 @@
     MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR,
     MODEL_THINKING_EFFORT_ACTION_SELECTOR,
     MODEL_THINKING_EFFORT_OPTION_SELECTOR,
+    PILL_RESET_MENU_ITEM_SELECTOR,
+    normalizePillMenuLabel,
+    isLikelyPillModelLabel,
+    classifyPillSubmenuLabels,
     unique,
     getModelSwitcherButtonMatchGroups,
     getModelSwitcherMenuMatchGroups,

@@ -43,6 +43,40 @@
       rowLabel: 'Pro',
     }),
   ]);
+  const PILL_EFFORT_ACTIONS = Object.freeze([
+    Object.freeze({
+      slot: 11,
+      id: 'effort-extra-high',
+      group: 'primary-extra',
+      label: 'Extra High',
+      actionKind: 'pill-effort',
+      optionValue: 'Extra High',
+    }),
+    Object.freeze({
+      slot: 12,
+      id: 'effort-max',
+      group: 'primary-extra',
+      label: 'Max',
+      actionKind: 'pill-effort',
+      optionValue: 'Max',
+    }),
+  ]);
+  const PILL_UTILITY_ACTIONS = Object.freeze([
+    Object.freeze({
+      slot: 13,
+      id: 'toggle-speed',
+      group: 'pill-utility',
+      label: 'Toggle Speed (Normal / Fast)',
+      actionKind: 'pill-speed-toggle',
+    }),
+    Object.freeze({
+      slot: 14,
+      id: 'reset-default',
+      group: 'pill-utility',
+      label: 'Reset to default',
+      actionKind: 'pill-reset',
+    }),
+  ]);
   const MODEL_NAME_ACTIONS = Object.freeze([
     Object.freeze({
       slot: 3,
@@ -97,14 +131,24 @@
     }),
   ]);
   const ACTION_SLOTS = Object.freeze(
-    [...PRIMARY_ACTIONS, ...MODEL_NAME_ACTIONS, ...EXTRA_ACTIONS].map((action) =>
-      Object.freeze({ ...action }),
-    ),
+    [
+      ...PRIMARY_ACTIONS,
+      ...MODEL_NAME_ACTIONS,
+      ...EXTRA_ACTIONS,
+      ...PILL_EFFORT_ACTIONS,
+      ...PILL_UTILITY_ACTIONS,
+    ].map((action) => Object.freeze({ ...action })),
   );
-  const ACTION_SLOT_COUNT = ACTION_SLOTS.length;
+  const ACTION_SLOT_COUNT = MAX_SLOTS;
   const ACTION_BY_ID = Object.freeze(
     ACTION_SLOTS.reduce((acc, action) => {
       acc[action.id] = action;
+      return acc;
+    }, {}),
+  );
+  const ACTION_BY_SLOT = Object.freeze(
+    ACTION_SLOTS.reduce((acc, action) => {
+      acc[action.slot] = action;
       return acc;
     }, {}),
   );
@@ -114,6 +158,15 @@
       ...MODEL_NAME_ACTIONS.map((action) => action.slot),
       ...EXTRA_ACTIONS.map((action) => action.slot),
     ) + 1;
+  const MODEL_NAME_DYNAMIC_SLOTS = Object.freeze(
+    Array.from(
+      { length: MAX_SLOTS - MODEL_NAME_DYNAMIC_SLOT_START },
+      (_, index) => index + MODEL_NAME_DYNAMIC_SLOT_START,
+    ).filter((slot) => !ACTION_BY_SLOT[slot]),
+  );
+  const MODEL_NAME_DYNAMIC_SLOT_END =
+    MODEL_NAME_DYNAMIC_SLOTS[MODEL_NAME_DYNAMIC_SLOTS.length - 1] ||
+    MODEL_NAME_DYNAMIC_SLOT_START - 1;
   const PRIMARY_ACTION_IDS_BY_ACTIVE_CONFIG = Object.freeze({
     'configure-latest': Object.freeze(['instant', 'thinking', 'configure']),
     'configure-5-2': Object.freeze(['instant', 'thinking', 'configure-latest', 'configure']),
@@ -141,7 +194,86 @@
     'configure-o3': Object.freeze(['configure-o3', 'configure']),
   });
   const DEFAULT_INTEGRATED_MODEL_CATALOG = Object.freeze({
+    version: 4,
+    selectorShape: 'pill-three-submenu',
+    pillMenu: true,
+    integratedEffort: true,
+    scrapedAt: 0,
+    thinkingEffortIds: Object.freeze([]),
+    configureOptions: Object.freeze([
+      Object.freeze({ id: 'configure-latest', label: 'GPT-5.6 Sol', slot: 3 }),
+      Object.freeze({ id: 'configure-dynamic-gpt-5-6-terra', label: 'GPT-5.6 Terra', slot: 8 }),
+      Object.freeze({ id: 'configure-dynamic-gpt-5-6-luna', label: 'GPT-5.6 Luna', slot: 9 }),
+      Object.freeze({ id: 'configure-dynamic-gpt-5-5', label: 'GPT-5.5', slot: 10 }),
+    ]),
+    frontendByConfig: Object.freeze({
+      'configure-latest': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Light', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+        Object.freeze({ available: true, id: 'effort-extra-high', label: 'Extra High', slot: 11 }),
+        Object.freeze({ available: true, id: 'effort-max', label: 'Max', slot: 12 }),
+      ]),
+      'configure-dynamic-gpt-5-6-terra': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Light', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+        Object.freeze({ available: true, id: 'effort-extra-high', label: 'Extra High', slot: 11 }),
+        Object.freeze({ available: true, id: 'effort-max', label: 'Max', slot: 12 }),
+      ]),
+      'configure-dynamic-gpt-5-6-luna': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Light', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+        Object.freeze({ available: true, id: 'effort-extra-high', label: 'Extra High', slot: 11 }),
+        Object.freeze({ available: true, id: 'effort-max', label: 'Max', slot: 12 }),
+      ]),
+      'configure-dynamic-gpt-5-5': Object.freeze([
+        Object.freeze({ available: true, id: 'instant', label: 'Light', slot: 0 }),
+        Object.freeze({ available: true, id: 'thinking', label: 'Medium', slot: 1 }),
+        Object.freeze({ available: true, id: 'pro', label: 'High', slot: 7 }),
+        Object.freeze({ available: true, id: 'effort-extra-high', label: 'Extra High', slot: 11 }),
+      ]),
+    }),
+    speedByConfig: Object.freeze({
+      'configure-latest': Object.freeze([
+        Object.freeze({ available: true, id: 'speed-standard', label: 'Standard' }),
+        Object.freeze({ available: true, id: 'speed-fast', label: 'Fast' }),
+      ]),
+      'configure-dynamic-gpt-5-6-terra': Object.freeze([
+        Object.freeze({ available: true, id: 'speed-standard', label: 'Standard' }),
+        Object.freeze({ available: true, id: 'speed-fast', label: 'Fast' }),
+      ]),
+      'configure-dynamic-gpt-5-6-luna': Object.freeze([
+        Object.freeze({ available: true, id: 'speed-standard', label: 'Standard' }),
+        Object.freeze({ available: true, id: 'speed-fast', label: 'Fast' }),
+      ]),
+      'configure-dynamic-gpt-5-5': Object.freeze([
+        Object.freeze({ available: true, id: 'speed-standard', label: 'Standard' }),
+        Object.freeze({ available: true, id: 'speed-fast', label: 'Fast' }),
+      ]),
+    }),
+  });
+  const DEFAULT_INTEGRATED_MODEL_NAMES = Object.freeze([
+    'Light',
+    'Medium',
+    '',
+    'GPT-5.6 Sol',
+    '',
+    '',
+    '',
+    'High',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
+    'GPT-5.5',
+    'Extra High',
+    'Max',
+    'Toggle Speed (Normal / Fast)',
+    'Reset to default',
+  ]);
+  const DEFAULT_LEGACY_MODEL_CATALOG = Object.freeze({
     version: 3,
+    selectorShape: 'integrated-two-level',
     integratedEffort: true,
     scrapedAt: 0,
     thinkingEffortIds: Object.freeze([]),
@@ -170,7 +302,7 @@
       ]),
     }),
   });
-  const DEFAULT_INTEGRATED_MODEL_NAMES = Object.freeze([
+  const DEFAULT_LEGACY_MODEL_NAMES = Object.freeze([
     'Instant',
     'Medium',
     '',
@@ -181,6 +313,11 @@
     'High',
     '5.4',
     '5.3',
+    '',
+    '',
+    '',
+    '',
+    '',
   ]);
   const THINKING_EFFORT_OPTIONS = Object.freeze([
     Object.freeze({
@@ -358,8 +495,14 @@
     'Digit5',
     'Digit6',
     'Digit7',
+    'Digit8',
+    'Digit9',
   ]);
   const DEFAULT_PICK_MODEL_CODE = 'Digit0';
+  const DEFAULT_GROUP_MODEL_CODES = Object.freeze({
+    primary: Object.freeze(['F1', 'F2', 'F3', 'F4', 'F5']),
+    configure: DEFAULT_SEQUENTIAL_MODEL_CODES,
+  });
 
   const buildDefaultKeyCodesFromPresentationGroups = (groups) => {
     const out = new Array(MAX_SLOTS).fill('');
@@ -367,7 +510,8 @@
     let nextSequentialIndex = 0;
 
     (Array.isArray(groups) ? groups : []).forEach((group) => {
-      (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
+      const groupCodes = DEFAULT_GROUP_MODEL_CODES[group?.id] || [];
+      (Array.isArray(group?.actions) ? group.actions : []).forEach((action, actionIndex) => {
         const base =
           getActionById(action?.id) ||
           (Number.isInteger(Number(action?.slot)) ? getActionBySlot(Number(action.slot)) : null) ||
@@ -382,6 +526,11 @@
           return;
         }
 
+        if (groupCodes[actionIndex]) {
+          out[slot] = groupCodes[actionIndex];
+          return;
+        }
+
         if (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
           out[slot] = DEFAULT_SEQUENTIAL_MODEL_CODES[nextSequentialIndex];
           nextSequentialIndex += 1;
@@ -393,9 +542,20 @@
   };
 
   const defaultKeyCodes = () => {
-    return buildDefaultKeyCodesFromPresentationGroups(
+    const latestCodes = buildDefaultKeyCodesFromPresentationGroups(
       getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, defaultNames(), null),
     );
+    const legacyCodes = buildDefaultKeyCodesFromPresentationGroups(
+      getPopupPresentationGroups(
+        DEFAULT_ACTIVE_CONFIG_ID,
+        defaultLegacyNames(),
+        DEFAULT_LEGACY_MODEL_CATALOG,
+      ),
+    );
+    legacyCodes.forEach((code, slot) => {
+      if (code && !latestCodes[slot]) latestCodes[slot] = code;
+    });
+    return latestCodes;
   };
 
   const isDynamicModelNameActionId = (value) =>
@@ -467,7 +627,7 @@
   };
   const getDynamicModelNameFallbackSlot = (optionIndex) => {
     const index = Number.isInteger(Number(optionIndex)) ? Number(optionIndex) : 0;
-    return Math.min(MAX_SLOTS - 1, MODEL_NAME_DYNAMIC_SLOT_START + Math.max(0, index - 1));
+    return MODEL_NAME_DYNAMIC_SLOTS[Math.max(0, index - 1)] ?? -1;
   };
 
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
@@ -536,11 +696,16 @@
         .map((option) => toValidDynamicModelNameSlot(option?.slot))
         .filter((slot) => slot >= 0),
     );
+    const reservedStaticSlots = new Set(
+      ACTION_SLOTS.filter((action) => action.group !== 'configure').map((action) => action.slot),
+    );
     let nextDynamicSlot = MODEL_NAME_DYNAMIC_SLOT_START;
     const takeNextDynamicSlot = () => {
       while (
         nextDynamicSlot < MAX_SLOTS &&
-        (usedSlots.has(nextDynamicSlot) || reservedDynamicSlots.has(nextDynamicSlot))
+        (usedSlots.has(nextDynamicSlot) ||
+          reservedDynamicSlots.has(nextDynamicSlot) ||
+          reservedStaticSlots.has(nextDynamicSlot))
       ) {
         nextDynamicSlot += 1;
       }
@@ -655,6 +820,16 @@
     if (text === 'heavy' || text === 'thinking heavy') return 'thinking-heavy';
     return '';
   };
+  const normalizeSpeedId = (value) => {
+    const text = normalizeMenuText(value).replace(/[_-]+/g, ' ');
+    if (!text) return '';
+    if (text === 'speed standard' || text === 'standard' || text === 'normal') {
+      return 'speed-standard';
+    }
+    if (text === 'speed fast' || text === 'fast') return 'speed-fast';
+    return '';
+  };
+  const mapSpeedLabelToId = (label) => normalizeSpeedId(label);
   const normalizeThinkingEffortIconToken = (value) => {
     const raw = String(value || '')
       .trim()
@@ -783,6 +958,7 @@
     return {
       ...base,
       label,
+      ...(catalog?.pillMenu === true ? { actionKind: 'pill-effort', optionValue: label } : {}),
       viewGroup: 'primary',
       viewKey: `popup-primary:${normalizeActiveConfigId(activeConfigId)}:${base.id}`,
       labelI18nKey: '',
@@ -920,6 +1096,17 @@
       incomingNames,
       effectiveCatalog,
     );
+    if (effectiveCatalog.pillMenu === true) {
+      PILL_UTILITY_ACTIONS.forEach((action) => {
+        modelNameActions.push({
+          ...action,
+          viewGroup: 'configure',
+          viewKey: `configure:${action.id}`,
+          active: false,
+          labelI18nKey: '',
+        });
+      });
+    }
 
     return [
       {
@@ -938,16 +1125,31 @@
       },
     ];
   };
+  const getPopupShortcutSlotForPosition = (
+    groupId,
+    groupIndex,
+    incomingNames = [],
+    catalog = null,
+  ) => {
+    const index = Number(groupIndex);
+    if (!Number.isInteger(index) || index < 0) return -1;
+    const group = getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, incomingNames, catalog).find(
+      (candidate) => candidate?.id === groupId,
+    );
+    return toValidSlot(group?.actions?.[index]?.slot);
+  };
   const mapFrontendLabelToActionId = (label, activeConfigId = DEFAULT_ACTIVE_CONFIG_ID) => {
     const rawText = normalizeMenuText(label);
     const text = rawText.replace(
-      /^(instant|thinking|medium|high|pro)\s*(?:(?:gpt)[-\s]*)?\d+(?:\.\d+)?$/,
+      /^(instant|thinking|light|medium|high|extra high|max|pro)\s*(?:(?:gpt)[-\s]*)?\d+(?:\.\d+)?$/,
       '$1',
     );
     if (!text) return '';
-    if (text === 'instant') return 'instant';
+    if (text === 'instant' || text === 'light') return 'instant';
     if (text === 'thinking' || text === 'medium') return 'thinking';
     if (text === 'high') return 'pro';
+    if (text === 'extra high') return 'effort-extra-high';
+    if (text === 'max') return 'effort-max';
     if (text === 'pro')
       return normalizeActiveConfigId(activeConfigId) === 'configure-latest' ? 'pro' : '';
     if (text === 'thinking mini' || text === 'gpt-5 mini') return 'configure-5-0-thinking-mini';
@@ -964,7 +1166,9 @@
     if (action.id === 'pro') return fallback && !/^pro$/i.test(fallback) ? fallback : 'High';
     if (action.id === 'configure' && /^configure\b/i.test(fallback)) return '';
     if (action.id === 'configure-latest')
-      return fallback && !/^latest$/i.test(fallback) ? fallback : '5.5';
+      return fallback && !/^latest$/i.test(fallback)
+        ? fallback
+        : DEFAULT_INTEGRATED_MODEL_CATALOG.configureOptions[0].label;
     if (action.id === 'configure-5-0-thinking-mini') return '5.0 Thinking Mini';
     return String(action.label || fallback || '').trim();
   };
@@ -1007,6 +1211,8 @@
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
   };
+  const defaultLegacyNames = () => DEFAULT_LEGACY_MODEL_NAMES.slice(0, MAX_SLOTS);
+  const getDefaultLegacyCatalog = () => DEFAULT_LEGACY_MODEL_CATALOG;
 
   // Only for popup display aesthetics: replace bare “→” with “Legacy Models →”
   const prettifyForPopup = (names) => {
@@ -1022,11 +1228,13 @@
     ACTION_GROUPS.map((group) => ({ ...group, actions: group.actions.slice() }));
   const getActionSlots = () => ACTION_SLOTS.slice();
   const getActionBySlot = (slot) =>
-    Number.isInteger(slot) && slot >= 0 && slot < ACTION_SLOTS.length ? ACTION_SLOTS[slot] : null;
+    Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS ? ACTION_BY_SLOT[slot] || null : null;
 
   window.ModelLabels = Object.freeze({
     MAX_SLOTS,
     ACTION_SLOT_COUNT,
+    MODEL_NAME_DYNAMIC_SLOT_START,
+    MODEL_NAME_DYNAMIC_SLOT_END,
     DEFAULT_ACTIVE_CONFIG_ID,
     TESTID_CANON,
     MAIN_CANON_BY_INDEX,
@@ -1057,11 +1265,14 @@
     getPresentationGroups,
     getPopupPrimaryActions,
     getPopupPresentationGroups,
+    getPopupShortcutSlotForPosition,
     buildDefaultKeyCodesFromPresentationGroups,
     mapFrontendLabelToActionId,
     normalizeThinkingEffortId,
     normalizeThinkingEffortIconToken,
     mapThinkingEffortLabelToId,
+    normalizeSpeedId,
+    mapSpeedLabelToId,
     getThinkingEffortOptionById,
     getThinkingEffortOptionByIconToken,
     getThinkingShortcutByStorageKey,
@@ -1076,6 +1287,8 @@
     normalizeStoredActionName,
     resolveActionableNames,
     defaultNames,
+    defaultLegacyNames,
+    getDefaultLegacyCatalog,
     prettifyForPopup,
   });
 })();

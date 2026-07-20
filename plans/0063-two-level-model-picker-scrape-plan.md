@@ -2,6 +2,12 @@
 
 ## Goal
 
+- [ ] Phase 2: support ChatGPT's pill menu with separate `Model`, `Effort`, and `Speed` submenus while retaining the current integrated/two-level scraper as a fallback.
+- [ ] Prove the live menu state for every exposed model, including each model's available effort and speed choices, then persist enough catalog metadata for popup and overlay parity.
+- [ ] Add `Toggle Speed (Normal / Fast)` and `Reset to default` as the two far-right actions on the second six-column grid row.
+- [ ] Generate pristine/fallback model-picker shortcut assignments from the same latest grouped catalog layout used to render the first and second rows.
+- [x] Add a popup `Latest` / `Legacy` segmented view beside the Effort heading; route pill-menu refreshes to the Latest snapshot and integrated/two-level refreshes to the Legacy snapshot without changing either scraper.
+- [x] Keep one mirrored shortcut layout across both catalog views: effort positions default to `F1`-`F5`, and model/utility positions default to `1`-`9`.
 - [x] Phase 1: make the popup `Refresh Models` button hydrate the new two-row model picker data from the current ChatGPT composer picker.
 - [x] Populate the first popup row from the first-level integrated options (`Instant`, `Medium`, `High`, varying by selected model) and the second popup row from the second-level model list (`5.5`, `5.4`, `5.3`, `o3`, etc.).
 - [x] Keep persisted `modelCatalog`, `modelNames`, and popup rendering contracts stable enough for manual testing before shortcut activation is updated.
@@ -9,6 +15,9 @@
 
 ## Investigation findings
 
+- [x] Live Chrome inspection on 2026-07-20 found an expanded `5.6 Luna Light` composer pill whose main Radix menu contains a power slider, a native `Reset to default` menu item, and three structural submenu triggers: `Model 5.6 Luna`, `Effort Light`, and `Speed Standard`.
+- [x] User manual testing confirmed on 2026-07-20 that both the pill-menu scraper and the older integrated/two-level scraper work; the remaining scope is popup profile persistence/view switching and shortcut defaults, not scraper traversal.
+- [ ] Capture the complete live `Model` / `Effort` / `Speed` state matrix before locking selectors or catalog rules.
 - [x] Post-refresh duplicate detection used `getModelActionSlots().length` as a contiguous array boundary even though refreshed model actions use sparse persisted slots; a displayed second-row action at slot 8, 9, or 10 could therefore be omitted from a prefix scan of `modelPickerKeyCodes`.
 - [x] Live refresh on 2026-07-10 confirmed that ChatGPT now renders the first-level Instant row as `Instant` plus a separate `5.5` badge in the same `menuitemradio`; the shared extractor's `textContent` concatenated the adjacent spans as `Instant5.5`, and its older tertiary-text selector did not remove the badge, so the exact frontend-label mapper discarded Instant while still accepting `Medium` and `High`.
 - [x] The new first-level scrape is `data-testid="composer-intelligence-picker-content"` inside the same open Radix menu shape already used by the extension.
@@ -32,10 +41,14 @@
 
 ## Scope
 
+- [ ] Preserve the current `scrapeIntegratedModelCatalogOnce()` and legacy Configure path as ordered fallbacks when the three-submenu pill shape is absent or incomplete.
+- [ ] Reuse structural Radix relationships and semantic roles/attributes observed in the live page; do not bind the new primary scraper to localized labels alone.
+- [ ] Keep popup and shortcuts overlay model grids sourced from the same catalog/action helpers, including the two new synthetic actions and default key assignments.
 - [ ] Touch only model-picker selector, scrape, action, devscrape, and focused test files unless validation exposes a direct dependency.
 - [ ] Preserve the persisted `modelCatalog.configureOptions`, `modelCatalog.frontendByConfig`, `modelNames`, and `activeModelConfigId` contracts so popup and overlay rendering continue to use shared metadata.
 - [ ] Keep older configure-dialog helper functions as fallback where cheap and already isolated, but stop requiring that route for the current refresh flow.
 - [ ] Do not change Chrome permissions, shortcut storage shape, or model-picker slot count.
+- [ ] Preserve the generic `modelCatalog` / `modelNames` current-page keys for content-script shortcut execution while adding Latest/Legacy popup snapshots.
 - [ ] Do not complete runtime shortcut activation in phase 1; prove refresh and popup row hydration first.
 - [ ] Do not collapse generic paid-user scrape failures into the free prompt; the prompt is gated by an explicit content-script result for either a missing composer pill or a language-agnostic model menu with no switching surface.
 
@@ -50,6 +63,19 @@
 
 ## Implementation plan
 
+- [ ] Capture and normalize the current three-submenu pill contract:
+  - Inventory every visible model row and, for each selected model, its available effort and speed rows plus checked/disabled/default state.
+  - Restore the conversation's initial model, effort, and speed after the inspection.
+  - Add a focused fixture/matrix that preserves the observed structural attributes without relying on localized model-menu prose as the selector contract.
+- [ ] Add a primary three-submenu catalog scrape in `extension/content.js`:
+  - Detect the main pill menu structurally, resolve its `Model`, `Effort`, and `Speed` submenu triggers, and associate each controlled Radix menu with its trigger.
+  - Select each available model, rescan effort and speed choices, and persist normalized per-model state without breaking existing `configureOptions`, `frontendByConfig`, `modelNames`, or active-config consumers.
+  - Fall through to the existing integrated/two-level and Configure-dialog paths only when the new shape is unavailable or cannot produce a complete catalog.
+- [ ] Extend shared model-action metadata and both grid renderers:
+  - Place `Toggle Speed (Normal / Fast)` and `Reset to default` in columns 5 and 6 of the second six-column row.
+  - Route the actions through the live pill menu's speed and reset controls, with current menu automation as the only DOM owner.
+  - Keep popup and shortcuts overlay labels, ordering, visibility, and slot identity in parity.
+- [ ] Derive pristine/fallback `modelPickerKeyCodes` from the shared grouped action layout so installed defaults automatically mirror the latest first- and second-row catalog, while preserving user-customized assignments and duplicate safeguards.
 - [x] Build the conflict-check slot set from the current catalog-backed presentation groups and iterate those exact sparse slot indices in both direct assignment checks and Alt-mode collision checks.
 - [x] Strip ChatGPT's current generic tertiary-text badge class during shared menu-label extraction and normalize a trailing numeric/GPT model-version badge—with or without DOM-inserted whitespace—before mapping first-level integrated effort labels, so refresh extraction and exposed-menu shortcut labeling both recognize every available row.
 - [x] Add selectors/helpers for the composer intelligence menu and its model submenu trigger:
@@ -77,6 +103,20 @@
 - [x] Label the second-level model menu:
   - Apply popup-assigned slot labels to visible second-level model rows.
   - Keep active model config in sync when second-level model rows are clicked manually or by shortcut.
+- [x] Keep the shortcut overlay and live-menu hints in profile parity:
+  - Add the popup's ephemeral `Latest | Legacy` view selector to the shortcut overlay, defaulting to Latest on each open and rendering both profiles from their stored catalog snapshots.
+  - Resolve displayed overlay key assignments by the same mirrored visual grid positions used by the popup.
+  - Add structural, language-agnostic shortcut hints to open pill Effort and Speed submenus while preserving the legacy menu hint path.
+  - Keep `Toggle Speed (Normal / Fast)` in its existing utility-grid position; this follow-up does not move it.
+  - Align both segmented controls' active text treatment, enlarge their labels/pills, and nudge the Latest/Legacy control upward another 3 px.
+  - Treat a unique visible shortcut hint as authoritative across Chat and Work menu shapes: one keypress first invokes the existing `Show Model Picker` route, opens model/effort submenu triggers to expose their hints, activates the exact hinted ARIA item, and otherwise preserves the dedicated speed-toggle and legacy fallbacks.
+  - Resolve model submenu hints and keypresses from the canonical Latest-grid position used by the popup before consulting current-catalog action slots, so reordered Chat/Legacy actions cannot reuse another row's displayed key.
+  - Mirror the popup's complete Latest/Legacy segmented-control CSS inside the shortcut overlay shadow-root style block, including grid-left alignment, 14 px typography, 11 px horizontal padding, 22 px height, and `#003f7a` border/active fill.
+- [x] Finish segmented-header and menu-dismiss behavior:
+  - Translate `Latest Models` and `Legacy Models` in every shipped locale, keeping each translated label at 15 Unicode characters or fewer.
+  - Move the Effort heading and model-grid top edge down 18 px while leaving both segmented selectors on the upper header line; mirror the header spacing in the shortcut overlay.
+  - Restore Alt/Control clicks by targeting its explicit control rather than the first `.p-segmented-controls`, which now resolves to Latest/Legacy.
+  - After successful model, effort, speed, reset, and legacy selection actions, refocus the composer so the picker closes; also refocus in the catalog-refresh cleanup path on success or failure.
 - [x] Add integrated effort fallback behavior:
   - If the active model does not expose a requested baseline effort (`Instant`, `Medium`, `High`), route the shortcut through the default/latest model and then select that effort there.
   - Current expected behavior: `o3 + Instant` and `o3 + High` switch to `5.5` with the requested effort; `o3 + Medium` stays on `o3`; `5.4` keeps all three effort shortcuts in-model.
@@ -100,8 +140,18 @@
 
 ## Validation
 
+- [ ] Prove the live state matrix covers every exposed model and every effort/speed option, and that the initial live selection is restored afterward.
+- [ ] Add/run focused fixtures for three-submenu detection, per-model effort/speed catalog capture, fallback ordering, the two synthetic actions, and catalog-derived pristine key defaults.
+- [ ] Verify popup and shortcuts overlay render identical two-row action identities with `Toggle Speed (Normal / Fast)` and `Reset to default` at second-row columns 5 and 6.
+- [ ] Reload the unpacked extension and run a live refresh on the paid positive-control conversation; verify the new primary scrape completes and the legacy scraper remains reachable in focused fallback coverage.
 - [x] Run `npx biome check` on changed JS files.
 - [x] Run `node tests/model-picker-slot-uniqueness.mjs`.
+- [x] Run `node tests/model-picker-pill-three-menu-fixture.mjs`.
+- [x] Run `npx playwright test tests/playwright/model-picker-profile-selector.spec.mjs --workers=1` to prove the Latest/Legacy selector mirrors a mismatched fourth second-row slot and propagates a Legacy edit back to Latest.
+- [x] Add/run focused coverage for Latest/Legacy shortcut-overlay switching and structural pill Effort/Speed hint routing; the fixture executes both overlay profiles with intentionally mismatched slots and verifies structural hint/observer wiring.
+- [x] Add/run focused coverage proving the Chat-mode model submenu maps its first five rows to canonical popup keys `1`-`5` without duplicate hints when catalog action slots are reordered.
+- [x] Add/run focused coverage for translated profile-label length, explicit Alt/Control control targeting, 18 px header separation, and composer refocus after selection/refresh; the Playwright control click and refreshed visual baseline both pass.
+- [x] Regenerate and pass the intentional popup visual baseline with `npx playwright test tests/playwright/popup-visual.spec.mjs --workers=1 --update-snapshots`.
 - [x] Run or add a focused fixture test proving a two-level catalog renders first-row `Instant` / `Medium` / `High` and second-row model labels.
 - [x] Add/run focused fixture coverage proving a higher numeric model such as `5.6` becomes `configure-latest` even when it is not the first visible submenu row.
 - [x] Add/run focused coverage for integrated catalog rendering/defaults; runtime missing-effort fallback is now live-menu driven in `content.js`.
@@ -115,6 +165,10 @@
 
 ## Done when
 
+- [ ] The live paid-account pill scrape produces a complete, test-backed model/effort/speed matrix for every exposed model without using the fallback path.
+- [ ] The existing integrated/two-level and Configure scrapers remain intact as fallback paths and have focused ordering coverage.
+- [ ] Popup and overlay both place `Toggle Speed (Normal / Fast)` and `Reset to default` at the far right of the second grid row, with working runtime actions.
+- [ ] Pristine/fallback shortcut keys are generated from the latest shared two-row catalog layout without overwriting customized stored keys.
 - [ ] Manual model refresh succeeds against the new two-level menu without `CONFIGURE_ITEM_NOT_FOUND`.
 - [x] Popup model picker renders the refreshed first two rows from shared catalog metadata.
 - [x] The old separate effort row does not show for an integrated-effort catalog.

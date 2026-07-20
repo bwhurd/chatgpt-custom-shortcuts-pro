@@ -6,6 +6,13 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.20.2026
+- Added: Toggle Speed and Reset to Default model shortcuts.
+- Fixed: Model refresh works with ChatGPT's latest `work` mode, `chat mode`, as well as the legacy model picker.
+- Fixed: Model, effort, and speed hints match configured shortcuts without duplicates.
+- Fixed: Send Top Bar To Bottom fits ChatGPT Work controls beside the sidebar and new chat buttons.
+- Fixed: Composer positioning stays correct when Send Top Bar To Bottom is disabled.
+
 #### 07.13.2026
 - Fixed: Upload, Create Image, and Web Search shortcuts work again.
 - Added: Deep Research shortcut.

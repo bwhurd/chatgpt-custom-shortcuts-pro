@@ -479,6 +479,12 @@
   "section_switch_models": {
     "message": "モデルの切り替え"
   },
+  "label_modelCatalogLatest": {
+    "message": "最新モデル"
+  },
+  "label_modelCatalogLegacy": {
+    "message": "旧モデル"
+  },
   "section_model_picker_tweaks": {
     "message": "モデル選択"
   },

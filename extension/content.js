@@ -1730,18 +1730,22 @@ const clickElementLikeUser = (el) => {
         type === 'pointerout' ||
         type === 'pointerleave';
       try {
-        el.dispatchEvent(
-          new Ctor(type, {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            clientX: cx,
-            clientY: cy,
-            button: 0,
-            buttons: isPress ? 1 : isRelease ? 0 : 0,
-            view: window,
-          }),
-        );
+        const init = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: cx,
+          clientY: cy,
+          button: 0,
+          buttons: isPress ? 1 : isRelease ? 0 : 0,
+          view: window,
+        };
+        if (Ctor === PointerEvent) {
+          init.pointerId = 1;
+          init.pointerType = 'mouse';
+          init.isPrimary = true;
+        }
+        el.dispatchEvent(new Ctor(type, init));
       } catch {
         /* ignore */
       }
@@ -7286,11 +7290,30 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         margin-top: 2px !important;
-        margin-bottom: -35px !important;
+        margin-bottom: -20px !important;
         overflow-anchor: none !important;
         min-height: 36px !important;
         box-sizing: border-box !important;
         background: transparent !important;
+      }
+
+      #bottomBarContainer[data-layout="native-utility-row"] {
+        display: flex !important;
+        width: auto !important;
+        min-height: 36px !important;
+        margin: 0 !important;
+        flex: 0 0 auto !important;
+      }
+
+      #bottomBarContainer[data-layout="native-utility-row"] #bottomBarLane,
+      #bottomBarContainer[data-layout="native-utility-row"] #bottomBarRow {
+        width: auto !important;
+        min-height: 36px !important;
+      }
+
+      #bottomBarContainer[data-layout="native-utility-row"] #bottomBarRow {
+        gap: 0 !important;
+        padding: 0 !important;
       }
 
       #bottomBarContainer[data-pending="true"] {
@@ -7440,6 +7463,25 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     };
   }
 
+  function findNativeComposerUtilityRow(snapshot) {
+    if (!(snapshot?.mountAfterEl instanceof Element)) return null;
+
+    let candidate = snapshot.mountAfterEl.nextElementSibling;
+    if (candidate?.id === 'bottomBarContainer') {
+      candidate = candidate.nextElementSibling;
+    }
+
+    if (!(candidate instanceof HTMLElement) || candidate.hidden) return null;
+
+    const row = candidate.firstElementChild;
+    if (!(row instanceof HTMLElement)) return null;
+
+    const buttons = row.querySelectorAll('button');
+    if (buttons.length < 2 || !row.querySelector('button[aria-haspopup="menu"]')) return null;
+
+    return row;
+  }
+
   function createBottomBarController() {
     const state = {
       started: false,
@@ -7457,6 +7499,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       mountedHostParent: null,
       mountedAnchor: null,
+      usesNativeUtilityRow: false,
       composerContainer: null,
       modelButton: null,
       headerActions: null,
@@ -7733,6 +7776,11 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       if (!(state.root instanceof HTMLElement)) return;
       if (!(snapshot?.composerContainer instanceof Element)) return;
 
+      if (state.usesNativeUtilityRow) {
+        state.root.style.width = 'auto';
+        return;
+      }
+
       const width = Math.max(0, Math.round(snapshot.composerContainer.clientWidth * 10) / 10);
       if (!width) return;
 
@@ -7748,6 +7796,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       }
 
       const root = createRoot();
+      const nativeUtilityRow = findNativeComposerUtilityRow(snapshot);
+      state.usesNativeUtilityRow = nativeUtilityRow instanceof HTMLElement;
+      root.dataset.layout = state.usesNativeUtilityRow ? 'native-utility-row' : 'standalone';
 
       state.lane = ensureSlot('bottomBarLane', SHELL_SLOT_STYLES.lane);
       state.row = ensureSlot('bottomBarRow', SHELL_SLOT_STYLES.row);
@@ -7768,16 +7819,21 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       syncShellGeometry(snapshot);
       applyIdleOpacity();
 
-      const mountParent = snapshot.mountParent;
+      const mountParent = state.usesNativeUtilityRow ? nativeUtilityRow : snapshot.mountParent;
       const mountAfterEl = snapshot.mountAfterEl;
-      const needsAttach =
-        root.parentElement !== mountParent || root.previousElementSibling !== mountAfterEl;
+      const needsAttach = state.usesNativeUtilityRow
+        ? root.parentElement !== mountParent || mountParent.firstElementChild !== root
+        : root.parentElement !== mountParent || root.previousElementSibling !== mountAfterEl;
 
       if (needsAttach) {
         suppressOwnMutations(350);
 
         withScrollPreserved(() => {
-          mountParent.insertBefore(root, mountAfterEl.nextSibling);
+          if (state.usesNativeUtilityRow) {
+            mountParent.insertBefore(root, mountParent.firstChild);
+          } else {
+            mountParent.insertBefore(root, mountAfterEl.nextSibling);
+          }
         });
 
         state.attachCount += 1;
@@ -7964,7 +8020,11 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         return 'mount_parent_mismatch';
       }
 
-      if (state.mountedAnchor && state.root.previousElementSibling !== state.mountedAnchor) {
+      if (state.usesNativeUtilityRow) {
+        if (state.mountedHostParent?.firstElementChild !== state.root) {
+          return 'native_utility_row_order_mismatch';
+        }
+      } else if (state.mountedAnchor && state.root.previousElementSibling !== state.mountedAnchor) {
         return 'anchor_mismatch';
       }
 
@@ -8454,7 +8514,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
           const style = document.createElement('style');
           style.textContent = `
 form.w-full[data-type="unified-composer"] {
-    margin-bottom: -1em;
+    margin-bottom: 0.5em;
 }
 
 .bg-token-bg-elevated-secondary.sticky.bottom-0
@@ -8743,13 +8803,13 @@ form.w-full[data-type="unified-composer"] {
     '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR =
     ModelPickerSelectors.MODEL_THINKING_EFFORT_OPTION_SELECTOR || '[role="menuitemradio"]';
+  const PILL_RESET_MENU_ITEM_SELECTOR =
+    ModelPickerSelectors.PILL_RESET_MENU_ITEM_SELECTOR ||
+    '[role="menuitem"][class*="_ResetToDefault"]';
+  // Radix portals keep submenus outside their parent menu, so descendant role matching
+  // remains menu-scoped while supporting the pill's deeper internal wrapper hierarchy.
   const MODEL_MENU_ITEM_SELECTOR =
-    ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
-    ':scope > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
-    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
-    ':scope > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]), ' +
-    ':scope > * > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])[data-radix-collection-item], ' +
-    ':scope > * > * > :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])';
+    ':scope :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"])';
   const THINKING_EFFORT_OPTION_IDS = [
     'thinking-standard',
     'thinking-extended',
@@ -8805,12 +8865,7 @@ form.w-full[data-type="unified-composer"] {
         return !!menu.querySelector('[data-testid^="model-switcher-"]');
       });
   };
-  const getModelActionBySlot = (slot) => {
-    const staticAction =
-      typeof window.ModelLabels?.getActionBySlot === 'function'
-        ? window.ModelLabels.getActionBySlot(slot)
-        : null;
-    if (staticAction) return staticAction;
+  const getCurrentModelPresentationAction = (predicate) => {
     const catalog = window.__modelCatalog || null;
     if (!catalog || typeof window.ModelLabels?.getPopupPresentationGroups !== 'function') return null;
     const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
@@ -8819,13 +8874,24 @@ form.w-full[data-type="unified-composer"] {
       window.MODEL_NAMES || [],
       catalog,
     );
-    return (
-      groups
-        .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
-        .find((action) => Number(action?.slot) === Number(slot)) || null
+    return groups
+      .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+      .find(predicate) || null;
+  };
+  const getModelActionBySlot = (slot) => {
+    const presentedAction = getCurrentModelPresentationAction(
+      (action) => Number(action?.slot) === Number(slot),
     );
+    if (presentedAction) return presentedAction;
+    return typeof window.ModelLabels?.getActionBySlot === 'function'
+      ? window.ModelLabels.getActionBySlot(slot)
+      : null;
   };
   const getModelActionById = (id) => {
+    const presentedAction = getCurrentModelPresentationAction(
+      (action) => String(action?.id || '').trim() === String(id || '').trim(),
+    );
+    if (presentedAction) return presentedAction;
     const catalogAction =
       typeof window.ModelLabels?.getCatalogActionById === 'function'
         ? window.ModelLabels.getCatalogActionById(id, window.__modelCatalog || null, window.MODEL_NAMES || [])
@@ -8882,6 +8948,24 @@ form.w-full[data-type="unified-composer"] {
       })();
   const sleepAsync =
     typeof sleep === 'function' ? sleep : (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const MODEL_PICKER_COMPOSER_REFOCUS_DELAY_MS = 40;
+  const MODEL_PICKER_COMPOSER_REFOCUS_ACTION_KINDS = new Set([
+    'main-row',
+    'configure-frontend-row',
+    'configure-option',
+    'pill-effort',
+    'pill-speed-toggle',
+    'pill-reset',
+  ]);
+  const scheduleComposerRefocusAfterModelPicker = () => {
+    window.setTimeout(() => {
+      try {
+        window.triggerDirectComposerActivation?.();
+      } catch {}
+    }, MODEL_PICKER_COMPOSER_REFOCUS_DELAY_MS);
+  };
+  const shouldRefocusComposerAfterModelAction = (action) =>
+    MODEL_PICKER_COMPOSER_REFOCUS_ACTION_KINDS.has(String(action?.actionKind || '').trim());
   const smartClickSafe =
     typeof smartClick === 'function'
       ? smartClick
@@ -9327,8 +9411,22 @@ form.w-full[data-type="unified-composer"] {
   const ANIM_FLASH_OUT_S = 0.075; // was 0.15
 
   chrome.storage.sync.get(
-    ['useControlForModelSwitcherRadio', 'modelPickerKeyCodes', 'activeModelConfigId', 'modelCatalog'],
-    ({ useControlForModelSwitcherRadio, modelPickerKeyCodes, activeModelConfigId, modelCatalog }) => {
+    [
+      'useControlForModelSwitcherRadio',
+      'modelPickerKeyCodes',
+      'activeModelConfigId',
+      'modelCatalog',
+      'modelCatalogLatest',
+      'modelNamesLatest',
+    ],
+    ({
+      useControlForModelSwitcherRadio,
+      modelPickerKeyCodes,
+      activeModelConfigId,
+      modelCatalog,
+      modelCatalogLatest,
+      modelNamesLatest,
+    }) => {
       // Initialize shared KEY_CODES (mutate the const array to keep references alive)
       const incoming = Array.isArray(modelPickerKeyCodes)
         ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
@@ -9339,6 +9437,49 @@ form.w-full[data-type="unified-composer"] {
       const initialActiveModelConfigId = setCachedActiveModelConfigId(activeModelConfigId);
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = initialActiveModelConfigId;
       window.__modelCatalog = modelCatalog && typeof modelCatalog === 'object' ? modelCatalog : null;
+      window.__modelCatalogLatest =
+        modelCatalogLatest && typeof modelCatalogLatest === 'object' ? modelCatalogLatest : null;
+      window.__modelNamesLatest = Array.isArray(modelNamesLatest)
+        ? modelNamesLatest.slice(0, MAX_SLOTS)
+        : [];
+
+      const getLatestPopupShortcutSlotForPosition = (groupId, groupIndex, fallbackSlot = -1) => {
+        const genericCatalog = window.__modelCatalog;
+        const latestCatalog =
+          window.__modelCatalogLatest ||
+          (genericCatalog?.pillMenu === true || genericCatalog?.selectorShape === 'pill-three-submenu'
+            ? genericCatalog
+            : null);
+        const latestNames = Array.isArray(window.__modelNamesLatest)
+          ? window.__modelNamesLatest
+          : [];
+        const slot =
+          typeof window.ModelLabels?.getPopupShortcutSlotForPosition === 'function'
+            ? window.ModelLabels.getPopupShortcutSlotForPosition(
+                groupId,
+                groupIndex,
+                latestNames,
+                latestCatalog,
+              )
+            : -1;
+        if (Number.isInteger(slot) && slot >= 0 && slot < KEY_CODES.length) return slot;
+        const fallback = Number(fallbackSlot);
+        return Number.isInteger(fallback) && fallback >= 0 && fallback < KEY_CODES.length
+          ? fallback
+          : -1;
+      };
+
+      const getLatestPopupShortcutSlots = () => {
+        const slots = [];
+        ['primary', 'configure'].forEach((groupId) => {
+          for (let groupIndex = 0; groupIndex < MAX_SLOTS; groupIndex += 1) {
+            const slot = getLatestPopupShortcutSlotForPosition(groupId, groupIndex);
+            if (slot < 0) break;
+            if (!slots.includes(slot)) slots.push(slot);
+          }
+        });
+        return slots;
+      };
 
       // Platform + modifier label
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
@@ -9415,11 +9556,26 @@ form.w-full[data-type="unified-composer"] {
         return false;
       };
 
+      // Use the exact runtime entry point behind the working "Show model picker" shortcut.
+      const waitForPillMainMenuFromShortcut = async () => {
+        const btn = getModelMenuButton();
+        if (!(btn instanceof Element) || !btn.matches(COMPOSER_MODEL_MENU_BTN_SELECTOR)) {
+          return null;
+        }
+        const currentMain = getOpenPillMainMenu(btn);
+        if (currentMain) return currentMain;
+        if (typeof window.__cspOpenModelPickerMainMenu !== 'function') return null;
+        window.__cspOpenModelPickerMainMenu();
+        return waitForAsync(() => getOpenPillMainMenu(btn), { timeout: 1800, interval: 30 });
+      };
+
       const ModelPickerHints = (() => {
         const STYLE_ID = '__altHintStyle';
         const HINT_CLASS = 'alt-hint';
         let scheduleToken = 0;
-        let observedOpenSurfaceCount = 0;
+        let nextOpenSurfaceId = 1;
+        let observedOpenSurfaceSignature = '';
+        const openSurfaceIds = new WeakMap();
 
         function ensureStyle() {
           if (document.getElementById(STYLE_ID)) return;
@@ -9463,6 +9619,40 @@ form.w-full[data-type="unified-composer"] {
           span.className = HINT_CLASS;
           span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
           (target || el).appendChild(span);
+        }
+
+        function getUniqueVisibleMenuItemForSlot(slot, root = document) {
+          const slotIndex = Number(slot);
+          if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= KEY_CODES.length) {
+            return null;
+          }
+          const keyLabel = displayFromCode(KEY_CODES[slotIndex]);
+          if (!keyLabel || keyLabel === '—') return null;
+          const expectedHint = `${MOD_KEY_TEXT}+${keyLabel}`;
+          const openMenus = new Set(getOpenModelMenus());
+          const matches = new Set();
+          const scope = root instanceof Element ? root : document;
+
+          scope.querySelectorAll(`.${HINT_CLASS}`).forEach((hint) => {
+            if (hint.textContent?.trim() !== expectedHint || !isUsablyVisibleModelElement(hint)) {
+              return;
+            }
+            const item = hint.closest(
+              '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"]',
+            );
+            const menu = item?.closest?.('[role="menu"]');
+            if (
+              item instanceof Element &&
+              menu instanceof Element &&
+              openMenus.has(menu) &&
+              isUsablyVisibleModelElement(item) &&
+              !isUnavailableModelMenuItem(item)
+            ) {
+              matches.add(item);
+            }
+          });
+
+          return matches.size === 1 ? matches.values().next().value : null;
         }
 
         function getExpectedPrimaryHintTexts(primaryPairs) {
@@ -9544,12 +9734,80 @@ form.w-full[data-type="unified-composer"] {
           const menu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
           if (!(menu instanceof Element)) return false;
           let applied = false;
-          getModelVersionMenuItems(menu).forEach((item, index) => {
-            const action = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
-            const slot = Number(action?.slot);
+          const items = getModelVersionMenuItems(menu);
+          const listLabels = items.map(getModelVersionMenuItemLabel);
+          items.forEach((item, index) => {
+            const action = getModelNameActionForMenuItem(
+              item,
+              index,
+              window.__modelCatalog,
+              listLabels,
+            );
+            const slot = getLatestPopupShortcutSlotForPosition(
+              'configure',
+              index,
+              action?.slot,
+            );
             if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
             const label = displayFromCode(KEY_CODES[slot]);
             if (!label || label === '—') return;
+            addLabel(item, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function getOpenPillSubmenuByKind(kind) {
+          const mainMenu = getOpenPillMainMenu();
+          if (!(mainMenu instanceof Element)) return null;
+          for (const trigger of getPillSubmenuTriggers(mainMenu)) {
+            const menu = getOpenPillSubmenuForTrigger(trigger);
+            if (menu instanceof Element && classifyPillSubmenu(menu) === kind) return menu;
+          }
+          return null;
+        }
+
+        function getPillEffortHintActions() {
+          const catalog = window.__modelCatalog || null;
+          const activeModelConfigId = normalizeActiveModelConfigId(
+            window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+          );
+          const names = Array.isArray(window.MODEL_NAMES) ? window.MODEL_NAMES : [];
+          const groups =
+            typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
+              ? window.ModelLabels.getPopupPresentationGroups(activeModelConfigId, names, catalog)
+              : [];
+          return (groups.find((group) => group?.id === 'primary')?.actions || []).filter(
+            (action) => Number.isInteger(Number(action?.slot)),
+          );
+        }
+
+        function applyPillEffortSubmenuHints() {
+          const menu = getOpenPillSubmenuByKind('effort');
+          if (!(menu instanceof Element)) return false;
+          const actions = getPillEffortHintActions();
+          let applied = false;
+          getPillRadioItems(menu).forEach((item, index) => {
+            const slot = Number(actions[index]?.slot);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
+            const label = displayFromCode(KEY_CODES[slot]);
+            if (!label || label === '—') return;
+            addLabel(item, label);
+            applied = true;
+          });
+          return applied;
+        }
+
+        function applyPillSpeedSubmenuHints() {
+          const menu = getOpenPillSubmenuByKind('speed');
+          if (!(menu instanceof Element)) return false;
+          const action = getModelActionById('toggle-speed');
+          const slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return false;
+          const label = displayFromCode(KEY_CODES[slot]);
+          if (!label || label === '—') return false;
+          let applied = false;
+          getPillRadioItems(menu).forEach((item) => {
             addLabel(item, label);
             applied = true;
           });
@@ -9580,6 +9838,8 @@ form.w-full[data-type="unified-composer"] {
           applied = applyThinkingEffortListboxHints() || applied;
           applied = applyModelSelectorThinkingEffortMenuHints() || applied;
           applied = applyModelVersionSubmenuHints() || applied;
+          applied = applyPillEffortSubmenuHints() || applied;
+          applied = applyPillSpeedSubmenuHints() || applied;
           return applied;
         }
 
@@ -9705,23 +9965,41 @@ form.w-full[data-type="unified-composer"] {
             .filter(isOpenVisibleListbox).length;
         }
 
-        function getOpenConfigureDialogCount() {
-          return findConfigureDialog() ? 1 : 0;
-        }
-
         function isConfigureUiLikelyActive() {
           return !!findConfigureDialog() || getOpenSelectListboxCount() > 0;
         }
 
-        function scheduleWhenOpenSurfaceCountChanges() {
+        function getOpenSurfaceSignature() {
+          const configureDialog = findConfigureDialog();
+          const listboxes = [findConfigureCombobox(), findThinkingEffortCombobox()]
+            .map(getControlledListboxForCombobox)
+            .filter(isOpenVisibleListbox);
+          const surfaces = [
+            ...getOpenModelMenus(),
+            ...(configureDialog ? [configureDialog] : []),
+            ...listboxes,
+          ];
+          return surfaces
+            .map((surface) => {
+              if (!openSurfaceIds.has(surface)) {
+                openSurfaceIds.set(surface, nextOpenSurfaceId++);
+              }
+              const roleShape = ['menuitem', 'menuitemradio', 'option']
+                .map((role) => surface.querySelectorAll(`[role="${role}"]`).length)
+                .join(':');
+              return `${openSurfaceIds.get(surface)}:${roleShape}`;
+            })
+            .join('|');
+        }
+
+        function scheduleWhenOpenSurfaceChanges() {
           if (!isModelMenuLikelyActive() && !isConfigureUiLikelyActive()) {
-            observedOpenSurfaceCount = 0;
+            observedOpenSurfaceSignature = '';
             return;
           }
-          const count =
-            getOpenModelMenus().length + getOpenConfigureDialogCount() + getOpenSelectListboxCount();
-          if (count !== observedOpenSurfaceCount) {
-            observedOpenSurfaceCount = count;
+          const signature = getOpenSurfaceSignature();
+          if (signature !== observedOpenSurfaceSignature) {
+            observedOpenSurfaceSignature = signature;
             setTimeout(() => schedule({ retries: 8, interval: DELAY_APPLY_HINTS_OBSERVER_MS }), 0);
           }
         }
@@ -9729,7 +10007,7 @@ form.w-full[data-type="unified-composer"] {
         function installInteractionListeners() {
           document.addEventListener('click', scheduleAfterMenuInteraction);
 
-          const observer = new MutationObserver(scheduleWhenOpenSurfaceCountChanges);
+          const observer = new MutationObserver(scheduleWhenOpenSurfaceChanges);
           observer.observe(document.documentElement, {
             childList: true,
             subtree: true,
@@ -9744,6 +10022,7 @@ form.w-full[data-type="unified-composer"] {
           apply,
           applyOpenSelectListboxHints,
           ensureStyle,
+          getUniqueVisibleMenuItemForSlot,
           installInteractionListeners,
           schedule,
         };
@@ -10114,6 +10393,7 @@ form.w-full[data-type="unified-composer"] {
       }
 
       function getPrimaryMenuActionPairs(state = getVisibleModelMenuState()) {
+        if (isPillConfiguratorMenu(state.main)) return [];
         const rawItems = (state.items || []).filter((item) => item.menu === 'main');
         const activeModelConfigId = window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
         const catalog = window.__modelCatalog || null;
@@ -10303,8 +10583,28 @@ form.w-full[data-type="unified-composer"] {
       function indexFromEvent(e) {
         const utils = window.ShortcutUtils || {};
         const cmp = typeof utils.codeEquals === 'function' ? utils.codeEquals : () => false;
-        for (let i = 0; i < KEY_CODES.length; i++) {
-          if (cmp(e.code, KEY_CODES[i])) return i;
+        const currentVisibleSlots =
+          typeof ModelLabels.getPopupPresentationGroups === 'function'
+            ? ModelLabels.getPopupPresentationGroups(
+                window.__activeModelConfigId || ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
+                window.MODEL_NAMES || [],
+                window.__modelCatalog || null,
+              )
+                .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+                .map((action) => Number(action?.slot))
+                .filter(
+                  (slot, index, slots) =>
+                    Number.isInteger(slot) &&
+                    slot >= 0 &&
+                    slot < KEY_CODES.length &&
+                    slots.indexOf(slot) === index,
+                )
+            : KEY_CODES.map((_, slot) => slot);
+        const visibleSlots = Array.from(
+          new Set([...getLatestPopupShortcutSlots(), ...currentVisibleSlots]),
+        );
+        for (const slot of visibleSlots) {
+          if (cmp(e.code, KEY_CODES[slot])) return slot;
         }
         return -1;
       }
@@ -10379,6 +10679,151 @@ form.w-full[data-type="unified-composer"] {
         if (delayMs > 0) await sleepAsync(delayMs);
         smartClickSafe(el);
       };
+
+      const getPillSubmenuTriggers = (mainMenu) =>
+        mainMenu instanceof Element
+          ? getDirectModelMenuItems(mainMenu).filter(
+              (item) =>
+                item.getAttribute('role') === 'menuitem' &&
+                item.getAttribute('aria-haspopup') === 'menu' &&
+                !isUnavailableModelMenuItem(item),
+            )
+          : [];
+      const getPillRadioItems = (menu) =>
+        menu instanceof Element
+          ? getDirectModelMenuItems(menu).filter(
+              (item) =>
+                item.getAttribute('role') === 'menuitemradio' &&
+                !isUnavailableModelMenuItem(item),
+            )
+          : [];
+      const getPillRadioLabel = (item) => {
+        if (!(item instanceof Element)) return '';
+        const primary = item.querySelector('.truncate') || item.querySelector('.grow') || item;
+        return getModelTextWithoutHints(primary).replace(/\s+/g, ' ').trim();
+      };
+      const classifyPillSubmenu = (menu) => {
+        const labels = getPillRadioItems(menu).map(getPillRadioLabel);
+        if (typeof ModelPickerSelectors.classifyPillSubmenuLabels === 'function') {
+          return ModelPickerSelectors.classifyPillSubmenuLabels(labels);
+        }
+        if (labels.length >= 2 && labels.every(isLikelyModelVersionLabel)) return 'model';
+        if (labels.length === 2) return 'speed';
+        if (labels.length >= 3) return 'effort';
+        return '';
+      };
+      const isPillConfiguratorMenu = (mainMenu) =>
+        mainMenu instanceof Element &&
+        !!mainMenu.querySelector('[role="slider"]') &&
+        getPillSubmenuTriggers(mainMenu).length >= 3;
+      const getOpenPillMainMenu = (button = getModelMenuButton()) => {
+        const triggerId = button?.id || '';
+        if (!triggerId) return null;
+        return (
+          Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).find(
+            (menu) =>
+              menu.getAttribute('aria-labelledby') === triggerId &&
+              isUsablyVisibleModelElement(menu) &&
+              isPillConfiguratorMenu(menu),
+          ) || null
+        );
+      };
+      const getOpenPillSubmenuForTrigger = (trigger) => {
+        if (!(trigger instanceof Element)) return null;
+        const controlledId = trigger.getAttribute('aria-controls') || '';
+        const controlledMenu = controlledId ? document.getElementById(controlledId) : null;
+        if (
+          controlledMenu instanceof Element &&
+          controlledMenu.matches(MODEL_MENU_SELECTOR) &&
+          isUsablyVisibleModelElement(controlledMenu)
+        ) {
+          return controlledMenu;
+        }
+        if (!trigger.id) return null;
+        return (
+          Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).find(
+            (menu) =>
+              menu !== trigger.closest('[data-radix-menu-content]') &&
+              menu.getAttribute('aria-labelledby') === trigger.id &&
+              isUsablyVisibleModelElement(menu),
+          ) || null
+        );
+      };
+      const openPillSubmenu = async (trigger) => {
+        if (!(trigger instanceof Element)) return null;
+        const existing = getOpenPillSubmenuForTrigger(trigger);
+        if (existing) return existing;
+
+        // Preserve the bounded retry strategy used by the prior working scraper. The
+        // new UI has three structurally identical triggers, so only the controlled
+        // menu lookup and later row-shape classification differ.
+        const openAttempt = (attemptIndex) => {
+          trigger.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+          trigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          trigger.dispatchEvent(new MouseEvent('pointerenter', { bubbles: false }));
+          trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+          trigger.focus?.();
+          switch (attemptIndex % 4) {
+            case 1:
+              smartClickSafe(trigger);
+              break;
+            case 2:
+              pressElementKey(trigger, 'ArrowRight', 'ArrowRight');
+              break;
+            case 3:
+              pressElementKey(trigger, 'Enter', 'Enter');
+              break;
+            default:
+              trigger.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+              break;
+          }
+        };
+
+        let attempts = 0;
+        return waitForAsync(
+          () => {
+            const found = getOpenPillSubmenuForTrigger(trigger);
+            if (found) return found;
+            openAttempt(attempts++);
+            return null;
+          },
+          { timeout: 1800, interval: 45 },
+        );
+      };
+      const discoverPillSubmenuTriggers = async (mainMenu) => {
+        const found = { model: null, effort: null, speed: null };
+        for (const trigger of getPillSubmenuTriggers(mainMenu)) {
+          const menu = await openPillSubmenu(trigger);
+          const type = classifyPillSubmenu(menu);
+          if (type && !found[type]) found[type] = trigger;
+        }
+        return found;
+      };
+      const commitPillRadioItem = async (item, settleMs = 160) => {
+        if (!(item instanceof Element)) return false;
+        if (
+          item.getAttribute('aria-checked') === 'true' ||
+          item.getAttribute('data-state') === 'checked'
+        ) {
+          return true;
+        }
+        activateMenuItem(item);
+        const committed = await waitForAsync(
+          () =>
+            !item.isConnected ||
+            item.getAttribute('aria-checked') === 'true' ||
+            item.getAttribute('data-state') === 'checked',
+          { timeout: Math.max(700, settleMs), interval: 35 },
+        );
+        if (settleMs > 0) await sleepAsync(settleMs);
+        return !!committed;
+      };
+      const getPillResetMenuItem = (mainMenu) =>
+        mainMenu instanceof Element
+          ? getDirectModelMenuItems(mainMenu).find((item) =>
+              item.matches(PILL_RESET_MENU_ITEM_SELECTOR),
+            ) || null
+          : null;
 
       const getTargetMenuItemForAction = (action, state = getVisibleModelMenuState()) => {
         if (!action) return null;
@@ -10941,7 +11386,16 @@ form.w-full[data-type="unified-composer"] {
           ? window.ModelLabels.sortThinkingEffortIds(ids)
           : Array.from(new Set(ids));
       };
-      const DYNAMIC_SCRAPE_SLOT_START = 8;
+      const DYNAMIC_SCRAPE_SLOT_START = Number.isInteger(
+        Number(window.ModelLabels?.MODEL_NAME_DYNAMIC_SLOT_START),
+      )
+        ? Number(window.ModelLabels.MODEL_NAME_DYNAMIC_SLOT_START)
+        : 8;
+      const DYNAMIC_SCRAPE_SLOT_END = Number.isInteger(
+        Number(window.ModelLabels?.MODEL_NAME_DYNAMIC_SLOT_END),
+      )
+        ? Number(window.ModelLabels.MODEL_NAME_DYNAMIC_SLOT_END)
+        : MAX_SLOTS - 1;
       const isDynamicScrapeAction = (action) =>
         action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
       const createScrapeSlotAllocator = (actions, startSlot = DYNAMIC_SCRAPE_SLOT_START) => {
@@ -10951,6 +11405,12 @@ form.w-full[data-type="unified-composer"] {
           actions
             .filter((action) => action?.fromCatalog)
             .map((action) => Number(action.slot))
+            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+        );
+        const reservedStaticSlots = new Set(
+          getModelActionSlots()
+            .filter((action) => action?.group !== 'configure')
+            .map((action) => Number(action?.slot))
             .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
         );
 
@@ -10965,12 +11425,14 @@ form.w-full[data-type="unified-composer"] {
           }
           if (!isDynamic) return -1;
           while (
-            nextDynamicSlot < MAX_SLOTS &&
-            (usedSlots.has(nextDynamicSlot) || reservedCatalogSlots.has(nextDynamicSlot))
+            nextDynamicSlot <= DYNAMIC_SCRAPE_SLOT_END &&
+            (usedSlots.has(nextDynamicSlot) ||
+              reservedCatalogSlots.has(nextDynamicSlot) ||
+              reservedStaticSlots.has(nextDynamicSlot))
           ) {
             nextDynamicSlot += 1;
           }
-          if (nextDynamicSlot >= MAX_SLOTS) return -1;
+          if (nextDynamicSlot > DYNAMIC_SCRAPE_SLOT_END) return -1;
           slot = nextDynamicSlot;
           usedSlots.add(slot);
           nextDynamicSlot += 1;
@@ -11041,10 +11503,16 @@ form.w-full[data-type="unified-composer"] {
       };
       const persistScrapedModelCatalog = (catalog, { activeModelConfigId = '' } = {}) => {
         const modelNames = deriveFlatModelNamesFromCatalog(catalog);
+        const isLatestProfile =
+          catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu';
+        const profileSuffix = isLatestProfile ? 'Latest' : 'Legacy';
         const values = {
           [MODEL_CATALOG_STORAGE_KEY]: catalog,
           modelNames,
           modelNamesAt: catalog.scrapedAt,
+          [`modelCatalog${profileSuffix}`]: catalog,
+          [`modelNames${profileSuffix}`]: modelNames,
+          [`modelNames${profileSuffix}At`]: catalog.scrapedAt,
         };
         if (activeModelConfigId) values.activeModelConfigId = activeModelConfigId;
         chrome.storage.sync.set(values, () => {});
@@ -11234,6 +11702,190 @@ form.w-full[data-type="unified-composer"] {
         await sleepAsync(180);
         return true;
       };
+      const PILL_EFFORT_ACTION_IDS_BY_ROW = Object.freeze([
+        'instant',
+        'thinking',
+        'pro',
+        'effort-extra-high',
+        'effort-max',
+      ]);
+      const PILL_SPEED_IDS_BY_ROW = Object.freeze(['speed-standard', 'speed-fast']);
+      const collectPillEffortRows = (menu) => {
+        return getPillRadioItems(menu)
+          .map((item, index) => {
+            const label = getPillRadioLabel(item);
+            const actionId = PILL_EFFORT_ACTION_IDS_BY_ROW[index] || '';
+            if (!actionId) return null;
+            const action = getModelActionById(actionId);
+            const slot = Number(action?.slot);
+            if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+            return {
+              id: actionId,
+              slot,
+              available: true,
+              selected:
+                item.getAttribute('aria-checked') === 'true' ||
+                item.getAttribute('data-state') === 'checked',
+              label,
+            };
+          })
+          .filter(Boolean);
+      };
+      const collectPillSpeedRows = (menu) => {
+        return getPillRadioItems(menu)
+          .map((item, index) => {
+            const label = getPillRadioLabel(item);
+            const id = PILL_SPEED_IDS_BY_ROW[index] || '';
+            if (!id) return null;
+            return {
+              id,
+              available: true,
+              selected:
+                item.getAttribute('aria-checked') === 'true' ||
+                item.getAttribute('data-state') === 'checked',
+              label,
+            };
+          })
+          .filter(Boolean);
+      };
+      const getPillMenuInventory = async () => {
+        const main = getOpenPillMainMenu();
+        if (!main) return null;
+        const triggers = await discoverPillSubmenuTriggers(main);
+        return triggers.model && triggers.effort && triggers.speed
+          ? { main, triggers }
+          : null;
+      };
+      const selectPillModelNameDuringScrape = async (action) => {
+        if (!action?.id) return false;
+        const readyState = await waitForPillMainMenuFromShortcut();
+        if (!readyState) return false;
+        const inventory = await getPillMenuInventory();
+        if (!inventory) return false;
+        const menu = await openPillSubmenu(inventory.triggers.model);
+        const item = findModelVersionMenuItemForAction(menu, action);
+        if (!(item instanceof Element)) return false;
+        if (!(await commitPillRadioItem(item, 180))) return false;
+        persistActiveModelConfigId(action.id);
+        return true;
+      };
+      const scrapePillModelCatalogOnce = async () => {
+        await releasePreparedModelConfigSession();
+        const readyState = await waitForPillMainMenuFromShortcut();
+        logModelRefreshDebug('pill:main-menu', { found: !!readyState });
+        if (!readyState) return { fallback: true };
+        const initialInventory = await getPillMenuInventory();
+        logModelRefreshDebug('pill:submenu-inventory', {
+          model: !!initialInventory?.triggers?.model,
+          effort: !!initialInventory?.triggers?.effort,
+          speed: !!initialInventory?.triggers?.speed,
+        });
+        if (!initialInventory) return { fallback: true };
+
+        const modelMenu = await openPillSubmenu(initialInventory.triggers.model);
+        const modelNameItems = getPillRadioItems(modelMenu).filter((item) =>
+          isLikelyModelVersionLabel(getPillRadioLabel(item)),
+        );
+        if (!modelNameItems.length) return { fallback: true };
+
+        const modelNameLabels = modelNameItems.map(getPillRadioLabel);
+        const modelNameActions = modelNameItems.map((item, index) =>
+          getModelNameActionForMenuItem(item, index, window.__modelCatalog, modelNameLabels),
+        );
+        const availableModelNames = buildAvailableScrapeActions(
+          modelNameItems,
+          modelNameActions,
+          getPillRadioLabel,
+        );
+        if (!availableModelNames.length) return { fallback: true };
+
+        const activeIndex = modelNameItems.findIndex(
+          (item) =>
+            item.getAttribute('aria-checked') === 'true' ||
+            item.getAttribute('data-state') === 'checked',
+        );
+        const initialActiveModelName =
+          availableModelNames[Math.max(0, activeIndex)] || availableModelNames[0] || null;
+        const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
+        const frontendByConfig = {};
+        const speedByConfig = {};
+        let selectedConfigId = initialActiveConfigId;
+
+        for (const modelName of availableModelNames) {
+          if (modelName.id !== selectedConfigId) {
+            const selected = await selectPillModelNameDuringScrape(modelName);
+            if (!selected) continue;
+            selectedConfigId = modelName.id;
+          }
+
+          const reopened = await waitForPillMainMenuFromShortcut();
+          if (!reopened) continue;
+          const inventory = await getPillMenuInventory();
+          if (!inventory) continue;
+
+          const effortMenu = await openPillSubmenu(inventory.triggers.effort);
+          frontendByConfig[modelName.id] = collectPillEffortRows(effortMenu);
+          const speedMenu = await openPillSubmenu(inventory.triggers.speed);
+          speedByConfig[modelName.id] = collectPillSpeedRows(speedMenu);
+          logModelRefreshDebug('pill:model-collected', {
+            modelId: modelName.id,
+            effortCount: frontendByConfig[modelName.id].length,
+            speedCount: speedByConfig[modelName.id].length,
+          });
+        }
+
+        if (initialActiveModelName?.id && selectedConfigId !== initialActiveConfigId) {
+          await selectPillModelNameDuringScrape(initialActiveModelName);
+        }
+
+        const complete = availableModelNames.every(
+          (modelName) =>
+            Array.isArray(frontendByConfig[modelName.id]) &&
+            frontendByConfig[modelName.id].length > 0 &&
+            Array.isArray(speedByConfig[modelName.id]) &&
+            speedByConfig[modelName.id].length === 2,
+        );
+        if (!complete) return { fallback: true };
+
+        const catalog = {
+          version: 4,
+          selectorShape: 'pill-three-submenu',
+          pillMenu: true,
+          scrapedAt: Date.now(),
+          integratedEffort: true,
+          configureOptions: availableModelNames.map((modelName) => ({
+            id: modelName.id,
+            slot: modelName.slot,
+            label:
+              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                ? window.ModelLabels.getCanonicalActionLabel(modelName.id, modelName.label)
+                : modelName.label,
+          })),
+          thinkingEffortIds: [],
+          frontendByConfig,
+          speedByConfig,
+        };
+        const modelNames = persistScrapedModelCatalog(catalog, {
+          activeModelConfigId: initialActiveConfigId,
+        });
+        setCachedActiveModelConfigId(initialActiveConfigId);
+        logModelRefreshDebug('pill-three-submenu:success', {
+          models: availableModelNames.map((model) => model.label),
+          effortCounts: Object.fromEntries(
+            Object.entries(frontendByConfig).map(([id, rows]) => [id, rows.length]),
+          ),
+          speedCounts: Object.fromEntries(
+            Object.entries(speedByConfig).map(([id, rows]) => [id, rows.length]),
+          ),
+        });
+
+        return {
+          ok: true,
+          modelCatalog: catalog,
+          modelNames,
+          activeModelConfigId: initialActiveConfigId,
+        };
+      };
       const scrapeIntegratedModelCatalogOnce = async () => {
         await releasePreparedModelConfigSession();
         const alreadyOpen = ensureMainMenuOpen();
@@ -11356,9 +12008,16 @@ form.w-full[data-type="unified-composer"] {
           activeModelConfigId: initialActiveConfigId,
         };
       };
-      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) =>
-        ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
+      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) => {
+        try {
+          return await ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
           try {
+          await releasePreparedModelConfigSession();
+          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
+
+          const pillResult = await scrapePillModelCatalogOnce();
+          if (!pillResult?.fallback) return pillResult;
+
           await releasePreparedModelConfigSession();
           if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
 
@@ -11491,7 +12150,11 @@ form.w-full[data-type="unified-composer"] {
           } catch (error) {
             return { ok: false, error: error?.message || 'SCRAPE_FAILED' };
           }
-        });
+          });
+        } finally {
+          scheduleComposerRefocusAfterModelPicker();
+        }
+      };
 
       const getConfigureClickTargets = (configureItem) => {
         if (!(configureItem instanceof Element)) return [];
@@ -11695,6 +12358,13 @@ form.w-full[data-type="unified-composer"] {
       ) => {
         if (!action?.id || window.__modelCatalog?.integratedEffort !== true) return false;
         return withTemporarilyHiddenModelUi(hideUi, async () => {
+          if (window.__modelCatalog?.pillMenu === true) {
+            const selected = await selectPillModelNameDuringScrape(action);
+            if (!selected) return false;
+            if (!hideUi) flashBottomBar();
+            return true;
+          }
+
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
           const opened = await openModelVersionSubmenu(initialState || getVisibleModelMenuState());
@@ -11713,6 +12383,116 @@ form.w-full[data-type="unified-composer"] {
           activateMenuItem(item);
           persistActiveModelConfigId(action.id);
           await sleepAsync(100);
+          if (!hideUi) flashBottomBar();
+          return true;
+        });
+      };
+      const findPillEffortItemForAction = (menu, action) =>
+        getPillRadioItems(menu).find(
+          (_item, index) => PILL_EFFORT_ACTION_IDS_BY_ROW[index] === action?.id,
+        ) || null;
+      const runPillEffortAction = async (action, { hideUi = false } = {}) => {
+        if (!action?.id || window.__modelCatalog?.pillMenu !== true) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const openEffortMenu = async () => {
+            const alreadyOpen = ensureMainMenuOpen();
+            await sleepAsync(alreadyOpen ? 80 : 140);
+            const inventory = await getPillMenuInventory();
+            return inventory ? openPillSubmenu(inventory.triggers.effort) : null;
+          };
+
+          let menu = await openEffortMenu();
+          let item = findPillEffortItemForAction(menu, action);
+          const activeConfigId =
+            window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+          const latestRows =
+            window.__modelCatalog?.frontendByConfig?.[DEFAULT_ACTIVE_MODEL_CONFIG_ID];
+          const latestSupportsAction = Array.isArray(latestRows)
+            ? latestRows.some(
+                (row) =>
+                  row?.available === true &&
+                  String(row?.id || '').trim() === String(action.id || '').trim(),
+              )
+            : false;
+
+          if (!item && activeConfigId !== DEFAULT_ACTIVE_MODEL_CONFIG_ID && latestSupportsAction) {
+            const latestAction = getModelActionById(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+            if (latestAction && (await selectPillModelNameDuringScrape(latestAction))) {
+              menu = await openEffortMenu();
+              item = findPillEffortItemForAction(menu, action);
+            }
+          }
+          if (!(item instanceof Element)) return false;
+
+          if (!hideUi && window.gsap) flashMenuItem(item);
+          if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
+          await commitPillRadioItem(item, 120);
+          if (!hideUi) flashBottomBar();
+          return true;
+        });
+      };
+      const persistPillSpeedSelection = (selectedItem) => {
+        const menu = selectedItem?.closest?.('[role="menu"]');
+        const selectedIndex = getPillRadioItems(menu).indexOf(selectedItem);
+        const selectedId = PILL_SPEED_IDS_BY_ROW[selectedIndex] || '';
+        const activeConfigId =
+          window.__activeModelConfigId || DEFAULT_ACTIVE_MODEL_CONFIG_ID;
+        const catalog = window.__modelCatalog;
+        const rows = catalog?.speedByConfig?.[activeConfigId];
+        if (!selectedId || !Array.isArray(rows)) return;
+        const nextCatalog = {
+          ...catalog,
+          speedByConfig: {
+            ...catalog.speedByConfig,
+            [activeConfigId]: rows.map((row) => ({
+              ...row,
+              selected: String(row?.id || '').trim() === selectedId,
+            })),
+          },
+        };
+        window.__modelCatalog = nextCatalog;
+        chrome.storage.sync.set({ modelCatalog: nextCatalog }, () => {});
+      };
+      const runPillSpeedToggleAction = async ({ hideUi = false } = {}) => {
+        if (window.__modelCatalog?.pillMenu !== true) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 80 : 140);
+          const inventory = await getPillMenuInventory();
+          if (!inventory) return false;
+          const menu = await openPillSubmenu(inventory.triggers.speed);
+          const items = getPillRadioItems(menu);
+          if (items.length !== 2) return false;
+          const checked = items.find(
+            (item) =>
+              item.getAttribute('aria-checked') === 'true' ||
+              item.getAttribute('data-state') === 'checked',
+          );
+          const target = items.find((item) => item !== checked) || null;
+          if (!(target instanceof Element)) return false;
+          if (!hideUi && window.gsap) flashMenuItem(target);
+          if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
+          await commitPillRadioItem(target, 120);
+          persistPillSpeedSelection(target);
+          if (!hideUi) flashBottomBar();
+          return true;
+        });
+      };
+      const runPillResetAction = async ({ hideUi = false } = {}) => {
+        if (window.__modelCatalog?.pillMenu !== true) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 80 : 140);
+          const state = getVisibleModelMenuState();
+          if (!isPillConfiguratorMenu(state.main)) return false;
+          const item = getPillResetMenuItem(state.main);
+          if (!(item instanceof Element)) return false;
+          if (!hideUi && window.gsap) flashMenuItem(item);
+          if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
+          item.focus?.();
+          pressElementKey(item, 'Enter', 'Enter');
+          await sleepAsync(160);
+          persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
           if (!hideUi) flashBottomBar();
           return true;
         });
@@ -11940,7 +12720,9 @@ form.w-full[data-type="unified-composer"] {
       window.__cspRunThinkingEffortAction = (optionId, options = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
-        void runThinkingEffortOptionAction(option.id, options);
+        void runThinkingEffortOptionAction(option.id, options).then((result) => {
+          if (result !== false) scheduleComposerRefocusAfterModelPicker();
+        });
         return true;
       };
       const runProThinkingEffortOptionAction = async (optionId, { hideUi = false } = {}) => {
@@ -11955,7 +12737,9 @@ form.w-full[data-type="unified-composer"] {
       window.__cspRunProThinkingEffortAction = (optionId, options = {}) => {
         const option = getThinkingEffortOptionById(optionId);
         if (!option?.id) return false;
-        void runProThinkingEffortOptionAction(option.id, options);
+        void runProThinkingEffortOptionAction(option.id, options).then((result) => {
+          if (result !== false) scheduleComposerRefocusAfterModelPicker();
+        });
         return true;
       };
 
@@ -11963,7 +12747,7 @@ form.w-full[data-type="unified-composer"] {
       window.__mp_applyHints = (options = {}) => ModelPickerHints.schedule(options);
 
       const ModelPickerActionRunner = (() => {
-        function createCompletion(options) {
+        function createCompletion(action, options) {
           let completed = false;
           return (ok = true) => {
             if (completed) return;
@@ -11972,6 +12756,9 @@ form.w-full[data-type="unified-composer"] {
               try {
                 options.onComplete(ok);
               } catch {}
+            }
+            if (ok && shouldRefocusComposerAfterModelAction(action)) {
+              scheduleComposerRefocusAfterModelPicker();
             }
           };
         }
@@ -12130,10 +12917,105 @@ form.w-full[data-type="unified-composer"] {
           activateVisibleMenuTarget(ready, complete);
         }
 
-        function execute(action, options = {}) {
-          if (!action) return false;
-          const complete = createCompletion(options);
-          if (dispatchPreparedConfigureOptionIfAvailable(action, options, complete)) return true;
+        function dispatchPillAction(action, options, complete) {
+          let task = null;
+          if (action.actionKind === 'pill-effort') {
+            task = runPillEffortAction(action, { hideUi: options.hideUi === true });
+          } else if (action.actionKind === 'pill-speed-toggle') {
+            task = runPillSpeedToggleAction({ hideUi: options.hideUi === true });
+          } else if (action.actionKind === 'pill-reset') {
+            task = runPillResetAction({ hideUi: options.hideUi === true });
+          }
+          if (!task) return false;
+          void task.then((result) => complete(result !== false));
+          return true;
+        }
+
+        function activateVisibleHintedMenuItem(target, complete) {
+          if (!(target instanceof Element)) return false;
+          if (window.gsap) flashMenuItem(target);
+          setTimeout(() => {
+            activateMenuItem(target);
+            flashBottomBar();
+            complete(true);
+          }, DELAY_ACTIVATE_TARGET_MS);
+          return true;
+        }
+
+        const isHintedSubmenuTrigger = (item) =>
+          item instanceof Element &&
+          item.getAttribute('role') === 'menuitem' &&
+          (item.getAttribute('aria-haspopup') === 'menu' || item.hasAttribute('data-has-submenu'));
+
+        async function findHintedTargetAfterOpeningMenus(sourceSlot) {
+          if (typeof window.toggleModelSelector === 'function') {
+            window.toggleModelSelector();
+          } else if (typeof window.__cspOpenModelPickerMainMenu === 'function') {
+            window.__cspOpenModelPickerMainMenu();
+          } else {
+            ensureMainMenuOpen();
+          }
+          const mainMenu = await waitForAsync(
+            () => {
+              const main = getVisibleModelMenuState().main;
+              if (!(main instanceof Element)) return null;
+              ModelPickerHints.apply();
+              return main;
+            },
+            { timeout: 900, interval: 25 },
+          );
+          if (!(mainMenu instanceof Element)) return null;
+
+          const directTarget = ModelPickerHints.getUniqueVisibleMenuItemForSlot(
+            sourceSlot,
+            mainMenu,
+          );
+          if (directTarget && !isHintedSubmenuTrigger(directTarget)) return directTarget;
+
+          const submenuTriggers = Array.from(
+            new Set([
+              ...(isHintedSubmenuTrigger(directTarget) ? [directTarget] : []),
+              ...getPillSubmenuTriggers(mainMenu),
+            ]),
+          );
+          for (const trigger of submenuTriggers) {
+            const submenu = await openPillSubmenu(trigger);
+            if (!(submenu instanceof Element)) continue;
+            const submenuTarget = await waitForAsync(
+              () => {
+                ModelPickerHints.apply();
+                return ModelPickerHints.getUniqueVisibleMenuItemForSlot(sourceSlot, submenu);
+              },
+              { timeout: 450, interval: 25 },
+            );
+            if (submenuTarget instanceof Element) return submenuTarget;
+          }
+          return null;
+        }
+
+        function dispatchVisibleHintedMenuAction(action, options, complete) {
+          if (options.hideUi === true) return false;
+          const sourceSlot = Number(options.sourceSlot);
+          if (!Number.isInteger(sourceSlot)) return false;
+
+          const visibleTarget = ModelPickerHints.getUniqueVisibleMenuItemForSlot(sourceSlot);
+          if (
+            !isHintedSubmenuTrigger(visibleTarget) &&
+            activateVisibleHintedMenuItem(visibleTarget, complete)
+          ) {
+            return true;
+          }
+
+          void findHintedTargetAfterOpeningMenus(sourceSlot).then((openedTarget) => {
+            if (activateVisibleHintedMenuItem(openedTarget, complete)) return;
+            dispatchActionWithoutVisibleHint(action, options, complete);
+          });
+          return true;
+        }
+
+        function dispatchActionWithoutVisibleHint(action, options, complete) {
+          if (dispatchPillAction(action, options, complete)) return;
+          if (dispatchPreparedConfigureOptionIfAvailable(action, options, complete)) return;
 
           const alreadyOpen = ensureMainMenuOpen();
           setTimeout(
@@ -12146,6 +13028,16 @@ form.w-full[data-type="unified-composer"] {
             },
             alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
           );
+        }
+
+        function execute(action, options = {}) {
+          if (!action) return false;
+          const complete = createCompletion(action, options);
+          // When the open menu already labels one exact item with this shortcut, activate that
+          // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
+          // catalogs route the same actions through submenus; the visible hint is authoritative.
+          if (dispatchVisibleHintedMenuAction(action, options, complete)) return true;
+          dispatchActionWithoutVisibleHint(action, options, complete);
           return true;
         }
 
@@ -12289,12 +13181,16 @@ form.w-full[data-type="unified-composer"] {
     tick();
   };
 
+  const openModelPickerMainMenu = () => {
+    const btn = getModelMenuButton();
+    if (!btn) return Promise.resolve(null);
+    return new Promise((resolve) => waitForModelMenuOpen(btn, resolve));
+  };
+  window.__cspOpenModelPickerMainMenu = openModelPickerMainMenu;
+
   // Runtime bridge: keyboard dispatcher opens current single-level menus and older submenu layouts.
   window.toggleModelSelector = () => {
-    const btn = getModelMenuButton();
-    if (!btn) return;
-
-    waitForModelMenuOpen(btn, (state) => {
+    void openModelPickerMainMenu().then((state) => {
       const readyState = state || getVisibleModelMenuState();
       if (!readyState.submenuTrigger) return;
       setTimeout(
@@ -12319,6 +13215,18 @@ form.w-full[data-type="unified-composer"] {
         changes.modelCatalog.newValue && typeof changes.modelCatalog.newValue === 'object'
           ? changes.modelCatalog.newValue
           : null;
+    }
+    if (changes.modelCatalogLatest) {
+      window.__modelCatalogLatest =
+        changes.modelCatalogLatest.newValue &&
+        typeof changes.modelCatalogLatest.newValue === 'object'
+          ? changes.modelCatalogLatest.newValue
+          : null;
+    }
+    if (changes.modelNamesLatest) {
+      window.__modelNamesLatest = Array.isArray(changes.modelNamesLatest.newValue)
+        ? changes.modelNamesLatest.newValue.slice(0, MAX_SLOTS)
+        : [];
     }
     if (changes.modelPickerKeyCodes) {
       const val = changes.modelPickerKeyCodes.newValue;
@@ -12770,6 +13678,77 @@ setTimeout(() => {
 :host,:root{--text-primary:#1e1e1e;--text-secondary:#646464;--border-light:#dfdfdc;--bg-primary:#f4f3f1;--bg-secondary:#f8f7f5;--highlight-color:#3f51b5}*,body{margin:0}*{padding:0;box-sizing:border-box}body{width:100%;height:100vh;overflow-y:auto;overflow-x:hidden;padding:.5rem;display:flex;justify-content:center;align-items:flex-start;line-height:1.5!important}.key-input,.key-text,h1{text-wrap:balance}.key-input,.key-text,.shortcut-label,.tooltiptext,body,h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important;font-size:14px;font-feature-settings:normal;font-variation-settings:normal;text-size-adjust:100%;text-align:start;text-overflow:ellipsis;white-space-collapse:collapse;unicode-bidi:isolate;pointer-events:auto}.tooltiptext{text-wrap:balance}h1{font-size:1.25rem;font-weight:500;text-align:center;margin-bottom:1rem}#toast-container .toast{text-wrap:balance}.disabled-section{opacity:.2;pointer-events:none}.disabled-section .key-input{background-color:#eee;color:#aaa;border-color:#ccc;cursor:not-allowed}.flash-highlight{animation:pulse-highlight 0.6s ease-out 1.2s 1}.full-width{grid-column:span 2}.icon-input-container{display:flex;align-items:center;gap:8px}.icon-input-container::after{position:absolute;left:.5rem;top:50%;transform:translateY(-50%);font:inherit;color:#666;pointer-events:none;z-index:2;opacity:1;transition:opacity 0.1s ease}.icon-input-container:focus-within::after{opacity:0}.key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary)}.key-input:focus{border-color:var(--highlight-color);outline:0}.key-text{font-size:.9rem;font-weight:600}.material-checkbox{width:12px;height:12px;cursor:pointer!important}.material-radio{width:12px;height:12px;cursor:pointer!important}.material-icons-outlined{font-size:18px;color:var(--text-secondary)}.material-input-long{position:relative;z-index:1;width:6ch;padding:.25rem .5rem;border:1px solid #ccc;border-radius:9999px;background:0 0;box-sizing:border-box;color:#fff0;transition:width 0.25s ease}.material-input-long:focus{width:24ch;color:inherit;outline:0}.model-picker{width:100%;display:flex;flex-direction:column;align-items:left;margin-left:0}.model-picker-shortcut{flex-direction:column;align-items:stretch;gap:6px}.mp-icons{display:flex;justify-content:center;font-size:clamp(9px, 1.9vw, 12px);line-height:1;scale:.85;margin-left:10px}.mp-icons .material-symbols-outlined{margin:0 -1px;pointer-events:none;vertical-align:middle}.mp-option{display:inline-flex;align-items:center;gap:4px;cursor:pointer;position:relative;user-select:none;font-size:12px}.mp-option input[type="radio"]{width:12px;height:12px;margin:0 2px;accent-color:var(--highlight-color)}.mp-option-text{text-align:center;font-size:.75rem;text-wrap:balance;margin:0}.mp-option .info-icon{margin-left:2px;line-height:1;font-size:14px}.mp-options{display:flex;justify-content:center;gap:3rem;margin-top:10px;margin-bottom:8px}.new-emoji-indicator{font-size:1.5em;line-height:1;user-select:none;pointer-events:none;opacity:.9;transform:translateY(-1px)}.new-feature-tag{font-size:.65rem;font-weight:600;color:#fff;background-color:#6fc15f;padding:2px 6px;border-radius:4px;letter-spacing:.5px;line-height:1;user-select:none}.opacity-slider-clipper{height:60px;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%}.opacity-tooltip{position:relative;width:60%;flex:1 1 0%;min-width:0}.opacity-tooltip.tooltip:hover::after{transform:scaleX(0)!important}.opacity-tooltip.visible-opacity-slider::after{transform-origin:left;pointer-events:none;content:"";display:block;position:absolute;bottom:-2px;left:0;width:100%;transform:scaleX(0);transition:transform 0.2s ease-in-out}.opacity-tooltip.visible-opacity-slider:hover::after,.opacity-tooltip:hover::after{transform:scaleX(1)}.opacity-tooltip::after{content:none;border:0}.p-form-switch{--width:80px;cursor:pointer;display:inline-block;scale:.5;transform-origin:right center}.p-form-switch>input{display:none}.p-form-switch>span{background:#e0e0e0;border:1px solid #d3d3d3;border-radius:500px;display:block;height:calc(var(--width) / 1.6);position:relative;transition:all 0.2s;width:var(--width)}.p-form-switch>span::after{background:#f9f9f9;border-radius:50%;border:.5px solid rgb(0 0 0 / .101987);box-shadow:0 3px 1px rgb(0 0 0 / .1),0 1px 1px rgb(0 0 0 / .16),0 3px 8px rgb(0 0 0 / .15);box-sizing:border-box;content:"";height:84%;left:3%;position:absolute;top:6.5%;transition:all 0.2s;width:52.5%}.p-form-switch>input:checked+span{background:#60c35b}.p-form-switch>input:checked+span::after{left:calc(100% - calc(var(--width) / 1.8))}.shortcut-column{display:flex;flex-direction:column;gap:10px}.shortcut-container{width:800px;max-width:100%;margin:0 auto;padding:1rem;background-color:var(--bg-primary);border-radius:8px;box-shadow:0 4px 8px rgb(0 0 0 / .1);box-sizing:border-box}.shortcut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.shortcut-item,.shortcut-keys{display:flex;align-items:center;max-width:100%}.shortcut-item{justify-content:space-between;background-color:var(--bg-secondary);padding:.75rem .75rem .75rem .75rem;border:1px solid var(--border-light);border-radius:6px;box-shadow:0 2px 4px rgb(0 0 0 / .05);min-height:3.5rem}.shortcut-item.hidden{visibility:hidden;pointer-events:none}.shortcut-item .p-form-switch,.shortcut-item label.p-form-switch,.shortcut-item>.p-form-switch{margin-left:auto}.shortcut-keys{gap:5px}.shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5}.shortcut-label,.shortcut-label .i18n,.tooltip .i18n{text-wrap:balance}.tooltip{position:relative;display:inline;cursor:pointer;border-bottom:none}.tooltip .i18n{text-underline-offset:4px;text-decoration-thickness:1px;display:inline}.tooltip .tooltiptext{visibility:hidden;width:120px;background-color:#2a2b32;color:#ececf1;text-align:left;border-radius:6px;padding:5px;position:absolute;z-index:1;top:-100%;left:50%;transform:translateX(-50%);opacity:0;transition:opacity 0.3s}.tooltip-area{display:none;opacity:0;transition:opacity 0.5s ease-in-out;position:fixed;bottom:0;left:0;width:100%;height:55px;padding:8px 10px 10px;background-color:#f5f5f5;color:#616161;text-align:center;line-height:1.5;border-top:1px solid #ccc;font-size:.9rem;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:400;z-index:100;box-shadow:0 -4px 8px rgb(0 0 0 / .2);text-wrap:balance}.tooltip:hover .tooltiptext{visibility:visible;opacity:1}.mp-option-text.i18n{margin-right:.25rem}.opacity-slider::-webkit-slider-runnable-track,.opacity-slider::-moz-range-track{height:4px;border-radius:2px;background:#9e9e9e}.opacity-slider::-webkit-slider-thumb,.opacity-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#6fc05f;border:none}.class-1{display:flex;flex-direction:column;gap:8px}.class-2{display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start}.class-3{flex:0 0 auto;margin-bottom:4px}.class-4{flex:1 1 auto;min-width:0;display:flex;justify-content:center;align-items:center}.class-5{width:100%;overflow:visible;display:flex;align-items:center;justify-content:center}.class-6{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;padding-right:10px!important}.class-7{width:100%;display:flex;justify-content:center}.class-8{width:20px;height:20px;display:block;opacity:.6}.class-9{width:85%}.class-10{display:flex;align-items:center;gap:4px}.class-11{font-size:11px}.class-12{margin-left:auto;flex-shrink:0}.class-13{position:relative}.class-14{flex:1}.class-15{margin-bottom:4px}.class-16{line-height:1.8!important}.class-17{margin-bottom:2px}.class-18{display:flex;justify-content:center;gap:3rem}.class-19{display:flex;gap:32px;align-items:center;justify-content:center;flex-grow:1;max-width:400px}.class-20{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;position:relative;border-bottom:none!important}.class-21{font-size:20px}.class-22{border-bottom:none!important}.class-23{width:12px;height:12px}.class-24{margin-left:auto}.class-25{flex:0 0 auto}.class-26{flex:1 1 auto;display:flex;justify-content:center;align-items:center}.class-27{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;transform:scale(1);transform-origin:top center;margin-left:20px;margin-right:-20px}.class-28{display:flex;gap:1.5rem;align-items:center}.class-29{display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px dotted currentColor;padding-bottom:4px}.class-30{display:flex;align-items:center}.class-31{display:none!important}@keyframes pulse-highlight{0%{box-shadow:0 0 0 0 rgb(33 150 243 / .6)}to{box-shadow:0 0 0 0 #fff0}70%{box-shadow:0 0 0 10px #fff0}}h1{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif!important}.opacity-editable{cursor:pointer;transition:border 0.18s,box-shadow 0.18s,background 0.18s;border-radius:20px;padding:0% .5em;border:1.5px solid #fff0;outline:none}.opacity-editable:hover,.opacity-editable:focus,.opacity-editable.editing{border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none}.opacity-editable input{outline:none;border:none;width:2.4em;font:inherit;background:none;text-align:right;box-shadow:none}#dup-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .14);display:flex;align-items:center;justify-content:center;z-index:99999}#dup-box{background:#fff;padding:22px 20px 18px;border-radius:16px;box-shadow:0 4px 24px rgb(0 0 0 / .14);max-width:400px;width:92vw;font:15px / 1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}#dup-box h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#111}#dup-msg{margin:0 0 16px;font-size:15px;color:#444}#dup-box label{display:flex;align-items:center;gap:7px;margin:0 0 20px;font-size:14px;color:#666;user-select:none}#dup-dont{accent-color:#007aff}.dup-btns{display:flex;justify-content:flex-end;gap:12px}#dup-no,#dup-yes{padding:7px 22px;font-size:15px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s}#dup-no{font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}#dup-no:hover,#dup-no:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}#dup-no:active{background:rgb(0 122 255 / .16)}#dup-yes{font-weight:600;color:#fff;background:#007aff;border:none}#dup-yes:hover,#dup-yes:focus-visible{background:#338fff;color:#fff}#dup-yes:active{background:#006be6;color:#fff}span.dup-key{color:#007aff!important;font-weight:600;width:95%}.mp-key{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:1.8em;height:1.6em;margin:0 2px;padding:0 .4em;border-radius:6px;font-weight:600;border:1.5px solid rgb(0 0 0 / .11);box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015);outline:none;user-select:none;transition:border 0.18s,box-shadow 0.18s,background 0.18s}.mp-key:hover,.mp-key:focus,.mp-key.listening{border:1.5px solid rgb(0 0 0 / .11);outline:2px solid #39f!important;box-shadow:0 0 2px 1px rgb(0 0 0 / .07);background:rgb(0 0 0 / .015)}.mp-key:focus{outline:2px solid #39f!important;outline-offset:1px}.custom-tooltip{position:relative}.custom-tooltip:hover::after,.custom-tooltip:focus::after,.custom-tooltip:focus-visible::after,.custom-tooltip:focus-within::after{content:attr(data-tooltip);white-space:pre;position:absolute;top:-63px;left:50%;transform:translateX(-50%);background:rgb(0 0 0 / .9);color:#fff;padding:6px 10px;border-radius:6px;font-size:16px;font-weight:500;text-align:center;line-height:1.3;z-index:9999;pointer-events:none;box-shadow:0 2px 6px rgb(0 0 0 / .2)}.custom-tooltip:hover::before,.custom-tooltip:focus::before,.custom-tooltip:focus-visible::before,.custom-tooltip:focus-within::before{content:"";position:absolute;top:-15px;left:50%;transform:translateX(-50%) rotate(180deg);border-width:6px;border-style:solid;border-color:#fff0 #fff0 rgb(0 0 0 / .9) #fff0}.mp-key--shift-left.custom-tooltip:hover::after,.mp-key--shift-left.custom-tooltip:focus::after,.mp-key--shift-left.custom-tooltip:focus-visible::after,.mp-key--shift-left.custom-tooltip:focus-within::after{left:calc(50% - 1em)}.mp-key--shift-left.custom-tooltip:hover::before,.mp-key--shift-left.custom-tooltip:focus::before,.mp-key--shift-left.custom-tooltip:focus-visible::before,.mp-key--shift-left.custom-tooltip:focus-within::before{left:calc(50% - 1em)}.ios-searchbar{margin:8px 0 12px;padding:0 4px 8px 0}.ios-searchbar-inner{display:flex;align-items:center;gap:8px}.ios-search-input{-webkit-appearance:none;appearance:none;width:100%;height:36px;border-radius:9999px;border:1px solid rgb(60 60 67 / .18);background:rgb(118 118 128 / .12);box-shadow:inset 0 1px 0 rgb(255 255 255 / .35);outline:none;padding:0 36px;font:inherit;line-height:36px;caret-color:#007aff;transition:background 0.12s,border-color 0.12s,box-shadow 0.12s;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236e6e73'><path d='M13.61 12.2l4 4a1 1 0 11-1.42 1.42l-4-4a7 7 0 111.42-1.42zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z'/></svg>");background-repeat:no-repeat;background-position:12px 50%;background-size:16px 16px}.ios-search-input::placeholder{color:#6e6e73;opacity:1}.ios-search-input:focus{background:rgb(118 118 128 / .18);border-color:rgb(60 60 67 / .28);box-shadow:0 0 0 2px rgb(0 122 255 / .15)}.ios-search-cancel{display:none;border:0;background:#fff0;color:#007aff;font:inherit;padding:4px 8px;line-height:1;border-radius:6px}.ios-searchbar.focused .ios-search-cancel,.ios-searchbar.active .ios-search-cancel{display:inline-block}.ios-search-cancel:active{background:rgb(0 122 255 / .08)}.shortcut-container.filtering-active .blank-row{display:none!important}.shortcut-container.filtering-active .shortcut-grid{align-content:start!important;justify-content:start!important;grid-auto-flow:dense;gap:8px 12px}.shortcut-container.filtering-active .shortcut-grid>.shortcut-item{margin:0!important}@media (prefers-color-scheme:dark){.ios-search-input{border-color:rgb(235 235 245 / .18);background:rgb(118 118 128 / .24)}.ios-search-input:focus{border-color:rgb(235 235 245 / .28);box-shadow:0 0 0 2px rgb(10 132 255 / .22)}.ios-search-input::placeholder{color:#8e8e93}.ios-search-cancel{color:#0a84ff}}:root{--tooltip-max-ch:36}.material-symbols-outlined.info-icon{font-size:1em;font-weight:inherit;vertical-align:middle;line-height:1;cursor:pointer;margin-left:.25em}.info-icon-tooltip{position:relative;display:inline-flex;align-items:center;cursor:pointer}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:120%;transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px)));display:block;background:rgb(20 20 20 / .98);color:#fff;padding:12px 20px;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;font-weight:500;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:normal;word-break:keep-all;line-height:1.45;z-index:1100;pointer-events:none;box-shadow:0 6px 20px rgb(0 0 0 / .14),0 1.5px 7px rgb(0 0 0 / .12);inline-size:clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw);box-sizing:border-box;opacity:1;transition:opacity 0.16s cubic-bezier(.4,0,.2,1);padding-block:12px;max-inline-size:var(--tooltip-max-fit,clamp(28ch, calc(var(--tooltip-max-ch) * 1ch), 95vw))}.info-icon-tooltip:hover::after,.info-icon-tooltip:focus::after{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.info-icon-tooltip:hover::before,.info-icon-tooltip:focus::before{transform:translateX(calc(-50% + var(--tooltip-offset-x, 0px))) translateY(var(--tooltip-offset-y,0))}.nowrap-label{white-space:nowrap;display:inline-block}.backup-restore-tile .shortcut-keys{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;white-space:nowrap;overflow-x:hidden}.dup-like-btn{padding:7px 22px;font-size:13px;border-radius:9999px;outline:none;font-family:inherit;-webkit-tap-highlight-color:#fff0;cursor:pointer;transition:background 0.14s,border-color 0.14s,color 0.14s;font-weight:500;color:#007aff;background:#fff0;border:1px solid rgb(0 0 0 / .12)}.dup-like-btn:hover,.dup-like-btn:focus-visible{background:rgb(0 122 255 / .08);border-color:rgb(0 122 255 / .19);color:#007aff}.dup-like-btn:active{background:rgb(0 122 255 / .16)}.class-9{accent-color:#60c35b}#dup-line1{text-wrap:normal!important;white-space:normal!important}#dup-box,#dup-box *{text-wrap:normal!important;white-space:normal!important;word-break:normal!important;overflow-wrap:normal!important}.blank-row{grid-column:span 2;height:50px}.blank-row.section-header{display:flex;align-items:flex-end;justify-content:flex-start;padding:0 .75rem 2px;min-height:24px;color:rgb(60 60 67 / .6);font-size:12px;font-weight:600;letter-spacing:.06em;line-height:1;text-transform:uppercase;white-space:nowrap}.model-picker-shortcut-grid{display:grid;grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:auto;gap:4px;margin-bottom:12px;overflow:hidden;padding:8px 0;font-size:80%;box-sizing:border-box;background:transparent}.model-picker-shortcut-grid>.shortcut-item:nth-child(n+16){display:none}.model-picker-shortcut-grid .shortcut-item{background:var(--bg-secondary);border:1px solid var(--border-light);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;transition:box-shadow .12s;padding:.75rem;min-height:3.5rem}.model-picker-shortcut-grid .shortcut-label{font-size:90%;color:var(--text-primary);font-weight:400;line-height:1.5;margin-bottom:6px;text-align:center}.model-picker-shortcut-grid .shortcut-keys{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:0;font-size:.9rem;color:var(--text-secondary)}.model-picker-shortcut-grid .key-text,.model-picker-shortcut-grid .platform-alt-label{font-weight:600;font-size:.9rem;color:var(--text-primary)}.model-picker-shortcut-grid .key-input{width:50px;height:2rem;border:1px solid var(--border-light);border-radius:9999px;text-align:center;font-size:.9rem;font-weight:700;background-color:var(--bg-primary);color:var(--text-secondary);pointer-events:none;margin-left:2px;margin-right:2px}.model-picker-shortcut-grid *{box-sizing:border-box}*,body{color:#000}.model-picker-shortcut-grid .shortcut-label{font-size:97.2%;}.model-picker-shortcut-grid{padding-bottom:0;margin-bottom:0;}
   `;
   const OVERLAY_MODEL_GRID_CSS = `
+.overlay-model-catalog-heading {
+  display: flex;
+  align-items: flex-start;
+  min-height: 44px;
+  margin-top: 0;
+  padding-left: 12px;
+  position: relative;
+  color: rgba(60, 60, 67, 0.6);
+  font-family: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.72px;
+  line-height: 12px;
+  text-transform: uppercase;
+}
+.overlay-model-catalog-heading > span {
+  position: relative;
+  top: 25px;
+}
+.overlay-model-catalog-heading .p-segmented-controls.mp-model-catalog-profile-selector {
+  --color-segmented: #003f7a;
+  --p-segmented-bg: #fff;
+  background: var(--p-segmented-bg);
+  border: 1px solid var(--color-segmented);
+  border-radius: 30px;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  height: 22px;
+  left: 0;
+  margin: 0;
+  overflow: hidden;
+  position: absolute;
+  top: -2px;
+  width: auto;
+  white-space: nowrap;
+  letter-spacing: normal;
+}
+.overlay-model-catalog-heading .p-segmented-controls.mp-model-catalog-profile-selector button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #4f4e4e;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 1;
+  font-family: var(--popup-font-stack);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  height: 100%;
+  justify-content: center;
+  letter-spacing: normal;
+  line-height: 1;
+  padding: 0 11px;
+  text-align: center;
+  text-decoration: none;
+  text-transform: none;
+  transition: 0.5s color, 0.5s background, 0.5s border-color;
+  -webkit-tap-highlight-color: transparent;
+}
+.overlay-model-catalog-heading
+  .p-segmented-controls.mp-model-catalog-profile-selector
+  button.active {
+  background: var(--color-segmented);
+  color: #fff;
+}
+.overlay-model-catalog-heading
+  .p-segmented-controls.mp-model-catalog-profile-selector
+  > button:not(:first-child) {
+  border-left: 1px solid currentColor;
+}
 .model-picker-shortcut-grid,
 .model-picker-effort-shortcut-grid,
 .model-picker-effort-label-row {
@@ -13106,15 +14085,70 @@ setTimeout(() => {
 
   const getOverlayModelSlotLimit = () => window.ModelLabels?.MAX_SLOTS || 15;
 
+  const OVERLAY_MODEL_PROFILE_LATEST = 'latest';
+  const OVERLAY_MODEL_PROFILE_LEGACY = 'legacy';
+  const OVERLAY_DEFAULT_ACTIVE_MODEL_CONFIG_ID = 'configure-latest';
+
+  const getOverlayModelCatalogProfile = (catalog) => {
+    if (!catalog || typeof catalog !== 'object') return '';
+    return catalog.pillMenu === true || catalog.selectorShape === 'pill-three-submenu'
+      ? OVERLAY_MODEL_PROFILE_LATEST
+      : OVERLAY_MODEL_PROFILE_LEGACY;
+  };
+
+  const getOverlayDefaultModelCatalog = (profile) =>
+    profile === OVERLAY_MODEL_PROFILE_LEGACY &&
+    typeof window.ModelLabels?.getDefaultLegacyCatalog === 'function'
+      ? window.ModelLabels.getDefaultLegacyCatalog()
+      : null;
+
+  const getOverlayDefaultModelNames = (profile) => {
+    const source =
+      profile === OVERLAY_MODEL_PROFILE_LEGACY
+        ? typeof window.ModelLabels?.defaultLegacyNames === 'function'
+          ? window.ModelLabels.defaultLegacyNames()
+          : []
+        : typeof window.ModelLabels?.defaultNames === 'function'
+          ? window.ModelLabels.defaultNames()
+          : [];
+    const names = Array.isArray(source) ? source.slice(0, getOverlayModelSlotLimit()) : [];
+    while (names.length < getOverlayModelSlotLimit()) names.push('');
+    return names;
+  };
+
+  const normalizeOverlayModelNames = (names, profile) => {
+    if (!Array.isArray(names)) return getOverlayDefaultModelNames(profile);
+    const out = names
+      .slice(0, getOverlayModelSlotLimit())
+      .map((name) => (typeof name === 'string' ? name : ''));
+    while (out.length < getOverlayModelSlotLimit()) out.push('');
+    return out;
+  };
+
+  const getOverlayProfileCatalog = (cfg, profile) => {
+    const explicit =
+      profile === OVERLAY_MODEL_PROFILE_LEGACY
+        ? cfg?.modelCatalogLegacy
+        : cfg?.modelCatalogLatest;
+    if (explicit && typeof explicit === 'object') return explicit;
+    if (getOverlayModelCatalogProfile(cfg?.modelCatalog) === profile) return cfg.modelCatalog;
+    return getOverlayDefaultModelCatalog(profile);
+  };
+
+  const getOverlayProfileNames = (cfg, profile) => {
+    const explicit =
+      profile === OVERLAY_MODEL_PROFILE_LEGACY ? cfg?.modelNamesLegacy : cfg?.modelNamesLatest;
+    if (Array.isArray(explicit)) return normalizeOverlayModelNames(explicit, profile);
+    if (getOverlayModelCatalogProfile(cfg?.modelCatalog) === profile) {
+      return normalizeOverlayModelNames(cfg?.modelNames, profile);
+    }
+    return getOverlayDefaultModelNames(profile);
+  };
+
   const getOverlayActiveModelConfigId = (cfg) =>
     typeof window.ModelLabels?.normalizeActiveConfigId === 'function'
       ? window.ModelLabels.normalizeActiveConfigId(cfg?.activeModelConfigId)
-      : cfg?.activeModelConfigId || 'configure-latest';
-
-  const getOverlayModelNames = () =>
-    typeof window.ModelLabels?.resolveActionableNames === 'function'
-      ? window.ModelLabels.resolveActionableNames(window.MODEL_NAMES || [])
-      : window.MODEL_NAMES || [];
+      : cfg?.activeModelConfigId || OVERLAY_DEFAULT_ACTIVE_MODEL_CONFIG_ID;
 
   const getOverlayModelActionGroups = (activeModelConfigId, names, catalog) =>
     typeof window.ModelLabels?.getPopupPresentationGroups === 'function'
@@ -13124,6 +14158,37 @@ setTimeout(() => {
         : typeof window.ModelLabels?.getActionGroups === 'function'
           ? window.ModelLabels.getActionGroups()
           : [];
+
+  const getOverlayProfileActionGroups = (cfg, profile, useDefaultActiveConfig = false) => {
+    const catalog = getOverlayProfileCatalog(cfg, profile);
+    const names = getOverlayProfileNames(cfg, profile);
+    const activeModelConfigId = useDefaultActiveConfig
+      ? OVERLAY_DEFAULT_ACTIVE_MODEL_CONFIG_ID
+      : getOverlayActiveModelConfigId(cfg);
+    return getOverlayModelActionGroups(activeModelConfigId, names, catalog);
+  };
+
+  const getOverlayMirroredSlotsForGridPosition = (cfg, groupId, groupIndex, fallbackSlot) => {
+    const slots = new Set();
+    [OVERLAY_MODEL_PROFILE_LATEST, OVERLAY_MODEL_PROFILE_LEGACY].forEach((profile) => {
+      const group = getOverlayProfileActionGroups(cfg, profile, true).find(
+        (candidate) => candidate?.id === groupId,
+      );
+      const slot = Number(group?.actions?.[groupIndex]?.slot);
+      if (Number.isInteger(slot) && slot >= 0 && slot < getOverlayModelSlotLimit()) {
+        slots.add(slot);
+      }
+    });
+    const normalizedFallback = Number(fallbackSlot);
+    if (
+      Number.isInteger(normalizedFallback) &&
+      normalizedFallback >= 0 &&
+      normalizedFallback < getOverlayModelSlotLimit()
+    ) {
+      slots.add(normalizedFallback);
+    }
+    return Array.from(slots);
+  };
 
   const getOverlayModelKeyCodes = () => {
     const maxSlots = getOverlayModelSlotLimit();
@@ -13149,10 +14214,16 @@ setTimeout(() => {
     return isMacPlatform() ? 'Command + ' : 'Ctrl + ';
   };
 
-  const buildShortcutOverlayModelPickerRow = (action, group, context) => {
-    const { activeModelConfigId, codes, modifierLabel, names } = context;
+  const buildShortcutOverlayModelPickerRow = (action, group, groupIndex, context) => {
+    const { activeModelConfigId, cfg, codes, modifierLabel, names } = context;
     const label = escapeHtml(action.label || names[action.slot] || '');
-    const value = displayFromCode(codes[action.slot]);
+    const mirroredSlots = getOverlayMirroredSlotsForGridPosition(
+      cfg,
+      group.id,
+      groupIndex,
+      action.slot,
+    );
+    const value = displayFromCode(codes[mirroredSlots[0] ?? action.slot]);
     const activeClass =
       group.id === 'configure' && action.id === activeModelConfigId
         ? ' mp-configure-item mp-configure-item-active'
@@ -13171,23 +14242,34 @@ setTimeout(() => {
     `;
   };
 
-  function buildShortcutOverlayModelPickerGrid(cfg) {
+  function buildShortcutOverlayModelPickerGrid(cfg, requestedProfile = OVERLAY_MODEL_PROFILE_LATEST) {
+    const profile =
+      requestedProfile === OVERLAY_MODEL_PROFILE_LEGACY
+        ? OVERLAY_MODEL_PROFILE_LEGACY
+        : OVERLAY_MODEL_PROFILE_LATEST;
     const activeModelConfigId = getOverlayActiveModelConfigId(cfg);
-    const names = getOverlayModelNames();
-    const actionGroups = getOverlayModelActionGroups(
-      activeModelConfigId,
-      names,
-      cfg?.modelCatalog || null,
-    );
+    const names = getOverlayProfileNames(cfg, profile);
+    const actionGroups = getOverlayProfileActionGroups(cfg, profile);
     const codes = getOverlayModelKeyCodes();
     const modifierLabel = getOverlayModelPickerModifierLabel(cfg);
-    const rowContext = { activeModelConfigId, codes, modifierLabel, names };
+    const rowContext = { activeModelConfigId, cfg, codes, modifierLabel, names };
 
     const groupMarkup = actionGroups
       .map((group) => {
         const rows = (group.actions || [])
-          .filter((action) => isAssigned(codes[action.slot]))
-          .map((action) => buildShortcutOverlayModelPickerRow(action, group, rowContext));
+          .map((action, groupIndex) => ({ action, groupIndex }))
+          .filter(({ action, groupIndex }) => {
+            const mirroredSlots = getOverlayMirroredSlotsForGridPosition(
+              cfg,
+              group.id,
+              groupIndex,
+              action.slot,
+            );
+            return isAssigned(codes[mirroredSlots[0] ?? action.slot]);
+          })
+          .map(({ action, groupIndex }) =>
+            buildShortcutOverlayModelPickerRow(action, group, groupIndex, rowContext),
+          );
 
         if (!rows.length) return '';
 
@@ -13209,11 +14291,22 @@ setTimeout(() => {
 
     if (!groupMarkup.length) return '';
 
+    const effortLabel = escapeHtml(getMessage('section_switch_models', 'Effort'));
+    const latestLabel = escapeHtml(getMessage('label_modelCatalogLatest', 'Latest Models'));
+    const legacyLabel = escapeHtml(getMessage('label_modelCatalogLegacy', 'Legacy Models'));
+    const isLatest = profile === OVERLAY_MODEL_PROFILE_LATEST;
+
     return `
-<div class="section-header" role="heading" aria-level="2" style="margin-top:0;padding-left:12px;font-size:12px;font-family:ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol';font-weight:600;line-height:12px;letter-spacing:0.72px;text-transform:uppercase;color:rgba(60,60,67,0.6);">
-  Effort
+<div class="overlay-model-picker-root" data-overlay-model-picker-root data-model-catalog-profile="${profile}">
+<div class="section-header overlay-model-catalog-heading" role="heading" aria-level="2">
+  <span>${effortLabel}</span>
+  <div class="p-segmented-controls p-segmented-radius mp-model-catalog-profile-selector" role="tablist" aria-label="Model list version">
+    <button type="button" class="${isLatest ? 'active' : ''}" role="tab" aria-selected="${isLatest}" ${isLatest ? '' : 'tabindex="-1"'} data-overlay-model-catalog-profile="latest">${latestLabel}</button>
+    <button type="button" class="${isLatest ? '' : 'active'}" role="tab" aria-selected="${!isLatest}" ${isLatest ? 'tabindex="-1"' : ''} data-overlay-model-catalog-profile="legacy">${legacyLabel}</button>
+  </div>
 </div>
-${groupMarkup.join('')}`;
+${groupMarkup.join('')}
+</div>`;
   }
 
   // ---- 3) Build overlay HTML (sections similar to popup, but only assigned shortcuts) ----
@@ -13460,6 +14553,27 @@ ${groupMarkup.join('')}`;
   // ---- 4) Show/close overlay (injecting CSS, scrolling) ----
   const OVERLAY_ID = 'csp-shortcut-overlay';
 
+  const wireShortcutOverlayModelProfileSelector = (shadow, cfg) => {
+    const root = shadow.querySelector('[data-overlay-model-picker-root]');
+    if (!(root instanceof Element)) return;
+    root.querySelectorAll('[data-overlay-model-catalog-profile]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const profile =
+          button.getAttribute('data-overlay-model-catalog-profile') ===
+          OVERLAY_MODEL_PROFILE_LEGACY
+            ? OVERLAY_MODEL_PROFILE_LEGACY
+            : OVERLAY_MODEL_PROFILE_LATEST;
+        if (root.getAttribute('data-model-catalog-profile') === profile) return;
+        const template = document.createElement('template');
+        template.innerHTML = buildShortcutOverlayModelPickerGrid(cfg, profile).trim();
+        const replacement = template.content.firstElementChild;
+        if (!(replacement instanceof Element)) return;
+        root.replaceWith(replacement);
+        wireShortcutOverlayModelProfileSelector(shadow, cfg);
+      });
+    });
+  };
+
   const showShortcutOverlay = async (cfg) => {
     const existing = document.getElementById(OVERLAY_ID);
     if (existing) {
@@ -13579,6 +14693,8 @@ ${groupMarkup.join('')}`;
       <button class="csp-close-btn" aria-label="Close overlay">×</button>
     </div>
     `;
+
+    wireShortcutOverlayModelProfileSelector(shadow, cfg);
 
     /* Position the X: 1em left of the H1's right edge, same top as H1, then keep fixed */
     const placeCloseBtnFromH1 = () => {

@@ -289,25 +289,95 @@ assert.equal(
   JSON.stringify(
     noCatalogGroups.find((group) => group.id === 'primary')?.actions.map((action) => action.label),
   ),
-  JSON.stringify(['Instant', 'Medium', 'High']),
-  'no-catalog popup fallback should use the scraped integrated first row',
+  JSON.stringify(['Light', 'Medium', 'High', 'Extra High', 'Max']),
+  'no-catalog popup fallback should use the live pill effort row',
 );
 assert.equal(
   JSON.stringify(
     noCatalogGroups.find((group) => group.id === 'configure')?.actions.map((action) => action.label),
   ),
-  JSON.stringify(['5.5', '5.4', '5.3', 'o3']),
-  'no-catalog popup fallback should use the scraped second-row model labels',
+  JSON.stringify([
+    'GPT-5.6 Sol',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
+    'GPT-5.5',
+    'Toggle Speed (Normal / Fast)',
+    'Reset to default',
+  ]),
+  'no-catalog popup fallback should use the live pill model and utility row',
 );
 assert.equal(
-  JSON.stringify(ModelLabels.defaultKeyCodes().slice(0, 10)),
-  JSON.stringify(['Digit1', 'Digit2', '', 'Digit4', '', '', 'Digit7', 'Digit3', 'Digit5', 'Digit6']),
-  'default model picker codes should not assign the removed Configure slot',
+  JSON.stringify(ModelLabels.defaultKeyCodes()),
+  JSON.stringify([
+    'F1',
+    'F2',
+    '',
+    'Digit1',
+    '',
+    '',
+    'Digit4',
+    'F3',
+    'Digit2',
+    'Digit3',
+    'Digit4',
+    'F4',
+    'F5',
+    'Digit5',
+    'Digit6',
+  ]),
+  'default model picker codes should mirror Latest and Legacy visual positions',
+);
+const legacyFallbackGroups = ModelLabels.getPopupPresentationGroups(
+  ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
+  ModelLabels.defaultLegacyNames(),
+  ModelLabels.getDefaultLegacyCatalog(),
+);
+assert.deepEqual(
+  Array.from(
+    legacyFallbackGroups.find((group) => group.id === 'primary')?.actions || [],
+    (action) => action.label,
+  ),
+  ['Instant', 'Medium', 'High'],
+  'Legacy fallback should preserve the older effort row independently from Latest',
+);
+assert.deepEqual(
+  Array.from(
+    legacyFallbackGroups.find((group) => group.id === 'configure')?.actions || [],
+    (action) => action.label,
+  ),
+  ['5.5', '5.4', '5.3', 'o3'],
+  'Legacy fallback should preserve the older model row independently from Latest',
+);
+assert.deepEqual(
+  Array.from(
+    legacyFallbackGroups.find((group) => group.id === 'configure')?.actions || [],
+    (action, index) =>
+      ModelLabels.buildDefaultKeyCodesFromPresentationGroups(legacyFallbackGroups)[action.slot] ||
+      `missing-${index}`,
+  ),
+  ['Digit1', 'Digit2', 'Digit3', 'Digit4'],
+  'Legacy fallback should mirror numeric shortcuts by second-row position',
 );
 assert.equal(
-  JSON.stringify(ModelLabels.defaultNames().slice(0, 10)),
-  JSON.stringify(['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3']),
-  'default model names should mirror the scraped integrated picker layout',
+  JSON.stringify(ModelLabels.defaultNames()),
+  JSON.stringify([
+    'Light',
+    'Medium',
+    '',
+    'GPT-5.6 Sol',
+    '',
+    '',
+    '',
+    'High',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
+    'GPT-5.5',
+    'Extra High',
+    'Max',
+    'Toggle Speed (Normal / Fast)',
+    'Reset to default',
+  ]),
+  'default model names should mirror the live pill picker layout',
 );
 assert.equal(
   JSON.stringify(
@@ -325,13 +395,13 @@ assert.equal(
     'Instant',
     'Medium',
     '',
-    '5.5',
+    'GPT-5.6 Sol',
     '',
     '',
     'o3',
     'High',
-    '5.4',
-    '5.3',
+    'GPT-5.6 Terra',
+    'GPT-5.6 Luna',
   ]),
   'legacy stored names should not restore Thinking/Configure/Latest fallbacks',
 );

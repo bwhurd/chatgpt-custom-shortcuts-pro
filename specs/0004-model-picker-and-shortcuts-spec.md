@@ -44,6 +44,12 @@ The model picker has two separate but related state shapes:
 - `modelPickerKeyCodes`
   - flat persisted shortcut array
   - full slot count stays fixed even when popup rows are grouped visually
+- `modelCatalogLatest` / `modelNamesLatest`
+  - popup snapshot updated only by the current three-submenu pill scraper
+- `modelCatalogLegacy` / `modelNamesLegacy`
+  - popup snapshot updated only by the older integrated/two-level or Configure fallback scraper
+- `modelCatalog` / `modelNames`
+  - current-page compatibility keys used by content-script shortcut execution; each successful scrape still updates them
 - `modelCatalog.configureOptions`
   - refreshed Configure Models entries must persist their canonical `slot`
   - dynamic configure entries must never reuse a slot, even when ChatGPT inserts a new model between existing rows
@@ -55,6 +61,10 @@ Shared grouped rendering comes from `shared/model-picker-labels.js`, not hardcod
 
 Important invariant:
 - the popup and shortcuts overlay must render from the same grouped model-action source of truth
+- the popup opens on the Latest snapshot; its Latest/Legacy segmented selector changes only the rendered snapshot and never launches or changes a scraper
+- shortcut assignments remain one shared 15-slot array; edits are mirrored across matching visual positions in both catalog snapshots
+- pristine effort-row positions use `F1` through `F5`, and pristine model/utility-row positions use `Digit1` through `Digit9`
+- every shipped locale supplies translated `Latest Models` and `Legacy Models` labels of at most 15 Unicode characters
 
 ## Popup behavior
 
@@ -63,7 +73,10 @@ Important invariant:
 - saving canonical codes
 - duplicate modal behavior
 - segmented Alt vs Control model-hotkey mode
+- segmented Latest vs Legacy catalog view mode
 - model grid rendering from shared metadata
+
+The two segmented selectors occupy the upper header line. The Effort label and model-grid top edge sit 18 px lower. Alt/Control wiring targets `#mp-model-switcher-modifier-selector`; it must never use the first generic `.p-segmented-controls`, because Latest/Legacy precedes it in the DOM.
 
 The popup should not invent its own model-row grouping or label rules separate from `shared/model-picker-labels.js`.
 
@@ -74,6 +87,10 @@ The overlay in `content.js` must stay aligned with the popup:
 - same label source
 - same assigned-only shortcut visibility rules
 - same shared styling contract with `popup.css`
+- same ephemeral Latest/Legacy segmented view, defaulting to Latest each time the overlay opens
+- same deterministic visual-position shortcut mapping: read the Latest position first, then its Legacy counterpart, so a mismatched stored pair never renders different keys between tabs
+
+The overlay profile selector reads `modelCatalogLatest` / `modelNamesLatest` and `modelCatalogLegacy` / `modelNamesLegacy` directly from the settings snapshot. Switching it only replaces the overlay model grid; it does not persist a selected tab, mutate either catalog, or launch a scrape.
 
 Key wiring:
 - overlay open key comes from `shortcutKeyShowOverlay` in storage and ships as `Alt + .` (`Period`) by default
@@ -146,6 +163,15 @@ Thinking effort shortcuts must support both current account surfaces:
 
 For the integrated first-level model menu, map the semantic effort label even when ChatGPT appends a model-version badge inside the same row (for example, `Instant` plus `5.5`). The badge is metadata, not part of the effort label; catalog refresh, popup first-row rendering, and exposed-menu shortcut hints must continue to recognize the effort option.
 
+The three-submenu pill must expose shortcut hints in all three open submenus:
+- Model rows use the existing catalog-backed model action mapping.
+- Effort rows use the active catalog's shared popup-primary action order and slots.
+- Both Speed radio rows display the one `toggle-speed` utility shortcut because that shortcut toggles between the two states.
+
+Pill hint discovery must follow structural menu relationships (`role`, `aria-controls`, open/visible state, direct radio-row order, and shared submenu classification), never localized `Model`, `Effort`, `Speed`, or option text. Keep the older integrated and Configure-dialog hint functions active as the Legacy fallback path.
+
+After a successful runtime model, effort, speed, reset, or legacy model-picker selection, focus the visible composer input so Radix dismisses the picker. Catalog refresh uses the same composer-refocus helper in cleanup, including fallback and failure exits, so no scrape path leaves the menu open.
+
 Duplicate shortcut checks must iterate the exact slot numbers in the current catalog-backed presentation groups. Refreshed dynamic model rows use sparse slots, so action count must never be treated as a contiguous `modelPickerKeyCodes` boundary.
 
 Keep the older assistant icon fallback as a last resort for accounts that still expose that route.
@@ -204,7 +230,7 @@ Usually means one of:
 
 Check `specs/0003-cloud-sync-and-settings-data-flow-spec.md`.
 
-`modelNames` is intentionally excluded from export/import/Drive flows.
+The auto-managed `modelCatalog*` and `modelNames*` scrape snapshots are intentionally excluded from export/import/Drive flows.
 
 ## Repair checklist
 

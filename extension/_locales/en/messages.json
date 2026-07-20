@@ -479,6 +479,12 @@
   "section_switch_models": {
     "message": "Effort"
   },
+  "label_modelCatalogLatest": {
+    "message": "Latest Models"
+  },
+  "label_modelCatalogLegacy": {
+    "message": "Legacy Models"
+  },
   "section_model_picker_tweaks": {
     "message": "Model Picker"
   },

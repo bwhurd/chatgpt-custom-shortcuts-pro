@@ -479,6 +479,12 @@
   "section_switch_models": {
     "message": "मॉडल बदलें"
   },
+  "label_modelCatalogLatest": {
+    "message": "नए मॉडल"
+  },
+  "label_modelCatalogLegacy": {
+    "message": "पुराने मॉडल"
+  },
   "section_model_picker_tweaks": {
     "message": "मॉडल चयन"
   },
