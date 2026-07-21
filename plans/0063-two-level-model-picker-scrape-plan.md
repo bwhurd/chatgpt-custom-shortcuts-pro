@@ -63,6 +63,12 @@
 
 ## Implementation plan
 
+- [x] Retire the obsolete standalone `Thinking Standard` and `Thinking Extended` shortcut tiles:
+  - Remove both controls from the popup effort grid and shortcut-overlay effort layout while preserving their storage keys as inert legacy compatibility data.
+  - Remove the old manual-refresh `Digit8` / `Digit9` seeding path so a later refresh cannot recreate either assignment.
+  - Clear both stored shortcut values to NBSP through the normal options migration on extension update, and classify both actions as deprecated/not-applicable for validation.
+  - Keep the current catalog-backed effort actions and model-picker slot shortcuts unchanged.
+
 - [ ] Capture and normalize the current three-submenu pill contract:
   - Inventory every visible model row and, for each selected model, its available effort and speed rows plus checked/disabled/default state.
   - Restore the conversation's initial model, effort, and speed after the inspection.
@@ -139,6 +145,8 @@
   - Defer or remove configure-dialog capture requirements from the current validation path if the UI no longer exposes them.
 
 ## Validation
+
+- [x] Add/run focused coverage proving the retired effort tiles are absent, their legacy keys migrate to NBSP, and neither key remains runtime-active or overlay-visible.
 
 - [ ] Prove the live state matrix covers every exposed model and every effort/speed option, and that the initial live selection is restored afterward.
 - [ ] Add/run focused fixtures for three-submenu detection, per-model effort/speed catalog capture, fallback ordering, the two synthetic actions, and catalog-derived pristine key defaults.

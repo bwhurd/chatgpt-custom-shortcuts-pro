@@ -72,6 +72,8 @@
       'shortcutKeyStudy',
       'shortcutKeyToggleCanvas',
       'shortcutKeyThinkLonger',
+      'shortcutKeyThinkingStandard',
+      'shortcutKeyThinkingExtended',
     ],
     // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
     // Used for modifier-aware duplicate detection in popup.js.
@@ -88,8 +90,6 @@
       shortcutKeyToggleModelSelector: 'label_showModelPicker',
       shortcutKeyShowOverlay: 'label_showShortcutOverlay',
       shortcutKeyToggleCodeboxWrap: 'label_toggle_codebox_wrap',
-      shortcutKeyThinkingStandard: 'label_switchToThinkingStandard',
-      shortcutKeyThinkingExtended: 'label_switchToThinkingExtended',
       shortcutKeyThinkingLight: 'label_switchToThinkingLight',
       shortcutKeyThinkingHeavy: 'label_switchToThinkingHeavy',
       shortcutKeyProStandard: 'label_switchToProStandard',
@@ -142,8 +142,6 @@
         keys: [
           'shortcutKeyToggleModelSelector',
           'shortcutKeyShowOverlay',
-          'shortcutKeyThinkingStandard',
-          'shortcutKeyThinkingExtended',
           'shortcutKeyThinkingLight',
           'shortcutKeyThinkingHeavy',
           'shortcutKeyProStandard',

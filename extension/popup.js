@@ -164,11 +164,6 @@ const buildDefaultModelPickerCodes = ({
   out[14] = 'Digit6';
   return out;
 };
-const MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS = Object.freeze({
-  shortcutKeyThinkingStandard: 'Digit8',
-  shortcutKeyThinkingExtended: 'Digit9',
-});
-const THINKING_SHORTCUTS_MANUAL_SEED_KEY = 'cspThinkingShortcutsManualSeededV1';
 const AUTO_MANAGED_SYNC_KEYS = new Set([
   'activeModelConfigId',
   'modelCatalog',
@@ -258,79 +253,6 @@ const isPristineUserSettingsSnapshot = (snapshot) =>
       !AUTO_MANAGED_SYNC_KEYS.has(key) &&
       !(key === 'modelPickerKeyCodes' && hasDefaultModelPickerCodes(snapshot[key])),
   );
-const hasHydratedModelCatalog = (catalog) => {
-  if (!catalog || typeof catalog !== 'object') return false;
-  if (Array.isArray(catalog.configureOptions) && catalog.configureOptions.length) return true;
-  return Object.values(catalog.frontendByConfig || {}).some((rows) => Array.isArray(rows) && rows.length > 0);
-};
-const waitForPaint = (count = 2) =>
-  new Promise((resolve) => {
-    const step = (remaining) => {
-      if (remaining <= 0) {
-        resolve();
-        return;
-      }
-      window.requestAnimationFrame?.(() => step(remaining - 1)) ?? setTimeout(() => step(remaining - 1), 16);
-    };
-    step(count);
-  });
-const storageGetAsync = (area, keys) =>
-  new Promise((resolve) => {
-    try {
-      area.get(keys, (result) => resolve(result || {}));
-    } catch {
-      resolve({});
-    }
-  });
-const storageSetAsync = (area, data) =>
-  new Promise((resolve) => {
-    try {
-      area.set(data, () => resolve());
-    } catch {
-      resolve();
-    }
-  });
-async function maybeSeedThinkingShortcutsAfterManualCatalogRefresh({ hadCatalogBefore = false } = {}) {
-  if (hadCatalogBefore || !hasHydratedModelCatalog(window.__modelCatalog)) return;
-  if (window.__modelCatalog?.integratedEffort === true) return;
-
-  const localState = await storageGetAsync(chrome.storage.local, [THINKING_SHORTCUTS_MANUAL_SEED_KEY]);
-  if (localState?.[THINKING_SHORTCUTS_MANUAL_SEED_KEY]) return;
-
-  await waitForPaint(2);
-
-  const shortcutIds = Object.keys(MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS);
-  const currentValues = await storageGetAsync(chrome.storage.sync, shortcutIds);
-  const patch = {};
-
-  shortcutIds.forEach((id) => {
-    const currentValue = currentValues?.[id];
-    if (currentValue !== undefined && currentValue !== '' && currentValue !== '\u00A0') return;
-
-    const code = MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS[id];
-    const conflicts =
-      typeof window.ShortcutUtils?.buildConflictsForCode === 'function'
-        ? window.ShortcutUtils.buildConflictsForCode(code, { type: 'shortcut', id })
-        : [];
-    if (conflicts.length) return;
-    patch[id] = code;
-  });
-
-  if (Object.keys(patch).length) {
-    await storageSetAsync(chrome.storage.sync, patch);
-    Object.entries(patch).forEach(([id, code]) => {
-      const input = document.getElementById(id);
-      if (!(input instanceof HTMLInputElement)) return;
-      input.dataset.keyCode = code;
-      input.value =
-        typeof window.ShortcutUtils?.displayFromCode === 'function'
-          ? window.ShortcutUtils.displayFromCode(code)
-          : code;
-    });
-  }
-
-  await storageSetAsync(chrome.storage.local, { [THINKING_SHORTCUTS_MANUAL_SEED_KEY]: true });
-}
 const isChatGptUrl = (url) => /^https?:\/\/([^.]+\.)?chatgpt\.com\//i.test(String(url || ''));
 const queryTabsAsync = (queryInfo) =>
   new Promise((resolve) => {
@@ -3194,6 +3116,14 @@ document.addEventListener('DOMContentLoaded', () => {
       effortGrid?.classList.toggle('mp-pro-effort-visible', hasVisibleProEffort);
     }
 
+    const hasVisibleEffortShortcut = Array.from(
+      document.querySelectorAll('#mp-effort-grid .shortcut-item'),
+    ).some((item) => item.dataset.filterLocked !== '1' && item.style.display !== 'none');
+    if (effortGrid) {
+      effortGrid.hidden = !hasVisibleEffortShortcut;
+      effortGrid.setAttribute('aria-hidden', hasVisibleEffortShortcut ? 'false' : 'true');
+    }
+
     const searchInput = document.querySelector('.ios-search-input');
     if (searchInput instanceof HTMLInputElement) {
       searchInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -5341,7 +5271,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
   const triggerManualCatalogRefresh = async (source = 'manual') => {
     const startScrape = window.__startModelCatalogScrape;
     if (typeof startScrape !== 'function' || isModelCatalogScrapeLoading()) return null;
-    const hadCatalogBefore = hasHydratedModelCatalog(window.__modelCatalog);
     setModelCatalogRefreshPromptVisible(false, `${source}:hide-prompt`);
     renderAll({ allowPendingRebuild: true });
     const result = await startScrape();
@@ -5360,7 +5289,6 @@ chrome.storage.sync.get('modelPickerKeyCodes', (data) => {
       return null;
     }
     renderAll({ allowPendingRebuild: true });
-    await maybeSeedThinkingShortcutsAfterManualCatalogRefresh({ hadCatalogBefore });
     return result;
   };
 

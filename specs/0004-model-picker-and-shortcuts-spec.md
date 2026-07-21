@@ -147,7 +147,7 @@ Activation probe metadata is the source of truth for future live shortcut checks
 
 If a report shows a shortcut as static `PARTIAL` but the same action has a passing live probe, treat that as a resolved state-specific target rather than a broken shortcut. The Dashboard and Top Follow-Up sections should be used for routine repair priority; the Details tab preserves static scrape diagnostics for deeper investigation.
 
-Removed ChatGPT features should stay inert for existing installs while disappearing from user-facing shortcut grids. `shortcutKeyStudy`, `shortcutKeyToggleCanvas`, and `shortcutKeyThinkLonger` are legacy storage/default keys only; keep them explicit as `not-applicable` metadata and do not show them in `popup.html` or overlay schema unless ChatGPT restores those features.
+Removed ChatGPT features should stay inert for existing installs while disappearing from user-facing shortcut grids. `shortcutKeyStudy`, `shortcutKeyToggleCanvas`, `shortcutKeyThinkLonger`, `shortcutKeyThinkingStandard`, and `shortcutKeyThinkingExtended` are legacy storage/default keys only; keep them explicit as `not-applicable` metadata and do not show them in `popup.html` or overlay schema unless ChatGPT restores those features. The retired standalone Thinking Standard/Extended keys are cleared to NBSP by the options migration so updates cannot retain an active assignment.
 
 ## Runtime model switching
 

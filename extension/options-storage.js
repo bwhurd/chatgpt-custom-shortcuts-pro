@@ -255,6 +255,13 @@ if (typeof OptionsSync === 'undefined') {
         delete stored.shortcutKeyShowShortcuts;
       },
 
+      // 2.7) Retire the obsolete standalone Thinking Standard/Extended shortcuts.
+      // Keep the keys as blank legacy data so older synced assignments cannot reactivate.
+      (stored) => {
+        stored.shortcutKeyThinkingStandard = '\u00A0';
+        stored.shortcutKeyThinkingExtended = '\u00A0';
+      },
+
       // 3) Sanitize modelPickerKeyCodes to a 15-slot string array (pads from old 10)
       (stored) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes) ? stored.modelPickerKeyCodes : [];

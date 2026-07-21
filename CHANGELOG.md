@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.21.2026
+- Removed: Thinking Standard and Extended shortcuts because those options are no longer available.
+
 #### 07.20.2026
 - Added: Toggle Speed and Reset to Default model shortcuts.
 - Fixed: Model refresh works with ChatGPT's latest `work` mode, `chat mode`, as well as the legacy model picker.

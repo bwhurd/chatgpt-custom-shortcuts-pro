@@ -6290,8 +6290,12 @@ const clickElementLikeUser = (el) => {
       shortcutKeyRegenerateAskToChangeResponse: runRegenerateAskToChangeResponseShortcut,
       shortcutKeyMoreDotsReadAloud: runReadAloudShortcut,
       shortcutKeyMoreDotsBranchInNewChat: runBranchInNewChatShortcut,
-      shortcutKeyThinkingExtended: () => runLegacyThinkingEffortShortcut('thinking-extended'),
-      shortcutKeyThinkingStandard: () => runLegacyThinkingEffortShortcut('thinking-standard'),
+      shortcutKeyThinkingExtended: async () => {
+        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
+      },
+      shortcutKeyThinkingStandard: async () => {
+        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
+      },
       shortcutKeyThinkingLight: () => runLegacyThinkingEffortShortcut('thinking-light'),
       shortcutKeyThinkingHeavy: () => runLegacyThinkingEffortShortcut('thinking-heavy'),
       shortcutKeyProStandard: () => runProThinkingEffortShortcut('thinking-standard'),
@@ -6360,16 +6364,6 @@ const clickElementLikeUser = (el) => {
     function flushUsageAnalytics(_reason) {}
 
     const THINKING_EFFORT_DYNAMIC_SHORTCUTS = [
-      {
-        storageKey: 'shortcutKeyThinkingExtended',
-        optionId: 'thinking-extended',
-        fallback: () => runLegacyThinkingEffortShortcut('thinking-extended'),
-      },
-      {
-        storageKey: 'shortcutKeyThinkingStandard',
-        optionId: 'thinking-standard',
-        fallback: () => runLegacyThinkingEffortShortcut('thinking-standard'),
-      },
       {
         storageKey: 'shortcutKeyThinkingLight',
         optionId: 'thinking-light',
@@ -13949,20 +13943,6 @@ setTimeout(() => {
       column: 1,
     },
     {
-      key: 'shortcutKeyThinkingStandard',
-      labelHtml: 'Thinking<br>Standard',
-      optionKind: 'thinking',
-      optionId: 'thinking-standard',
-      column: 2,
-    },
-    {
-      key: 'shortcutKeyThinkingExtended',
-      labelHtml: 'Thinking<br>Extended',
-      optionKind: 'thinking',
-      optionId: 'thinking-extended',
-      column: 3,
-    },
-    {
       key: 'shortcutKeyThinkingHeavy',
       labelHtml: 'Thinking<br>Heavy',
       optionKind: 'thinking',
@@ -14398,8 +14378,6 @@ ${groupMarkup.join('')}
           keys: [
             'shortcutKeyToggleModelSelector',
             'shortcutKeyShowOverlay',
-            'shortcutKeyThinkingStandard',
-            'shortcutKeyThinkingExtended',
             'shortcutKeyThinkingLight',
             'shortcutKeyThinkingHeavy',
             'shortcutKeyProStandard',

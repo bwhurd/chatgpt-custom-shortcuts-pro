@@ -1084,47 +1084,11 @@
       }),
       notes: 'Clipboard selection helper verified by clipboard contents.',
     }),
-    defineShortcutAction({
-      actionId: 'shortcutKeyThinkingExtended',
-      targetRefs: [
-        'model-switcher-button',
-        'model-switcher-menu',
-        'model-switcher-thinking-effort-action',
-        'model-switcher-thinking-effort-menu',
-        'model-switcher-thinking-effort-extended',
-      ],
-      uiStateRefs: targetStateRefs(
-        'model-switcher-button',
-        'model-switcher-menu',
-        'model-switcher-thinking-effort-action',
-        'model-switcher-thinking-effort-menu',
-        'model-switcher-thinking-effort-extended',
-      ),
-      activationProbe: clickTargetProbe('model-switcher-thinking-effort-extended', {
-        setup: 'model-effort-shortcut',
-        uiStateRefs: [],
-      }),
+    notApplicable('shortcutKeyThinkingExtended', {
+      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
     }),
-    defineShortcutAction({
-      actionId: 'shortcutKeyThinkingStandard',
-      targetRefs: [
-        'model-switcher-button',
-        'model-switcher-menu',
-        'model-switcher-thinking-effort-action',
-        'model-switcher-thinking-effort-menu',
-        'model-switcher-thinking-effort-standard',
-      ],
-      uiStateRefs: targetStateRefs(
-        'model-switcher-button',
-        'model-switcher-menu',
-        'model-switcher-thinking-effort-action',
-        'model-switcher-thinking-effort-menu',
-        'model-switcher-thinking-effort-standard',
-      ),
-      activationProbe: clickTargetProbe('model-switcher-thinking-effort-standard', {
-        setup: 'model-effort-shortcut',
-        uiStateRefs: [],
-      }),
+    notApplicable('shortcutKeyThinkingStandard', {
+      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProStandard',
