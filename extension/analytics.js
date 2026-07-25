@@ -59,6 +59,7 @@
     selectThenCopyAllMessages: '[',
     shortcutKeyClickSendButton: 'Enter',
     shortcutKeyClickStopButton: 'Backspace',
+    shortcutKeyToggleChatWork: 'Digit5',
   });
   const MODEL_PICKER_DEFAULT_KEY_CODES = Object.freeze([
     'F1',
@@ -74,8 +75,8 @@
     'Digit4',
     'F4',
     'F5',
-    'Digit5',
     'Digit6',
+    'Digit0',
   ]);
   const MODEL_SLOT_ACTION_IDS = Object.freeze(
     Array.from({ length: 15 }, (_value, index) => `modelPickerSlot:${index + 1}`),

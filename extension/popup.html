@@ -32,9 +32,9 @@
             class="p-segmented-controls p-segmented-radius mp-model-catalog-profile-selector" role="tablist"
             aria-label="Model list version">
             <button type="button" class="active i18n" role="tab" aria-selected="true"
-              data-i18n="label_modelCatalogLatest" data-model-catalog-profile="latest">Latest Models</button>
+              data-i18n="label_modelCatalogLegacy" data-model-catalog-profile="legacy">Chat Models</button>
             <button type="button" class="i18n" role="tab" aria-selected="false" tabindex="-1"
-              data-i18n="label_modelCatalogLegacy" data-model-catalog-profile="legacy">Legacy Models</button>
+              data-i18n="label_modelCatalogLatest" data-model-catalog-profile="latest">Work Models</button>
           </div>
         </div>
 
@@ -63,7 +63,10 @@
         name="modelSwitcher" style="display: none;">
 
       <!-- Model Picker six-column rows are injected by popup.js (see modelPickerInputsGridInitV2 IIFE) -->
-      <div id="mp-grid-anchor"></div>
+      <div id="mp-grid-anchor">
+        <input class="key-input" id="shortcutKeyToggleChatWork" data-sync="shortcutKeyToggleChatWork"
+          maxlength="12" name="shortcutKeyToggleChatWork" type="text" value="" hidden />
+      </div>
 
       <section id="mp-effort-grid" class="mp-effort-grid" aria-labelledby="mp-effort-heading">
         <div class="mp-effort-label-row">

@@ -316,6 +316,17 @@
     byTestId('create-new-chat-button', 'create-new-chat-button', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
     }),
+    bySelectorList(
+      'chat-work-surface-toggle',
+      ['header [role="group"] button[role="radio"][aria-checked]'],
+      {
+        identifier: 'header-two-radio-chat-surface-toggle',
+        matchGroups: [['role="group"', 'role="radio"', 'aria-checked=']],
+        uiStateRefs: ['topbar-bottom-disabled-header-area'],
+        notes:
+          'Blank-chat surface selector: one visible header group with exactly two button radios and one checked state; runtime matching does not depend on localized Chat/Work labels.',
+      },
+    ),
     byTestId('search-conversation-button', 'search-conversation-button', {
       matchGroups: [['data-testid="search-conversation-button"'], ['#ac6d36']],
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
@@ -784,6 +795,16 @@
         notes:
           'New Conversation should open a blank chat where the Temporary Chat button is available before any prompt is sent.',
       }),
+    }),
+    defineShortcutAction({
+      actionId: 'shortcutKeyToggleChatWork',
+      targetRefs: ['create-new-chat-button', 'chat-work-surface-toggle'],
+      uiStateRefs: targetStateRefs('create-new-chat-button', 'chat-work-surface-toggle'),
+      activationProbe: notLiveProbed(
+        'Stateful route-and-toggle action is validated manually: from an active conversation it opens a blank chat, waits 500 ms, then activates the unchecked header surface radio.',
+      ),
+      notes:
+        'Uses the same native new-conversation helper as Alt+N and a language-agnostic two-radio header resolver.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeySearchConversationHistory',

@@ -231,6 +231,14 @@ That means a new setting should be visible to import/export if:
 - it exists in `DEFAULT_PRESET_DATA`
 - and it is not explicitly excluded
 
+The model picker is a deliberate special case: `modelPickerKeyCodesLatest` and
+`modelPickerKeyCodesLegacy` are independent profile arrays, while
+`modelPickerKeyCodes` is a legacy compatibility field only.
+`modelPickerKeyCodeProfilesVersion` gates the one-time split. The dedicated
+profile initializer owns first-run/migration writes for these three keys; the
+generic popup default seeder must skip them so it cannot race and overwrite a
+completed migration.
+
 ### Cloud sync
 
 Cloud sync uses `OPTIONS_DEFAULTS` as the allowlist through `storage.js`.

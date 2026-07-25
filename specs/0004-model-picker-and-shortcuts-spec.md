@@ -41,15 +41,22 @@ The model picker has two separate but related state shapes:
 - `window.MODEL_NAMES`
   - actionable visible model labels used by popup/content after hydration
   - must not keep the legacy `→` arrow entry once hydrated
+- `modelPickerKeyCodesLatest` / `modelPickerKeyCodesLegacy`
+  - independent persisted 15-slot shortcut arrays for Work and Chat
+  - matching defaults may reuse the same keys, but later edits are never mirrored or linked
 - `modelPickerKeyCodes`
-  - flat persisted shortcut array
-  - full slot count stays fixed even when popup rows are grouped visually
+  - legacy shared-array input retained only for one-time migration and backward-compatible export/import
+- `modelPickerKeyCodeProfilesVersion`
+  - gates the one-time shared-array split; normal popup hydration and catalog refresh never rerun it
 - `modelCatalogLatest` / `modelNamesLatest`
   - popup snapshot updated only by the current three-submenu pill scraper
 - `modelCatalogLegacy` / `modelNamesLegacy`
   - popup snapshot updated only by the older integrated/two-level or Configure fallback scraper
 - `modelCatalog` / `modelNames`
   - current-page compatibility keys used by content-script shortcut execution; each successful scrape still updates them
+- `modelCatalogSelectedProfile`
+  - sync-backed popup view preference storing internal `legacy` (Chat) or `latest` (Work)
+  - defaults to Chat when absent; changing it never mutates either catalog or launches a scrape
 - `modelCatalog.configureOptions`
   - refreshed Configure Models entries must persist their canonical `slot`
   - dynamic configure entries must never reuse a slot, even when ChatGPT inserts a new model between existing rows
@@ -61,10 +68,12 @@ Shared grouped rendering comes from `shared/model-picker-labels.js`, not hardcod
 
 Important invariant:
 - the popup and shortcuts overlay must render from the same grouped model-action source of truth
-- the popup opens on the Latest snapshot; its Latest/Legacy segmented selector changes only the rendered snapshot and never launches or changes a scraper
-- shortcut assignments remain one shared 15-slot array; edits are mirrored across matching visual positions in both catalog snapshots
-- pristine effort-row positions use `F1` through `F5`, and pristine model/utility-row positions use `Digit1` through `Digit9`
-- every shipped locale supplies translated `Latest Models` and `Legacy Models` labels of at most 15 Unicode characters
+- the popup opens on its last stored Chat/Work snapshot selection, defaulting to Chat/Legacy for a new install; its segmented selector changes only the rendered snapshot and persisted view preference and never launches or changes a scraper
+- the popup and overlay read the requested profile array directly at each action's persisted `slot`
+- edits, clears, and resets write only the selected profile; they never modify the other profile
+- pristine effort-row positions use `F1` through `F5`; pristine model and non-reset Model Toggles positions use sequential digits, while Reset uses `Digit0`
+- the Work profile renders `Toggle Speed` and `Reset to default` in a third `Model Toggles` group; the Chat profile does not render those two Work-only actions
+- every shipped locale supplies translated `Work Models` and `Chat Models` labels of at most 15 Unicode characters
 
 ## Popup behavior
 
@@ -80,6 +89,19 @@ The two segmented selectors occupy the upper header line. The Effort label and m
 
 The popup should not invent its own model-row grouping or label rules separate from `shared/model-picker-labels.js`.
 
+### Catalog refresh lifecycle
+
+The popup's manual model refresh is a two-surface operation:
+- call the same native new-conversation helper used by the configurable New Conversation shortcut
+- wait for the blank-chat native Chat/Work radio group, then remember its selected mode
+- select Chat by structural radio order and run the existing catalog scraper into the Chat/Legacy snapshot
+- select Work and run the existing catalog scraper into the Work/Latest snapshot
+- in cleanup, collapse any model menus or Configure dialog opened by either scrape, restore the initially selected Chat/Work mode, and make the generic `modelCatalog` / `modelNames` compatibility keys match that restored mode
+
+Mode selection must use the blank-chat two-radio structure and reciprocal checked state, not localized Chat/Work labels. A failure on one surface must not prevent the coordinator from attempting the other surface, and cleanup must run for success and failure.
+
+Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Popup hydration and profile-change events follow the same rule.
+
 ## Shortcuts overlay parity
 
 The overlay in `content.js` must stay aligned with the popup:
@@ -87,10 +109,10 @@ The overlay in `content.js` must stay aligned with the popup:
 - same label source
 - same assigned-only shortcut visibility rules
 - same shared styling contract with `popup.css`
-- same ephemeral Latest/Legacy segmented view, defaulting to Latest each time the overlay opens
-- same deterministic visual-position shortcut mapping: read the Latest position first, then its Legacy counterpart, so a mismatched stored pair never renders different keys between tabs
+- same ephemeral Chat/Work segmented view, defaulting to Chat/Legacy each time the overlay opens
+- the requested profile's own shortcut array read directly at `action.slot`
 
-The overlay profile selector reads `modelCatalogLatest` / `modelNamesLatest` and `modelCatalogLegacy` / `modelNamesLegacy` directly from the settings snapshot. Switching it only replaces the overlay model grid; it does not persist a selected tab, mutate either catalog, or launch a scrape.
+The overlay profile selector reads `modelCatalogLatest` / `modelNamesLatest` and `modelCatalogLegacy` / `modelNamesLegacy` directly from the settings snapshot. Unlike the popup selector, the overlay remains ephemeral and defaults to Chat/Legacy each time it opens. Switching it only replaces the overlay model grid; it does not persist a selected tab, mutate either catalog, or launch a scrape.
 
 Key wiring:
 - overlay open key comes from `shortcutKeyShowOverlay` in storage and ships as `Alt + .` (`Period`) by default
@@ -168,11 +190,15 @@ The three-submenu pill must expose shortcut hints in all three open submenus:
 - Effort rows use the active catalog's shared popup-primary action order and slots.
 - Both Speed radio rows display the one `toggle-speed` utility shortcut because that shortcut toggles between the two states.
 
+For a known Work `configure-option` shortcut, activation opens the structurally first submenu trigger and verifies that its controlled menu is the Model menu before selecting the catalog action directly. Full submenu discovery and hint scanning are fallback paths only when that verified direct route fails.
+
+Runtime shortcut resolution first selects the current native Chat/Work profile, scans only that profile's presented slots for the assigned code, and dispatches the exact matching action. On a blank conversation, the native two-radio state and captured mode changes own profile selection. After those radios disappear, the live shared composer trigger identifies Work structurally by its `[data-animated-slider-trigger="true"]` wrapper; the same trigger without that wrapper identifies Chat. Catalog/menu inventory scanning remains a fallback for DOM activation, not a way to discover the user's stored assignment.
+
 Pill hint discovery must follow structural menu relationships (`role`, `aria-controls`, open/visible state, direct radio-row order, and shared submenu classification), never localized `Model`, `Effort`, `Speed`, or option text. Keep the older integrated and Configure-dialog hint functions active as the Legacy fallback path.
 
 After a successful runtime model, effort, speed, reset, or legacy model-picker selection, focus the visible composer input so Radix dismisses the picker. Catalog refresh uses the same composer-refocus helper in cleanup, including fallback and failure exits, so no scrape path leaves the menu open.
 
-Duplicate shortcut checks must iterate the exact slot numbers in the current catalog-backed presentation groups. Refreshed dynamic model rows use sparse slots, so action count must never be treated as a contiguous `modelPickerKeyCodes` boundary.
+Duplicate shortcut checks must iterate the exact sparse slot numbers in the relevant catalog-backed presentation groups; action count must never be treated as a contiguous array boundary.
 
 Keep the older assistant icon fallback as a last resort for accounts that still expose that route.
 
@@ -195,6 +221,11 @@ If duplicate prompts feel inconsistent, inspect the active modifier mode first.
 
 - If a change touches shortcut editing, shortcut normalization, shortcut save flows, import/restore flows, model picker controls tied to shortcuts, or the shortcuts overlay, keep duplicate-shortcut detection and blocking working.
 - Preserve duplicate-shortcut safeguards for add, edit, import, and restore paths unless the task explicitly changes duplicate-handling behavior.
+- A model edit checks only the selected profile plus same-modifier global shortcuts. A global shortcut edit checks both profiles because that command is available in either mode.
+- The same canonical code may appear once in Chat and once in Work. Matching defaults are allowed; cross-profile reuse must not trigger a duplicate prompt or clear either assignment.
+- Within one profile, assigning an already-used canonical code transfers ownership atomically: clear the old owner, then write the exact requested slot. Never renumber, autofill, mirror, or reorder other assignments.
+- Explicit import/restore and the one-time v0-to-v1 migration may clear a later canonical duplicate within a profile. They must preserve all nonduplicate customizations, including values in slots not present in the current catalog.
+- Catalog scrape, catalog hydration, popup open, and profile switching never repair or reseed shortcut assignments.
 
 ## Tab-targeting invariant
 

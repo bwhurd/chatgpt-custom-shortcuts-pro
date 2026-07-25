@@ -34,12 +34,12 @@ const localeMessages = Object.fromEntries(
 );
 
 const expectedProfileLabels = {
-  en: ['Latest Models', 'Legacy Models'],
-  es: ['Modelos nuevos', 'Modelos previos'],
-  hi: ['नए मॉडल', 'पुराने मॉडल'],
-  ja: ['最新モデル', '旧モデル'],
-  ru: ['Новые модели', 'Старые модели'],
-  uk: ['Нові моделі', 'Старі моделі'],
+  en: ['Work Models', 'Chat Models'],
+  es: ['Modelos Trabajo', 'Modelos Chat'],
+  hi: ['कार्य मॉडल', 'चैट मॉडल'],
+  ja: ['作業モデル', 'チャットモデル'],
+  ru: ['Рабочие модели', 'Модели чата'],
+  uk: ['Робочі моделі', 'Моделі чату'],
 };
 localeCodes.forEach((locale) => {
   const labels = [
@@ -53,7 +53,27 @@ localeCodes.forEach((locale) => {
       `${locale} profile label "${label}" must be 15 Unicode characters or fewer`,
     );
   });
+  assert.equal(
+    localeMessages[locale].label_modelTogglesCompact.message,
+    'Model Toggles',
+    `${locale} should provide the Model Toggles group label`,
+  );
 });
+assert.match(
+  popupHtmlSource,
+  /class="active i18n"[^>]*aria-selected="true"[\s\S]*?data-model-catalog-profile="legacy">Chat Models<\/button>[\s\S]*?data-model-catalog-profile="latest">Work Models<\/button>/,
+  'popup selector should render Chat/legacy first and active before Work/latest',
+);
+assert.match(
+  popupJsSource,
+  /window\.__modelCatalogProfile = MODEL_CATALOG_PROFILE_LEGACY/,
+  'popup catalog profile should initialize to Chat/legacy',
+);
+assert.match(
+  popupJsSource,
+  /window\.MODEL_NAMES = window\.__modelNamesProfiles\[MODEL_CATALOG_PROFILE_LEGACY\]\.slice\(\)/,
+  'popup model names should initialize from the Chat/legacy profile',
+);
 
 const labelsContext = { window: {} };
 vm.createContext(labelsContext);
@@ -166,6 +186,7 @@ for (const option of configureOptions) {
   const groups = ModelLabels.getPopupPresentationGroups(option.id, [], liveCatalog);
   const primary = groups.find((group) => group.id === 'primary')?.actions || [];
   const configure = groups.find((group) => group.id === 'configure')?.actions || [];
+  const toggles = groups.find((group) => group.id === 'model-toggles');
   const observed = LIVE_PILL_MATRIX.find((entry) => entry.model === option.label);
 
   assert.deepEqual(
@@ -179,18 +200,20 @@ for (const option of configureOptions) {
   );
   assert.deepEqual(
     Array.from(configure, (action) => action.label),
-    [
-      ...modelLabels,
-      'Toggle Speed (Normal / Fast)',
-      'Reset to default',
-    ],
-    'the second row should contain all four models followed by the two requested utilities',
+    modelLabels,
+    'the second row should contain only the four Work models',
   );
   assert.deepEqual(
-    Array.from(configure.slice(-2), (action) => action.slot),
-    [13, 14],
-    'the utility actions should own the two far-right second-row slots',
+    Array.from(toggles?.actions || [], (action) => action.label),
+    ['Toggle Chat / Work', 'Toggle Speed', 'Reset to default'],
+    'the third row should begin with the shared Chat/Work toggle before the two Work utilities',
   );
+  assert.deepEqual(
+    Array.from(toggles?.actions || [], (action) => action.slot),
+    [undefined, 13, 14],
+    'the normal shortcut should not consume a model slot and the Work utilities should preserve theirs',
+  );
+  assert.equal(toggles?.labelI18nKey, 'label_modelTogglesCompact');
 }
 
 const defaultGroups = ModelLabels.getPopupPresentationGroups(
@@ -215,25 +238,43 @@ assert.deepEqual(
     'Digit4',
     'F4',
     'F5',
-    'Digit5',
     'Digit6',
+    'Digit0',
   ],
   'fallback keys should mirror the first grid row with F1-F5 and the second with 1-9',
 );
 
-const chatMenuLabels = ['GPT-5.6 Sol', 'GPT-5.5', 'GPT-5.4', 'GPT-5.3', 'o3'];
+const chatMenuLabels = ['GPT-5.6 Sol', 'GPT-5.5', 'GPT-5.4', 'GPT-5.3'];
 const chatMenuShortcutSlots = chatMenuLabels.map((_label, index) =>
-  ModelLabels.getPopupShortcutSlotForPosition('configure', index, [], liveCatalog),
+  ModelLabels.getPopupShortcutSlotForPosition(
+    'configure',
+    index,
+    ModelLabels.defaultLegacyNames(),
+    ModelLabels.getDefaultLegacyCatalog(),
+  ),
 );
 assert.deepEqual(
   Array.from(chatMenuShortcutSlots),
-  [3, 8, 9, 10, 13],
-  'Chat-mode model rows should use the same canonical Latest-grid positions shown by the popup',
+  [3, 8, 9, 6],
+  'Chat model rows should retain their own action slots',
 );
 assert.deepEqual(
-  Array.from(chatMenuShortcutSlots, (slot) => defaultCodes[slot]),
-  ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'],
-  'Chat-mode model hints should remain one-to-one even when legacy model action slots are reordered',
+  Array.from(
+    chatMenuShortcutSlots,
+    (slot) => ModelLabels.defaultKeyCodesForProfile('legacy')[slot],
+  ),
+  ['Digit1', 'Digit2', 'Digit3', 'Digit4'],
+  'Chat defaults should match Work positions without sharing their stored slots',
+);
+assert.equal(
+  ModelLabels.getPopupShortcutSlotForPosition(
+    'configure',
+    4,
+    ModelLabels.defaultLegacyNames(),
+    ModelLabels.getDefaultLegacyCatalog(),
+  ),
+  -1,
+  'a fifth Chat model position must not borrow the first Work Model Toggles slot',
 );
 
 const latestNames = new Array(ModelLabels.MAX_SLOTS).fill('');
@@ -254,10 +295,9 @@ const overlayCodes = [
   'KeyL',
   'F4',
   'F5',
-  'Digit5',
   'Digit6',
+  'Digit0',
 ];
-labelsContext.window.__modelPickerKeyCodes = overlayCodes;
 labelsContext.escapeHtml = (value) => String(value);
 labelsContext.getMessage = (key, fallback = '') =>
   ({
@@ -265,6 +305,7 @@ labelsContext.getMessage = (key, fallback = '') =>
     label_modelCatalogLatest: 'Latest',
     label_modelCatalogLegacy: 'Legacy',
     label_configureModelsCompact: 'Pick Model',
+    label_toggleChatWork: 'Toggle Chat / Work',
   })[key] || fallback;
 labelsContext.displayFromCode = (code) =>
   String(code || '')
@@ -273,12 +314,32 @@ labelsContext.displayFromCode = (code) =>
     .toLowerCase();
 labelsContext.isAssigned = (code) => !!code;
 labelsContext.isMacPlatform = () => false;
+labelsContext.shortcutModifierLabel = () => 'Alt + ';
 labelsContext.overlayCfg = {
   activeModelConfigId: 'configure-latest',
+  shortcutKeyToggleChatWork: 'KeyG',
   modelCatalogLatest: liveCatalog,
   modelNamesLatest: latestNames,
   modelCatalogLegacy: ModelLabels.getDefaultLegacyCatalog(),
   modelNamesLegacy: Array.from(ModelLabels.defaultLegacyNames()),
+  modelPickerKeyCodesLatest: overlayCodes,
+  modelPickerKeyCodesLegacy: [
+    'F1',
+    'F2',
+    '',
+    'Digit1',
+    '',
+    '',
+    'KeyO',
+    'F3',
+    'Digit2',
+    'Digit3',
+    '',
+    '',
+    '',
+    '',
+    '',
+  ],
 };
 const overlayHelperStart = contentSource.indexOf('const getOverlayModelSlotLimit');
 const overlayHelperEnd = contentSource.indexOf(
@@ -288,27 +349,42 @@ const overlayHelperEnd = contentSource.indexOf(
 assert.ok(overlayHelperStart >= 0 && overlayHelperEnd > overlayHelperStart);
 vm.runInContext(
   `${contentSource.slice(overlayHelperStart, overlayHelperEnd)}
-globalThis.overlayLatestMarkup = buildShortcutOverlayModelPickerGrid(overlayCfg);
-globalThis.overlayLegacyMarkup = buildShortcutOverlayModelPickerGrid(overlayCfg, 'legacy');`,
+globalThis.overlayLegacyMarkup = buildShortcutOverlayModelPickerGrid(overlayCfg);
+globalThis.overlayLatestMarkup = buildShortcutOverlayModelPickerGrid(overlayCfg, 'latest');`,
   labelsContext,
   { filename: 'overlay-model-profile-fixture.js' },
 );
 assert.match(labelsContext.overlayLatestMarkup, /data-model-catalog-profile="latest"/);
 assert.match(labelsContext.overlayLatestMarkup, /GPT-5\.6 Sol/);
-assert.match(labelsContext.overlayLatestMarkup, /Toggle Speed \(Normal \/ Fast\)/);
+assert.match(labelsContext.overlayLatestMarkup, /Toggle Chat \/ Work/);
+assert.match(labelsContext.overlayLatestMarkup, /Toggle Speed/);
 assert.match(labelsContext.overlayLatestMarkup, /Reset to default/);
+assert.match(labelsContext.overlayLatestMarkup, /data-group="model-toggles"/);
+assert.match(labelsContext.overlayLatestMarkup, />Model Toggles</);
 assert.match(labelsContext.overlayLegacyMarkup, /data-model-catalog-profile="legacy"/);
-assert.match(labelsContext.overlayLegacyMarkup, />5\.5</);
-assert.match(labelsContext.overlayLegacyMarkup, />o3</);
 assert.match(
   labelsContext.overlayLegacyMarkup,
-  /value="l"/,
-  'Legacy should display the canonical Latest fourth-position shortcut',
+  /data-overlay-model-catalog-profile="legacy"[\s\S]*?data-overlay-model-catalog-profile="latest"/,
+  'overlay selector should render Chat/legacy before Work/latest',
+);
+assert.match(
+  labelsContext.overlayLegacyMarkup,
+  /class="active"[^>]*data-overlay-model-catalog-profile="legacy"/,
+  'overlay selector should default to Chat/legacy',
+);
+assert.match(labelsContext.overlayLegacyMarkup, />5\.5</);
+assert.match(labelsContext.overlayLegacyMarkup, />o3</);
+assert.match(labelsContext.overlayLegacyMarkup, /data-group="model-toggles"/);
+assert.match(labelsContext.overlayLegacyMarkup, /Toggle Chat \/ Work/);
+assert.match(
+  labelsContext.overlayLegacyMarkup,
+  /value="o"/,
+  'Chat should display its independently stored fourth-position shortcut',
 );
 assert.doesNotMatch(
   labelsContext.overlayLegacyMarkup,
-  /value="o"/,
-  'Legacy should not render its stale fourth-position slot assignment',
+  /value="l"/,
+  'Chat should not display the Work fourth-position shortcut',
 );
 
 const legacyGroups = ModelLabels.getPopupPresentationGroups('configure-latest', [], {
@@ -328,9 +404,11 @@ assert.deepEqual(
   'the existing integrated scraper catalog should remain a utility-free fallback',
 );
 
-const pillIndex = contentSource.indexOf('const pillResult = await scrapePillModelCatalogOnce()');
+const pillIndex = contentSource.indexOf(
+  'const pillResult = await scrapePillModelCatalogOnce({ profile })',
+);
 const integratedIndex = contentSource.indexOf(
-  'const integratedResult = await scrapeIntegratedModelCatalogOnce()',
+  'const integratedResult = await scrapeIntegratedModelCatalogOnce({ profile })',
 );
 const legacyIndex = contentSource.indexOf("error: 'CONFIGURE_ITEM_NOT_FOUND'");
 assert.ok(pillIndex >= 0, 'content should define the new primary pill scrape call');
@@ -376,6 +454,16 @@ assert.match(
   /const PILL_SPEED_IDS_BY_ROW = Object\.freeze\(\['speed-standard', 'speed-fast'\]\)/,
   'pill speed states should be mapped by structural row order, not localized labels',
 );
+assert.match(
+  contentSource,
+  /const getPillSpeedTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length === 3 \? triggers\[2\] : null/,
+  'the current three-submenu pill should expose Speed through its verified third structural trigger',
+);
+assert.match(
+  contentSource,
+  /const getPillModelTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length === 3 \? triggers\[0\] : null/,
+  'the current three-submenu pill should expose Model through its verified first structural trigger',
+);
 assert.doesNotMatch(
   contentSource.slice(
     contentSource.indexOf('const PILL_EFFORT_ACTION_IDS_BY_ROW'),
@@ -386,12 +474,40 @@ assert.doesNotMatch(
 );
 assert.match(
   contentSource,
-  /const scrapePillModelCatalogOnce = async \(\) =>[\s\S]*?await waitForPillMainMenuFromShortcut\(\)/,
+  /const scrapePillModelCatalogOnce = async \(\{ profile = '' \} = \{\}\) =>[\s\S]*?await waitForPillMainMenuFromShortcut\(\)/,
   'the primary pill scrape must await the shortcut opener before inventorying menus',
 );
 assert.match(contentSource, /runPillSpeedToggleAction/);
 assert.match(contentSource, /runPillResetAction/);
 assert.match(contentSource, /speedByConfig/);
+const pillSpeedSelectionUpdateSource = contentSource.slice(
+  contentSource.indexOf('const updatePillSpeedSelectionInMemory ='),
+  contentSource.indexOf('const runPillSpeedToggleAction = async'),
+);
+assert.match(
+  pillSpeedSelectionUpdateSource,
+  /window\.__modelCatalog = nextCatalog/,
+  'Speed toggles should keep the active content-script catalog coherent in memory',
+);
+assert.doesNotMatch(
+  pillSpeedSelectionUpdateSource,
+  /chrome\.storage/,
+  'Speed toggles should not rewrite the full sync catalog for an unused selected flag',
+);
+const pillSpeedToggleSource = contentSource.slice(
+  contentSource.indexOf('const runPillSpeedToggleAction = async'),
+  contentSource.indexOf('const runPillResetAction = async'),
+);
+assert.doesNotMatch(
+  pillSpeedToggleSource,
+  /window\.__modelCatalog\?\.pillMenu/,
+  'Speed toggle support should be determined from the live structural pill inventory, not stale stored catalog shape',
+);
+assert.match(
+  pillSpeedToggleSource,
+  /getPillSpeedTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'speed'[\s\S]*?getPillMenuInventory\(\)/,
+  'Speed should use the verified third-trigger fast path before falling back to full submenu discovery',
+);
 const pillHintSource = contentSource.slice(
   contentSource.indexOf('function getOpenPillSubmenuByKind'),
   contentSource.indexOf('function applyConfigureFrontendRowHints'),
@@ -423,18 +539,23 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /applyModelVersionSubmenuHints[\s\S]*?getLatestPopupShortcutSlotForPosition\(\s*'configure',\s*index/,
-  'model submenu hints should use the popup canonical grid position instead of stale per-label slots',
+  /applyModelVersionSubmenuHints[\s\S]*?const slot = Number\(action\?\.slot\)/,
+  'model submenu hints should use the active profile action slot directly',
 );
 assert.match(
   contentSource,
-  /new Set\(\[\.\.\.getLatestPopupShortcutSlots\(\), \.\.\.currentVisibleSlots\]\)/,
-  'keyboard matching should include the canonical popup slots used by positional model hints',
+  /activateCurrentRuntimeModelPickerProfile\('shortcut:key'\)[\s\S]*?for \(const slot of currentVisibleSlots\)/,
+  'keyboard matching should scan only the currently active profile slots',
 );
 assert.match(
   contentSource,
   /const openSurfaceIds = new WeakMap\(\)[\s\S]*?function getOpenSurfaceSignature\(\)[\s\S]*?new MutationObserver\(scheduleWhenOpenSurfaceChanges\)/,
   'hint scheduling should detect submenu identity changes even when the number of open menus is unchanged',
+);
+assert.match(
+  contentSource,
+  /function getNativeChatWorkSurfaceMode[\s\S]*?data-animated-slider-trigger="true"[\s\S]*?composer:read/,
+  'existing conversations should select Chat or Work from the live composer trigger after the blank-page radios disappear',
 );
 
 const overlayProfileSource = contentSource.slice(
@@ -447,18 +568,23 @@ assert.match(overlayProfileSource, /cfg\?\.modelNamesLatest/);
 assert.match(overlayProfileSource, /cfg\?\.modelNamesLegacy/);
 assert.match(
   overlayProfileSource,
-  /getOverlayMirroredSlotsForGridPosition[\s\S]*?OVERLAY_MODEL_PROFILE_LATEST[\s\S]*?OVERLAY_MODEL_PROFILE_LEGACY/,
-  'the overlay should resolve shortcut display slots in deterministic Latest-then-Legacy order',
+  /storageKey[\s\S]*?modelPickerKeyCodesLatest[\s\S]*?modelPickerKeyCodesLegacy[\s\S]*?codes\[action\.slot\]/,
+  'the overlay should read the requested profile array at the action slot directly',
+);
+assert.doesNotMatch(
+  overlayProfileSource,
+  /getOverlayMirroredSlotsForGridPosition/,
+  'the overlay must not relink Chat and Work assignments by visual position',
 );
 assert.match(
   overlayProfileSource,
-  /buildShortcutOverlayModelPickerGrid\(cfg, requestedProfile = OVERLAY_MODEL_PROFILE_LATEST\)/,
-  'each overlay open should default its model grid to Latest',
+  /buildShortcutOverlayModelPickerGrid\(cfg, requestedProfile = OVERLAY_MODEL_PROFILE_LEGACY\)/,
+  'each overlay open should default its model grid to Chat/legacy',
 );
 assert.match(
   overlayProfileSource,
-  /data-overlay-model-catalog-profile="latest"[\s\S]*?data-overlay-model-catalog-profile="legacy"/,
-  'the overlay should render both profile tabs',
+  /data-overlay-model-catalog-profile="legacy"[\s\S]*?data-overlay-model-catalog-profile="latest"/,
+  'the overlay should render Chat/legacy before Work/latest',
 );
 assert.match(
   overlayProfileSource,
@@ -523,15 +649,29 @@ const modelPickerRunnerSource = contentSource.slice(
 assert.match(
   modelPickerRunnerSource,
   /async function findHintedTargetAfterOpeningMenus\(sourceSlot\)[\s\S]*?typeof window\.toggleModelSelector === 'function'[\s\S]*?window\.toggleModelSelector\(\);[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\);[\s\S]*?getUniqueVisibleMenuItemForSlot\([\s\S]*?sourceSlot,[\s\S]*?mainMenu,[\s\S]*?getPillSubmenuTriggers\(mainMenu\)[\s\S]*?openPillSubmenu\(trigger\)[\s\S]*?getUniqueVisibleMenuItemForSlot\(sourceSlot, submenu\)/,
-  'one shortcut press should expose first-level and submenu hints before choosing the exact labeled item',
+  'fallback hint discovery should still scan exposed submenus when direct action routing cannot resolve a target',
 );
 assert.doesNotMatch(
   modelPickerRunnerSource,
   /shouldScanSubmenus|\['pill-effort', 'configure-option'\]\.includes/,
-  'every canonical popup slot should be allowed to scan submenus because tab mirroring can pair it with a different legacy action',
+  'fallback submenu discovery should not depend on cross-profile slot mirroring',
+);
+assert.match(
+  modelPickerRunnerSource,
+  /function dispatchVisibleHintedMenuAction\(action, options, complete\)\s*{\s*[\s\S]*?if \(action\.actionKind === 'pill-speed-toggle'\) return false;/,
+  'the shared Speed shortcut should bypass unique-hint routing because both radio rows intentionally carry the same hint',
 );
 const modelPickerExecuteSource = modelPickerRunnerSource.slice(
   modelPickerRunnerSource.indexOf('function execute(action, options = {})'),
+);
+assert.ok(
+  modelPickerExecuteSource.indexOf(
+    'if (dispatchDirectPillModelAction(action, options, complete))',
+  ) <
+    modelPickerExecuteSource.indexOf(
+      'if (dispatchVisibleHintedMenuAction(action, options, complete))',
+    ),
+  'a known Work model action should route directly before generic hint discovery',
 );
 assert.ok(
   modelPickerExecuteSource.indexOf(
@@ -541,6 +681,16 @@ assert.ok(
       'dispatchActionWithoutVisibleHint(action, options, complete);',
     ),
   'the visible hinted item must win before Work-mode pill submenu routing',
+);
+assert.match(
+  modelPickerRunnerSource,
+  /function dispatchDirectPillModelAction\(action, options, complete\)[\s\S]*?action\.actionKind !== 'configure-option'[\s\S]*?runIntegratedModelNameAction\(action/,
+  'direct Work model routing should be limited to known configure-option actions',
+);
+assert.match(
+  contentSource,
+  /const selectPillModelNameDuringScrape = async \(action\)[\s\S]*?getPillModelTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'model'[\s\S]*?getPillMenuInventory\(\)/,
+  'Work model activation should verify the first-trigger fast path before full inventory fallback',
 );
 assert.match(
   popupHtmlSource,

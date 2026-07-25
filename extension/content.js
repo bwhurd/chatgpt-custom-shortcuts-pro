@@ -3698,6 +3698,128 @@ const clickElementLikeUser = (el) => {
     return true;
   }
 
+  function getNativeChatWorkSurfaceRadios() {
+    const groups = Array.from(document.querySelectorAll('header [role="group"]')).filter((group) =>
+      isDirectActionVisible(group),
+    );
+
+    for (const group of groups) {
+      const radios = Array.from(group.querySelectorAll('button[role="radio"][aria-checked]')).filter(
+        (radio) => isDirectActionVisible(radio),
+      );
+      if (radios.length !== 2) continue;
+      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'true').length !== 1) {
+        continue;
+      }
+      return radios;
+    }
+
+    return [];
+  }
+
+  function rememberNativeChatWorkSurfaceMode(mode, source = 'native') {
+    if (mode !== 'chat' && mode !== 'work') return '';
+    if (window.__cspChatWorkSurfaceMode === mode) return mode;
+    window.__cspChatWorkSurfaceMode = mode;
+    window.dispatchEvent(
+      new CustomEvent('csp-chat-work-mode-changed', {
+        detail: { mode, source },
+      }),
+    );
+    return mode;
+  }
+
+  async function waitForNativeChatWorkSurfaceRadios(timeoutMs = 3000) {
+    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+    let radios = getNativeChatWorkSurfaceRadios();
+    while (radios.length !== 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      radios = getNativeChatWorkSurfaceRadios();
+    }
+    return radios;
+  }
+
+  function getNativeChatWorkSurfaceMode(radios = getNativeChatWorkSurfaceRadios()) {
+    const selectedIndex = radios.findIndex(
+      (radio) => radio.getAttribute('aria-checked') === 'true',
+    );
+    if (selectedIndex === 0) return rememberNativeChatWorkSurfaceMode('chat', 'native:read');
+    if (selectedIndex === 1) return rememberNativeChatWorkSurfaceMode('work', 'native:read');
+
+    // The two radios disappear after the first message. On an existing
+    // conversation, Work retains a structural animated-slider wrapper inside
+    // the shared composer model trigger; Chat uses the same trigger without it.
+    if (window.location.pathname !== '/chat' && window.location.pathname !== '/') {
+      const modelTrigger = window.CSPModelPickerSelectors?.getModelMenuButton?.(
+        document,
+        window,
+      );
+      if (modelTrigger instanceof Element) {
+        const mode = modelTrigger.querySelector('[data-animated-slider-trigger="true"]')
+          ? 'work'
+          : 'chat';
+        return rememberNativeChatWorkSurfaceMode(mode, 'composer:read');
+      }
+    }
+    return '';
+  }
+
+  async function selectNativeChatWorkSurfaceMode(mode, timeoutMs = 3000) {
+    const targetIndex = mode === 'work' ? 1 : mode === 'chat' ? 0 : -1;
+    if (targetIndex < 0) return false;
+
+    let radios = await waitForNativeChatWorkSurfaceRadios(timeoutMs);
+    const target = radios[targetIndex];
+    if (!(target instanceof Element)) return false;
+    if (target.getAttribute('aria-checked') === 'true') {
+      rememberNativeChatWorkSurfaceMode(mode, 'native:already-selected');
+      return true;
+    }
+    if (!safeClick(target)) return false;
+
+    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      radios = getNativeChatWorkSurfaceRadios();
+      if (radios[targetIndex]?.getAttribute('aria-checked') === 'true') {
+        rememberNativeChatWorkSurfaceMode(mode, 'native:selected');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function triggerNativeChatWorkToggle() {
+    let radios = getNativeChatWorkSurfaceRadios();
+    const isBlankConversation = window.location.pathname === '/';
+
+    if (!isBlankConversation || radios.length !== 2) {
+      triggerNativeNewConversationButton();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      radios = await waitForNativeChatWorkSurfaceRadios();
+    }
+
+    const currentMode = getNativeChatWorkSurfaceMode(radios);
+    if (!currentMode) return false;
+    return selectNativeChatWorkSurfaceMode(currentMode === 'chat' ? 'work' : 'chat');
+  }
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      const radio =
+        event.target instanceof Element
+          ? event.target.closest('header button[role="radio"][aria-checked]')
+          : null;
+      if (!(radio instanceof Element)) return;
+      const radios = getNativeChatWorkSurfaceRadios();
+      const index = radios.indexOf(radio);
+      if (index === 0) rememberNativeChatWorkSurfaceMode('chat', 'native:click');
+      if (index === 1) rememberNativeChatWorkSurfaceMode('work', 'native:click');
+    },
+    true,
+  );
+
   function triggerNativeSidebarToggleButton() {
     const direct = findFirstVisibleElement(SIDEBAR_TOGGLE_SELECTORS);
     return safeClick(direct);
@@ -3748,10 +3870,15 @@ const clickElementLikeUser = (el) => {
   }
 
   Object.assign(window, {
+    getNativeChatWorkSurfaceMode,
+    rememberNativeChatWorkSurfaceMode,
+    selectNativeChatWorkSurfaceMode,
     triggerNativeNewConversationButton,
+    triggerNativeChatWorkToggle,
     triggerNativeSidebarToggleButton,
     triggerNativeSearchConversationButton,
     triggerDirectComposerActivation,
+    waitForNativeChatWorkSurfaceRadios,
   });
 
   // @note Keyboard shortcut defaults
@@ -3767,6 +3894,7 @@ const clickElementLikeUser = (el) => {
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',
     shortcutKeyScrollToTop: 'KeyT',
     shortcutKeyNewConversation: 'KeyN',
+    shortcutKeyToggleChatWork: 'Digit5',
     shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyToggleSidebar: 'KeyS',
     shortcutKeyActivateInput: 'KeyW',
@@ -6223,6 +6351,9 @@ const clickElementLikeUser = (el) => {
       shortcutKeyNewConversation: function newConversation() {
         triggerNativeNewConversationButton();
       },
+      shortcutKeyToggleChatWork: () => {
+        void triggerNativeChatWorkToggle();
+      },
       shortcutKeySearchConversationHistory: () => {
         triggerNativeSearchConversationButton();
       },
@@ -7270,16 +7401,6 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
   function getBottomBarCss() {
     return `
-      .${READY_CLASS} .draggable.sticky.top-0,
-      .${READY_CLASS} #page-header {
-        opacity: 0 !important;
-        pointer-events: none !important;
-        position: absolute !important;
-        width: 1px !important;
-        height: 1px !important;
-        overflow: hidden !important;
-      }
-
       #bottomBarContainer {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
@@ -7413,19 +7534,31 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     return null;
   }
 
+  function hasActionableConversationHeaderControls(actions) {
+    return (
+      actions instanceof Element &&
+      !!actions.querySelector('button, a[href], [role="button"]')
+    );
+  }
+
   function findHeaderConversationActions() {
     const pageHeader = document.querySelector(SELECTORS.PAGE_HEADER);
 
     if (pageHeader instanceof Element) {
       const fromHeader = pageHeader.querySelector(SELECTORS.CONVERSATION_HEADER_ACTIONS);
-      if (fromHeader instanceof Element && !fromHeader.closest('#bottomBarContainer')) {
+      if (
+        hasActionableConversationHeaderControls(fromHeader) &&
+        !fromHeader.closest('#bottomBarContainer')
+      ) {
         return fromHeader;
       }
     }
 
     return (
       Array.from(document.querySelectorAll(SELECTORS.CONVERSATION_HEADER_ACTIONS)).find(
-        (el) => !el.closest('#bottomBarContainer'),
+        (el) =>
+          hasActionableConversationHeaderControls(el) &&
+          !el.closest('#bottomBarContainer'),
       ) || null
     );
   }
@@ -7460,20 +7593,29 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   function findNativeComposerUtilityRow(snapshot) {
     if (!(snapshot?.mountAfterEl instanceof Element)) return null;
 
+    let hydratingRow = null;
     let candidate = snapshot.mountAfterEl.nextElementSibling;
-    if (candidate?.id === 'bottomBarContainer') {
+    for (let scanned = 0; candidate && scanned < 12; scanned += 1) {
+      if (
+        candidate instanceof HTMLElement &&
+        candidate.id !== 'bottomBarContainer' &&
+        !candidate.hidden
+      ) {
+        const row = candidate.firstElementChild;
+        if (row instanceof HTMLElement) {
+          const buttons = row.querySelectorAll('button');
+          const menuButtons = row.querySelectorAll('button[aria-haspopup="menu"]');
+          if (buttons.length >= 2 && menuButtons.length >= 1) return row;
+          if (!hydratingRow && buttons.length === 1 && menuButtons.length === 1) {
+            hydratingRow = row;
+          }
+        }
+      }
+
       candidate = candidate.nextElementSibling;
     }
 
-    if (!(candidate instanceof HTMLElement) || candidate.hidden) return null;
-
-    const row = candidate.firstElementChild;
-    if (!(row instanceof HTMLElement)) return null;
-
-    const buttons = row.querySelectorAll('button');
-    if (buttons.length < 2 || !row.querySelector('button[aria-haspopup="menu"]')) return null;
-
-    return row;
+    return hydratingRow;
   }
 
   function createBottomBarController() {
@@ -7483,6 +7625,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       scheduled: false,
       reconcileRunning: false,
       suppressObserverUntil: 0,
+      suppressedReconcileTimer: 0,
 
       root: null,
       lane: null,
@@ -7601,8 +7744,17 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     function installMainObserver(snapshot = null) {
       if (!(state.observer instanceof MutationObserver)) {
         state.observer = new MutationObserver((mutations) => {
-          if (performance.now() < state.suppressObserverUntil) return;
           if (!mutations.length) return;
+
+          if (performance.now() < state.suppressObserverUntil) {
+            if (
+              !mutations.every(isInternalBottomBarMutation) &&
+              mutations.some(isRelevantMutation)
+            ) {
+              scheduleReconcileAfterSuppression();
+            }
+            return;
+          }
 
           if (mutations.every(isInternalBottomBarMutation)) return;
 
@@ -7631,6 +7783,15 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       }
 
       observeMainRoot(resolveObservationRoot(snapshot));
+    }
+
+    function scheduleReconcileAfterSuppression() {
+      clearTimeout(state.suppressedReconcileTimer);
+      const remainingMs = Math.max(0, state.suppressObserverUntil - performance.now());
+      state.suppressedReconcileTimer = window.setTimeout(() => {
+        state.suppressedReconcileTimer = 0;
+        scheduleReconcile('mutation:relevant_during_suppression');
+      }, remainingMs + 16);
     }
 
     function suppressOwnMutations(ms = 250) {
@@ -7918,7 +8079,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       return node;
     }
 
-    function shouldHideTopHeader() {
+    function shouldMarkBottomBarReady() {
       return state.revealed;
     }
 
@@ -7971,7 +8132,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       state.revealed = true;
 
-      applyReadyState(shouldHideTopHeader());
+      applyReadyState(shouldMarkBottomBarReady());
     }
 
     function syncRevealedSlots(shell, nextModelButton, nextHeaderActions) {
@@ -7991,7 +8152,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       adjustBottomBarTextScaling(shell.bottomBar);
       window.__cspEnsureDisclaimerHider?.();
-      applyReadyState(shouldHideTopHeader());
+      applyReadyState(shouldMarkBottomBarReady());
     }
 
     function getRepairReason() {
@@ -8757,6 +8918,27 @@ form.w-full[data-type="unified-composer"] {
   const KEY_CODES = [];
   const ModelLabels = window.ModelLabels || {};
   const MAX_SLOTS = ModelLabels.MAX_SLOTS || 15;
+  const MODEL_PICKER_PROFILE_LATEST = 'latest';
+  const MODEL_PICKER_PROFILE_LEGACY = 'legacy';
+  const MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE = Object.freeze({
+    [MODEL_PICKER_PROFILE_LATEST]: 'modelPickerKeyCodesLatest',
+    [MODEL_PICKER_PROFILE_LEGACY]: 'modelPickerKeyCodesLegacy',
+  });
+  const MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY = 'modelPickerKeyCodeProfilesVersion';
+  const MODEL_PICKER_KEY_CODE_PROFILES_VERSION = 1;
+  const MODEL_PICKER_CODES_BY_PROFILE = {
+    [MODEL_PICKER_PROFILE_LATEST]: [],
+    [MODEL_PICKER_PROFILE_LEGACY]: [],
+  };
+  const MODEL_CATALOG_BY_PROFILE = {
+    [MODEL_PICKER_PROFILE_LATEST]: null,
+    [MODEL_PICKER_PROFILE_LEGACY]: null,
+  };
+  const MODEL_NAMES_BY_PROFILE = {
+    [MODEL_PICKER_PROFILE_LATEST]: [],
+    [MODEL_PICKER_PROFILE_LEGACY]: [],
+  };
+  let ACTIVE_MODEL_PICKER_PROFILE = MODEL_PICKER_PROFILE_LEGACY;
   const ModelPickerSelectors = window.CSPModelPickerSelectors || {};
   const LEGACY_MODEL_MENU_BTN_SELECTOR =
     ModelPickerSelectors.LEGACY_MODEL_MENU_BUTTON_SELECTOR ||
@@ -8926,20 +9108,88 @@ form.w-full[data-type="unified-composer"] {
         ? String(value || '').trim()
         : DEFAULT_ACTIVE_MODEL_CONFIG_ID;
   let LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = DEFAULT_ACTIVE_MODEL_CONFIG_ID;
-  const getDefaultModelPickerCodes = () =>
-    typeof window.ModelLabels?.defaultKeyCodes === 'function'
-      ? window.ModelLabels.defaultKeyCodes()
+  const normalizeModelPickerProfile = (profile) =>
+    profile === MODEL_PICKER_PROFILE_LATEST
+      ? MODEL_PICKER_PROFILE_LATEST
+      : MODEL_PICKER_PROFILE_LEGACY;
+  const getDefaultModelPickerCodes = (profile = MODEL_PICKER_PROFILE_LATEST) =>
+    typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function'
+      ? window.ModelLabels.defaultKeyCodesForProfile(normalizeModelPickerProfile(profile))
+      : typeof window.ModelLabels?.defaultKeyCodes === 'function'
+        ? window.ModelLabels.defaultKeyCodes()
       : (() => {
         const out = new Array(MAX_SLOTS).fill('');
-        out[0] = 'Digit1';
-        out[1] = 'Digit2';
-        out[3] = 'Digit4';
-        out[6] = 'Digit7';
-        out[7] = 'Digit3';
-        out[8] = 'Digit5';
-        out[9] = 'Digit6';
+        out[0] = 'F1';
+        out[1] = 'F2';
+        out[3] = 'Digit1';
+        out[7] = 'F3';
+        out[8] = 'Digit2';
+        out[9] = 'Digit3';
+        if (normalizeModelPickerProfile(profile) === MODEL_PICKER_PROFILE_LATEST) {
+          out[10] = 'Digit4';
+          out[11] = 'F4';
+          out[12] = 'F5';
+          out[13] = 'Digit6';
+          out[14] = 'Digit0';
+        } else {
+          out[6] = 'Digit4';
+        }
         return out;
       })();
+  const normalizeProfileModelPickerCodes = (codes, profile) => {
+    const hasArray = Array.isArray(codes);
+    const out = hasArray ? codes.slice(0, MAX_SLOTS) : [];
+    while (out.length < MAX_SLOTS) out.push('');
+    return hasArray ? out : getDefaultModelPickerCodes(profile).slice(0, MAX_SLOTS);
+  };
+  const getProfileForChatWorkMode = (mode) =>
+    mode === 'work' ? MODEL_PICKER_PROFILE_LATEST : MODEL_PICKER_PROFILE_LEGACY;
+  const getProfileForCatalog = (catalog) =>
+    catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu'
+      ? MODEL_PICKER_PROFILE_LATEST
+      : MODEL_PICKER_PROFILE_LEGACY;
+  const getRuntimeModelPickerProfile = () => {
+    const liveMode =
+      typeof window.getNativeChatWorkSurfaceMode === 'function'
+        ? window.getNativeChatWorkSurfaceMode()
+        : '';
+    if (liveMode === 'chat' || liveMode === 'work') {
+      return getProfileForChatWorkMode(liveMode);
+    }
+    const cachedMode = window.__cspChatWorkSurfaceMode;
+    if (cachedMode === 'chat' || cachedMode === 'work') {
+      return getProfileForChatWorkMode(cachedMode);
+    }
+    return ACTIVE_MODEL_PICKER_PROFILE;
+  };
+  const activateRuntimeModelPickerProfile = (profile, source = 'runtime') => {
+    const normalizedProfile = normalizeModelPickerProfile(profile);
+    const changed = ACTIVE_MODEL_PICKER_PROFILE !== normalizedProfile;
+    ACTIVE_MODEL_PICKER_PROFILE = normalizedProfile;
+    const codes = normalizeProfileModelPickerCodes(
+      MODEL_PICKER_CODES_BY_PROFILE[normalizedProfile],
+      normalizedProfile,
+    );
+    MODEL_PICKER_CODES_BY_PROFILE[normalizedProfile] = codes;
+    KEY_CODES.splice(0, KEY_CODES.length, ...codes);
+    const catalog = MODEL_CATALOG_BY_PROFILE[normalizedProfile];
+    const names = MODEL_NAMES_BY_PROFILE[normalizedProfile];
+    window.__modelCatalog = catalog && typeof catalog === 'object' ? catalog : null;
+    window.MODEL_NAMES = Array.isArray(names) ? names.slice(0, MAX_SLOTS) : [];
+    window.__modelPickerKeyCodesProfiles = MODEL_PICKER_CODES_BY_PROFILE;
+    window.__modelPickerKeyCodes = codes;
+    window.__activeModelPickerShortcutProfile = normalizedProfile;
+    if (changed) {
+      window.dispatchEvent(
+        new CustomEvent('csp-model-picker-shortcut-profile-changed', {
+          detail: { profile: normalizedProfile, source },
+        }),
+      );
+    }
+    return normalizedProfile;
+  };
+  const activateCurrentRuntimeModelPickerProfile = (source = 'runtime') =>
+    activateRuntimeModelPickerProfile(getRuntimeModelPickerProfile(), source);
   const sleepAsync =
     typeof sleep === 'function' ? sleep : (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const MODEL_PICKER_COMPOSER_REFOCUS_DELAY_MS = 40;
@@ -9408,72 +9658,116 @@ form.w-full[data-type="unified-composer"] {
     [
       'useControlForModelSwitcherRadio',
       'modelPickerKeyCodes',
+      MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST],
+      MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY],
+      MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
       'activeModelConfigId',
       'modelCatalog',
       'modelCatalogLatest',
+      'modelCatalogLegacy',
       'modelNamesLatest',
+      'modelNamesLegacy',
     ],
-    ({
-      useControlForModelSwitcherRadio,
-      modelPickerKeyCodes,
-      activeModelConfigId,
-      modelCatalog,
-      modelCatalogLatest,
-      modelNamesLatest,
-    }) => {
-      // Initialize shared KEY_CODES (mutate the const array to keep references alive)
-      const incoming = Array.isArray(modelPickerKeyCodes)
-        ? modelPickerKeyCodes.slice(0, MAX_SLOTS)
-        : [];
-      while (incoming.length < MAX_SLOTS) incoming.push('');
-      const effective = incoming.some(Boolean) ? incoming : getDefaultModelPickerCodes();
-      KEY_CODES.splice(0, KEY_CODES.length, ...effective);
+    (stored = {}) => {
+      const {
+        useControlForModelSwitcherRadio,
+        activeModelConfigId,
+        modelCatalog,
+        modelCatalogLatest,
+        modelCatalogLegacy,
+        modelNamesLatest,
+        modelNamesLegacy,
+      } = stored;
+      const genericProfile = getProfileForCatalog(modelCatalog);
+      MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] =
+        modelCatalogLatest && typeof modelCatalogLatest === 'object'
+          ? modelCatalogLatest
+          : genericProfile === MODEL_PICKER_PROFILE_LATEST
+            ? modelCatalog
+            : null;
+      MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] =
+        modelCatalogLegacy && typeof modelCatalogLegacy === 'object'
+          ? modelCatalogLegacy
+          : genericProfile === MODEL_PICKER_PROFILE_LEGACY
+            ? modelCatalog
+            : typeof ModelLabels.getDefaultLegacyCatalog === 'function'
+              ? ModelLabels.getDefaultLegacyCatalog()
+              : null;
+      MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] = Array.isArray(modelNamesLatest)
+        ? modelNamesLatest.slice(0, MAX_SLOTS)
+        : typeof ModelLabels.defaultNames === 'function'
+          ? ModelLabels.defaultNames().slice(0, MAX_SLOTS)
+          : [];
+      MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] = Array.isArray(modelNamesLegacy)
+        ? modelNamesLegacy.slice(0, MAX_SLOTS)
+        : typeof ModelLabels.defaultLegacyNames === 'function'
+          ? ModelLabels.defaultLegacyNames().slice(0, MAX_SLOTS)
+          : [];
+
+      const latestKey =
+        MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      const legacyKey =
+        MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
+      let latestCodes = normalizeProfileModelPickerCodes(
+        stored[latestKey],
+        MODEL_PICKER_PROFILE_LATEST,
+      );
+      let legacyCodes = normalizeProfileModelPickerCodes(
+        stored[legacyKey],
+        MODEL_PICKER_PROFILE_LEGACY,
+      );
+      if (
+        Number(stored[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] || 0) <
+        MODEL_PICKER_KEY_CODE_PROFILES_VERSION
+      ) {
+        const sharedCodes = Array.isArray(stored.modelPickerKeyCodes)
+          ? stored.modelPickerKeyCodes
+          : getDefaultModelPickerCodes(MODEL_PICKER_PROFILE_LATEST);
+        const getMigrationGroups = (profile) =>
+          typeof ModelLabels.getPopupPresentationGroups === 'function'
+            ? ModelLabels.getPopupPresentationGroups(
+                ModelLabels.DEFAULT_ACTIVE_CONFIG_ID || DEFAULT_ACTIVE_MODEL_CONFIG_ID,
+                MODEL_NAMES_BY_PROFILE[profile],
+                MODEL_CATALOG_BY_PROFILE[profile],
+              )
+            : [];
+        const migrated =
+          typeof ModelLabels.migrateSharedKeyCodesToProfiles === 'function'
+            ? ModelLabels.migrateSharedKeyCodesToProfiles({
+                codes: sharedCodes,
+                latestGroups: getMigrationGroups(MODEL_PICKER_PROFILE_LATEST),
+                legacyGroups: getMigrationGroups(MODEL_PICKER_PROFILE_LEGACY),
+              })
+            : null;
+        latestCodes = normalizeProfileModelPickerCodes(
+          migrated?.[MODEL_PICKER_PROFILE_LATEST],
+          MODEL_PICKER_PROFILE_LATEST,
+        );
+        legacyCodes = normalizeProfileModelPickerCodes(
+          migrated?.[MODEL_PICKER_PROFILE_LEGACY],
+          MODEL_PICKER_PROFILE_LEGACY,
+        );
+        // The popup is the sole persistence owner for the v0 -> v1 split.
+        // Content derives the same temporary arrays in memory so shortcuts work
+        // before the popup has ever been opened, without racing that migration.
+      }
+      MODEL_PICKER_CODES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] = latestCodes;
+      MODEL_PICKER_CODES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] = legacyCodes;
+
       const initialActiveModelConfigId = setCachedActiveModelConfigId(activeModelConfigId);
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = initialActiveModelConfigId;
-      window.__modelCatalog = modelCatalog && typeof modelCatalog === 'object' ? modelCatalog : null;
-      window.__modelCatalogLatest =
-        modelCatalogLatest && typeof modelCatalogLatest === 'object' ? modelCatalogLatest : null;
-      window.__modelNamesLatest = Array.isArray(modelNamesLatest)
-        ? modelNamesLatest.slice(0, MAX_SLOTS)
-        : [];
-
-      const getLatestPopupShortcutSlotForPosition = (groupId, groupIndex, fallbackSlot = -1) => {
-        const genericCatalog = window.__modelCatalog;
-        const latestCatalog =
-          window.__modelCatalogLatest ||
-          (genericCatalog?.pillMenu === true || genericCatalog?.selectorShape === 'pill-three-submenu'
-            ? genericCatalog
-            : null);
-        const latestNames = Array.isArray(window.__modelNamesLatest)
-          ? window.__modelNamesLatest
-          : [];
-        const slot =
-          typeof window.ModelLabels?.getPopupShortcutSlotForPosition === 'function'
-            ? window.ModelLabels.getPopupShortcutSlotForPosition(
-                groupId,
-                groupIndex,
-                latestNames,
-                latestCatalog,
-              )
-            : -1;
-        if (Number.isInteger(slot) && slot >= 0 && slot < KEY_CODES.length) return slot;
-        const fallback = Number(fallbackSlot);
-        return Number.isInteger(fallback) && fallback >= 0 && fallback < KEY_CODES.length
-          ? fallback
-          : -1;
-      };
-
-      const getLatestPopupShortcutSlots = () => {
-        const slots = [];
-        ['primary', 'configure'].forEach((groupId) => {
-          for (let groupIndex = 0; groupIndex < MAX_SLOTS; groupIndex += 1) {
-            const slot = getLatestPopupShortcutSlotForPosition(groupId, groupIndex);
-            if (slot < 0) break;
-            if (!slots.includes(slot)) slots.push(slot);
-          }
-        });
-        return slots;
-      };
+      const nativeInitialMode =
+        typeof window.getNativeChatWorkSurfaceMode === 'function'
+          ? window.getNativeChatWorkSurfaceMode()
+          : '';
+      const initialProfile = nativeInitialMode
+        ? getProfileForChatWorkMode(nativeInitialMode)
+        : genericProfile;
+      activateRuntimeModelPickerProfile(initialProfile, 'storage:bootstrap');
+      window.__modelCatalogLatest = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      window.__modelCatalogLegacy = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
+      window.__modelNamesLatest = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      window.__modelNamesLegacy = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
 
       // Platform + modifier label
       const IS_MAC = /Mac|iPad|iPhone|iPod/.test(navigator.platform);
@@ -9737,11 +10031,7 @@ form.w-full[data-type="unified-composer"] {
               window.__modelCatalog,
               listLabels,
             );
-            const slot = getLatestPopupShortcutSlotForPosition(
-              'configure',
-              index,
-              action?.slot,
-            );
+            const slot = Number(action?.slot);
             if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
             const label = displayFromCode(KEY_CODES[slot]);
             if (!label || label === '—') return;
@@ -10241,6 +10531,36 @@ form.w-full[data-type="unified-composer"] {
           sendResponse({ modelNames: Array.isArray(names) ? names : null });
           return;
         }
+        if (msg && msg.type === 'CSP_REFRESH_CHAT_WORK_MODEL_CATALOGS') {
+          logModelRefreshDebug('message:dual-surface-catalog-refresh:start', {
+            hideUi: msg.hideUi !== false,
+          });
+          void refreshChatWorkModelCatalogsOnce({
+            hideUi: msg.hideUi !== false,
+          })
+            .then((result) => {
+              logModelRefreshDebug('message:dual-surface-catalog-refresh:result', {
+                result: {
+                  ok: !!result?.ok,
+                  error: result?.error || '',
+                  initialMode: result?.initialMode || '',
+                  chatOk: !!result?.profiles?.chat?.ok,
+                  workOk: !!result?.profiles?.work?.ok,
+                },
+                menu: getModelRefreshDebugMenuSummary(),
+              });
+              sendResponse(result);
+            })
+            .catch((error) => {
+              const result = { ok: false, error: error?.message || 'REFRESH_EXCEPTION' };
+              logModelRefreshDebug('message:dual-surface-catalog-refresh:exception', {
+                result,
+                menu: getModelRefreshDebugMenuSummary(),
+              });
+              sendResponse(result);
+            });
+          return true;
+        }
         if (msg && msg.type === 'CSP_SCRAPE_MODEL_CATALOG') {
           logModelRefreshDebug('message:catalog-scrape:start', {
             hideUi: msg.hideUi !== false,
@@ -10575,6 +10895,7 @@ form.w-full[data-type="unified-composer"] {
 
       // Use the global helper to avoid drift/duplication
       function indexFromEvent(e) {
+        activateCurrentRuntimeModelPickerProfile('shortcut:key');
         const utils = window.ShortcutUtils || {};
         const cmp = typeof utils.codeEquals === 'function' ? utils.codeEquals : () => false;
         const currentVisibleSlots =
@@ -10594,10 +10915,7 @@ form.w-full[data-type="unified-composer"] {
                     slots.indexOf(slot) === index,
                 )
             : KEY_CODES.map((_, slot) => slot);
-        const visibleSlots = Array.from(
-          new Set([...getLatestPopupShortcutSlots(), ...currentVisibleSlots]),
-        );
-        for (const slot of visibleSlots) {
+        for (const slot of currentVisibleSlots) {
           if (cmp(e.code, KEY_CODES[slot])) return slot;
         }
         return -1;
@@ -10695,6 +11013,14 @@ form.w-full[data-type="unified-composer"] {
         if (!(item instanceof Element)) return '';
         const primary = item.querySelector('.truncate') || item.querySelector('.grow') || item;
         return getModelTextWithoutHints(primary).replace(/\s+/g, ' ').trim();
+      };
+      const getPillSpeedTriggerFromCurrentOrder = (mainMenu) => {
+        const triggers = getPillSubmenuTriggers(mainMenu);
+        return triggers.length === 3 ? triggers[2] : null;
+      };
+      const getPillModelTriggerFromCurrentOrder = (mainMenu) => {
+        const triggers = getPillSubmenuTriggers(mainMenu);
+        return triggers.length === 3 ? triggers[0] : null;
       };
       const classifyPillSubmenu = (menu) => {
         const labels = getPillRadioItems(menu).map(getPillRadioLabel);
@@ -11495,10 +11821,18 @@ form.w-full[data-type="unified-composer"] {
         });
         return names.slice(0, MAX_SLOTS);
       };
-      const persistScrapedModelCatalog = (catalog, { activeModelConfigId = '' } = {}) => {
+      const persistScrapedModelCatalog = (
+        catalog,
+        { activeModelConfigId = '', profile = '' } = {},
+      ) => {
         const modelNames = deriveFlatModelNamesFromCatalog(catalog);
         const isLatestProfile =
-          catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu';
+          profile === 'work' ||
+          (profile !== 'chat' &&
+            (catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu'));
+        const shortcutProfile = isLatestProfile
+          ? MODEL_PICKER_PROFILE_LATEST
+          : MODEL_PICKER_PROFILE_LEGACY;
         const profileSuffix = isLatestProfile ? 'Latest' : 'Legacy';
         const values = {
           [MODEL_CATALOG_STORAGE_KEY]: catalog,
@@ -11509,6 +11843,14 @@ form.w-full[data-type="unified-composer"] {
           [`modelNames${profileSuffix}At`]: catalog.scrapedAt,
         };
         if (activeModelConfigId) values.activeModelConfigId = activeModelConfigId;
+        MODEL_CATALOG_BY_PROFILE[shortcutProfile] = catalog;
+        MODEL_NAMES_BY_PROFILE[shortcutProfile] = modelNames.slice(0, MAX_SLOTS);
+        window[`__modelCatalog${profileSuffix}`] = catalog;
+        window[`__modelNames${profileSuffix}`] = modelNames.slice(0, MAX_SLOTS);
+        if (ACTIVE_MODEL_PICKER_PROFILE === shortcutProfile) {
+          window.__modelCatalog = catalog;
+          window.MODEL_NAMES = modelNames.slice(0, MAX_SLOTS);
+        }
         chrome.storage.sync.set(values, () => {});
         return modelNames;
       };
@@ -11752,18 +12094,22 @@ form.w-full[data-type="unified-composer"] {
       };
       const selectPillModelNameDuringScrape = async (action) => {
         if (!action?.id) return false;
-        const readyState = await waitForPillMainMenuFromShortcut();
-        if (!readyState) return false;
-        const inventory = await getPillMenuInventory();
-        if (!inventory) return false;
-        const menu = await openPillSubmenu(inventory.triggers.model);
+        const mainMenu = await waitForPillMainMenuFromShortcut();
+        if (!mainMenu) return false;
+        const directTrigger = getPillModelTriggerFromCurrentOrder(mainMenu);
+        let menu = directTrigger ? await openPillSubmenu(directTrigger) : null;
+        if (classifyPillSubmenu(menu) !== 'model') {
+          const inventory = await getPillMenuInventory();
+          if (!inventory) return false;
+          menu = await openPillSubmenu(inventory.triggers.model);
+        }
         const item = findModelVersionMenuItemForAction(menu, action);
         if (!(item instanceof Element)) return false;
         if (!(await commitPillRadioItem(item, 180))) return false;
         persistActiveModelConfigId(action.id);
         return true;
       };
-      const scrapePillModelCatalogOnce = async () => {
+      const scrapePillModelCatalogOnce = async ({ profile = '' } = {}) => {
         await releasePreparedModelConfigSession();
         const readyState = await waitForPillMainMenuFromShortcut();
         logModelRefreshDebug('pill:main-menu', { found: !!readyState });
@@ -11861,6 +12207,7 @@ form.w-full[data-type="unified-composer"] {
         };
         const modelNames = persistScrapedModelCatalog(catalog, {
           activeModelConfigId: initialActiveConfigId,
+          profile,
         });
         setCachedActiveModelConfigId(initialActiveConfigId);
         logModelRefreshDebug('pill-three-submenu:success', {
@@ -11880,7 +12227,7 @@ form.w-full[data-type="unified-composer"] {
           activeModelConfigId: initialActiveConfigId,
         };
       };
-      const scrapeIntegratedModelCatalogOnce = async () => {
+      const scrapeIntegratedModelCatalogOnce = async ({ profile = '' } = {}) => {
         await releasePreparedModelConfigSession();
         const alreadyOpen = ensureMainMenuOpen();
         await sleepAsync(alreadyOpen ? 120 : 180);
@@ -11992,6 +12339,7 @@ form.w-full[data-type="unified-composer"] {
         };
         const modelNames = persistScrapedModelCatalog(catalog, {
           activeModelConfigId: initialActiveConfigId,
+          profile,
         });
         setCachedActiveModelConfigId(initialActiveConfigId);
 
@@ -12002,20 +12350,24 @@ form.w-full[data-type="unified-composer"] {
           activeModelConfigId: initialActiveConfigId,
         };
       };
-      const scrapeModelCatalogOnce = async ({ hideUi = true, keepPreparedSession = true } = {}) => {
+      const scrapeModelCatalogOnce = async ({
+        hideUi = true,
+        keepPreparedSession = true,
+        profile = '',
+      } = {}) => {
         try {
           return await ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
           try {
           await releasePreparedModelConfigSession();
           if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
 
-          const pillResult = await scrapePillModelCatalogOnce();
+          const pillResult = await scrapePillModelCatalogOnce({ profile });
           if (!pillResult?.fallback) return pillResult;
 
           await releasePreparedModelConfigSession();
           if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
 
-          const integratedResult = await scrapeIntegratedModelCatalogOnce();
+          const integratedResult = await scrapeIntegratedModelCatalogOnce({ profile });
           if (!integratedResult?.fallback) return integratedResult;
 
           await releasePreparedModelConfigSession();
@@ -12119,7 +12471,7 @@ form.w-full[data-type="unified-composer"] {
             thinkingEffortIds,
             frontendByConfig,
           };
-          const modelNames = persistScrapedModelCatalog(catalog);
+          const modelNames = persistScrapedModelCatalog(catalog, { profile });
 
           if (keepPreparedSession) {
             clearHiddenLiveScrapeElements();
@@ -12147,6 +12499,113 @@ form.w-full[data-type="unified-composer"] {
           });
         } finally {
           scheduleComposerRefocusAfterModelPicker();
+        }
+      };
+
+      const collapseOpenModelPickerUiAfterScrape = async () => {
+        await releasePreparedModelConfigSession();
+        clearHiddenLiveScrapeElements();
+
+        const dialog = findConfigureDialog();
+        const closeButton = dialog?.querySelector?.('[data-testid="close-button"]');
+        if (closeButton) smartClickSafe(closeButton);
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const state = getVisibleModelMenuState();
+          const targets = [
+            document.activeElement instanceof Element ? document.activeElement : null,
+            state.submenu,
+            state.main,
+            getModelMenuButton(),
+          ].filter((target, index, list) => target instanceof Element && list.indexOf(target) === index);
+          if (!state.main && !state.submenu && !(findConfigureDialog() instanceof Element)) break;
+          targets.forEach((target) => {
+            pressElementKey(target, 'Escape', 'Escape');
+          });
+          await sleepAsync(50);
+        }
+
+        window.triggerDirectComposerActivation?.();
+        await sleepAsync(50);
+      };
+
+      const refreshChatWorkModelCatalogsOnce = async ({ hideUi = true } = {}) => {
+        const profiles = {};
+        let initialMode = '';
+
+        window.triggerNativeNewConversationButton?.();
+        await sleepAsync(500);
+
+        const radios = await window.waitForNativeChatWorkSurfaceRadios?.(4000);
+        initialMode = window.getNativeChatWorkSurfaceMode?.(radios) || '';
+        if (!initialMode) {
+          return {
+            ok: false,
+            error: 'CHAT_WORK_SELECTOR_NOT_FOUND',
+            initialMode: '',
+            profiles,
+          };
+        }
+
+        try {
+          for (const mode of ['chat', 'work']) {
+            await collapseOpenModelPickerUiAfterScrape();
+            const selected = await window.selectNativeChatWorkSurfaceMode?.(mode, 3000);
+            if (!selected) {
+              profiles[mode] = {
+                ok: false,
+                error: `CHAT_WORK_${mode.toUpperCase()}_MODE_NOT_SELECTED`,
+              };
+              continue;
+            }
+
+            await sleepAsync(500);
+            profiles[mode] = await scrapeModelCatalogOnce({
+              hideUi,
+              keepPreparedSession: false,
+              profile: mode,
+            });
+          }
+
+          const failures = ['chat', 'work']
+            .map((mode) => profiles[mode])
+            .filter((result) => !result?.ok);
+          const firstFailure = failures[0] || null;
+          const preferredResult =
+            profiles[initialMode]?.ok === true
+              ? profiles[initialMode]
+              : profiles.work?.ok === true
+                ? profiles.work
+                : profiles.chat?.ok === true
+                  ? profiles.chat
+                  : null;
+
+          return {
+            ...(preferredResult || {}),
+            ok: failures.length === 0,
+            error: firstFailure?.error || '',
+            noModelSwitcher:
+              failures.length > 0 &&
+              failures.every((result) => result?.noModelSwitcher === true),
+            reason: firstFailure?.reason || '',
+            initialMode,
+            profiles,
+          };
+        } finally {
+          await collapseOpenModelPickerUiAfterScrape();
+          await window.selectNativeChatWorkSurfaceMode?.(initialMode, 3000);
+          await sleepAsync(120);
+
+          const initialResult = profiles[initialMode];
+          if (initialResult?.ok && initialResult.modelCatalog) {
+            persistScrapedModelCatalog(initialResult.modelCatalog, {
+              activeModelConfigId: initialResult.activeModelConfigId || '',
+              profile: initialMode,
+            });
+            setCachedActiveModelConfigId(initialResult.activeModelConfigId || '');
+          }
+
+          await collapseOpenModelPickerUiAfterScrape();
         }
       };
 
@@ -12425,7 +12884,7 @@ form.w-full[data-type="unified-composer"] {
           return true;
         });
       };
-      const persistPillSpeedSelection = (selectedItem) => {
+      const updatePillSpeedSelectionInMemory = (selectedItem) => {
         const menu = selectedItem?.closest?.('[role="menu"]');
         const selectedIndex = getPillRadioItems(menu).indexOf(selectedItem);
         const selectedId = PILL_SPEED_IDS_BY_ROW[selectedIndex] || '';
@@ -12445,16 +12904,20 @@ form.w-full[data-type="unified-composer"] {
           },
         };
         window.__modelCatalog = nextCatalog;
-        chrome.storage.sync.set({ modelCatalog: nextCatalog }, () => {});
+        MODEL_CATALOG_BY_PROFILE[ACTIVE_MODEL_PICKER_PROFILE] = nextCatalog;
       };
       const runPillSpeedToggleAction = async ({ hideUi = false } = {}) => {
-        if (window.__modelCatalog?.pillMenu !== true) return false;
         return withTemporarilyHiddenModelUi(hideUi, async () => {
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
-          const inventory = await getPillMenuInventory();
-          if (!inventory) return false;
-          const menu = await openPillSubmenu(inventory.triggers.speed);
+          const mainMenu = getOpenPillMainMenu();
+          const directTrigger = getPillSpeedTriggerFromCurrentOrder(mainMenu);
+          let menu = directTrigger ? await openPillSubmenu(directTrigger) : null;
+          if (classifyPillSubmenu(menu) !== 'speed') {
+            const inventory = await getPillMenuInventory();
+            if (!inventory) return false;
+            menu = await openPillSubmenu(inventory.triggers.speed);
+          }
           const items = getPillRadioItems(menu);
           if (items.length !== 2) return false;
           const checked = items.find(
@@ -12467,7 +12930,7 @@ form.w-full[data-type="unified-composer"] {
           if (!hideUi && window.gsap) flashMenuItem(target);
           if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
           await commitPillRadioItem(target, 120);
-          persistPillSpeedSelection(target);
+          updatePillSpeedSelectionInMemory(target);
           if (!hideUi) flashBottomBar();
           return true;
         });
@@ -12925,6 +13388,19 @@ form.w-full[data-type="unified-composer"] {
           return true;
         }
 
+        function dispatchDirectPillModelAction(action, options, complete) {
+          if (
+            window.__modelCatalog?.pillMenu !== true ||
+            action.actionKind !== 'configure-option'
+          ) {
+            return false;
+          }
+          void runIntegratedModelNameAction(action, {
+            hideUi: options.hideUi === true,
+          }).then((result) => complete(result !== false));
+          return true;
+        }
+
         function activateVisibleHintedMenuItem(target, complete) {
           if (!(target instanceof Element)) return false;
           if (window.gsap) flashMenuItem(target);
@@ -12988,6 +13464,10 @@ form.w-full[data-type="unified-composer"] {
         }
 
         function dispatchVisibleHintedMenuAction(action, options, complete) {
+          // Both Speed radio rows intentionally carry the same toggle shortcut, so
+          // the generic unique-hint resolver cannot choose the unchecked target.
+          // Route this utility action through its structural checked-row toggle.
+          if (action.actionKind === 'pill-speed-toggle') return false;
           if (options.hideUi === true) return false;
           const sourceSlot = Number(options.sourceSlot);
           if (!Number.isInteger(sourceSlot)) return false;
@@ -13027,6 +13507,9 @@ form.w-full[data-type="unified-composer"] {
         function execute(action, options = {}) {
           if (!action) return false;
           const complete = createCompletion(action, options);
+          // A scraped Work model already identifies its structural destination.
+          // Open the verified first Model submenu directly; hint discovery remains fallback-only.
+          if (dispatchDirectPillModelAction(action, options, complete)) return true;
           // When the open menu already labels one exact item with this shortcut, activate that
           // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
           // catalogs route the same actions through submenus; the visible hint is authoritative.
@@ -13044,6 +13527,7 @@ form.w-full[data-type="unified-composer"] {
         ModelPickerActionRunner.execute(action, options);
       // --- KEY HANDLING ---
       function runModelPickerShortcutSlot(slot, options = {}) {
+        activateCurrentRuntimeModelPickerProfile('shortcut:run');
         const idx = Number(slot);
         if (!Number.isInteger(idx) || idx < 0 || idx >= KEY_CODES.length) return false;
         const action = getModelActionBySlot(idx) || options.fallbackAction || null;
@@ -13194,7 +13678,16 @@ form.w-full[data-type="unified-composer"] {
     });
   };
 
-  // Listen for modelPickerKeyCodes changes and update in real-time
+  window.addEventListener('csp-chat-work-mode-changed', (event) => {
+    const mode = event?.detail?.mode;
+    if (mode !== 'chat' && mode !== 'work') return;
+    activateRuntimeModelPickerProfile(
+      getProfileForChatWorkMode(mode),
+      event?.detail?.source || 'native:mode-change',
+    );
+  });
+
+  // Keep both independent profile caches current without touching the other profile.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     if (changes.activeModelConfigId) {
@@ -13204,41 +13697,78 @@ form.w-full[data-type="unified-composer"] {
       LAST_PERSISTED_ACTIVE_MODEL_CONFIG_ID = nextActiveModelConfigId;
     }
     if (changes.modelCatalog) {
-      // Runtime bridge: overlay and shortcuts share the latest scraped model catalog.
-      window.__modelCatalog =
+      const catalog =
         changes.modelCatalog.newValue && typeof changes.modelCatalog.newValue === 'object'
           ? changes.modelCatalog.newValue
           : null;
+      const profile = getProfileForCatalog(catalog);
+      MODEL_CATALOG_BY_PROFILE[profile] = catalog;
+      if (ACTIVE_MODEL_PICKER_PROFILE === profile) window.__modelCatalog = catalog;
     }
     if (changes.modelCatalogLatest) {
-      window.__modelCatalogLatest =
+      MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] =
         changes.modelCatalogLatest.newValue &&
         typeof changes.modelCatalogLatest.newValue === 'object'
           ? changes.modelCatalogLatest.newValue
           : null;
+      window.__modelCatalogLatest = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LATEST) {
+        window.__modelCatalog = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      }
+    }
+    if (changes.modelCatalogLegacy) {
+      MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] =
+        changes.modelCatalogLegacy.newValue &&
+        typeof changes.modelCatalogLegacy.newValue === 'object'
+          ? changes.modelCatalogLegacy.newValue
+          : null;
+      window.__modelCatalogLegacy = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
+      if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LEGACY) {
+        window.__modelCatalog = MODEL_CATALOG_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
+      }
     }
     if (changes.modelNamesLatest) {
-      window.__modelNamesLatest = Array.isArray(changes.modelNamesLatest.newValue)
+      MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] = Array.isArray(
+        changes.modelNamesLatest.newValue,
+      )
         ? changes.modelNamesLatest.newValue.slice(0, MAX_SLOTS)
         : [];
-    }
-    if (changes.modelPickerKeyCodes) {
-      const val = changes.modelPickerKeyCodes.newValue;
-      if (!Array.isArray(val)) return;
-
-      const next = val.slice(0, MAX_SLOTS);
-      while (next.length < MAX_SLOTS) next.push('');
-
-      // Mutate the const array so references stay valid
-      KEY_CODES.splice(0, KEY_CODES.length, ...next);
-
-      // If menu is open, refresh labels to reflect new keys
-      const btn = getModelMenuButton();
-      if (btn?.getAttribute('aria-expanded') === 'true') {
-        setTimeout(() => {
-          window.__mp_applyHints?.();
-        }, DELAY_APPLY_HINTS_STORAGE_MS);
+      window.__modelNamesLatest = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
+      if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LATEST) {
+        window.MODEL_NAMES = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST].slice();
       }
+    }
+    if (changes.modelNamesLegacy) {
+      MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] = Array.isArray(
+        changes.modelNamesLegacy.newValue,
+      )
+        ? changes.modelNamesLegacy.newValue.slice(0, MAX_SLOTS)
+        : [];
+      window.__modelNamesLegacy = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
+      if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LEGACY) {
+        window.MODEL_NAMES = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY].slice();
+      }
+    }
+
+    let activeCodesChanged = false;
+    [MODEL_PICKER_PROFILE_LATEST, MODEL_PICKER_PROFILE_LEGACY].forEach((profile) => {
+      const storageKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[profile];
+      if (!changes[storageKey]) return;
+      MODEL_PICKER_CODES_BY_PROFILE[profile] = normalizeProfileModelPickerCodes(
+        changes[storageKey].newValue,
+        profile,
+      );
+      if (ACTIVE_MODEL_PICKER_PROFILE === profile) {
+        activateRuntimeModelPickerProfile(profile, 'storage:shortcut-change');
+        activeCodesChanged = true;
+      }
+    });
+
+    const btn = getModelMenuButton();
+    if (activeCodesChanged && btn?.getAttribute('aria-expanded') === 'true') {
+      setTimeout(() => {
+        window.__mp_applyHints?.();
+      }, DELAY_APPLY_HINTS_STORAGE_MS);
     }
   });
 })();
@@ -14148,35 +14678,19 @@ setTimeout(() => {
     return getOverlayModelActionGroups(activeModelConfigId, names, catalog);
   };
 
-  const getOverlayMirroredSlotsForGridPosition = (cfg, groupId, groupIndex, fallbackSlot) => {
-    const slots = new Set();
-    [OVERLAY_MODEL_PROFILE_LATEST, OVERLAY_MODEL_PROFILE_LEGACY].forEach((profile) => {
-      const group = getOverlayProfileActionGroups(cfg, profile, true).find(
-        (candidate) => candidate?.id === groupId,
-      );
-      const slot = Number(group?.actions?.[groupIndex]?.slot);
-      if (Number.isInteger(slot) && slot >= 0 && slot < getOverlayModelSlotLimit()) {
-        slots.add(slot);
-      }
-    });
-    const normalizedFallback = Number(fallbackSlot);
-    if (
-      Number.isInteger(normalizedFallback) &&
-      normalizedFallback >= 0 &&
-      normalizedFallback < getOverlayModelSlotLimit()
-    ) {
-      slots.add(normalizedFallback);
-    }
-    return Array.from(slots);
-  };
-
-  const getOverlayModelKeyCodes = () => {
+  const getOverlayModelKeyCodes = (cfg, profile) => {
     const maxSlots = getOverlayModelSlotLimit();
+    const storageKey =
+      profile === OVERLAY_MODEL_PROFILE_LATEST
+        ? 'modelPickerKeyCodesLatest'
+        : 'modelPickerKeyCodesLegacy';
     const codes =
-      Array.isArray(window.__modelPickerKeyCodes) && window.__modelPickerKeyCodes.length
-        ? window.__modelPickerKeyCodes.slice(0, maxSlots)
-        : typeof window.ModelLabels?.defaultKeyCodes === 'function'
-          ? window.ModelLabels.defaultKeyCodes().slice(0, maxSlots)
+      Array.isArray(cfg?.[storageKey])
+        ? cfg[storageKey].slice(0, maxSlots)
+        : Array.isArray(window.__modelPickerKeyCodesProfiles?.[profile])
+          ? window.__modelPickerKeyCodesProfiles[profile].slice(0, maxSlots)
+          : typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function'
+            ? window.ModelLabels.defaultKeyCodesForProfile(profile).slice(0, maxSlots)
           : [];
     while (codes.length < maxSlots) codes.push('');
     return codes;
@@ -14194,16 +14708,20 @@ setTimeout(() => {
     return isMacPlatform() ? 'Command + ' : 'Ctrl + ';
   };
 
-  const buildShortcutOverlayModelPickerRow = (action, group, groupIndex, context) => {
+  const buildShortcutOverlayModelPickerRow = (action, group, context) => {
     const { activeModelConfigId, cfg, codes, modifierLabel, names } = context;
-    const label = escapeHtml(action.label || names[action.slot] || '');
-    const mirroredSlots = getOverlayMirroredSlotsForGridPosition(
-      cfg,
-      group.id,
-      groupIndex,
-      action.slot,
+    const storageKey =
+      action?.actionKind === 'shortcut-setting' ? String(action?.storageKey || '') : '';
+    const isStandaloneShortcut = storageKey.length > 0;
+    const label = escapeHtml(
+      getMessage(action?.labelI18nKey, '') || action.label || names[action.slot] || '',
     );
-    const value = displayFromCode(codes[mirroredSlots[0] ?? action.slot]);
+    const value = displayFromCode(
+      isStandaloneShortcut ? cfg?.[storageKey] : codes[action.slot],
+    );
+    const rowModifierLabel = isStandaloneShortcut
+      ? shortcutModifierLabel(storageKey)
+      : modifierLabel;
     const activeClass =
       group.id === 'configure' && action.id === activeModelConfigId
         ? ' mp-configure-item mp-configure-item-active'
@@ -14215,14 +14733,14 @@ setTimeout(() => {
       <div class="shortcut-item${activeClass}">
         <div class="shortcut-label"><span class="mp-label">${label}</span></div>
         <div class="shortcut-keys">
-          <span class="key-text platform-alt-label">${modifierLabel}</span>
+          <span class="key-text platform-alt-label">${rowModifierLabel}</span>
           <input class="key-input" disabled maxlength="12" value="${value}" />
         </div>
       </div>
     `;
   };
 
-  function buildShortcutOverlayModelPickerGrid(cfg, requestedProfile = OVERLAY_MODEL_PROFILE_LATEST) {
+  function buildShortcutOverlayModelPickerGrid(cfg, requestedProfile = OVERLAY_MODEL_PROFILE_LEGACY) {
     const profile =
       requestedProfile === OVERLAY_MODEL_PROFILE_LEGACY
         ? OVERLAY_MODEL_PROFILE_LEGACY
@@ -14230,25 +14748,22 @@ setTimeout(() => {
     const activeModelConfigId = getOverlayActiveModelConfigId(cfg);
     const names = getOverlayProfileNames(cfg, profile);
     const actionGroups = getOverlayProfileActionGroups(cfg, profile);
-    const codes = getOverlayModelKeyCodes();
+    const codes = getOverlayModelKeyCodes(cfg, profile);
     const modifierLabel = getOverlayModelPickerModifierLabel(cfg);
     const rowContext = { activeModelConfigId, cfg, codes, modifierLabel, names };
 
     const groupMarkup = actionGroups
       .map((group) => {
         const rows = (group.actions || [])
-          .map((action, groupIndex) => ({ action, groupIndex }))
-          .filter(({ action, groupIndex }) => {
-            const mirroredSlots = getOverlayMirroredSlotsForGridPosition(
-              cfg,
-              group.id,
-              groupIndex,
-              action.slot,
-            );
-            return isAssigned(codes[mirroredSlots[0] ?? action.slot]);
+          .map((action) => ({ action }))
+          .filter(({ action }) => {
+            if (action?.actionKind === 'shortcut-setting' && action?.storageKey) {
+              return isAssigned(cfg?.[action.storageKey]);
+            }
+            return isAssigned(codes[action.slot]);
           })
-          .map(({ action, groupIndex }) =>
-            buildShortcutOverlayModelPickerRow(action, group, groupIndex, rowContext),
+          .map(({ action }) =>
+            buildShortcutOverlayModelPickerRow(action, group, rowContext),
           );
 
         if (!rows.length) return '';
@@ -14272,8 +14787,8 @@ setTimeout(() => {
     if (!groupMarkup.length) return '';
 
     const effortLabel = escapeHtml(getMessage('section_switch_models', 'Effort'));
-    const latestLabel = escapeHtml(getMessage('label_modelCatalogLatest', 'Latest Models'));
-    const legacyLabel = escapeHtml(getMessage('label_modelCatalogLegacy', 'Legacy Models'));
+    const latestLabel = escapeHtml(getMessage('label_modelCatalogLatest', 'Work Models'));
+    const legacyLabel = escapeHtml(getMessage('label_modelCatalogLegacy', 'Chat Models'));
     const isLatest = profile === OVERLAY_MODEL_PROFILE_LATEST;
 
     return `
@@ -14281,8 +14796,8 @@ setTimeout(() => {
 <div class="section-header overlay-model-catalog-heading" role="heading" aria-level="2">
   <span>${effortLabel}</span>
   <div class="p-segmented-controls p-segmented-radius mp-model-catalog-profile-selector" role="tablist" aria-label="Model list version">
-    <button type="button" class="${isLatest ? 'active' : ''}" role="tab" aria-selected="${isLatest}" ${isLatest ? '' : 'tabindex="-1"'} data-overlay-model-catalog-profile="latest">${latestLabel}</button>
     <button type="button" class="${isLatest ? '' : 'active'}" role="tab" aria-selected="${!isLatest}" ${isLatest ? 'tabindex="-1"' : ''} data-overlay-model-catalog-profile="legacy">${legacyLabel}</button>
+    <button type="button" class="${isLatest ? 'active' : ''}" role="tab" aria-selected="${isLatest}" ${isLatest ? '' : 'tabindex="-1"'} data-overlay-model-catalog-profile="latest">${latestLabel}</button>
   </div>
 </div>
 ${groupMarkup.join('')}
@@ -14318,6 +14833,9 @@ ${groupMarkup.join('')}
     };
     const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
     const renderedKeys = new Set();
+    if (isAssigned(cfg?.shortcutKeyToggleChatWork)) {
+      renderedKeys.add('shortcutKeyToggleChatWork');
+    }
     const labelForKey = (k) => {
       const i18nKey = labelI18nByKey[k];
       const msg = getMessage(i18nKey, '');
@@ -14378,6 +14896,7 @@ ${groupMarkup.join('')}
           keys: [
             'shortcutKeyToggleModelSelector',
             'shortcutKeyShowOverlay',
+            'shortcutKeyToggleChatWork',
             'shortcutKeyThinkingLight',
             'shortcutKeyThinkingHeavy',
             'shortcutKeyProStandard',
@@ -14457,6 +14976,7 @@ ${groupMarkup.join('')}
     for (const section of sections) {
       const rows = section.keys
         .filter((k) => !EFFORT_SHORTCUT_KEY_SET.has(k))
+        .filter((k) => !renderedKeys.has(k))
         .filter((k) => isShortcutVisibleInCatalog(k))
         .filter((k) => isAssigned(cfg?.[k]))
         .map((k) => {
@@ -14886,13 +15406,24 @@ ${groupMarkup.join('')}
         typeof window.ModelLabels?.resolveActionableNames === 'function'
           ? window.ModelLabels.resolveActionableNames(raw)
           : ['Instant', 'Medium', '', '5.5', '', '', 'o3', 'High', '5.4', '5.3'];
-      const buildDefaultCodes = () =>
-        typeof window.ModelLabels?.defaultKeyCodes === 'function'
-          ? window.ModelLabels.defaultKeyCodes()
+      const buildDefaultCodes = (profile) =>
+        typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function'
+          ? window.ModelLabels.defaultKeyCodesForProfile(profile)
+          : typeof window.ModelLabels?.defaultKeyCodes === 'function'
+            ? window.ModelLabels.defaultKeyCodes()
           : ['Digit1', 'Digit2', 'Digit0', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7'];
 
       try {
-        chrome.storage.sync.get(['modelNames', 'modelPickerKeyCodes', 'modelCatalog'], (res = {}) => {
+        chrome.storage.sync.get([
+          'modelNames',
+          'modelCatalog',
+          'modelCatalogLatest',
+          'modelCatalogLegacy',
+          'modelNamesLatest',
+          'modelNamesLegacy',
+          'modelPickerKeyCodesLatest',
+          'modelPickerKeyCodesLegacy',
+        ], (res = {}) => {
           if (!isExtensionAlive()) return resolve();
           if (chrome.runtime.lastError) {
             if (
@@ -14907,16 +15438,35 @@ ${groupMarkup.join('')}
           try {
             const rawNames = Array.isArray(res.modelNames) ? res.modelNames.slice(0, MAX) : [];
             const names = defaultNames(rawNames).slice(0, MAX);
-            const codes = Array.isArray(res.modelPickerKeyCodes)
-              ? res.modelPickerKeyCodes.slice(0, MAX)
-              : buildDefaultCodes().slice(0, MAX);
-
-            while (codes.length < MAX) codes.push('');
-            // Runtime bridge: shortcuts overlay reads hydrated model names/codes from the content scope.
+            const latestCodes = Array.isArray(res.modelPickerKeyCodesLatest)
+              ? res.modelPickerKeyCodesLatest.slice(0, MAX)
+              : buildDefaultCodes('latest').slice(0, MAX);
+            const legacyCodes = Array.isArray(res.modelPickerKeyCodesLegacy)
+              ? res.modelPickerKeyCodesLegacy.slice(0, MAX)
+              : buildDefaultCodes('legacy').slice(0, MAX);
+            while (latestCodes.length < MAX) latestCodes.push('');
+            while (legacyCodes.length < MAX) legacyCodes.push('');
             window.__modelCatalog =
               res.modelCatalog && typeof res.modelCatalog === 'object' ? res.modelCatalog : null;
+            window.__modelCatalogLatest =
+              res.modelCatalogLatest && typeof res.modelCatalogLatest === 'object'
+                ? res.modelCatalogLatest
+                : null;
+            window.__modelCatalogLegacy =
+              res.modelCatalogLegacy && typeof res.modelCatalogLegacy === 'object'
+                ? res.modelCatalogLegacy
+                : null;
+            window.__modelNamesLatest = Array.isArray(res.modelNamesLatest)
+              ? res.modelNamesLatest.slice(0, MAX)
+              : [];
+            window.__modelNamesLegacy = Array.isArray(res.modelNamesLegacy)
+              ? res.modelNamesLegacy.slice(0, MAX)
+              : [];
             window.MODEL_NAMES = names;
-            window.__modelPickerKeyCodes = codes;
+            window.__modelPickerKeyCodesProfiles = {
+              latest: latestCodes,
+              legacy: legacyCodes,
+            };
           } catch (err) {
             if (
               /context invalidated/i.test(err?.message || '') ||

@@ -301,10 +301,17 @@ assert.equal(
     'GPT-5.6 Terra',
     'GPT-5.6 Luna',
     'GPT-5.5',
-    'Toggle Speed (Normal / Fast)',
-    'Reset to default',
   ]),
-  'no-catalog popup fallback should use the live pill model and utility row',
+  'no-catalog popup fallback should keep the Work model row model-only',
+);
+assert.equal(
+  JSON.stringify(
+    noCatalogGroups
+      .find((group) => group.id === 'model-toggles')
+      ?.actions.map((action) => action.label),
+  ),
+  JSON.stringify(['Toggle Chat / Work', 'Toggle Speed', 'Reset to default']),
+  'no-catalog popup fallback should render the shared Chat/Work toggle before the Work utilities',
 );
 assert.equal(
   JSON.stringify(ModelLabels.defaultKeyCodes()),
@@ -315,17 +322,17 @@ assert.equal(
     'Digit1',
     '',
     '',
-    'Digit4',
+    '',
     'F3',
     'Digit2',
     'Digit3',
     'Digit4',
     'F4',
     'F5',
-    'Digit5',
     'Digit6',
+    'Digit0',
   ]),
-  'default model picker codes should mirror Latest and Legacy visual positions',
+  'the backward-compatible default should use the independent Work profile',
 );
 const legacyFallbackGroups = ModelLabels.getPopupPresentationGroups(
   ModelLabels.DEFAULT_ACTIVE_CONFIG_ID,
@@ -350,13 +357,83 @@ assert.deepEqual(
 );
 assert.deepEqual(
   Array.from(
+    legacyFallbackGroups.find((group) => group.id === 'model-toggles')?.actions || [],
+    (action) => action.label,
+  ),
+  ['Toggle Chat / Work'],
+  'Legacy fallback should render only the shared Chat/Work toggle in Model Toggles',
+);
+assert.deepEqual(
+  Array.from(
     legacyFallbackGroups.find((group) => group.id === 'configure')?.actions || [],
     (action, index) =>
       ModelLabels.buildDefaultKeyCodesFromPresentationGroups(legacyFallbackGroups)[action.slot] ||
       `missing-${index}`,
   ),
   ['Digit1', 'Digit2', 'Digit3', 'Digit4'],
-  'Legacy fallback should mirror numeric shortcuts by second-row position',
+  'Chat defaults should use the same visual-position numbers without sharing storage',
+);
+const latestDefaults = Array.from(
+  ModelLabels.defaultKeyCodesForProfile(ModelLabels.MODEL_PICKER_PROFILE_LATEST),
+);
+const legacyDefaults = Array.from(
+  ModelLabels.defaultKeyCodesForProfile(ModelLabels.MODEL_PICKER_PROFILE_LEGACY),
+);
+assert.deepEqual(
+  [latestDefaults[3], latestDefaults[8], latestDefaults[9], latestDefaults[10]],
+  ['Digit1', 'Digit2', 'Digit3', 'Digit4'],
+  'Work should own its four model defaults directly',
+);
+assert.deepEqual(
+  [legacyDefaults[3], legacyDefaults[8], legacyDefaults[9], legacyDefaults[6]],
+  ['Digit1', 'Digit2', 'Digit3', 'Digit4'],
+  'Chat should independently own matching visual-position defaults',
+);
+assert.equal(latestDefaults[6], '', 'Work should not retain the Chat-only fourth-model slot');
+assert.equal(legacyDefaults[10], '', 'Chat should not retain the Work-only fourth-model slot');
+
+const observedSharedCodes = latestDefaults.slice();
+observedSharedCodes[6] = 'Digit4';
+observedSharedCodes[8] = 'Digit3';
+observedSharedCodes[9] = 'Numpad3';
+observedSharedCodes[10] = 'Digit2';
+observedSharedCodes[14] = 'KeyR';
+const migratedProfiles = ModelLabels.migrateSharedKeyCodesToProfiles({
+  codes: observedSharedCodes,
+  latestGroups: noCatalogGroups,
+  legacyGroups: legacyFallbackGroups,
+});
+const migratedLatest = Array.from(migratedProfiles.latest);
+const migratedLegacy = Array.from(migratedProfiles.legacy);
+assert.deepEqual(
+  [migratedLatest[3], migratedLatest[8], migratedLatest[9], migratedLatest[10]],
+  ['Digit1', 'Digit3', '', 'Digit2'],
+  'one-time migration should keep the first Work 3 and clear only the later alias duplicate',
+);
+assert.equal(
+  migratedLatest[14],
+  'KeyR',
+  'one-time migration should preserve unrelated Work customizations',
+);
+assert.deepEqual(
+  [migratedLegacy[3], migratedLegacy[8], migratedLegacy[9], migratedLegacy[6]],
+  ['Digit1', 'Digit3', '', 'Digit4'],
+  'Chat should normalize the same legacy source independently in its own slot order',
+);
+assert.equal(
+  migratedLatest[8],
+  migratedLegacy[8],
+  'the same key may remain once in each profile because the commands are mutually exclusive',
+);
+assert.equal(
+  migratedLatest[6],
+  'Digit4',
+  'migration should preserve a nonduplicate customization even when its slot is not currently visible in Work',
+);
+assert.equal(
+  migratedLegacy[10],
+  'Digit2',
+  'migration should preserve a nonduplicate customization even when its slot is not currently visible in Chat',
 );
 assert.equal(
   JSON.stringify(ModelLabels.defaultNames()),
@@ -374,7 +451,7 @@ assert.equal(
     'GPT-5.5',
     'Extra High',
     'Max',
-    'Toggle Speed (Normal / Fast)',
+    'Toggle Speed',
     'Reset to default',
   ]),
   'default model names should mirror the live pill picker layout',

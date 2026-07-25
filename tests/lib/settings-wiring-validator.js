@@ -33,7 +33,31 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'modelPickerKeyCodes',
-    reason: 'Model picker data shape is out of scope for this validator, but export/default coverage should remain visible.',
+    reason: 'Legacy model picker migration data is out of scope for this validator, but export/default coverage should remain visible.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+    },
+  },
+  {
+    key: 'modelPickerKeyCodesLatest',
+    reason: 'Work model picker assignments are profile data rather than popup.html controls.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+    },
+  },
+  {
+    key: 'modelPickerKeyCodesLegacy',
+    reason: 'Chat model picker assignments are profile data rather than popup.html controls.',
+    checks: {
+      optionsDefault: true,
+      exportedFixture: true,
+    },
+  },
+  {
+    key: 'modelPickerKeyCodeProfilesVersion',
+    reason: 'Internal one-time model picker shortcut migration marker.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -157,6 +181,8 @@ function loadValidationContext(repoRoot) {
   const popupExplicitOverrides = extractConstObjectLiteral(popupJsSource, 'EXPLICIT_PRESET_OVERRIDES', {
     NBSP,
     DEFAULT_MODEL_PICKER_KEY_CODES: [],
+    DEFAULT_MODEL_PICKER_KEY_CODES_LATEST: [],
+    DEFAULT_MODEL_PICKER_KEY_CODES_LEGACY: [],
   });
   const popupShortcutFallbacks = extractConstObjectLiteral(
     popupJsSource,

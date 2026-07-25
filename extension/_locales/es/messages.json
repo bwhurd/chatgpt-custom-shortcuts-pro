@@ -480,10 +480,10 @@
     "message": "Cambiar modelo"
   },
   "label_modelCatalogLatest": {
-    "message": "Modelos nuevos"
+    "message": "Modelos Trabajo"
   },
   "label_modelCatalogLegacy": {
-    "message": "Modelos previos"
+    "message": "Modelos Chat"
   },
   "section_model_picker_tweaks": {
     "message": "Elegir modelo"
@@ -496,6 +496,12 @@
   },
   "label_configureModelsCompact": {
     "message": "Pick Model"
+  },
+  "label_modelTogglesCompact": {
+    "message": "Model Toggles"
+  },
+  "label_toggleChatWork": {
+    "message": "Alternar Chat / Work"
   },
   "label_modelPickerUseLatestModel": {
     "message": "Usar el modelo más reciente"

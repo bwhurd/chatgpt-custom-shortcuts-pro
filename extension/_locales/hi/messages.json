@@ -480,10 +480,10 @@
     "message": "मॉडल बदलें"
   },
   "label_modelCatalogLatest": {
-    "message": "नए मॉडल"
+    "message": "कार्य मॉडल"
   },
   "label_modelCatalogLegacy": {
-    "message": "पुराने मॉडल"
+    "message": "चैट मॉडल"
   },
   "section_model_picker_tweaks": {
     "message": "मॉडल चयन"
@@ -496,6 +496,12 @@
   },
   "label_configureModelsCompact": {
     "message": "Pick Model"
+  },
+  "label_modelTogglesCompact": {
+    "message": "Model Toggles"
+  },
+  "label_toggleChatWork": {
+    "message": "Chat / Work टॉगल करें"
   },
   "label_modelPickerUseLatestModel": {
     "message": "नवीनतम मॉडल का उपयोग करें"

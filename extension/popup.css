@@ -949,42 +949,6 @@ span.dup-key {
 /* ===== End Duplicate Key Overlay Styles ===== */
 
 /* ===== Begin Custom Model Selector Styles ===== */
-.mp-key {
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.8em;
-  height: 1.6em;
-  margin: 0 2px;
-  padding: 0 0.4em;
-  border-radius: 6px;
-  font-weight: 600;
-  border: 1.5px solid rgba(0, 0, 0, 0.11);
-  box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.07);
-  background: rgba(0, 0, 0, 0.015);
-  outline: none;
-  user-select: none;
-  transition:
-    border 0.18s,
-    box-shadow 0.18s,
-    background 0.18s;
-}
-
-.mp-key:hover,
-.mp-key:focus,
-.mp-key.listening {
-  border: 1.5px solid rgba(0, 0, 0, 0.11);
-  outline: 2px solid #39f !important;
-  box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.07);
-  background: rgba(0, 0, 0, 0.015);
-}
-
-.mp-key:focus {
-  outline: 2px solid #39f !important;
-  outline-offset: 1px;
-}
-
 /* Custom tooltips for model picker (black background, white text) */
 .custom-tooltip {
   position: relative;
@@ -1028,21 +992,6 @@ span.dup-key {
   border-width: 6px;
   border-style: solid;
   border-color: transparent transparent rgba(0, 0, 0, 0.9) transparent;
-}
-
-/* Shift tooltip for the last chip (slot 0) to the left by 1em */
-.mp-key--shift-left.custom-tooltip:hover::after,
-.mp-key--shift-left.custom-tooltip:focus::after,
-.mp-key--shift-left.custom-tooltip:focus-visible::after,
-.mp-key--shift-left.custom-tooltip:focus-within::after {
-  left: calc(50% - 1em);
-}
-
-.mp-key--shift-left.custom-tooltip:hover::before,
-.mp-key--shift-left.custom-tooltip:focus::before,
-.mp-key--shift-left.custom-tooltip:focus-visible::before,
-.mp-key--shift-left.custom-tooltip:focus-within::before {
-  left: calc(50% - 1em);
 }
 
 /* ===== End Custom Model Selector Styles ===== */
@@ -1481,6 +1430,10 @@ span.dup-key {
 
 .mp-grid-group[data-group="configure"] .mp-subsection-label {
   margin-top: 1.5em;
+}
+
+.mp-grid-group[data-group="model-toggles"] .mp-subsection-label {
+  margin-top: 18px;
 }
 
 .shortcut-container.filtering-active .mp-subsection-label {

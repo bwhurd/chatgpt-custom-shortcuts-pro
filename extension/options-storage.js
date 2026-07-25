@@ -14,6 +14,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyCopyLowest: 'c',
   selectThenCopy: 'x',
   shortcutKeyNewConversation: 'n',
+  shortcutKeyToggleChatWork: 'Digit5',
   shortcutKeyActivateInput: 'w',
   shortcutKeyToggleSidebar: 's',
   shortcutKeyPreviousThread: 'j',
@@ -79,7 +80,7 @@ const OPTIONS_DEFAULTS = {
     'GPT-5.5',
     'Extra High',
     'Max',
-    'Toggle Speed (Normal / Fast)',
+    'Toggle Speed',
     'Reset to default',
   ],
   modelCatalog: null,
@@ -98,7 +99,7 @@ const OPTIONS_DEFAULTS = {
     'GPT-5.5',
     'Extra High',
     'Max',
-    'Toggle Speed (Normal / Fast)',
+    'Toggle Speed',
     'Reset to default',
   ],
   modelNamesLatestAt: '',
@@ -145,9 +146,8 @@ const OPTIONS_DEFAULTS = {
   // Copy behavior
   disableCopyAfterSelectCheckbox: false,
 
-  // Model picker — up to 15 slots.
-  // Current pill defaults mirror the popup's two six-column rows:
-  // effort actions use F1-F5; model/utility actions use 1-9 by visual position.
+  // Legacy shared model-picker array. Retained only as the source for one-time
+  // migration and backward-compatible imports.
   modelPickerKeyCodes: [
     'F1',
     'F2',
@@ -162,9 +162,46 @@ const OPTIONS_DEFAULTS = {
     'Digit4',
     'F4',
     'F5',
-    'Digit5',
     'Digit6',
+    'Digit0',
   ],
+  // Independent profile arrays. Matching default positions intentionally reuse
+  // the same keys, but subsequent Chat and Work edits are never linked.
+  modelPickerKeyCodesLatest: [
+    'F1',
+    'F2',
+    '',
+    'Digit1',
+    '',
+    '',
+    '',
+    'F3',
+    'Digit2',
+    'Digit3',
+    'Digit4',
+    'F4',
+    'F5',
+    'Digit6',
+    'Digit0',
+  ],
+  modelPickerKeyCodesLegacy: [
+    'F1',
+    'F2',
+    '',
+    'Digit1',
+    '',
+    '',
+    'Digit4',
+    'F3',
+    'Digit2',
+    'Digit3',
+    '',
+    '',
+    '',
+    '',
+    '',
+  ],
+  modelPickerKeyCodeProfilesVersion: 0,
 
   // === Radios ===
   useAltForModelSwitcherRadio: true,
@@ -314,9 +351,27 @@ if (typeof OptionsSync === 'undefined') {
           'KeyT',
           'KeyY',
         ];
+        const priorSharedPositionDefaults = [
+          'F1',
+          'F2',
+          '',
+          'Digit1',
+          '',
+          '',
+          'Digit4',
+          'F3',
+          'Digit2',
+          'Digit3',
+          'Digit4',
+          'F4',
+          'F5',
+          'Digit5',
+          'Digit6',
+        ];
         if (
           arr.every((value, index) => value === legacyIntegratedDefaults[index]) ||
-          arr.every((value, index) => value === priorPillDefaults[index])
+          arr.every((value, index) => value === priorPillDefaults[index]) ||
+          arr.every((value, index) => value === priorSharedPositionDefaults[index])
         ) {
           stored.modelPickerKeyCodes = defaults.modelPickerKeyCodes.slice();
         }

@@ -480,10 +480,10 @@
     "message": "Effort"
   },
   "label_modelCatalogLatest": {
-    "message": "Latest Models"
+    "message": "Work Models"
   },
   "label_modelCatalogLegacy": {
-    "message": "Legacy Models"
+    "message": "Chat Models"
   },
   "section_model_picker_tweaks": {
     "message": "Model Picker"
@@ -496,6 +496,12 @@
   },
   "label_configureModelsCompact": {
     "message": "Pick Model"
+  },
+  "label_modelTogglesCompact": {
+    "message": "Model Toggles"
+  },
+  "label_toggleChatWork": {
+    "message": "Toggle Chat / Work"
   },
   "label_modelPickerUseLatestModel": {
     "message": "Use latest model"

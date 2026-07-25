@@ -480,10 +480,10 @@
     "message": "Змінити модель"
   },
   "label_modelCatalogLatest": {
-    "message": "Нові моделі"
+    "message": "Робочі моделі"
   },
   "label_modelCatalogLegacy": {
-    "message": "Старі моделі"
+    "message": "Моделі чату"
   },
   "section_model_picker_tweaks": {
     "message": "Вибір моделі"
@@ -496,6 +496,12 @@
   },
   "label_configureModelsCompact": {
     "message": "Pick Model"
+  },
+  "label_modelTogglesCompact": {
+    "message": "Model Toggles"
+  },
+  "label_toggleChatWork": {
+    "message": "Перемкнути Chat / Work"
   },
   "label_modelPickerUseLatestModel": {
     "message": "Використати найновішу модель"

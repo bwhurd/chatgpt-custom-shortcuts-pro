@@ -5,6 +5,8 @@
 (() => {
   const MAX_SLOTS = 15;
   const DEFAULT_ACTIVE_CONFIG_ID = 'configure-latest';
+  const MODEL_PICKER_PROFILE_LATEST = 'latest';
+  const MODEL_PICKER_PROFILE_LEGACY = 'legacy';
   const PRIMARY_ACTIONS = Object.freeze([
     Object.freeze({
       slot: 0,
@@ -66,7 +68,7 @@
       slot: 13,
       id: 'toggle-speed',
       group: 'pill-utility',
-      label: 'Toggle Speed (Normal / Fast)',
+      label: 'Toggle Speed',
       actionKind: 'pill-speed-toggle',
     }),
     Object.freeze({
@@ -77,6 +79,14 @@
       actionKind: 'pill-reset',
     }),
   ]);
+  const CHAT_WORK_TOGGLE_ACTION = Object.freeze({
+    id: 'toggle-chat-work',
+    group: 'shortcut-setting',
+    label: 'Toggle Chat / Work',
+    labelI18nKey: 'label_toggleChatWork',
+    actionKind: 'shortcut-setting',
+    storageKey: 'shortcutKeyToggleChatWork',
+  });
   const MODEL_NAME_ACTIONS = Object.freeze([
     Object.freeze({
       slot: 3,
@@ -268,7 +278,7 @@
     'GPT-5.5',
     'Extra High',
     'Max',
-    'Toggle Speed (Normal / Fast)',
+    'Toggle Speed',
     'Reset to default',
   ]);
   const DEFAULT_LEGACY_MODEL_CATALOG = Object.freeze({
@@ -498,7 +508,7 @@
     'Digit8',
     'Digit9',
   ]);
-  const DEFAULT_PICK_MODEL_CODE = 'Digit0';
+  const DEFAULT_RESET_MODEL_CODE = 'Digit0';
   const DEFAULT_GROUP_MODEL_CODES = Object.freeze({
     primary: Object.freeze(['F1', 'F2', 'F3', 'F4', 'F5']),
     configure: DEFAULT_SEQUENTIAL_MODEL_CODES,
@@ -512,6 +522,13 @@
     (Array.isArray(groups) ? groups : []).forEach((group) => {
       const groupCodes = DEFAULT_GROUP_MODEL_CODES[group?.id] || [];
       (Array.isArray(group?.actions) ? group.actions : []).forEach((action, actionIndex) => {
+        if (action?.actionKind === 'shortcut-setting' && action?.storageKey) {
+          if (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
+            nextSequentialIndex += 1;
+          }
+          return;
+        }
+
         const base =
           getActionById(action?.id) ||
           (Number.isInteger(Number(action?.slot)) ? getActionBySlot(Number(action.slot)) : null) ||
@@ -521,13 +538,16 @@
 
         seenSlots.add(slot);
 
-        if (base?.id === 'configure') {
-          out[slot] = DEFAULT_PICK_MODEL_CODE;
+        if (base?.id === 'reset-default') {
+          out[slot] = DEFAULT_RESET_MODEL_CODE;
           return;
         }
 
         if (groupCodes[actionIndex]) {
           out[slot] = groupCodes[actionIndex];
+          if (group?.id === 'configure') {
+            nextSequentialIndex = Math.max(nextSequentialIndex, actionIndex + 1);
+          }
           return;
         }
 
@@ -541,22 +561,77 @@
     return out;
   };
 
-  const defaultKeyCodes = () => {
-    const latestCodes = buildDefaultKeyCodesFromPresentationGroups(
-      getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, defaultNames(), null),
+  const normalizeModelPickerProfile = (profile) =>
+    profile === MODEL_PICKER_PROFILE_LEGACY
+      ? MODEL_PICKER_PROFILE_LEGACY
+      : MODEL_PICKER_PROFILE_LATEST;
+
+  const defaultKeyCodesForProfile = (
+    profile = MODEL_PICKER_PROFILE_LATEST,
+    { catalog, names } = {},
+  ) => {
+    const normalizedProfile = normalizeModelPickerProfile(profile);
+    const isLegacy = normalizedProfile === MODEL_PICKER_PROFILE_LEGACY;
+    const effectiveCatalog =
+      catalog === undefined ? (isLegacy ? DEFAULT_LEGACY_MODEL_CATALOG : null) : catalog;
+    const effectiveNames = Array.isArray(names)
+      ? names
+      : isLegacy
+        ? defaultLegacyNames()
+        : defaultNames();
+    return buildDefaultKeyCodesFromPresentationGroups(
+      getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, effectiveNames, effectiveCatalog),
     );
-    const legacyCodes = buildDefaultKeyCodesFromPresentationGroups(
-      getPopupPresentationGroups(
-        DEFAULT_ACTIVE_CONFIG_ID,
-        defaultLegacyNames(),
-        DEFAULT_LEGACY_MODEL_CATALOG,
-      ),
-    );
-    legacyCodes.forEach((code, slot) => {
-      if (code && !latestCodes[slot]) latestCodes[slot] = code;
-    });
-    return latestCodes;
   };
+
+  // Backward-compatible default for callers that have not yet selected a profile.
+  const defaultKeyCodes = () => defaultKeyCodesForProfile(MODEL_PICKER_PROFILE_LATEST);
+
+  const normalizeShortcutCollisionCode = (value) => {
+    const code = String(value || '').trim();
+    if (!code || code === '\u00A0') return '';
+    const numpadDigit = code.match(/^Numpad([0-9])$/);
+    return numpadDigit ? `Digit${numpadDigit[1]}` : code;
+  };
+
+  const normalizeProfileKeyCodes = (codes, groups) => {
+    const source = Array.isArray(codes) ? codes.slice(0, MAX_SLOTS) : [];
+    while (source.length < MAX_SLOTS) source.push('');
+    const normalized = new Array(MAX_SLOTS).fill('');
+    const claimedCodes = new Set();
+    const orderedSlots = [];
+    const seenSlots = new Set();
+
+    (Array.isArray(groups) ? groups : []).forEach((group) => {
+      (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
+        if (action?.actionKind === 'shortcut-setting' && action?.storageKey) return;
+        const slot = Number(action?.slot);
+        if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return;
+        if (seenSlots.has(slot)) return;
+        seenSlots.add(slot);
+        orderedSlots.push(slot);
+      });
+    });
+    for (let slot = 0; slot < MAX_SLOTS; slot++) {
+      if (!seenSlots.has(slot)) orderedSlots.push(slot);
+    }
+
+    orderedSlots.forEach((slot) => {
+      const code = typeof source[slot] === 'string' ? source[slot] : '';
+      const collisionCode = normalizeShortcutCollisionCode(code);
+      if (!collisionCode || claimedCodes.has(collisionCode)) return;
+
+      claimedCodes.add(collisionCode);
+      normalized[slot] = code;
+    });
+
+    return normalized;
+  };
+
+  const migrateSharedKeyCodesToProfiles = ({ codes, latestGroups, legacyGroups } = {}) => ({
+    [MODEL_PICKER_PROFILE_LATEST]: normalizeProfileKeyCodes(codes, latestGroups),
+    [MODEL_PICKER_PROFILE_LEGACY]: normalizeProfileKeyCodes(codes, legacyGroups),
+  });
 
   const isDynamicModelNameActionId = (value) =>
     /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
@@ -1096,17 +1171,23 @@
       incomingNames,
       effectiveCatalog,
     );
-    if (effectiveCatalog.pillMenu === true) {
-      PILL_UTILITY_ACTIONS.forEach((action) => {
-        modelNameActions.push({
-          ...action,
-          viewGroup: 'configure',
-          viewKey: `configure:${action.id}`,
-          active: false,
-          labelI18nKey: '',
-        });
-      });
-    }
+    const utilityActions = [
+      {
+        ...CHAT_WORK_TOGGLE_ACTION,
+        viewGroup: 'model-toggles',
+        viewKey: `model-toggles:${CHAT_WORK_TOGGLE_ACTION.id}`,
+        active: false,
+      },
+      ...(effectiveCatalog.pillMenu === true
+        ? PILL_UTILITY_ACTIONS.map((action) => ({
+            ...action,
+            viewGroup: 'model-toggles',
+            viewKey: `model-toggles:${action.id}`,
+            active: false,
+            labelI18nKey: '',
+          }))
+        : []),
+    ];
 
     return [
       {
@@ -1122,6 +1203,13 @@
         labelI18nKey: 'label_configureModelsCompact',
         compactLabel: true,
         actions: modelNameActions,
+      },
+      {
+        id: 'model-toggles',
+        label: 'Model Toggles',
+        labelI18nKey: 'label_modelTogglesCompact',
+        compactLabel: true,
+        actions: utilityActions,
       },
     ];
   };
@@ -1236,6 +1324,8 @@
     MODEL_NAME_DYNAMIC_SLOT_START,
     MODEL_NAME_DYNAMIC_SLOT_END,
     DEFAULT_ACTIVE_CONFIG_ID,
+    MODEL_PICKER_PROFILE_LATEST,
+    MODEL_PICKER_PROFILE_LEGACY,
     TESTID_CANON,
     MAIN_CANON_BY_INDEX,
     normTid,
@@ -1267,6 +1357,9 @@
     getPopupPresentationGroups,
     getPopupShortcutSlotForPosition,
     buildDefaultKeyCodesFromPresentationGroups,
+    defaultKeyCodesForProfile,
+    normalizeProfileKeyCodes,
+    migrateSharedKeyCodesToProfiles,
     mapFrontendLabelToActionId,
     normalizeThinkingEffortId,
     normalizeThinkingEffortIconToken,

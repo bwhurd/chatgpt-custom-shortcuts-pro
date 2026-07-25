@@ -287,6 +287,8 @@ Examples include:
 - `hideArrowButtonsCheckbox`
 - `hideCornerButtonsCheckbox`
 - `modelPickerKeyCodes`
+- `modelPickerKeyCodesLatest` / `modelPickerKeyCodesLegacy`
+- `modelPickerKeyCodeProfilesVersion`
 - `modelNames`
 - deprecated legacy shortcut keys still preserved in export/default data
 

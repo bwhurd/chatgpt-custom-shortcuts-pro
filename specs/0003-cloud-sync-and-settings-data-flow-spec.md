@@ -63,7 +63,7 @@ Important data rules:
 - downloaded Drive JSON is filtered back through the same known-key allowlist
 - `modelNames` is excluded again on restore
 - `saveLocalSettings()` writes only filtered keys back to sync storage
-- `rehydrateSettingsUI()` refreshes popup state, shortcut inputs, and `modelPickerKeyCodes`
+- `rehydrateSettingsUI()` refreshes popup state, shortcut inputs, and both independent model-picker profile arrays
 
 Retry behavior:
 - `CloudStorage` clears stale token/file-id state on `401` / `403` style failures and retries through the helper path
@@ -81,7 +81,8 @@ Important data rules:
 - snapshot source is the full `chrome.storage.sync` object
 - only allowlisted keys are serialized
 - every shortcut is normalized through `effectiveShortcutCode()`
-- `modelPickerKeyCodes` are normalized to the full picker slot count
+- `modelPickerKeyCodesLatest` and `modelPickerKeyCodesLegacy` are normalized independently to the full picker slot count
+- the legacy `modelPickerKeyCodes` field seeds both profiles only for old imports; it is not live shared state
 - `modelNames` is explicitly removed
 - file shape is `{ __meta, data }`
 
@@ -153,7 +154,8 @@ Usually means one of:
 Usually means one of:
 - value was not normalized to `KeyboardEvent.code`
 - cleared values were not preserved as NBSP
-- `modelPickerKeyCodes` were not padded back to the expected slot count
+- one or both model-picker profile arrays were not padded back to the expected slot count
+- a restore treated the legacy shared field as live state instead of a one-time compatibility input
 
 ## Repair checklist
 

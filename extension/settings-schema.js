@@ -96,6 +96,7 @@
       shortcutKeyProExtended: 'label_switchToProExtended',
 
       shortcutKeyNewConversation: 'label_new_chat',
+      shortcutKeyToggleChatWork: 'label_toggleChatWork',
       shortcutKeyActivateInput: 'label_focus_input',
       shortcutKeyToggleSidebar: 'label_toggle_sidebar',
       shortcutKeyPreviousThread: 'label_prev_thread',
@@ -142,6 +143,7 @@
         keys: [
           'shortcutKeyToggleModelSelector',
           'shortcutKeyShowOverlay',
+          'shortcutKeyToggleChatWork',
           'shortcutKeyThinkingLight',
           'shortcutKeyThinkingHeavy',
           'shortcutKeyProStandard',
