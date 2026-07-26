@@ -6,6 +6,11 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.25.2026
+- Added: Separate Chat Models and Work Models shortcut tabs, including Toggle Chat / Work.
+- Fixed: Model refresh updates both Chat and Work, restores the previous mode, and preserves independent shortcut assignments.
+- Fixed: Send Top Bar To Bottom keeps blank Work controls in one native row from initial load.
+
 #### 07.21.2026
 - Removed: Thinking Standard and Extended shortcuts because those options are no longer available.
 

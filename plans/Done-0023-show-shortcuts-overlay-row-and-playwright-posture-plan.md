@@ -23,4 +23,3 @@
 - [x] Run `node --check extension/content.js`.
 - [x] Run `node --check extension/popup.js`.
 - [x] Run `node tests/validate-keys.js`.
-- [ ] Reload the unpacked extension and the ChatGPT tab, then confirm `Show Shortcut Overlay` appears in the popup and overlay on `Alt + .` and the retired `Show Shortcuts` row is gone.

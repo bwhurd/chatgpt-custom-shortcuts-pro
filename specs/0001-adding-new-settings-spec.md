@@ -235,9 +235,11 @@ The model picker is a deliberate special case: `modelPickerKeyCodesLatest` and
 `modelPickerKeyCodesLegacy` are independent profile arrays, while
 `modelPickerKeyCodes` is a legacy compatibility field only.
 `modelPickerKeyCodeProfilesVersion` gates the one-time split. The dedicated
-profile initializer owns first-run/migration writes for these three keys; the
-generic popup default seeder must skip them so it cannot race and overwrite a
-completed migration.
+profile initializer exclusively owns first-run/migration writes for the Work
+array, Chat array, and version marker. The legacy shared array remains a
+compatibility/pristine-seed input and is not maintained by live edits. The
+generic popup default seeder must skip this profile state so it cannot race and
+overwrite a completed migration.
 
 ### Cloud sync
 

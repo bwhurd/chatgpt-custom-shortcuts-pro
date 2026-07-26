@@ -5,7 +5,7 @@ Use this when changing or repairing:
 - Drive save or restore
 - local settings export or import
 - allowlisting of synced settings
-- `modelNames` handling across local storage, exports, and Drive
+- scraped model-catalog/name snapshot handling across local storage, exports, and Drive
 
 This is the durable data-flow reference. Keep live task sequencing in `plans/` when a Cloud Sync change needs a plan; do not use this file as a backlog.
 
@@ -48,7 +48,7 @@ Popup path:
 Important data rules:
 - `loadLocalSettings()` reads current local settings, prefers `optionsStorage.getAll()` when available, then filters through `pickOptions()`
 - `pickOptions()` uses `OPTIONS_DEFAULTS` as the allowlist
-- `modelNames` is excluded from the payload
+- every scraped `modelCatalog*` / `modelNames*` snapshot and timestamp is excluded from the payload
 - Drive target is `appDataFolder/extension_settings.json`
 - cached Drive file id key: `csp_cloud_file_id_v1`
 
@@ -61,7 +61,7 @@ Popup path:
 
 Important data rules:
 - downloaded Drive JSON is filtered back through the same known-key allowlist
-- `modelNames` is excluded again on restore
+- every scraped model-catalog/name snapshot and timestamp is excluded again on restore
 - `saveLocalSettings()` writes only filtered keys back to sync storage
 - `rehydrateSettingsUI()` refreshes popup state, shortcut inputs, and both independent model-picker profile arrays
 
@@ -83,7 +83,7 @@ Important data rules:
 - every shortcut is normalized through `effectiveShortcutCode()`
 - `modelPickerKeyCodesLatest` and `modelPickerKeyCodesLegacy` are normalized independently to the full picker slot count
 - the legacy `modelPickerKeyCodes` field seeds both profiles only for old imports; it is not live shared state
-- `modelNames` is explicitly removed
+- every scraped model-catalog/name snapshot and timestamp is explicitly removed
 - file shape is `{ __meta, data }`
 
 ### Import
@@ -94,29 +94,31 @@ Popup path:
 
 Important data rules:
 - parsed JSON uses `data` when present
-- `modelNames` is dropped before merge
+- every scraped model-catalog/name snapshot and timestamp is dropped before merge
 - imported keys are filtered against the same popup allowlist
 - shortcut values are normalized back to `KeyboardEvent.code` / NBSP
+- each 15-slot model-picker shortcut profile is normalized independently; the same canonical key may appear once in Chat and once in Work, while only later duplicates inside the same profile are cleared
+- nonduplicate customized and currently hidden slots are preserved
 - imported values merge over the current sync snapshot before save
 - popup UI is rehydrated after save
 
-## `modelNames` invariant
+## Scraped model-state invariant
 
-`modelNames` is intentionally local/scraped state, not a portable user setting.
+The generic and profile-specific `modelCatalog*` / `modelNames*` snapshots and their timestamps are local scraped state, not portable user settings.
 
 That means:
-- do not export it
-- do not import it
-- do not upload it to Drive
-- do not restore it from Drive
+- do not export them
+- do not import them
+- do not upload them to Drive
+- do not restore them from Drive
 
 Current sources of truth:
 - `options-storage.js` seeds defaults
 - `shared/model-picker-labels.js` defines label fallbacks and slot count
 - `content.js` can scrape fresh model labels from ChatGPT into sync storage
-- `popup.js` hydrates visible model labels from local storage / shared defaults
+- `popup.js` hydrates visible model labels from runtime storage / shared defaults
 
-If model labels look wrong after restore, do not try to “fix” it by syncing `modelNames`. Fix the local hydration or scraping path instead.
+If model labels look wrong after restore, do not try to “fix” them by syncing scraped snapshots. Fix the local hydration or refresh path instead.
 
 ## What must stay aligned
 
@@ -155,6 +157,7 @@ Usually means one of:
 - value was not normalized to `KeyboardEvent.code`
 - cleared values were not preserved as NBSP
 - one or both model-picker profile arrays were not padded back to the expected slot count
+- duplicate cleanup was applied across Chat and Work instead of independently within each profile
 - a restore treated the legacy shared field as live state instead of a one-time compatibility input
 
 ## Repair checklist
@@ -163,5 +166,5 @@ When this subsystem breaks:
 1. verify the key is in `OPTIONS_DEFAULTS`
 2. verify popup defaults / allowlisting include it
 3. verify Drive paths still filter through known keys only
-4. verify `modelNames` is still excluded
+4. verify every scraped `modelCatalog*` / `modelNames*` snapshot and timestamp is still excluded
 5. verify popup rehydration mirrors imported/restored values back into controls

@@ -65,10 +65,9 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'modelNames',
-    reason: 'Model catalog data is out of scope for popup wiring checks, but export/default coverage should remain visible.',
+    reason: 'Scraped model catalog data is nonportable and intentionally absent from export fixtures.',
     checks: {
       optionsDefault: true,
-      exportedFixture: true,
     },
   },
   {

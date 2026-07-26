@@ -49,11 +49,12 @@ The model picker has two separate but related state shapes:
 - `modelPickerKeyCodeProfilesVersion`
   - gates the one-time shared-array split; normal popup hydration and catalog refresh never rerun it
 - `modelCatalogLatest` / `modelNamesLatest`
-  - popup snapshot updated only by the current three-submenu pill scraper
+  - Work snapshot; an explicit Work scrape writes here regardless of which ordered scraper succeeds
 - `modelCatalogLegacy` / `modelNamesLegacy`
-  - popup snapshot updated only by the older integrated/two-level or Configure fallback scraper
+  - Chat snapshot; an explicit Chat scrape writes here regardless of which ordered scraper succeeds
 - `modelCatalog` / `modelNames`
-  - current-page compatibility keys used by content-script shortcut execution; each successful scrape still updates them
+  - current-page compatibility keys used by content-script shortcut execution; dual refresh leaves them aligned with the restored initial mode
+  - menu-shape inference is compatibility fallback only when no explicit Chat/Work destination is supplied
 - `modelCatalogSelectedProfile`
   - sync-backed popup view preference storing internal `legacy` (Chat) or `latest` (Work)
   - defaults to Chat when absent; changing it never mutates either catalog or launches a scrape
@@ -72,7 +73,8 @@ Important invariant:
 - the popup and overlay read the requested profile array directly at each action's persisted `slot`
 - edits, clears, and resets write only the selected profile; they never modify the other profile
 - pristine effort-row positions use `F1` through `F5`; pristine model and non-reset Model Toggles positions use sequential digits, while Reset uses `Digit0`
-- the Work profile renders `Toggle Speed` and `Reset to default` in a third `Model Toggles` group; the Chat profile does not render those two Work-only actions
+- both profiles render shared `shortcutKeyToggleChatWork` as the first item in a third `Model Toggles` group; it is a normal shortcut setting, not an entry in either model-picker array
+- the Work profile additionally renders `Toggle Speed` and `Reset to default`; Chat renders only the shared Chat/Work toggle in that group
 - every shipped locale supplies translated `Work Models` and `Chat Models` labels of at most 15 Unicode characters
 
 ## Popup behavior
@@ -82,10 +84,10 @@ Important invariant:
 - saving canonical codes
 - duplicate modal behavior
 - segmented Alt vs Control model-hotkey mode
-- segmented Latest vs Legacy catalog view mode
+- segmented Chat Models vs Work Models profile view
 - model grid rendering from shared metadata
 
-The two segmented selectors occupy the upper header line. The Effort label and model-grid top edge sit 18 px lower. Alt/Control wiring targets `#mp-model-switcher-modifier-selector`; it must never use the first generic `.p-segmented-controls`, because Latest/Legacy precedes it in the DOM.
+The Chat Models / Work Models selector appears first on the upper header line, followed by the Alt / Control selector. The Effort label and model-grid top edge sit 18 px lower. Alt/Control wiring targets `#mp-model-switcher-modifier-selector`; it must never use the first generic `.p-segmented-controls`. Internal storage identifiers remain `legacy` for Chat and `latest` for Work.
 
 The popup should not invent its own model-row grouping or label rules separate from `shared/model-picker-labels.js`.
 
@@ -101,6 +103,8 @@ The popup's manual model refresh is a two-surface operation:
 Mode selection must use the blank-chat two-radio structure and reciprocal checked state, not localized Chat/Work labels. A failure on one surface must not prevent the coordinator from attempting the other surface, and cleanup must run for success and failure.
 
 Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Popup hydration and profile-change events follow the same rule.
+
+`Toggle Chat / Work` uses the same native New Conversation helper as the configurable new-chat shortcut. On a nonblank conversation it starts a blank conversation, waits 500 ms for the native two-radio surface selector, then selects the unchecked radio. On an already blank conversation it toggles directly. Runtime detection uses structural radio order and reciprocal checked state, never localized labels.
 
 ## Shortcuts overlay parity
 
@@ -223,7 +227,7 @@ If duplicate prompts feel inconsistent, inspect the active modifier mode first.
 - Preserve duplicate-shortcut safeguards for add, edit, import, and restore paths unless the task explicitly changes duplicate-handling behavior.
 - A model edit checks only the selected profile plus same-modifier global shortcuts. A global shortcut edit checks both profiles because that command is available in either mode.
 - The same canonical code may appear once in Chat and once in Work. Matching defaults are allowed; cross-profile reuse must not trigger a duplicate prompt or clear either assignment.
-- Within one profile, assigning an already-used canonical code transfers ownership atomically: clear the old owner, then write the exact requested slot. Never renumber, autofill, mirror, or reorder other assignments.
+- Within one profile, assigning an already-used canonical code transfers ownership deterministically as one user edit: clear the old owner, then write the exact requested slot. Never renumber, autofill, mirror, or reorder other assignments.
 - Explicit import/restore and the one-time v0-to-v1 migration may clear a later canonical duplicate within a profile. They must preserve all nonduplicate customizations, including values in slots not present in the current catalog.
 - Catalog scrape, catalog hydration, popup open, and profile switching never repair or reseed shortcut assignments.
 

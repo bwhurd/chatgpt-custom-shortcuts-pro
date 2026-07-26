@@ -109,6 +109,49 @@ assert.equal(
   'a complete native utility row should win over an earlier hydrating candidate',
 );
 
+const standaloneGateStart = contentSource.indexOf('function shouldHoldStandaloneWorkBottomBar');
+const standaloneGateEnd = contentSource.indexOf('function createBottomBarController', standaloneGateStart);
+assert.ok(
+  standaloneGateStart >= 0 && standaloneGateEnd > standaloneGateStart,
+  'blank-Work standalone visibility gate should exist',
+);
+const standaloneGateContext = vm.createContext({
+  location: { pathname: '/' },
+  mode: '',
+  getNativeChatWorkSurfaceMode: () => standaloneGateContext.mode,
+});
+vm.runInContext(
+  `${contentSource.slice(standaloneGateStart, standaloneGateEnd)}
+globalThis.holdUnknownWithoutNativeRow = shouldHoldStandaloneWorkBottomBar(false);
+globalThis.mode = 'chat';
+globalThis.holdChatWithoutNativeRow = shouldHoldStandaloneWorkBottomBar(false);
+globalThis.mode = 'work';
+globalThis.holdWorkWithoutNativeRow = shouldHoldStandaloneWorkBottomBar(false);
+globalThis.holdWorkWithNativeRow = shouldHoldStandaloneWorkBottomBar(true);`,
+  standaloneGateContext,
+  { filename: 'topbar-blank-work-standalone-gate.js' },
+);
+assert.equal(
+  standaloneGateContext.holdUnknownWithoutNativeRow,
+  true,
+  'an unresolved blank-chat mode should stay pending during cold hydration',
+);
+assert.equal(
+  standaloneGateContext.holdChatWithoutNativeRow,
+  false,
+  'blank Chat may use the standalone fallback when no native utility row exists',
+);
+assert.equal(
+  standaloneGateContext.holdWorkWithoutNativeRow,
+  true,
+  'blank Work should keep a standalone fallback pending until the native utility row appears',
+);
+assert.equal(
+  standaloneGateContext.holdWorkWithNativeRow,
+  false,
+  'blank Work should reveal normally once the native utility row is available',
+);
+
 assert.doesNotMatch(
   contentSource.slice(helperStart, helperEnd),
   /Choose project|Plugins/i,
@@ -190,6 +233,16 @@ assert.match(
   controllerSource,
   /function scheduleReconcileAfterSuppression\(\)[\s\S]*window\.setTimeout\([\s\S]*scheduleReconcile\('mutation:relevant_during_suppression'\)/,
   'suppressed relevant mutations should schedule one bounded post-suppression reconcile',
+);
+assert.match(
+  controllerSource,
+  /const holdStandaloneWorkBar = shouldHoldStandaloneWorkBottomBar\(state\.usesNativeUtilityRow\)[\s\S]*state\.revealed = false[\s\S]*root\.dataset\.pending = 'true'/,
+  'an already-revealed SPA shell should return to pending instead of flashing standalone on blank Work',
+);
+assert.match(
+  controllerSource,
+  /function getRevealDecision[\s\S]*shouldHoldStandaloneWorkBottomBar\(state\.usesNativeUtilityRow\)[\s\S]*shouldReveal:\s*false/,
+  'the initial reveal decision should wait for blank Work native-row readiness',
 );
 assert.doesNotMatch(
   controllerSource,

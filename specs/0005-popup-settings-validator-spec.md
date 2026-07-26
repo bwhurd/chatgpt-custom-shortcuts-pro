@@ -289,14 +289,17 @@ Examples include:
 - `modelPickerKeyCodes`
 - `modelPickerKeyCodesLatest` / `modelPickerKeyCodesLegacy`
 - `modelPickerKeyCodeProfilesVersion`
-- `modelNames`
+- `modelNames` as options-default/nonportable scraped inventory; it is intentionally absent from the exported fixture
 - deprecated legacy shortcut keys still preserved in export/default data
 
 For each supplemental key, keep the rule explicit about which surfaces are required, such as:
 - `OPTIONS_DEFAULTS`
 - exported fixture presence
+- intentional exported-fixture absence for local-only scraped state
 - schema deprecation membership
 - schema exclude-defaults membership
+
+Keep portable-backup filtering itself covered by the focused model-catalog backup fixture. The settings-wiring validator should describe the ownership contract, not require scraped runtime snapshots in `tests/fixtures/settings.json`.
 
 ## Output contract
 

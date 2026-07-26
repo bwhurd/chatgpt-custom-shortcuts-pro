@@ -79,18 +79,6 @@
     "modelPickerKeyCodes": ["Digit0", "Digit1", "KeyM", "", "", "", "KeyO", "Digit4", "Digit3", ""],
     "modelPickerKeyCodesLatest": ["F1", "F2", "", "Digit1", "", "", "", "F3", "Digit2", "Digit3", "Digit4", "F4", "F5", "Digit6", "Digit0"],
     "modelPickerKeyCodesLegacy": ["F1", "F2", "", "Digit1", "", "", "Digit4", "F3", "Digit2", "Digit3", "", "", "", "", ""],
-    "modelPickerKeyCodeProfilesVersion": 1,
-    "modelNames": [
-      "GPT-5 Auto",
-      "GPT-5 Instant",
-      "GPT-5 mini",
-      "GPT-5 Thinking",
-      "GPT-5 Pro",
-      "→",
-      "4o",
-      "4.1",
-      "o3",
-      "o4-mini"
-    ]
+    "modelPickerKeyCodeProfilesVersion": 1
   }
 }

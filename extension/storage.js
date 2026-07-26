@@ -5,8 +5,18 @@
   const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
   const OPTION_KEYS = new Set(Object.keys(globalThis.OPTIONS_DEFAULTS || {}));
-  // Keep modelNames local-only; exclude from Drive payloads/restores.
-  const OPTION_KEYS_EXCLUDE = new Set(['modelNames']);
+  // Scraped model state belongs to the current ChatGPT account/session.
+  const OPTION_KEYS_EXCLUDE = new Set([
+    'modelCatalog',
+    'modelCatalogLatest',
+    'modelCatalogLegacy',
+    'modelNames',
+    'modelNamesAt',
+    'modelNamesLatest',
+    'modelNamesLatestAt',
+    'modelNamesLegacy',
+    'modelNamesLegacyAt',
+  ]);
   const pickOptions = (obj = {}) => {
     const out = {};
     for (const k of OPTION_KEYS) {

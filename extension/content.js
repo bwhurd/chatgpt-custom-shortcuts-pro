@@ -7618,6 +7618,16 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     return hydratingRow;
   }
 
+  function shouldHoldStandaloneWorkBottomBar(usesNativeUtilityRow) {
+    if (usesNativeUtilityRow) return false;
+    if (location.pathname !== '/' && location.pathname !== '/chat') return false;
+    const mode =
+      typeof getNativeChatWorkSurfaceMode === 'function'
+        ? getNativeChatWorkSurfaceMode()
+        : '';
+    return mode !== 'chat';
+  }
+
   function createBottomBarController() {
     const state = {
       started: false,
@@ -7954,6 +7964,13 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       const nativeUtilityRow = findNativeComposerUtilityRow(snapshot);
       state.usesNativeUtilityRow = nativeUtilityRow instanceof HTMLElement;
       root.dataset.layout = state.usesNativeUtilityRow ? 'native-utility-row' : 'standalone';
+      const holdStandaloneWorkBar = shouldHoldStandaloneWorkBottomBar(state.usesNativeUtilityRow);
+      if (holdStandaloneWorkBar) {
+        state.revealed = false;
+        root.style.visibility = 'hidden';
+        root.dataset.pending = 'true';
+        applyReadyState(false);
+      }
 
       state.lane = ensureSlot('bottomBarLane', SHELL_SLOT_STYLES.lane);
       state.row = ensureSlot('bottomBarRow', SHELL_SLOT_STYLES.row);
@@ -8084,6 +8101,14 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     }
 
     function getRevealDecision(nextModelButton) {
+      if (shouldHoldStandaloneWorkBottomBar(state.usesNativeUtilityRow)) {
+        clearTimeout(state.revealTimer);
+        return {
+          shouldReveal: false,
+          reason: 'waiting_for_native_utility_row',
+        };
+      }
+
       const hasPrimaryControl = !!nextModelButton || !!state.modelButton;
       const waitedMs = performance.now() - state.shellAttachedAt;
       const waitedLongEnough = waitedMs >= 250;
@@ -12531,18 +12556,19 @@ form.w-full[data-type="unified-composer"] {
 
       const refreshChatWorkModelCatalogsOnce = async ({ hideUi = true } = {}) => {
         const profiles = {};
-        let initialMode = '';
+        let initialMode = window.getNativeChatWorkSurfaceMode?.() || '';
 
         window.triggerNativeNewConversationButton?.();
         await sleepAsync(500);
 
         const radios = await window.waitForNativeChatWorkSurfaceRadios?.(4000);
-        initialMode = window.getNativeChatWorkSurfaceMode?.(radios) || '';
-        if (!initialMode) {
+        const blankMode = window.getNativeChatWorkSurfaceMode?.(radios) || '';
+        if (!initialMode) initialMode = blankMode;
+        if (!blankMode) {
           return {
             ok: false,
             error: 'CHAT_WORK_SELECTOR_NOT_FOUND',
-            initialMode: '',
+            initialMode,
             profiles,
           };
         }

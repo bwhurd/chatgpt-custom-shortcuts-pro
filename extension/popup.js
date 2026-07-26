@@ -203,8 +203,7 @@ const buildDefaultModelPickerCodes = ({
   }
   return out;
 };
-const AUTO_MANAGED_SYNC_KEYS = new Set([
-  'activeModelConfigId',
+const MODEL_CATALOG_SCRAPE_STATE_KEYS = new Set([
   'modelCatalog',
   'modelCatalogLatest',
   'modelCatalogLegacy',
@@ -214,6 +213,10 @@ const AUTO_MANAGED_SYNC_KEYS = new Set([
   'modelNamesLatestAt',
   'modelNamesLegacy',
   'modelNamesLegacyAt',
+]);
+const AUTO_MANAGED_SYNC_KEYS = new Set([
+  'activeModelConfigId',
+  ...MODEL_CATALOG_SCRAPE_STATE_KEYS,
   'modelCatalogRefreshPromptDay',
   'modelCatalogRefreshPromptWeek',
   MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
@@ -244,26 +247,6 @@ const setActiveModelConfigIdCache = (value, source = 'storage') => {
     new CustomEvent('modelPickerActiveConfigChanged', { detail: { activeModelConfigId: next, source } }),
   );
   return next;
-};
-const getCurrentModelActionSlotIndices = (profile = getSelectedModelCatalogProfile()) => {
-  const normalizedProfile = normalizeModelCatalogProfile(profile);
-  const groups = getPopupModelPresentationGroups(
-    getVisualActiveModelConfigId(),
-    window.__modelNamesProfiles?.[normalizedProfile] ||
-      getDefaultModelNamesForProfile(normalizedProfile),
-    window.__modelCatalogProfiles?.[normalizedProfile] ||
-      getDefaultModelCatalogForProfile(normalizedProfile),
-  );
-  return Array.from(
-    new Set(
-      groups
-        .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
-        .map((action) => Number(action?.slot))
-        .filter(
-          (slot) => Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS,
-        ),
-    ),
-  );
 };
 const normalizeModelPickerCodesForComparison = (codes) => {
   const out = Array.isArray(codes) ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
@@ -620,18 +603,36 @@ const getModelCatalogScrapeState = () => String(window.__modelCatalogScrapeState
 const isModelCatalogScrapeLoading = () => getModelCatalogScrapeState() === 'loading';
 const isModelCatalogNoSwitcherVisible = () => getModelCatalogScrapeState() === 'no-switcher';
 const isModelCatalogRefreshPromptVisible = () => !!window.__modelCatalogRefreshPromptVisible;
+const hasSuccessfulModelCatalogProfile = (result) =>
+  Object.values(result?.profiles && typeof result.profiles === 'object' ? result.profiles : {}).some(
+    (profileResult) => profileResult?.ok === true,
+  );
 const isModelCatalogNoSwitcherResult = (result) =>
   !!result &&
+  !hasSuccessfulModelCatalogProfile(result) &&
   (result.noModelSwitcher === true ||
     result.error === MODEL_CATALOG_NO_SWITCHER_ERROR);
 const isDeliveredModelCatalogUnavailableResult = (result) => {
   if (!result?.fromChatGptTab) return false;
+  if (hasSuccessfulModelCatalogProfile(result)) return false;
   return [
     'MODEL_SUBMENU_NOT_FOUND',
     'MODEL_SUBMENU_OPTIONS_NOT_FOUND',
     'MODEL_OPTIONS_UNRESOLVED',
     'CONFIGURE_ITEM_NOT_FOUND',
   ].includes(String(result.error || '').trim());
+};
+const getModelCatalogRefreshOutcome = (result) => {
+  if (
+    isModelCatalogNoSwitcherResult(result) ||
+    isDeliveredModelCatalogUnavailableResult(result)
+  ) {
+    return 'no-switcher';
+  }
+  if (hasSuccessfulModelCatalogProfile(result)) {
+    return result?.ok ? 'ready' : 'partial';
+  }
+  return result?.ok ? 'ready' : 'failed';
 };
 const setModelCatalogScrapeState = (value, source = 'popup') => {
   const next = ['loading', 'ready', 'failed', 'no-switcher'].includes(String(value || '').trim())
@@ -1330,6 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
             result?.profiles && typeof result.profiles === 'object'
               ? result.profiles
               : {};
+          const hasScrapedProfiles = Object.keys(scrapedProfiles).length > 0;
           [
             ['chat', MODEL_CATALOG_PROFILE_LEGACY],
             ['work', MODEL_CATALOG_PROFILE_LATEST],
@@ -1368,16 +1370,21 @@ document.addEventListener('DOMContentLoaded', () => {
           if (typeof result.activeModelConfigId === 'string') {
             setActiveModelConfigIdCache(result.activeModelConfigId, 'popup:catalog-scrape');
           }
-          const scrapedProfile = getModelCatalogProfileForCatalog(result.modelCatalog);
-          if (result.modelCatalog) {
-            setModelCatalogCache(result.modelCatalog, 'popup:catalog-scrape', scrapedProfile);
-          }
-          if (Array.isArray(result.modelNames) && typeof window.__setPopupModelNames === 'function') {
-            window.__setPopupModelNames(
-              result.modelNames,
-              'popup:catalog-scrape',
-              scrapedProfile,
-            );
+          if (!hasScrapedProfiles) {
+            const scrapedProfile = getModelCatalogProfileForCatalog(result.modelCatalog);
+            if (result.modelCatalog) {
+              setModelCatalogCache(result.modelCatalog, 'popup:catalog-scrape', scrapedProfile);
+            }
+            if (
+              Array.isArray(result.modelNames) &&
+              typeof window.__setPopupModelNames === 'function'
+            ) {
+              window.__setPopupModelNames(
+                result.modelNames,
+                'popup:catalog-scrape',
+                scrapedProfile,
+              );
+            }
           }
           setModelCatalogScrapeState('ready', 'popup:catalog-scrape:ready');
           return result;
@@ -2850,21 +2857,12 @@ document.addEventListener('DOMContentLoaded', () => {
     modelPickerKeyCodesLatest: DEFAULT_MODEL_PICKER_KEY_CODES_LATEST.slice(),
     modelPickerKeyCodesLegacy: DEFAULT_MODEL_PICKER_KEY_CODES_LEGACY.slice(),
 
-    // Timestamp for scraped model names
-    modelNamesAt: '',
   };
   const DEFAULT_PRESET_DATA = (() => {
     const schema = window.CSP_SETTINGS_SCHEMA || {};
     const excludedKeys = new Set([
       // Keep current behavior: popup doesn't seed these by default.
-      'modelNames',
-      'modelCatalog',
-      'modelCatalogLatest',
-      'modelNamesLatest',
-      'modelNamesLatestAt',
-      'modelCatalogLegacy',
-      'modelNamesLegacy',
-      'modelNamesLegacyAt',
+      ...MODEL_CATALOG_SCRAPE_STATE_KEYS,
       'hideArrowButtonsCheckbox',
       'hideCornerButtonsCheckbox',
       ...(Array.isArray(schema?.excludeDefaultsKeys) ? schema.excludeDefaultsKeys : []),
@@ -4135,8 +4133,10 @@ document.addEventListener('DOMContentLoaded', () => {
         out[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
           MODEL_PICKER_KEY_CODE_PROFILES_VERSION;
 
-        // Intentionally exclude modelNames from exports; keep them local to this profile.
-        delete out.modelNames;
+        // Scraped catalog snapshots belong to the current ChatGPT account/session.
+        MODEL_CATALOG_SCRAPE_STATE_KEYS.forEach((key) => {
+          delete out[key];
+        });
 
         const payload = {
           __meta: {
@@ -4164,8 +4164,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function importSettingsObj(src) {
-      // modelNames stay local; ignore any provided in the file.
-      if (src && typeof src === 'object') delete src.modelNames;
+      // Scraped catalog snapshots are nonportable; ignore any provided in older files.
+      if (src && typeof src === 'object') {
+        MODEL_CATALOG_SCRAPE_STATE_KEYS.forEach((key) => {
+          delete src[key];
+        });
+      }
 
       const keySet = getExportKeySet();
       const next = {};
@@ -5175,12 +5179,19 @@ enableEditableOpacity(
     setModelCatalogRefreshPromptVisible(false, `${source}:hide-prompt`);
     renderAll({ allowPendingRebuild: true });
     const result = await startScrape();
-    if (isModelCatalogNoSwitcherResult(result) || isDeliveredModelCatalogUnavailableResult(result)) {
+    const outcome = getModelCatalogRefreshOutcome(result);
+    if (outcome === 'no-switcher') {
       setModelCatalogRefreshPromptVisible(false, `${source}:no-switcher`);
       renderAll({ allowPendingRebuild: true });
       return result;
     }
-    if (!result?.ok) {
+    if (outcome === 'partial') {
+      setModelCatalogRefreshPromptVisible(false, `${source}:partial`);
+      setModelCatalogScrapeState('ready', `${source}:partial`);
+      renderAll({ allowPendingRebuild: true });
+      return result;
+    }
+    if (outcome === 'failed') {
       setModelCatalogRefreshPromptVisible(true, `${source}:retry-prompt`);
       renderAll({ allowPendingRebuild: true });
       const msg =

@@ -92,7 +92,7 @@ The runtime flow should:
 - verify that the page under capture is exactly the chosen fixture URL
 - stop cleanly if the loaded page does not match
 - wait for a web-backed assistant turn before scrape capture so `1h_AgentTurnWithButtons_SingleThread_SearchedTheWeb.txt` cannot race ahead of late-loaded citation DOM
-- trigger the extension-backed `CSP_SCRAPE_MODEL_CATALOG` refresh-model flow after fixture readiness and before collecting scrape artifacts or live probes, so model target metadata is based on the current ChatGPT model picker
+- trigger the extension-backed single-surface `CSP_SCRAPE_MODEL_CATALOG` flow after fixture readiness and before collecting scrape artifacts or live probes, so model target metadata is based on the fixed conversation fixture; popup refresh uses the separate dual-surface coordinator that starts a blank conversation and visits both Chat and Work
 - use the chosen fixture URL for the rest of that scrape run, including resets and optional live probes
 - treat the authenticated conversation fixture as required because it is short, has multiple threads, and includes one response with web search and one without
 
@@ -142,6 +142,8 @@ The first-pass `scrape-wide` inventory is:
 - `2l_Composer_AddFilesAndMore_More_Submenu.txt`
 - `2m_Header_ConversationOptions_Menu.txt`
 
+The current pill menu's main, Model, Effort, and Speed states are the primary required model-picker family. The `2e`-`2j` Configure-dialog files are compatibility/fallback captures only: capture them when that older route is reachable, but defer or alias them when ChatGPT does not expose Configure. Absence of Configure alone must not fail the scrape.
+
 `1c` is captured as the last scrape step after the rest of the dump family is already captured successfully. The Playwright runner should:
 - toggle the extension setting that enables `MoveTopBarToBottom`
 - wait for the page to restabilize
@@ -153,13 +155,12 @@ If Chrome is authenticated but the local unpacked extension is not loaded, the d
 
 For extension-backed setup, the runner should first discover the loaded extension id from the CDP service worker list, then fall back to the standard profile's `Default\Secure Preferences` entry for the local unpacked `extension/` path. Browser-level failures such as `ERR_BLOCKED_BY_CLIENT` should stay visible in the artifact/report reason so a blocked profile is distinguishable from a missing scrape selector.
 
-The model-refresh dump family should mirror the bounded `scrapeModelCatalogOnce` flow in `extension/content.js`:
+The model-refresh dump family should mirror the bounded primary pill flow in `extension/content.js`:
 - open the model switcher main menu
-- open the current model row's thinking-effort submenu
-- open the Pro row's thinking-effort submenu when it exists; Pro Standard/Extended shortcut metadata should use this current model-selector path, not the retired Configure-dialog thinking-effort listbox
-- open the `model-configure-modal` dialog from that menu
-- open the configure combobox listbox
-- capture the dialog state for each configure option the refresh flow iterates
+- capture the structurally controlled Model submenu
+- capture the structurally controlled Effort submenu
+- capture the structurally controlled Speed submenu
+- retain integrated/two-level and Configure-dialog captures only as ordered compatibility fallbacks when those surfaces are present
 
 Keep that implementation simple and exact. Prefer the same stable targets used by the refresh-model scrape path over adding another generic submenu abstraction.
 
