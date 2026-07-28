@@ -3643,6 +3643,32 @@ const clickElementLikeUser = (el) => {
     return true;
   }
 
+  function findStructuralSearchConversationButton(
+    root = document,
+    isVisible = isDirectActionVisible,
+  ) {
+    const closeSidebarButton = root.querySelector(
+      '#sidebar-header button[data-testid="close-sidebar-button"]',
+    );
+    const expandedSearchButton = closeSidebarButton?.previousElementSibling;
+    if (expandedSearchButton?.matches?.('button') && isVisible(expandedSearchButton)) {
+      return expandedSearchButton;
+    }
+
+    for (const containerSelector of ['#stage-sidebar-tiny-bar', '#stage-popover-sidebar']) {
+      const container = root.querySelector(containerSelector);
+      const newChatButton = container?.querySelector(
+        '[data-testid="create-new-chat-button"]',
+      );
+      const searchButton = newChatButton?.parentElement?.nextElementSibling?.querySelector(
+        'button[data-sidebar-item="true"]',
+      );
+      if (searchButton?.matches?.('button') && isVisible(searchButton)) return searchButton;
+    }
+
+    return null;
+  }
+
   function navigateToNewConversationFallback() {
     if (window.location.pathname === '/') return true;
     window.location.assign('/');
@@ -3673,6 +3699,9 @@ const clickElementLikeUser = (el) => {
     const direct = await waitForFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
     if (safeClick(direct)) return true;
 
+    const structural = findStructuralSearchConversationButton();
+    if (safeClick(structural)) return true;
+
     const spriteMatch = await waitForFirstVisibleElement([
       `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
     ]);
@@ -3699,22 +3728,10 @@ const clickElementLikeUser = (el) => {
   }
 
   function getNativeChatWorkSurfaceRadios() {
-    const groups = Array.from(document.querySelectorAll('header [role="group"]')).filter((group) =>
-      isDirectActionVisible(group),
-    );
-
-    for (const group of groups) {
-      const radios = Array.from(group.querySelectorAll('button[role="radio"][aria-checked]')).filter(
-        (radio) => isDirectActionVisible(radio),
-      );
-      if (radios.length !== 2) continue;
-      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'true').length !== 1) {
-        continue;
-      }
-      return radios;
-    }
-
-    return [];
+    const resolveSurfaceRadios = window.CSPModelPickerSelectors?.getNativeChatWorkSurfaceRadios;
+    return typeof resolveSurfaceRadios === 'function'
+      ? resolveSurfaceRadios(document, window)
+      : [];
   }
 
   function rememberNativeChatWorkSurfaceMode(mode, source = 'native') {
@@ -3830,6 +3847,9 @@ const clickElementLikeUser = (el) => {
       (el) => isDirectActionVisible(el),
     );
     if (safeClick(direct)) return true;
+
+    const structural = findStructuralSearchConversationButton();
+    if (safeClick(structural)) return true;
 
     const spriteMatch = Array.from(
       document.querySelectorAll(
@@ -7541,6 +7561,27 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     );
   }
 
+  function restoreInactiveConversationHeaderActions(
+    actions,
+    homeParent,
+    homeNextSibling,
+  ) {
+    if (
+      !(actions instanceof Element) ||
+      !actions.isConnected ||
+      hasActionableConversationHeaderControls(actions) ||
+      !(homeParent instanceof Element) ||
+      !homeParent.isConnected
+    ) {
+      return false;
+    }
+    if (actions.parentElement === homeParent) return true;
+
+    const anchor = homeNextSibling?.parentNode === homeParent ? homeNextSibling : null;
+    homeParent.insertBefore(actions, anchor);
+    return true;
+  }
+
   function findHeaderConversationActions() {
     const pageHeader = document.querySelector(SELECTORS.PAGE_HEADER);
 
@@ -7650,6 +7691,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       composerContainer: null,
       modelButton: null,
       headerActions: null,
+      headerActionsHomeParent: null,
+      headerActionsHomeNextSibling: null,
 
       revealed: false,
       shellAttachedAt: 0,
@@ -8042,6 +8085,35 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       return null;
     }
 
+    function rememberHeaderActionsHome(actions) {
+      if (!(actions instanceof Element) || actions.closest('#bottomBarContainer')) return;
+      const parent = actions.parentElement;
+      if (!(parent instanceof Element) || !parent.isConnected) return;
+
+      state.headerActionsHomeParent = parent;
+      state.headerActionsHomeNextSibling = actions.nextSibling;
+    }
+
+    function releaseInactiveHeaderActions() {
+      if (
+        !(state.headerActions instanceof Element) ||
+        hasActionableConversationHeaderControls(state.headerActions)
+      ) {
+        return;
+      }
+
+      suppressOwnMutations(300);
+      if (
+        restoreInactiveConversationHeaderActions(
+          state.headerActions,
+          state.headerActionsHomeParent,
+          state.headerActionsHomeNextSibling,
+        )
+      ) {
+        state.headerActions = null;
+      }
+    }
+
     function syncSlotContent(slot, node) {
       if (!(slot instanceof Element)) return null;
 
@@ -8279,6 +8351,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     function isRelevantMutation(mutation) {
       const target = mutation.target instanceof Element ? mutation.target : null;
 
+      if (target && elementTouchesTrackedNode(target, state.headerActions)) return true;
+
       if (target && !target.closest('#bottomBarContainer')) {
         if (
           target.closest(SELECTORS.PAGE_HEADER) ||
@@ -8356,9 +8430,12 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
           state.modelButton,
         );
 
+        releaseInactiveHeaderActions();
+        const discoveredHeaderActions = findHeaderConversationActions();
+        rememberHeaderActionsHome(discoveredHeaderActions);
         const nextHeaderActions = resolveMountedSlotNode(
           shell.right,
-          findHeaderConversationActions(),
+          discoveredHeaderActions,
           state.headerActions,
         );
 

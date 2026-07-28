@@ -32,6 +32,12 @@
     '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR = '[role="group"] > [role="menuitemradio"]';
   const PILL_RESET_MENU_ITEM_SELECTOR = '[role="menuitem"][class*="_ResetToDefault"]';
+  const CHAT_WORK_SURFACE_GROUP_SELECTORS = Object.freeze([
+    'header [role="radiogroup"]',
+    'header [role="group"]',
+  ]);
+  const CHAT_WORK_SURFACE_GROUP_SELECTOR = CHAT_WORK_SURFACE_GROUP_SELECTORS.join(', ');
+  const CHAT_WORK_SURFACE_RADIO_SELECTOR = 'button[role="radio"][aria-checked]';
 
   function normalizePillMenuLabel(value) {
     return String(value || '')
@@ -56,6 +62,19 @@
 
   function unique(values) {
     return [...new Set((values || []).filter(Boolean))];
+  }
+
+  function getChatWorkSurfaceToggleSelectors() {
+    return CHAT_WORK_SURFACE_GROUP_SELECTORS.map(
+      (groupSelector) => `${groupSelector} ${CHAT_WORK_SURFACE_RADIO_SELECTOR}`,
+    );
+  }
+
+  function getChatWorkSurfaceToggleMatchGroups() {
+    return [
+      ['role="radiogroup"', 'role="radio"', 'aria-checked='],
+      ['role="group"', 'role="radio"', 'aria-checked='],
+    ];
   }
 
   function getModelSwitcherButtonMatchGroups() {
@@ -129,6 +148,29 @@
     return Array.from(element.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0);
   }
 
+  function getNativeChatWorkSurfaceRadios(documentObj = root.document, windowObj = root) {
+    if (!documentObj?.querySelectorAll) return [];
+    const groups = Array.from(
+      documentObj.querySelectorAll(CHAT_WORK_SURFACE_GROUP_SELECTOR),
+    ).filter((group) => isUsablyVisibleElement(group, windowObj));
+
+    for (const group of groups) {
+      const radios = Array.from(group.querySelectorAll(CHAT_WORK_SURFACE_RADIO_SELECTOR)).filter(
+        (radio) => isUsablyVisibleElement(radio, windowObj),
+      );
+      if (radios.length !== 2) continue;
+      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'true').length !== 1) {
+        continue;
+      }
+      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'false').length !== 1) {
+        continue;
+      }
+      return radios;
+    }
+
+    return [];
+  }
+
   function getModelMenuButton(documentObj = root.document, windowObj = root) {
     if (!documentObj?.querySelectorAll) return null;
     const candidates = Array.from(documentObj.querySelectorAll(MODEL_MENU_BUTTON_SELECTOR));
@@ -179,10 +221,15 @@
     MODEL_THINKING_EFFORT_ACTION_SELECTOR,
     MODEL_THINKING_EFFORT_OPTION_SELECTOR,
     PILL_RESET_MENU_ITEM_SELECTOR,
+    CHAT_WORK_SURFACE_GROUP_SELECTORS,
+    CHAT_WORK_SURFACE_GROUP_SELECTOR,
+    CHAT_WORK_SURFACE_RADIO_SELECTOR,
     normalizePillMenuLabel,
     isLikelyPillModelLabel,
     classifyPillSubmenuLabels,
     unique,
+    getChatWorkSurfaceToggleSelectors,
+    getChatWorkSurfaceToggleMatchGroups,
     getModelSwitcherButtonMatchGroups,
     getModelSwitcherMenuMatchGroups,
     getConfigureDialogMatchGroups,
@@ -195,6 +242,7 @@
     getModelThinkingEffortStandardMatchGroups,
     getModelThinkingEffortExtendedMatchGroups,
     isUsablyVisibleElement,
+    getNativeChatWorkSurfaceRadios,
     getModelMenuButton,
     getOpenModelMenuCandidates,
   });

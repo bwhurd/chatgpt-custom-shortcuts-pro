@@ -181,8 +181,12 @@ assert.ok(
 );
 
 class FakeHeaderActionsElement {
-  constructor(hasInteractiveControl) {
+  constructor(hasInteractiveControl, { connected = true } = {}) {
     this.hasInteractiveControl = hasInteractiveControl;
+    this.isConnected = connected;
+    this.parentElement = null;
+    this.parentNode = null;
+    this.children = [];
   }
 
   querySelector(selector) {
@@ -193,17 +197,59 @@ class FakeHeaderActionsElement {
     );
     return this.hasInteractiveControl ? {} : null;
   }
+
+  insertBefore(child, anchor) {
+    if (child.parentElement) {
+      child.parentElement.children = child.parentElement.children.filter((item) => item !== child);
+    }
+    const anchorIndex = anchor ? this.children.indexOf(anchor) : -1;
+    if (anchorIndex >= 0) {
+      this.children.splice(anchorIndex, 0, child);
+    } else {
+      this.children.push(child);
+    }
+    child.parentElement = this;
+    child.parentNode = this;
+  }
 }
+
+const nativeActionsHome = new FakeHeaderActionsElement(false);
+const nativeActionsAnchor = new FakeHeaderActionsElement(false);
+nativeActionsHome.children = [nativeActionsAnchor];
+nativeActionsAnchor.parentElement = nativeActionsHome;
+nativeActionsAnchor.parentNode = nativeActionsHome;
+const bottomRightSlot = new FakeHeaderActionsElement(false);
+const emptyMovedActions = new FakeHeaderActionsElement(false);
+bottomRightSlot.children = [emptyMovedActions];
+emptyMovedActions.parentElement = bottomRightSlot;
+emptyMovedActions.parentNode = bottomRightSlot;
+const populatedMovedActions = new FakeHeaderActionsElement(true);
+populatedMovedActions.parentElement = bottomRightSlot;
+populatedMovedActions.parentNode = bottomRightSlot;
 
 const headerActionsContext = vm.createContext({
   Element: FakeHeaderActionsElement,
   emptyActions: new FakeHeaderActionsElement(false),
   populatedActions: new FakeHeaderActionsElement(true),
+  nativeActionsHome,
+  nativeActionsAnchor,
+  emptyMovedActions,
+  populatedMovedActions,
 });
 vm.runInContext(
   `${contentSource.slice(headerActionsHelperStart, headerActionsHelperEnd)}
 globalThis.emptyReady = hasActionableConversationHeaderControls(emptyActions);
-globalThis.populatedReady = hasActionableConversationHeaderControls(populatedActions);`,
+globalThis.populatedReady = hasActionableConversationHeaderControls(populatedActions);
+globalThis.emptyRestored = restoreInactiveConversationHeaderActions(
+  emptyMovedActions,
+  nativeActionsHome,
+  nativeActionsAnchor,
+);
+globalThis.populatedRestored = restoreInactiveConversationHeaderActions(
+  populatedMovedActions,
+  nativeActionsHome,
+  nativeActionsAnchor,
+);`,
   headerActionsContext,
   { filename: 'topbar-header-actions-helper.js' },
 );
@@ -216,6 +262,26 @@ assert.equal(
   headerActionsContext.populatedReady,
   true,
   'conversation header actions should become movable once native controls materialize',
+);
+assert.equal(
+  headerActionsContext.emptyRestored,
+  true,
+  'an emptied Chat-only actions container should return to its native header parent in Work',
+);
+assert.equal(
+  emptyMovedActions.parentElement,
+  nativeActionsHome,
+  'the native actions placeholder should be restored before its original sibling anchor',
+);
+assert.equal(
+  nativeActionsHome.children[0],
+  emptyMovedActions,
+  'native header ordering should be preserved when the placeholder is restored',
+);
+assert.equal(
+  headerActionsContext.populatedRestored,
+  false,
+  'actionable Chat controls should remain eligible for the bottom-right slot',
 );
 
 const controllerStart = contentSource.indexOf('function createBottomBarController');
@@ -243,6 +309,20 @@ assert.match(
   controllerSource,
   /function getRevealDecision[\s\S]*shouldHoldStandaloneWorkBottomBar\(state\.usesNativeUtilityRow\)[\s\S]*shouldReveal:\s*false/,
   'the initial reveal decision should wait for blank Work native-row readiness',
+);
+const relevantMutationStart = controllerSource.indexOf('function isRelevantMutation');
+const trackedHeaderMutationIndex = controllerSource.indexOf(
+  'elementTouchesTrackedNode(target, state.headerActions)',
+  relevantMutationStart,
+);
+const outsideBottomBarGuardIndex = controllerSource.indexOf(
+  "target && !target.closest('#bottomBarContainer')",
+  relevantMutationStart,
+);
+assert.ok(
+  trackedHeaderMutationIndex >= 0 &&
+    outsideBottomBarGuardIndex > trackedHeaderMutationIndex,
+  'tracked header-action child changes should reconcile even while the native container is mounted in the bottom bar',
 );
 assert.doesNotMatch(
   controllerSource,

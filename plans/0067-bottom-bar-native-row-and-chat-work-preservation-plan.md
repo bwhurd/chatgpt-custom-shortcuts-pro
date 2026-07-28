@@ -6,6 +6,7 @@
 - [ ] Confirm the native Chat/Work selector keeps its normal header geometry and remains controlled only by ChatGPT.
 - [ ] Send the first Work message and verify the conversation actions move into the bottom-right slot without a page reload.
 - [ ] Switch to Chat and confirm the bottom-bar layout remains native and correctly aligned there.
+- [ ] After reloading the extension, verify blank Chat → Work returns the emptied conversation-actions container to its native header parent, then Work → Chat remounts the temporary/private-chat button in the bottom-right slot.
 
 ## Constraints
 

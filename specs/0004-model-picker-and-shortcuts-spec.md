@@ -148,6 +148,8 @@ Current direct-DOM pattern:
 - use a narrow storage migration when changing a shipped default key such as `KeyK` to `Comma`
 - do not leave temporary standalone IIFEs in parallel once the main shortcut path owns the action
 
+Search Chats no longer assumes `data-testid="search-conversation-button"` or a fixed sprite fragment. Its primary language-independent targets are the button immediately before `close-sidebar-button` in `#sidebar-header`, or the `data-sidebar-item` immediately after `create-new-chat-button` in the collapsed or narrow sidebar. The old test id, sprite match, and narrow-popover opening route remain ordered fallbacks.
+
 For dev-only runtime selector validation, the deterministic shortcut inventory should derive from:
 - `extension/shared/shortcut-action-metadata.js` for explicit shortcut validation metadata
 - `extension/shared/model-picker-selectors.js` for the model-picker opener selector contract shared with `content.js`

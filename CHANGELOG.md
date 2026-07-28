@@ -6,10 +6,15 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 07.28.2026
+- Fixed: Toggle Chat / Work and Chat model refresh work with ChatGPT's latest interface.
+
 #### 07.25.2026
 - Added: Separate Chat Models and Work Models shortcut tabs, including Toggle Chat / Work.
 - Fixed: Model refresh updates both Chat and Work, restores the previous mode, and preserves independent shortcut assignments.
 - Fixed: Send Top Bar To Bottom keeps blank Work controls in one native row from initial load.
+- Fixed: Temporary Chat returns after switching from Work back to Chat with Send Top Bar To Bottom enabled.
+- Fixed: Search Chats follows ChatGPT's current sidebar controls.
 
 #### 07.21.2026
 - Removed: Thinking Standard and Extended shortcuts because those options are no longer available.

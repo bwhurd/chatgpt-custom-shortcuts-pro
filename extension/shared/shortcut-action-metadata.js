@@ -169,6 +169,23 @@
           ['data-testid="Model-switCher-dropdown-button"'],
           ['__composer-pill', 'aria-haspopup="menu"', 'id="radix-'],
         ];
+  const chatWorkSurfaceToggleSelectors = Object.freeze(
+    unique(
+      typeof modelPickerSelectors.getChatWorkSurfaceToggleSelectors === 'function'
+        ? modelPickerSelectors.getChatWorkSurfaceToggleSelectors()
+        : [
+            'header [role="radiogroup"] button[role="radio"][aria-checked]',
+            'header [role="group"] button[role="radio"][aria-checked]',
+          ],
+    ),
+  );
+  const chatWorkSurfaceToggleMatchGroups =
+    typeof modelPickerSelectors.getChatWorkSurfaceToggleMatchGroups === 'function'
+      ? modelPickerSelectors.getChatWorkSurfaceToggleMatchGroups()
+      : [
+          ['role="radiogroup"', 'role="radio"', 'aria-checked='],
+          ['role="group"', 'role="radio"', 'aria-checked='],
+        ];
   const modelSwitcherMenuMatchGroups =
     typeof modelPickerSelectors.getModelSwitcherMenuMatchGroups === 'function'
       ? modelPickerSelectors.getModelSwitcherMenuMatchGroups()
@@ -316,20 +333,36 @@
     byTestId('create-new-chat-button', 'create-new-chat-button', {
       uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
     }),
-    bySelectorList(
-      'chat-work-surface-toggle',
-      ['header [role="group"] button[role="radio"][aria-checked]'],
-      {
-        identifier: 'header-two-radio-chat-surface-toggle',
-        matchGroups: [['role="group"', 'role="radio"', 'aria-checked=']],
-        uiStateRefs: ['topbar-bottom-disabled-header-area'],
-        notes:
-          'Blank-chat surface selector: one visible header group with exactly two button radios and one checked state; runtime matching does not depend on localized Chat/Work labels.',
-      },
-    ),
-    byTestId('search-conversation-button', 'search-conversation-button', {
-      matchGroups: [['data-testid="search-conversation-button"'], ['#ac6d36']],
-      uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
+    bySelectorList('chat-work-surface-toggle', chatWorkSurfaceToggleSelectors, {
+      identifier: 'header-two-radio-chat-surface-toggle',
+      matchGroups: chatWorkSurfaceToggleMatchGroups,
+      uiStateRefs: ['topbar-bottom-disabled-header-area'],
+      notes:
+        'Blank-chat surface selector: one visible header group or radiogroup with exactly two button radios and reciprocal checked state; runtime matching does not depend on localized Chat/Work labels.',
+    }),
+    byMenuChain('search-conversation-button', 'native-search-conversation-control', {
+      matchGroups: [
+        ['data-testid="search-conversation-button"'],
+        ['id="sidebar-header"', 'data-testid="close-sidebar-button"'],
+        [
+          'id="stage-sidebar-tiny-bar"',
+          'data-testid="create-new-chat-button"',
+          'data-sidebar-item="true"',
+        ],
+        [
+          'id="stage-popover-sidebar"',
+          'data-testid="create-new-chat-button"',
+          'data-sidebar-item="true"',
+        ],
+        ['#ac6d36'],
+      ],
+      uiStateRefs: [
+        'sidebar-collapsed-body',
+        'sidebar-expanded-body',
+        'narrow-header-sidebar-popover-control',
+      ],
+      notes:
+        'Search may be the control immediately before Close sidebar or the sidebar item immediately after New Chat; the old test id and sprite remain compatibility fallbacks.',
     }),
     byMenuChain('search-chats-dialog', 'role=dialog|placeholder=Search chats', {
       matchGroups: [['role="dialog"', 'placeholder="Search chats..."']],

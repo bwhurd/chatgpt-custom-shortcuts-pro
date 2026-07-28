@@ -34,7 +34,7 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /await releasePreparedModelConfigSession\(\);\s*if \(!getVisibleModelMenuButton\(\)\) return createNoModelSwitcherResult\('model-switcher-pill-missing'\);\s*const integratedResult = await scrapeIntegratedModelCatalogOnce\(\);/s,
+  /await releasePreparedModelConfigSession\(\);\s*if \(!getVisibleModelMenuButton\(\)\) return createNoModelSwitcherResult\('model-switcher-pill-missing'\);\s*const integratedResult = await scrapeIntegratedModelCatalogOnce\(\{\s*profile\s*\}\);/s,
   'content scrape should stop with the no-switcher result before trying the integrated scrape path',
 );
 assert.match(
