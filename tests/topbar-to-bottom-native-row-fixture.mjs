@@ -169,7 +169,7 @@ assert.doesNotMatch(
 );
 
 const headerActionsHelperStart = contentSource.indexOf(
-  'function hasActionableConversationHeaderControls',
+  'function hasRelocatableConversationHeaderControls',
 );
 const headerActionsHelperEnd = contentSource.indexOf(
   'function findHeaderConversationActions',
@@ -181,8 +181,8 @@ assert.ok(
 );
 
 class FakeHeaderActionsElement {
-  constructor(hasInteractiveControl, { connected = true } = {}) {
-    this.hasInteractiveControl = hasInteractiveControl;
+  constructor(controlKind = 'none', { connected = true } = {}) {
+    this.controlKind = controlKind;
     this.isConnected = connected;
     this.parentElement = null;
     this.parentNode = null;
@@ -192,10 +192,10 @@ class FakeHeaderActionsElement {
   querySelector(selector) {
     assert.equal(
       selector,
-      'button, a[href], [role="button"]',
-      'header readiness should use structural interactive controls',
+      'button[data-testid="share-chat-button"], button[data-testid="conversation-options-button"]',
+      'header relocation should use stable post-conversation controls',
     );
-    return this.hasInteractiveControl ? {} : null;
+    return this.controlKind === 'conversation' ? {} : null;
   }
 
   insertBefore(child, anchor) {
@@ -213,35 +213,50 @@ class FakeHeaderActionsElement {
   }
 }
 
-const nativeActionsHome = new FakeHeaderActionsElement(false);
-const nativeActionsAnchor = new FakeHeaderActionsElement(false);
+const nativeActionsHome = new FakeHeaderActionsElement();
+const nativeActionsAnchor = new FakeHeaderActionsElement();
 nativeActionsHome.children = [nativeActionsAnchor];
 nativeActionsAnchor.parentElement = nativeActionsHome;
 nativeActionsAnchor.parentNode = nativeActionsHome;
-const bottomRightSlot = new FakeHeaderActionsElement(false);
-const emptyMovedActions = new FakeHeaderActionsElement(false);
-bottomRightSlot.children = [emptyMovedActions];
+const bottomRightSlot = new FakeHeaderActionsElement();
+const emptyMovedActions = new FakeHeaderActionsElement();
+const preConversationMovedActions = new FakeHeaderActionsElement('pre-conversation');
+bottomRightSlot.children = [emptyMovedActions, preConversationMovedActions];
 emptyMovedActions.parentElement = bottomRightSlot;
 emptyMovedActions.parentNode = bottomRightSlot;
-const populatedMovedActions = new FakeHeaderActionsElement(true);
+preConversationMovedActions.parentElement = bottomRightSlot;
+preConversationMovedActions.parentNode = bottomRightSlot;
+const populatedMovedActions = new FakeHeaderActionsElement('conversation');
 populatedMovedActions.parentElement = bottomRightSlot;
 populatedMovedActions.parentNode = bottomRightSlot;
 
 const headerActionsContext = vm.createContext({
   Element: FakeHeaderActionsElement,
-  emptyActions: new FakeHeaderActionsElement(false),
-  populatedActions: new FakeHeaderActionsElement(true),
+  SELECTORS: {
+    CONVERSATION_HEADER_RELOCATION_CONTROLS:
+      'button[data-testid="share-chat-button"], button[data-testid="conversation-options-button"]',
+  },
+  emptyActions: new FakeHeaderActionsElement(),
+  preConversationActions: new FakeHeaderActionsElement('pre-conversation'),
+  populatedActions: new FakeHeaderActionsElement('conversation'),
   nativeActionsHome,
   nativeActionsAnchor,
   emptyMovedActions,
+  preConversationMovedActions,
   populatedMovedActions,
 });
 vm.runInContext(
   `${contentSource.slice(headerActionsHelperStart, headerActionsHelperEnd)}
-globalThis.emptyReady = hasActionableConversationHeaderControls(emptyActions);
-globalThis.populatedReady = hasActionableConversationHeaderControls(populatedActions);
+globalThis.emptyReady = hasRelocatableConversationHeaderControls(emptyActions);
+globalThis.preConversationReady = hasRelocatableConversationHeaderControls(preConversationActions);
+globalThis.populatedReady = hasRelocatableConversationHeaderControls(populatedActions);
 globalThis.emptyRestored = restoreInactiveConversationHeaderActions(
   emptyMovedActions,
+  nativeActionsHome,
+  nativeActionsAnchor,
+);
+globalThis.preConversationRestored = restoreInactiveConversationHeaderActions(
+  preConversationMovedActions,
   nativeActionsHome,
   nativeActionsAnchor,
 );
@@ -259,14 +274,29 @@ assert.equal(
   'the blank-chat empty header-actions placeholder must remain in the native header',
 );
 assert.equal(
+  headerActionsContext.preConversationReady,
+  false,
+  'temporary and group-chat controls must remain in the native header before a conversation exists',
+);
+assert.equal(
   headerActionsContext.populatedReady,
   true,
-  'conversation header actions should become movable once native controls materialize',
+  'conversation header actions should become movable once stable post-conversation controls materialize',
 );
 assert.equal(
   headerActionsContext.emptyRestored,
   true,
   'an emptied Chat-only actions container should return to its native header parent in Work',
+);
+assert.equal(
+  headerActionsContext.preConversationRestored,
+  true,
+  'pre-conversation controls should return to their native header parent',
+);
+assert.equal(
+  preConversationMovedActions.parentElement,
+  nativeActionsHome,
+  'pre-conversation controls should not remain mounted in the extension bottom bar',
 );
 assert.equal(
   emptyMovedActions.parentElement,
@@ -281,7 +311,128 @@ assert.equal(
 assert.equal(
   headerActionsContext.populatedRestored,
   false,
-  'actionable Chat controls should remain eligible for the bottom-right slot',
+  'stable post-conversation controls should remain eligible for the bottom-right slot',
+);
+
+class FakeMutationElement {
+  constructor(id = '') {
+    this.id = id;
+    this.parentElement = null;
+    this.children = [];
+  }
+
+  appendChild(child) {
+    if (child.parentElement) {
+      child.parentElement.children = child.parentElement.children.filter((item) => item !== child);
+    }
+    this.children.push(child);
+    child.parentElement = this;
+  }
+
+  closest(selector) {
+    if (selector !== '#bottomBarContainer') return null;
+    let current = this;
+    while (current) {
+      if (current.id === 'bottomBarContainer') return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  contains(node) {
+    let current = node;
+    while (current) {
+      if (current === this) return true;
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  matches() {
+    return false;
+  }
+
+  querySelector() {
+    return null;
+  }
+}
+
+const mutationHelpersStart = contentSource.indexOf('function nodeIsInsideBottomBar');
+const mutationHelpersEnd = contentSource.indexOf(
+  'function maybeStartNonCriticalHelpers',
+  mutationHelpersStart,
+);
+assert.ok(
+  mutationHelpersStart >= 0 && mutationHelpersEnd > mutationHelpersStart,
+  'bottom-bar mutation classifiers should exist',
+);
+
+const mutationRoot = new FakeMutationElement('bottomBarContainer');
+const mutationLeft = new FakeMutationElement('bottomBarLeft');
+const mutationRight = new FakeMutationElement('bottomBarRight');
+const trackedHeaderActions = new FakeMutationElement('conversation-header-actions');
+const shareButton = new FakeMutationElement();
+const optionsButton = new FakeMutationElement();
+const staticButton = new FakeMutationElement();
+mutationRoot.appendChild(mutationLeft);
+mutationRoot.appendChild(mutationRight);
+mutationRight.appendChild(trackedHeaderActions);
+trackedHeaderActions.appendChild(shareButton);
+trackedHeaderActions.appendChild(optionsButton);
+mutationLeft.appendChild(staticButton);
+
+const trackedHeaderMutation = {
+  target: trackedHeaderActions,
+  addedNodes: [shareButton, optionsButton],
+  removedNodes: [],
+};
+const extensionSlotMutation = {
+  target: mutationLeft,
+  addedNodes: [staticButton],
+  removedNodes: [],
+};
+const mutationContext = vm.createContext({
+  Element: FakeMutationElement,
+  RELEVANT_MUTATION_SELECTORS: [],
+  SELECTORS: {},
+  state: {
+    root: mutationRoot,
+    mountedAnchor: null,
+    composerContainer: null,
+    modelButton: null,
+    headerActions: trackedHeaderActions,
+  },
+  trackedHeaderMutation,
+  extensionSlotMutation,
+});
+vm.runInContext(
+  `${contentSource.slice(mutationHelpersStart, mutationHelpersEnd)}
+globalThis.trackedHeaderInternal = isInternalBottomBarMutation(trackedHeaderMutation);
+globalThis.trackedHeaderRelevant = isRelevantMutation(trackedHeaderMutation);
+globalThis.extensionSlotInternal = isInternalBottomBarMutation(extensionSlotMutation);
+globalThis.extensionSlotRelevant = isRelevantMutation(extensionSlotMutation);`,
+  mutationContext,
+  { filename: 'topbar-header-actions-mutation-helper.js' },
+);
+assert.equal(
+  mutationContext.trackedHeaderRelevant,
+  true,
+  'ChatGPT hydration inside the moved native actions container should remain relevant',
+);
+assert.equal(
+  mutationContext.trackedHeaderInternal,
+  false,
+  'ChatGPT hydration inside the moved native actions container must not be discarded as extension-internal',
+);
+assert.equal(
+  mutationContext.extensionSlotInternal,
+  true,
+  'purely extension-owned bottom-bar slot changes should remain internal',
+);
+assert.equal(
+  mutationContext.extensionSlotRelevant,
+  false,
+  'purely extension-owned bottom-bar slot changes should remain ignorable',
 );
 
 const controllerStart = contentSource.indexOf('function createBottomBarController');

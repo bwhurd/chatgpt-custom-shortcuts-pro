@@ -8,6 +8,7 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 #### 07.28.2026
 - Fixed: Toggle Chat / Work and Chat model refresh work with ChatGPT's latest interface.
+- Fixed: Fade Slim Sidebar reveals reliably without flashing over ChatGPT's latest sidebar icons.
 
 #### 07.25.2026
 - Added: Separate Chat Models and Work Models shortcut tabs, including Toggle Chat / Work.

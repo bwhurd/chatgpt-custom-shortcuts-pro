@@ -6395,12 +6395,11 @@ const clickElementLikeUser = (el) => {
       shortcutKeyToggleSidebar: function toggleSidebar() {
         // —— Directional snap logic ——
         const slimBarEl = document.getElementById('stage-sidebar-tiny-bar');
-        const largeSidebarEl = document.querySelector(
-          'aside#stage-sidebar:not([inert]):not(.pointer-events-none)',
-        );
-        if (window._fadeSlimSidebarEnabled && slimBarEl && !largeSidebarEl) {
+        const sidebarHost = getSlimSidebarHost();
+        const sidebarIsOpen = isSlimSidebarHostOpen(sidebarHost);
+        if (window._fadeSlimSidebarEnabled && slimBarEl && !sidebarIsOpen) {
           window.hideSlimSidebarBarInstant();
-        } else if (window._fadeSlimSidebarEnabled && slimBarEl && largeSidebarEl) {
+        } else if (window._fadeSlimSidebarEnabled && slimBarEl && sidebarIsOpen) {
           window.flashSlimSidebarBar();
         }
 
@@ -7267,6 +7266,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   const SELECTORS = {
     PAGE_HEADER: '#page-header',
     CONVERSATION_HEADER_ACTIONS: '#conversation-header-actions',
+    CONVERSATION_HEADER_RELOCATION_CONTROLS:
+      'button[data-testid="share-chat-button"], ' +
+      'button[data-testid="conversation-options-button"]',
     THREAD_BOTTOM_CONTAINER: '#thread-bottom-container',
     THREAD_BOTTOM: '#thread-bottom',
     COMPOSER_FORM: "form[data-type='unified-composer']",
@@ -7554,10 +7556,10 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     return null;
   }
 
-  function hasActionableConversationHeaderControls(actions) {
+  function hasRelocatableConversationHeaderControls(actions) {
     return (
       actions instanceof Element &&
-      !!actions.querySelector('button, a[href], [role="button"]')
+      !!actions.querySelector(SELECTORS.CONVERSATION_HEADER_RELOCATION_CONTROLS)
     );
   }
 
@@ -7569,7 +7571,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     if (
       !(actions instanceof Element) ||
       !actions.isConnected ||
-      hasActionableConversationHeaderControls(actions) ||
+      hasRelocatableConversationHeaderControls(actions) ||
       !(homeParent instanceof Element) ||
       !homeParent.isConnected
     ) {
@@ -7588,7 +7590,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     if (pageHeader instanceof Element) {
       const fromHeader = pageHeader.querySelector(SELECTORS.CONVERSATION_HEADER_ACTIONS);
       if (
-        hasActionableConversationHeaderControls(fromHeader) &&
+        hasRelocatableConversationHeaderControls(fromHeader) &&
         !fromHeader.closest('#bottomBarContainer')
       ) {
         return fromHeader;
@@ -7596,11 +7598,11 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     }
 
     return (
-      Array.from(document.querySelectorAll(SELECTORS.CONVERSATION_HEADER_ACTIONS)).find(
-        (el) =>
-          hasActionableConversationHeaderControls(el) &&
-          !el.closest('#bottomBarContainer'),
-      ) || null
+        Array.from(document.querySelectorAll(SELECTORS.CONVERSATION_HEADER_ACTIONS)).find(
+          (el) =>
+            hasRelocatableConversationHeaderControls(el) &&
+            !el.closest('#bottomBarContainer'),
+        ) || null
     );
   }
 
@@ -8097,7 +8099,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
     function releaseInactiveHeaderActions() {
       if (
         !(state.headerActions instanceof Element) ||
-        hasActionableConversationHeaderControls(state.headerActions)
+        hasRelocatableConversationHeaderControls(state.headerActions)
       ) {
         return;
       }
@@ -8311,7 +8313,23 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       return !!(el && el.closest('#bottomBarContainer') === state.root);
     }
 
+    function nodeIsInsideTrackedHeaderActions(node) {
+      const el =
+        node instanceof Element
+          ? node
+          : node && node.parentElement instanceof Element
+            ? node.parentElement
+            : null;
+      return !!(
+        el &&
+        state.headerActions instanceof Element &&
+        (el === state.headerActions || state.headerActions.contains(el))
+      );
+    }
+
     function isInternalBottomBarMutation(mutation) {
+      // The relocated container stays React-owned. Its first-message hydration must reconcile.
+      if (nodeIsInsideTrackedHeaderActions(mutation.target)) return false;
       if (!nodeIsInsideBottomBar(mutation.target)) return false;
 
       const touchedOutside = [...mutation.addedNodes, ...mutation.removedNodes].some(
@@ -13897,6 +13915,28 @@ setTimeout(() => {
 // ==================================================
 // @note Slim-bar opacity / fade logic (robust, overlay-aware, single IIFE)
 // ==================================================
+function getSlimSidebarHost(root = document) {
+  return (
+    root.getElementById('stage-slideover-sidebar') || root.getElementById('stage-sidebar') || null
+  );
+}
+
+function isSlimSidebarHostOpen(host) {
+  if (!host) return false;
+
+  const explicitState = host.getAttribute('data-state');
+  if (explicitState === 'open') return true;
+  if (explicitState === 'closed') return false;
+
+  const style = window.getComputedStyle(host);
+  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+}
+
+function resetCollapsedSlimSidebarScroll(host) {
+  if (!host || isSlimSidebarHostOpen(host) || host.scrollLeft === 0) return;
+  host.scrollLeft = 0;
+}
+
 (() => {
   chrome.storage.sync.get(
     { fadeSlimSidebarEnabled: false },
@@ -13904,6 +13944,7 @@ setTimeout(() => {
       window._fadeSlimSidebarEnabled = enabled;
 
       let bar = null;
+      let hoverTarget = null;
       let hover = false;
       let idleTimer = null;
       let idleTimerVersion = 0;
@@ -13941,16 +13982,6 @@ setTimeout(() => {
         barEl.style.removeProperty('pointer-events');
       }
 
-      // -- NEW: Helper to check if large sidebar is open --
-      function isLargeSidebarOpen() {
-        // Replace '#stage-sidebar' with your actual sidebar element ID/class if needed!
-        const largeSidebar = document.getElementById('stage-sidebar');
-        if (!largeSidebar) return false;
-        const style = window.getComputedStyle(largeSidebar);
-        // Consider it open if it's visible and not display:none/hidden
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-      }
-
       function getIdleOpacity() {
         return coerceNumberFromStorage(window._slimBarIdleOpacity, 0.0);
       }
@@ -13970,8 +14001,9 @@ setTimeout(() => {
 
       function detachCurrentBar() {
         if (!bar) return;
-        bar.removeEventListener('mouseenter', onEnter, true);
-        bar.removeEventListener('mouseleave', onLeave, true);
+        hoverTarget?.removeEventListener('mouseenter', onEnter, true);
+        hoverTarget?.removeEventListener('mouseleave', onLeave, true);
+        hoverTarget = null;
         if (classObserver) classObserver.disconnect();
         classObserver = null;
         clearTimeout(idleTimer);
@@ -14015,9 +14047,7 @@ setTimeout(() => {
           '[role="dialog"]',
           '[aria-modal="true"]',
           '[role="listbox"]',
-          '[data-radix-popper-content-wrapper]',
           '.modal, .slideover, .overlay, .DialogOverlay, .MenuOverlay',
-          '[data-state="open"]',
           '[data-overlay="true"]',
         ];
         for (const sel of selectors) {
@@ -14051,9 +14081,12 @@ setTimeout(() => {
           setOpacity('0');
           return;
         }
-        if (hover) return;
+        if (hover) {
+          setOpacity('1');
+          return;
+        }
         // If large sidebar is open, instantly set opacity 0
-        if (isLargeSidebarOpen()) {
+        if (isSlimSidebarHostOpen(getSlimSidebarHost())) {
           bar.style.setProperty('transition', 'none', 'important');
           setOpacity('0');
           void bar.offsetWidth;
@@ -14077,6 +14110,9 @@ setTimeout(() => {
 
       function onEnter() {
         if (!isFeatureEnabled()) return;
+        const host = getSlimSidebarHost();
+        if (isSlimSidebarHostOpen(host)) return;
+        resetCollapsedSlimSidebarScroll(host);
         hover = true;
         clearTimeout(idleTimer);
         setOpacity('1');
@@ -14090,7 +14126,7 @@ setTimeout(() => {
       function relevantNodeForSlimSidebarRefresh(node) {
         if (!(node instanceof Element) && !(node instanceof DocumentFragment)) return false;
         const selector =
-          '#stage-sidebar-tiny-bar, #stage-sidebar, [data-radix-popper-content-wrapper], [role="menu"][data-radix-menu-content], [role="dialog"], [aria-modal="true"], [role="listbox"], [data-overlay="true"]';
+          '#stage-sidebar-tiny-bar, #stage-slideover-sidebar, #stage-sidebar, [role="menu"][data-radix-menu-content], [role="dialog"], [aria-modal="true"], [role="listbox"], [data-overlay="true"]';
         if (node instanceof Element && node.matches(selector)) return true;
         return typeof node.querySelector === 'function' && !!node.querySelector(selector);
       }
@@ -14110,7 +14146,8 @@ setTimeout(() => {
       function refreshBarState() {
         if (!isFeatureEnabled()) return;
         const el = document.getElementById('stage-sidebar-tiny-bar');
-        if (el !== bar) {
+        const nextHoverTarget = getSlimSidebarHost() || el;
+        if (el !== bar || nextHoverTarget !== hoverTarget) {
           if (el) {
             const shouldFlash = pendingFlashAfterAttach;
             pendingFlashAfterAttach = false;
@@ -14151,38 +14188,30 @@ setTimeout(() => {
         if (!isFeatureEnabled() || !el.isConnected) return;
 
         bar = el;
+        const sidebarHost = getSlimSidebarHost();
+        const sidebarIsOpen = isSlimSidebarHostOpen(sidebarHost);
+        hoverTarget = sidebarHost || el;
+        resetCollapsedSlimSidebarScroll(sidebarHost);
+        hover = hoverTarget.matches(':hover') && !sidebarIsOpen;
         beginSettle();
         // Show instantly, then restore the fade
         bar.style.setProperty('transition', 'none', 'important');
-        setOpacity('1');
+        setOpacity(sidebarIsOpen ? '0' : '1');
         void bar.offsetWidth;
         bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
 
-        bar.addEventListener('mouseenter', onEnter, true);
-        bar.addEventListener('mouseleave', onLeave, true);
-
-        bar.addEventListener(
-          'click',
-          function onClick() {
-            if (!bar) return;
-            // Disable fade transition instantly for this click
-            bar.style.setProperty('transition', 'none', 'important');
-            setOpacity('0');
-            hover = false;
-            clearTimeout(idleTimer);
-            idleTimerVersion++;
-            void bar.offsetWidth;
-            setTimeout(() => {
-              if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-            }, 0);
-          },
-          true,
-        );
+        hoverTarget.addEventListener('mouseenter', onEnter, true);
+        hoverTarget.addEventListener('mouseleave', onLeave, true);
 
         classObserver = new MutationObserver(() => {
           if (!bar || !isFeatureEnabled()) return;
-          // Sidebar just closed or opened; handle transition instantly
-          if (isLargeSidebarOpen()) {
+          const currentHost = getSlimSidebarHost();
+          if (currentHost !== hoverTarget) {
+            scheduleBarRefresh(0);
+            return;
+          }
+
+          if (isSlimSidebarHostOpen(currentHost)) {
             bar.style.setProperty('transition', 'none', 'important');
             setOpacity('0');
             hover = false;
@@ -14193,27 +14222,27 @@ setTimeout(() => {
               if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
             }, 0);
           } else {
+            resetCollapsedSlimSidebarScroll(currentHost);
+            hover = currentHost.matches(':hover');
             bar.style.setProperty('transition', 'none', 'important');
             setOpacity('1');
             void bar.offsetWidth;
             setTimeout(() => {
               if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-              scheduleIdleFade();
+              if (!hover) scheduleIdleFade();
             }, 0);
           }
         });
 
-        // We want to observe changes on the large sidebar, not the slimbar
-        const largeSidebar = document.getElementById('stage-sidebar');
-        if (largeSidebar) {
-          classObserver.observe(largeSidebar, {
+        if (hoverTarget !== bar) {
+          classObserver.observe(hoverTarget, {
             attributes: true,
-            attributeFilter: ['class', 'style'],
+            attributeFilter: ['class', 'style', 'data-state'],
           });
         }
 
-        setOpacity('1');
-        scheduleIdleFade();
+        setOpacity(sidebarIsOpen ? '0' : '1');
+        if (!sidebarIsOpen && !hover) scheduleIdleFade();
       }
 
       function ensureGlobalObservers() {
