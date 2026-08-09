@@ -6,6 +6,11 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 08.08.2026
+- Fixed: Model refresh and model shortcuts work with ChatGPT's new Advanced model menus in Chat and Work.
+- Fixed: Reset to Default no longer appears when ChatGPT does not offer it.
+- Fixed: Control+Alt typing combinations like `@` on German and other language keyboard layouts no longer trigger unrelated Alt shortcuts.
+
 #### 07.28.2026
 - Fixed: Toggle Chat / Work and Chat model refresh work with ChatGPT's latest interface.
 - Fixed: Fade Slim Sidebar reveals reliably without flashing over ChatGPT's latest sidebar icons.
