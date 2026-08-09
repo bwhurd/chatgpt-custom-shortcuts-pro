@@ -72,9 +72,10 @@ Important invariant:
 - the popup opens on its last stored Chat/Work snapshot selection, defaulting to Chat/Legacy for a new install; its segmented selector changes only the rendered snapshot and persisted view preference and never launches or changes a scraper
 - the popup and overlay read the requested profile array directly at each action's persisted `slot`
 - edits, clears, and resets write only the selected profile; they never modify the other profile
-- pristine effort-row positions use `F1` through `F5`; pristine model and non-reset Model Toggles positions use sequential digits, while Reset uses `Digit0`
+- pristine effort-row positions use `F1` through `F5`; pristine model and visible Model Toggles positions use sequential digits
 - both profiles render shared `shortcutKeyToggleChatWork` as the first item in a third `Model Toggles` group; it is a normal shortcut setting, not an entry in either model-picker array
-- the Work profile additionally renders `Toggle Speed` and `Reset to default`; Chat renders only the shared Chat/Work toggle in that group
+- the Work profile additionally renders `Toggle Speed` when its Speed submenu is present; Chat renders only the shared Chat/Work toggle in that group
+- the retired `Reset to default` slot remains storage-compatible but is rendered or activated only when a scrape explicitly records `pillResetAvailable: true`; missing or false capability data must not invent the row
 - every shipped locale supplies translated `Work Models` and `Chat Models` labels of at most 15 Unicode characters
 
 ## Popup behavior
@@ -100,7 +101,9 @@ The popup's manual model refresh is a two-surface operation:
 - select Work and run the existing catalog scraper into the Work/Latest snapshot
 - in cleanup, collapse any model menus or Configure dialog opened by either scrape, restore the initially selected Chat/Work mode, and make the generic `modelCatalog` / `modelNames` compatibility keys match that restored mode
 
-Mode selection must use the blank-chat two-radio structure and reciprocal checked state, not localized Chat/Work labels. A failure on one surface must not prevent the coordinator from attempting the other surface, and cleanup must run for success and failure.
+Mode selection must use the blank-chat two-radio structure and reciprocal checked state, not localized Chat/Work labels. Before scraping or completing restoration, the reciprocal radio state and the same visible composer model button must remain stable for a bounded dwell period. A failure on one surface must not prevent the coordinator from attempting the other surface, and cleanup must run for success and failure.
+
+Chat is a hybrid selector surface: current GPT models use the compact two-submenu Power/Advanced shell, while selecting o3 changes the same surface to the integrated Intelligence menu. One Chat scrape must retain the GPT model/effort rows already collected from the compact shell, collect o3 effort rows from the integrated shell, and switch or restore model names through whichever shell is currently active.
 
 Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Popup hydration and profile-change events follow the same rule.
 
@@ -165,6 +168,12 @@ Activation probe metadata is the source of truth for future live shortcut checks
 
 ### Response thread navigation contract
 
+- Ordinary Alt-domain shortcuts require Alt/Option without Shift or either control-like
+  modifier. Primary-Control+Alt (Ctrl+Alt on Windows/Linux, Command+Option on macOS) is
+  reserved exclusively for the Previous/Next preview shortcuts below; unmatched compound
+  chords must pass through without falling back to an ordinary Alt action. This preserves
+  layout text entry such as German `Ctrl+Alt+Q` for `@`, even when Chromium does not report
+  `AltGraph`.
 - Resolve a response navigator structurally as a `div.tabular-nums` counter with button siblings on both sides; do not identify it from localized text or a bare `<` / `>` glyph.
 - Alt+Previous and Alt+Next scroll to and click the lowest visible enabled button for their direction. Disabled direction buttons are not actionable fallbacks.
 - Ctrl+Alt+Previous and Ctrl+Alt+Next are scroll-only previews: they never click a response button.
@@ -195,6 +204,10 @@ The three-submenu pill must expose shortcut hints in all three open submenus:
 - Model rows use the existing catalog-backed model action mapping.
 - Effort rows use the active catalog's shared popup-primary action order and slots.
 - Both Speed radio rows display the one `toggle-speed` utility shortcut because that shortcut toggles between the two states.
+
+Both current surfaces now open as compact Power menus. Their direct Advanced control is identified structurally as the non-submenu `role="menuitem"` with `aria-expanded`; never select it by localized text. Before scraping, model selection, effort selection, speed toggle, reset, or fallback hint discovery, click that control only when it is collapsed and wait until the required Model and Effort triggers are ready. Chat exposes those two submenus; Work adds Speed as a third submenu. Older two- or three-submenu menus without this control remain valid and must not be rejected.
+
+Catalogs persist `pillSpeedMenu` and `pillResetAvailable` from the observed menu. Popup/overlay utilities must follow those capabilities: never invent Speed for Chat or Reset when ChatGPT did not render the corresponding control.
 
 For a known Work `configure-option` shortcut, activation opens the structurally first submenu trigger and verifies that its controlled menu is the Model menu before selecting the catalog action directly. Full submenu discovery and hint scanning are fallback paths only when that verified direct route fails.
 

@@ -10,6 +10,17 @@ const coordinatorEnd = contentSource.indexOf('const getConfigureClickTargets', c
 assert.ok(coordinatorStart >= 0 && coordinatorEnd > coordinatorStart, 'dual-surface coordinator should exist');
 
 const coordinator = contentSource.slice(coordinatorStart, coordinatorEnd);
+const stableSurfaceStart = contentSource.indexOf('const waitForStableNativeChatWorkSurface');
+assert.ok(
+  stableSurfaceStart >= 0 && stableSurfaceStart < coordinatorStart,
+  'the dual-surface coordinator should have a structural surface-stability gate',
+);
+const stableSurface = contentSource.slice(stableSurfaceStart, coordinatorStart);
+assert.match(
+  stableSurface,
+  /window\.waitForNativeChatWorkSurfaceRadios\?\.\(0\)[\s\S]*?currentRadios\.length === 2[\s\S]*?aria-checked'\) === 'true'[\s\S]*?aria-checked'\) === 'false'[\s\S]*?currentButton instanceof Element[\s\S]*?currentButton !== stableButton[\s\S]*?Date\.now\(\) - stableSince >= stableMs/,
+  'surface readiness should require reciprocal radio state and one stable composer model button',
+);
 const orderedCalls = [
   'window.getNativeChatWorkSurfaceMode?.()',
   'window.triggerNativeNewConversationButton?.()',
@@ -17,6 +28,7 @@ const orderedCalls = [
   'window.getNativeChatWorkSurfaceMode?.(radios)',
   "for (const mode of ['chat', 'work'])",
   'window.selectNativeChatWorkSurfaceMode?.(mode, 3000)',
+  'waitForStableNativeChatWorkSurface(mode',
   'scrapeModelCatalogOnce({',
 ];
 let previousIndex = -1;
@@ -38,8 +50,8 @@ assert.match(
 );
 assert.match(
   coordinator,
-  /finally\s*\{[\s\S]*collapseOpenModelPickerUiAfterScrape\(\)[\s\S]*window\.selectNativeChatWorkSurfaceMode\?\.\(initialMode,\s*3000\)[\s\S]*persistScrapedModelCatalog\(initialResult\.modelCatalog,[\s\S]*profile:\s*initialMode,[\s\S]*collapseOpenModelPickerUiAfterScrape\(\)/,
-  'cleanup should collapse menus, restore the initial mode, restore its compatibility catalog, and collapse again',
+  /finally\s*\{[\s\S]*collapseOpenModelPickerUiAfterScrape\(\)[\s\S]*window\.selectNativeChatWorkSurfaceMode\?\.\(initialMode,\s*3000\)[\s\S]*waitForStableNativeChatWorkSurface\(initialMode[\s\S]*if \(!restored\)[\s\S]*selectNativeChatWorkSurfaceMode\?\.\(initialMode,\s*3000\)[\s\S]*persistScrapedModelCatalog\(initialResult\.modelCatalog,[\s\S]*profile:\s*initialMode,[\s\S]*collapseOpenModelPickerUiAfterScrape\(\)/,
+  'cleanup should stably restore and retry the initial mode, restore its compatibility catalog, and collapse again',
 );
 assert.doesNotMatch(
   coordinator,

@@ -207,6 +207,8 @@
     version: 4,
     selectorShape: 'pill-three-submenu',
     pillMenu: true,
+    pillSpeedMenu: true,
+    pillResetAvailable: false,
     integratedEffort: true,
     scrapedAt: 0,
     thinkingEffortIds: Object.freeze([]),
@@ -279,7 +281,7 @@
     'Extra High',
     'Max',
     'Toggle Speed',
-    'Reset to default',
+    '',
   ]);
   const DEFAULT_LEGACY_MODEL_CATALOG = Object.freeze({
     version: 3,
@@ -1179,7 +1181,13 @@
         active: false,
       },
       ...(effectiveCatalog.pillMenu === true
-        ? PILL_UTILITY_ACTIONS.map((action) => ({
+        ? PILL_UTILITY_ACTIONS.filter((action) => {
+            if (action.id === 'toggle-speed') return effectiveCatalog.pillSpeedMenu !== false;
+            if (action.id === 'reset-default') {
+              return effectiveCatalog.pillResetAvailable === true;
+            }
+            return true;
+          }).map((action) => ({
             ...action,
             viewGroup: 'model-toggles',
             viewKey: `model-toggles:${action.id}`,

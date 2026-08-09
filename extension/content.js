@@ -6659,23 +6659,25 @@ const clickElementLikeUser = (el) => {
       // Canonical key: use layout-aware key for text, keep exact for special keys.
       event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
-    const handleAltShortcutEvent = (event, keyIdentifier, isCtrlPressed) => {
-      if (!isCtrlPressed && isModelToggleShortcutEvent(event)) {
+    const hasUnexpectedAltShortcutModifier = (event) =>
+      event.shiftKey || (isMac ? event.ctrlKey : event.metaKey);
+
+    const handleAltShortcutEvent = (event, keyIdentifier, isPrimaryControlPressed) => {
+      if (hasUnexpectedAltShortcutModifier(event)) return false;
+
+      // Primary-Control+Alt belongs exclusively to the currently assigned
+      // response-navigation previews. Every other compound chord passes through:
+      // on layouts such as German, Ctrl+Alt+Q is text input for "@".
+      if (isPrimaryControlPressed) {
+        if (runPreviewThreadShortcut('shortcutKeyPreviousThread', event)) return true;
+        return runPreviewThreadShortcut('shortcutKeyNextThread', event);
+      }
+
+      if (isModelToggleShortcutEvent(event)) {
         return runAltShortcutAction('shortcutKeyToggleModelSelector', event);
       }
 
       if (runModelPickerDigitShortcut(event, keyIdentifier)) return true;
-
-      if (
-        isCtrlPressed &&
-        runPreviewThreadShortcut('shortcutKeyPreviousThread', event)
-      ) {
-        return true;
-      }
-
-      if (isCtrlPressed && runPreviewThreadShortcut('shortcutKeyNextThread', event)) {
-        return true;
-      }
 
       if (runDynamicThinkingEffortShortcut(event)) return true;
       if (runDynamicProThinkingEffortShortcut(event)) return true;
@@ -6725,12 +6727,19 @@ const clickElementLikeUser = (el) => {
       (event) => {
         if (shouldIgnoreShortcutEvent(event)) return;
 
-        const isCtrlPressed = isMac ? event.metaKey : event.ctrlKey;
+        const isPrimaryControlPressed = isMac ? event.metaKey : event.ctrlKey;
         const isAltPressed = event.altKey;
         const keyIdentifier = getShortcutKeyIdentifier(event);
 
-        if (isAltPressed && handleAltShortcutEvent(event, keyIdentifier, isCtrlPressed)) return;
-        if (isCtrlPressed && !isAltPressed) handleCtrlShortcutEvent(event, keyIdentifier);
+        if (
+          isAltPressed &&
+          handleAltShortcutEvent(event, keyIdentifier, isPrimaryControlPressed)
+        ) {
+          return;
+        }
+        if (isPrimaryControlPressed && !isAltPressed) {
+          handleCtrlShortcutEvent(event, keyIdentifier);
+        }
       },
       { capture: true },
     );
@@ -9099,6 +9108,9 @@ form.w-full[data-type="unified-composer"] {
     '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR =
     ModelPickerSelectors.MODEL_THINKING_EFFORT_OPTION_SELECTOR || '[role="menuitemradio"]';
+  const PILL_ADVANCED_TOGGLE_SELECTOR =
+    ModelPickerSelectors.PILL_ADVANCED_TOGGLE_SELECTOR ||
+    '[role="menuitem"][aria-expanded]:not([aria-haspopup="menu"])';
   const PILL_RESET_MENU_ITEM_SELECTOR =
     ModelPickerSelectors.PILL_RESET_MENU_ITEM_SELECTOR ||
     '[role="menuitem"][class*="_ResetToDefault"]';
@@ -9264,10 +9276,12 @@ form.w-full[data-type="unified-composer"] {
   };
   const getProfileForChatWorkMode = (mode) =>
     mode === 'work' ? MODEL_PICKER_PROFILE_LATEST : MODEL_PICKER_PROFILE_LEGACY;
-  const getProfileForCatalog = (catalog) =>
-    catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu'
+  const getProfileForCatalog = (catalog) => {
+    if (catalog?.selectorShape === 'pill-two-submenu') return MODEL_PICKER_PROFILE_LEGACY;
+    return catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu'
       ? MODEL_PICKER_PROFILE_LATEST
       : MODEL_PICKER_PROFILE_LEGACY;
+  };
   const getRuntimeModelPickerProfile = () => {
     const liveMode =
       typeof window.getNativeChatWorkSurfaceMode === 'function'
@@ -9971,10 +9985,14 @@ form.w-full[data-type="unified-composer"] {
           return null;
         }
         const currentMain = getOpenPillMainMenu(btn);
-        if (currentMain) return currentMain;
+        if (currentMain) return ensurePillAdvancedOptionsExpanded(currentMain);
         if (typeof window.__cspOpenModelPickerMainMenu !== 'function') return null;
         window.__cspOpenModelPickerMainMenu();
-        return waitForAsync(() => getOpenPillMainMenu(btn), { timeout: 1800, interval: 30 });
+        const opened = await waitForAsync(() => getOpenPillMainMenu(btn), {
+          timeout: 1800,
+          interval: 30,
+        });
+        return ensurePillAdvancedOptionsExpanded(opened);
       };
 
       const ModelPickerHints = (() => {
@@ -11118,9 +11136,22 @@ form.w-full[data-type="unified-composer"] {
               (item) =>
                 item.getAttribute('role') === 'menuitem' &&
                 item.getAttribute('aria-haspopup') === 'menu' &&
+                isUsablyVisibleModelElement(item) &&
                 !isUnavailableModelMenuItem(item),
             )
           : [];
+      const getPillAdvancedToggle = (mainMenu) =>
+        mainMenu instanceof Element
+          ? getDirectModelMenuItems(mainMenu).find((item) =>
+              typeof ModelPickerSelectors.isPillAdvancedToggle === 'function'
+                ? ModelPickerSelectors.isPillAdvancedToggle(item)
+                : item.matches(PILL_ADVANCED_TOGGLE_SELECTOR),
+            ) || null
+          : null;
+      const isPillAdvancedToggleExpanded = (toggle) =>
+        typeof ModelPickerSelectors.isPillAdvancedToggleExpanded === 'function'
+          ? ModelPickerSelectors.isPillAdvancedToggleExpanded(toggle)
+          : toggle instanceof Element && toggle.getAttribute('aria-expanded') === 'true';
       const getPillRadioItems = (menu) =>
         menu instanceof Element
           ? getDirectModelMenuItems(menu).filter(
@@ -11140,7 +11171,7 @@ form.w-full[data-type="unified-composer"] {
       };
       const getPillModelTriggerFromCurrentOrder = (mainMenu) => {
         const triggers = getPillSubmenuTriggers(mainMenu);
-        return triggers.length === 3 ? triggers[0] : null;
+        return triggers.length >= 2 ? triggers[0] : null;
       };
       const classifyPillSubmenu = (menu) => {
         const labels = getPillRadioItems(menu).map(getPillRadioLabel);
@@ -11155,7 +11186,8 @@ form.w-full[data-type="unified-composer"] {
       const isPillConfiguratorMenu = (mainMenu) =>
         mainMenu instanceof Element &&
         !!mainMenu.querySelector('[role="slider"]') &&
-        getPillSubmenuTriggers(mainMenu).length >= 3;
+        (getPillAdvancedToggle(mainMenu) instanceof Element ||
+          getPillSubmenuTriggers(mainMenu).length >= 2);
       const getOpenPillMainMenu = (button = getModelMenuButton()) => {
         const triggerId = button?.id || '';
         if (!triggerId) return null;
@@ -11166,6 +11198,27 @@ form.w-full[data-type="unified-composer"] {
               isUsablyVisibleModelElement(menu) &&
               isPillConfiguratorMenu(menu),
           ) || null
+        );
+      };
+      const ensurePillAdvancedOptionsExpanded = async (mainMenu) => {
+        if (!(mainMenu instanceof Element)) return null;
+        const initialToggle = getPillAdvancedToggle(mainMenu);
+        if (
+          initialToggle instanceof Element &&
+          !isPillAdvancedToggleExpanded(initialToggle)
+        ) {
+          initialToggle.focus?.();
+          smartClickSafe(initialToggle);
+        }
+        return waitForAsync(
+          () => {
+            const current = getOpenPillMainMenu() || (mainMenu.isConnected ? mainMenu : null);
+            if (!(current instanceof Element)) return null;
+            const toggle = getPillAdvancedToggle(current);
+            if (toggle instanceof Element && !isPillAdvancedToggleExpanded(toggle)) return null;
+            return getPillSubmenuTriggers(current).length >= 2 ? current : null;
+          },
+          { timeout: 1200, interval: 30 },
         );
       };
       const getOpenPillSubmenuForTrigger = (trigger) => {
@@ -11232,10 +11285,17 @@ form.w-full[data-type="unified-composer"] {
       };
       const discoverPillSubmenuTriggers = async (mainMenu) => {
         const found = { model: null, effort: null, speed: null };
-        for (const trigger of getPillSubmenuTriggers(mainMenu)) {
+        const triggers = getPillSubmenuTriggers(mainMenu);
+        const expectedTypes = ['model', 'effort', 'speed'];
+        for (const [index, trigger] of triggers.entries()) {
           const menu = await openPillSubmenu(trigger);
           const type = classifyPillSubmenu(menu);
-          if (type && !found[type]) found[type] = trigger;
+          const expectedType = expectedTypes[index] || '';
+          if (expectedType && (type === expectedType || (expectedType === 'effort' && type))) {
+            found[expectedType] = trigger;
+          } else if (type && !found[type]) {
+            found[type] = trigger;
+          }
         }
         return found;
       };
@@ -12205,12 +12265,10 @@ form.w-full[data-type="unified-composer"] {
           .filter(Boolean);
       };
       const getPillMenuInventory = async () => {
-        const main = getOpenPillMainMenu();
+        const main = await ensurePillAdvancedOptionsExpanded(getOpenPillMainMenu());
         if (!main) return null;
         const triggers = await discoverPillSubmenuTriggers(main);
-        return triggers.model && triggers.effort && triggers.speed
-          ? { main, triggers }
-          : null;
+        return triggers.model && triggers.effort ? { main, triggers } : null;
       };
       const selectPillModelNameDuringScrape = async (action) => {
         if (!action?.id) return false;
@@ -12229,6 +12287,10 @@ form.w-full[data-type="unified-composer"] {
         persistActiveModelConfigId(action.id);
         return true;
       };
+      const selectHybridModelNameDuringScrape = async (action) => {
+        if (await selectPillModelNameDuringScrape(action)) return true;
+        return selectIntegratedModelNameDuringScrape(action);
+      };
       const scrapePillModelCatalogOnce = async ({ profile = '' } = {}) => {
         await releasePreparedModelConfigSession();
         const readyState = await waitForPillMainMenuFromShortcut();
@@ -12241,6 +12303,8 @@ form.w-full[data-type="unified-composer"] {
           speed: !!initialInventory?.triggers?.speed,
         });
         if (!initialInventory) return { fallback: true };
+        const hasSpeedMenu = initialInventory.triggers.speed instanceof Element;
+        const hasResetItem = getPillResetMenuItem(initialInventory.main) instanceof Element;
 
         const modelMenu = await openPillSubmenu(initialInventory.triggers.model);
         const modelNameItems = getPillRadioItems(modelMenu).filter((item) =>
@@ -12273,20 +12337,36 @@ form.w-full[data-type="unified-composer"] {
 
         for (const modelName of availableModelNames) {
           if (modelName.id !== selectedConfigId) {
-            const selected = await selectPillModelNameDuringScrape(modelName);
+            const selected = await selectHybridModelNameDuringScrape(modelName);
             if (!selected) continue;
             selectedConfigId = modelName.id;
           }
 
           const reopened = await waitForPillMainMenuFromShortcut();
-          if (!reopened) continue;
-          const inventory = await getPillMenuInventory();
-          if (!inventory) continue;
-
-          const effortMenu = await openPillSubmenu(inventory.triggers.effort);
-          frontendByConfig[modelName.id] = collectPillEffortRows(effortMenu);
-          const speedMenu = await openPillSubmenu(inventory.triggers.speed);
-          speedByConfig[modelName.id] = collectPillSpeedRows(speedMenu);
+          const inventory = reopened ? await getPillMenuInventory() : null;
+          if (inventory) {
+            const effortMenu = await openPillSubmenu(inventory.triggers.effort);
+            frontendByConfig[modelName.id] = collectPillEffortRows(effortMenu);
+            const speedMenu = inventory.triggers.speed
+              ? await openPillSubmenu(inventory.triggers.speed)
+              : null;
+            speedByConfig[modelName.id] = speedMenu ? collectPillSpeedRows(speedMenu) : [];
+          } else if (!hasSpeedMenu) {
+            const alreadyOpen = ensureMainMenuOpen();
+            await sleepAsync(alreadyOpen ? 100 : 160);
+            const integratedState = getVisibleModelMenuState();
+            const isIntegratedMenu =
+              integratedState.main instanceof Element &&
+              !!integratedState.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+            if (!isIntegratedMenu) continue;
+            frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(
+              integratedState,
+              modelName.id,
+            );
+            speedByConfig[modelName.id] = [];
+          } else {
+            continue;
+          }
           logModelRefreshDebug('pill:model-collected', {
             modelId: modelName.id,
             effortCount: frontendByConfig[modelName.id].length,
@@ -12295,22 +12375,25 @@ form.w-full[data-type="unified-composer"] {
         }
 
         if (initialActiveModelName?.id && selectedConfigId !== initialActiveConfigId) {
-          await selectPillModelNameDuringScrape(initialActiveModelName);
+          await selectHybridModelNameDuringScrape(initialActiveModelName);
         }
 
         const complete = availableModelNames.every(
           (modelName) =>
             Array.isArray(frontendByConfig[modelName.id]) &&
             frontendByConfig[modelName.id].length > 0 &&
-            Array.isArray(speedByConfig[modelName.id]) &&
-            speedByConfig[modelName.id].length === 2,
+            (!hasSpeedMenu ||
+              (Array.isArray(speedByConfig[modelName.id]) &&
+                speedByConfig[modelName.id].length === 2)),
         );
         if (!complete) return { fallback: true };
 
         const catalog = {
           version: 4,
-          selectorShape: 'pill-three-submenu',
+          selectorShape: hasSpeedMenu ? 'pill-three-submenu' : 'pill-two-submenu',
           pillMenu: true,
+          pillSpeedMenu: hasSpeedMenu,
+          pillResetAvailable: hasResetItem,
           scrapedAt: Date.now(),
           integratedEffort: true,
           configureOptions: availableModelNames.map((modelName) => ({
@@ -12649,6 +12732,39 @@ form.w-full[data-type="unified-composer"] {
         await sleepAsync(50);
       };
 
+      const waitForStableNativeChatWorkSurface = async (
+        mode,
+        { timeout = 4000, stableMs = 350 } = {},
+      ) => {
+        const targetIndex = mode === 'work' ? 1 : mode === 'chat' ? 0 : -1;
+        if (targetIndex < 0) return false;
+        const deadline = Date.now() + Math.max(0, Number(timeout) || 0);
+        let stableSince = 0;
+        let stableButton = null;
+        while (Date.now() < deadline) {
+          const currentRadios =
+            (await window.waitForNativeChatWorkSurfaceRadios?.(0)) || [];
+          const currentButton = getVisibleModelMenuButton();
+          const selected =
+            currentRadios.length === 2 &&
+            currentRadios[targetIndex]?.getAttribute('aria-checked') === 'true' &&
+            currentRadios[1 - targetIndex]?.getAttribute('aria-checked') === 'false';
+          if (selected && currentButton instanceof Element) {
+            if (currentButton !== stableButton) {
+              stableButton = currentButton;
+              stableSince = Date.now();
+            } else if (Date.now() - stableSince >= stableMs) {
+              return true;
+            }
+          } else {
+            stableButton = null;
+            stableSince = 0;
+          }
+          await sleepAsync(50);
+        }
+        return false;
+      };
+
       const refreshChatWorkModelCatalogsOnce = async ({ hideUi = true } = {}) => {
         const profiles = {};
         let initialMode = window.getNativeChatWorkSurfaceMode?.() || '';
@@ -12672,15 +12788,20 @@ form.w-full[data-type="unified-composer"] {
           for (const mode of ['chat', 'work']) {
             await collapseOpenModelPickerUiAfterScrape();
             const selected = await window.selectNativeChatWorkSurfaceMode?.(mode, 3000);
-            if (!selected) {
+            const stable =
+              selected &&
+              (await waitForStableNativeChatWorkSurface(mode, {
+                timeout: 4000,
+                stableMs: 350,
+              }));
+            if (!stable) {
               profiles[mode] = {
                 ok: false,
-                error: `CHAT_WORK_${mode.toUpperCase()}_MODE_NOT_SELECTED`,
+                error: `CHAT_WORK_${mode.toUpperCase()}_MODE_NOT_READY`,
               };
               continue;
             }
 
-            await sleepAsync(500);
             profiles[mode] = await scrapeModelCatalogOnce({
               hideUi,
               keepPreparedSession: false,
@@ -12714,8 +12835,23 @@ form.w-full[data-type="unified-composer"] {
           };
         } finally {
           await collapseOpenModelPickerUiAfterScrape();
-          await window.selectNativeChatWorkSurfaceMode?.(initialMode, 3000);
-          await sleepAsync(120);
+          let restored = await window.selectNativeChatWorkSurfaceMode?.(initialMode, 3000);
+          restored =
+            restored &&
+            (await waitForStableNativeChatWorkSurface(initialMode, {
+              timeout: 4000,
+              stableMs: 350,
+            }));
+          if (!restored) {
+            await sleepAsync(200);
+            restored = await window.selectNativeChatWorkSurfaceMode?.(initialMode, 3000);
+            if (restored) {
+              await waitForStableNativeChatWorkSurface(initialMode, {
+                timeout: 4000,
+                stableMs: 350,
+              });
+            }
+          }
 
           const initialResult = profiles[initialMode];
           if (initialResult?.ok && initialResult.modelCatalog) {
@@ -13031,7 +13167,8 @@ form.w-full[data-type="unified-composer"] {
         return withTemporarilyHiddenModelUi(hideUi, async () => {
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
-          const mainMenu = getOpenPillMainMenu();
+          const mainMenu = await ensurePillAdvancedOptionsExpanded(getOpenPillMainMenu());
+          if (!mainMenu) return false;
           const directTrigger = getPillSpeedTriggerFromCurrentOrder(mainMenu);
           let menu = directTrigger ? await openPillSubmenu(directTrigger) : null;
           if (classifyPillSubmenu(menu) !== 'speed') {
@@ -13062,8 +13199,9 @@ form.w-full[data-type="unified-composer"] {
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
           const state = getVisibleModelMenuState();
-          if (!isPillConfiguratorMenu(state.main)) return false;
-          const item = getPillResetMenuItem(state.main);
+          const mainMenu = await ensurePillAdvancedOptionsExpanded(state.main);
+          if (!mainMenu) return false;
+          const item = getPillResetMenuItem(mainMenu);
           if (!(item instanceof Element)) return false;
           if (!hideUi && window.gsap) flashMenuItem(item);
           if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
@@ -13556,17 +13694,19 @@ form.w-full[data-type="unified-composer"] {
             { timeout: 900, interval: 25 },
           );
           if (!(mainMenu instanceof Element)) return null;
+          const readyMainMenu = await ensurePillAdvancedOptionsExpanded(mainMenu);
+          if (!(readyMainMenu instanceof Element)) return null;
 
           const directTarget = ModelPickerHints.getUniqueVisibleMenuItemForSlot(
             sourceSlot,
-            mainMenu,
+            readyMainMenu,
           );
           if (directTarget && !isHintedSubmenuTrigger(directTarget)) return directTarget;
 
           const submenuTriggers = Array.from(
             new Set([
               ...(isHintedSubmenuTrigger(directTarget) ? [directTarget] : []),
-              ...getPillSubmenuTriggers(mainMenu),
+              ...getPillSubmenuTriggers(readyMainMenu),
             ]),
           );
           for (const trigger of submenuTriggers) {

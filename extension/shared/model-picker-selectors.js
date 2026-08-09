@@ -31,6 +31,8 @@
   const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
     '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR = '[role="group"] > [role="menuitemradio"]';
+  const PILL_ADVANCED_TOGGLE_SELECTOR =
+    '[role="menuitem"][aria-expanded]:not([aria-haspopup="menu"])';
   const PILL_RESET_MENU_ITEM_SELECTOR = '[role="menuitem"][class*="_ResetToDefault"]';
   const CHAT_WORK_SURFACE_GROUP_SELECTORS = Object.freeze([
     'header [role="radiogroup"]',
@@ -58,6 +60,19 @@
     if (normalized.length === 2) return 'speed';
     if (normalized.length >= 3) return 'effort';
     return '';
+  }
+
+  function isPillAdvancedToggle(element) {
+    return (
+      !!element &&
+      element.getAttribute?.('role') === 'menuitem' &&
+      element.hasAttribute?.('aria-expanded') === true &&
+      element.getAttribute?.('aria-haspopup') !== 'menu'
+    );
+  }
+
+  function isPillAdvancedToggleExpanded(element) {
+    return isPillAdvancedToggle(element) && element.getAttribute('aria-expanded') === 'true';
   }
 
   function unique(values) {
@@ -220,6 +235,7 @@
     MODEL_THINKING_EFFORT_MENU_ITEM_SELECTOR,
     MODEL_THINKING_EFFORT_ACTION_SELECTOR,
     MODEL_THINKING_EFFORT_OPTION_SELECTOR,
+    PILL_ADVANCED_TOGGLE_SELECTOR,
     PILL_RESET_MENU_ITEM_SELECTOR,
     CHAT_WORK_SURFACE_GROUP_SELECTORS,
     CHAT_WORK_SURFACE_GROUP_SELECTOR,
@@ -227,6 +243,8 @@
     normalizePillMenuLabel,
     isLikelyPillModelLabel,
     classifyPillSubmenuLabels,
+    isPillAdvancedToggle,
+    isPillAdvancedToggleExpanded,
     unique,
     getChatWorkSurfaceToggleSelectors,
     getChatWorkSurfaceToggleMatchGroups,

@@ -142,7 +142,7 @@ The first-pass `scrape-wide` inventory is:
 - `2l_Composer_AddFilesAndMore_More_Submenu.txt`
 - `2m_Header_ConversationOptions_Menu.txt`
 
-The current pill menu's main, Model, Effort, and Speed states are the primary required model-picker family. The `2e`-`2j` Configure-dialog files are compatibility/fallback captures only: capture them when that older route is reachable, but defer or alias them when ChatGPT does not expose Configure. Absence of Configure alone must not fail the scrape.
+The current compact pill menu's main, Model, and Effort states are the primary required model-picker family; Work additionally requires Speed when that third structural trigger is present. The `2e`-`2j` Configure-dialog files are compatibility/fallback captures only: capture them when that older route is reachable, but defer or alias them when ChatGPT does not expose Configure. Absence of Speed on Chat or Configure on either surface must not fail the scrape.
 
 `1c` is captured as the last scrape step after the rest of the dump family is already captured successfully. The Playwright runner should:
 - toggle the extension setting that enables `MoveTopBarToBottom`
@@ -157,9 +157,10 @@ For extension-backed setup, the runner should first discover the loaded extensio
 
 The model-refresh dump family should mirror the bounded primary pill flow in `extension/content.js`:
 - open the model switcher main menu
+- structurally expand the compact Power menu's direct Advanced control when `aria-expanded="false"`, then wait for Model and Effort plus optional Work Speed without matching localized text
 - capture the structurally controlled Model submenu
 - capture the structurally controlled Effort submenu
-- capture the structurally controlled Speed submenu
+- capture the structurally controlled Speed submenu when present
 - retain integrated/two-level and Configure-dialog captures only as ordered compatibility fallbacks when those surfaces are present
 
 Keep that implementation simple and exact. Prefer the same stable targets used by the refresh-model scrape path over adding another generic submenu abstraction.

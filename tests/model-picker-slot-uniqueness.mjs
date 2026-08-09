@@ -310,8 +310,8 @@ assert.equal(
       .find((group) => group.id === 'model-toggles')
       ?.actions.map((action) => action.label),
   ),
-  JSON.stringify(['Toggle Chat / Work', 'Toggle Speed', 'Reset to default']),
-  'no-catalog popup fallback should render the shared Chat/Work toggle before the Work utilities',
+  JSON.stringify(['Toggle Chat / Work', 'Toggle Speed']),
+  'no-catalog popup fallback should render only the current shared and Work speed utilities',
 );
 assert.equal(
   JSON.stringify(ModelLabels.defaultKeyCodes()),
@@ -330,7 +330,7 @@ assert.equal(
     'F4',
     'F5',
     'Digit6',
-    'Digit0',
+    '',
   ]),
   'the backward-compatible default should use the independent Work profile',
 );
@@ -452,7 +452,7 @@ assert.equal(
     'Extra High',
     'Max',
     'Toggle Speed',
-    'Reset to default',
+    '',
   ]),
   'default model names should mirror the live pill picker layout',
 );

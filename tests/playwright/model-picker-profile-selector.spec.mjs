@@ -12,6 +12,8 @@ const latestCatalog = {
   version: 4,
   selectorShape: 'pill-three-submenu',
   pillMenu: true,
+  pillSpeedMenu: true,
+  pillResetAvailable: false,
   integratedEffort: true,
   configureOptions: [
     { id: 'configure-latest', label: 'GPT-5.6 Sol', slot: 3 },
@@ -262,11 +264,10 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
 
     await expect(configureInputs()).toHaveCount(4);
     await expect(modelToggleGroup().locator('.mp-subsection-label')).toHaveText('Model Toggles');
-    await expect(modelToggleInputs()).toHaveCount(2);
+    await expect(modelToggleInputs()).toHaveCount(1);
     await expect(modelToggleGroup().locator('.mp-label')).toHaveText([
       'Toggle Chat / Work',
       'Toggle Speed',
-      'Reset to default',
     ]);
     await expect(chatWorkToggleInput()).toHaveValue('g');
     await expect

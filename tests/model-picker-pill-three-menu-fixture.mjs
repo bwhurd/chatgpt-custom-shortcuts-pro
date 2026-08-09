@@ -89,6 +89,46 @@ vm.runInContext(selectorsSource, selectorsContext, {
 });
 const ModelPickerSelectors = selectorsContext.module.exports;
 
+const createAdvancedToggleFixture = ({ expanded = false, hasSubmenu = false } = {}) => {
+  const attributes = new Map([
+    ['role', 'menuitem'],
+    ['aria-expanded', expanded ? 'true' : 'false'],
+  ]);
+  if (hasSubmenu) attributes.set('aria-haspopup', 'menu');
+  return {
+    getAttribute: (name) => attributes.get(name) ?? null,
+    hasAttribute: (name) => attributes.has(name),
+  };
+};
+const collapsedAdvancedToggle = createAdvancedToggleFixture();
+const expandedAdvancedToggle = createAdvancedToggleFixture({ expanded: true });
+const modelSubmenuTrigger = createAdvancedToggleFixture({ hasSubmenu: true });
+assert.equal(
+  ModelPickerSelectors.isPillAdvancedToggle(collapsedAdvancedToggle),
+  true,
+  'the collapsed Advanced control should be recognized structurally',
+);
+assert.equal(
+  ModelPickerSelectors.isPillAdvancedToggleExpanded(collapsedAdvancedToggle),
+  false,
+  'the collapsed Advanced control should require expansion',
+);
+assert.equal(
+  ModelPickerSelectors.isPillAdvancedToggleExpanded(expandedAdvancedToggle),
+  true,
+  'an already expanded Advanced control should not be clicked closed',
+);
+assert.equal(
+  ModelPickerSelectors.isPillAdvancedToggle(modelSubmenuTrigger),
+  false,
+  'model submenus must not be mistaken for the Advanced control',
+);
+assert.equal(
+  ModelPickerSelectors.isPillAdvancedToggle(null),
+  false,
+  'older pill menus without an Advanced control should remain supported',
+);
+
 const LIVE_PILL_MATRIX = [
   {
     model: 'GPT-5.6 Sol',
@@ -176,6 +216,8 @@ const liveCatalog = {
   version: 4,
   selectorShape: 'pill-three-submenu',
   pillMenu: true,
+  pillSpeedMenu: true,
+  pillResetAvailable: false,
   integratedEffort: true,
   configureOptions,
   frontendByConfig,
@@ -205,16 +247,56 @@ for (const option of configureOptions) {
   );
   assert.deepEqual(
     Array.from(toggles?.actions || [], (action) => action.label),
-    ['Toggle Chat / Work', 'Toggle Speed', 'Reset to default'],
-    'the third row should begin with the shared Chat/Work toggle before the two Work utilities',
+    ['Toggle Chat / Work', 'Toggle Speed'],
+    'the third row should keep the shared Chat/Work toggle and the available Work speed utility',
   );
   assert.deepEqual(
     Array.from(toggles?.actions || [], (action) => action.slot),
-    [undefined, 13, 14],
-    'the normal shortcut should not consume a model slot and the Work utilities should preserve theirs',
+    [undefined, 13],
+    'the normal shortcut should not consume a model slot and Toggle Speed should preserve its slot',
   );
   assert.equal(toggles?.labelI18nKey, 'label_modelTogglesCompact');
 }
+
+const compactChatCatalog = {
+  ...liveCatalog,
+  selectorShape: 'pill-two-submenu',
+  pillSpeedMenu: false,
+  pillResetAvailable: false,
+  speedByConfig: {},
+};
+const compactChatToggleActions =
+  ModelLabels.getPopupPresentationGroups(configureOptions[0].id, [], compactChatCatalog).find(
+    (group) => group.id === 'model-toggles',
+  )?.actions || [];
+assert.deepEqual(
+  Array.from(compactChatToggleActions, (action) => action.label),
+  ['Toggle Chat / Work'],
+  'the compact Chat catalog should not inherit Work Speed or the removed Reset utility',
+);
+
+const catalogWithoutObservedReset = { ...liveCatalog };
+delete catalogWithoutObservedReset.pillResetAvailable;
+const unobservedResetActions =
+  ModelLabels.getPopupPresentationGroups(
+    configureOptions[0].id,
+    [],
+    catalogWithoutObservedReset,
+  ).find((group) => group.id === 'model-toggles')?.actions || [];
+assert.doesNotMatch(
+  Array.from(unobservedResetActions, (action) => action.label).join('|'),
+  /Reset to default/,
+  'Reset must be absent unless the scrape explicitly records that native row',
+);
+const popupFallbackGroups = popupJsSource.slice(
+  popupJsSource.indexOf('const FALLBACK_MODEL_ACTION_GROUPS'),
+  popupJsSource.indexOf('const cloneModelActionGroups'),
+);
+assert.doesNotMatch(
+  popupFallbackGroups,
+  /Reset to default|reset-default/,
+  'the popup fallback must not invent the optional Reset utility before catalog hydration',
+);
 
 const defaultGroups = ModelLabels.getPopupPresentationGroups(
   'configure-dynamic-gpt-5-6-luna',
@@ -239,7 +321,7 @@ assert.deepEqual(
     'F4',
     'F5',
     'Digit6',
-    'Digit0',
+    '',
   ],
   'fallback keys should mirror the first grid row with F1-F5 and the second with 1-9',
 );
@@ -358,7 +440,7 @@ assert.match(labelsContext.overlayLatestMarkup, /data-model-catalog-profile="lat
 assert.match(labelsContext.overlayLatestMarkup, /GPT-5\.6 Sol/);
 assert.match(labelsContext.overlayLatestMarkup, /Toggle Chat \/ Work/);
 assert.match(labelsContext.overlayLatestMarkup, /Toggle Speed/);
-assert.match(labelsContext.overlayLatestMarkup, /Reset to default/);
+assert.doesNotMatch(labelsContext.overlayLatestMarkup, /Reset to default/);
 assert.match(labelsContext.overlayLatestMarkup, /data-group="model-toggles"/);
 assert.match(labelsContext.overlayLatestMarkup, />Model Toggles</);
 assert.match(labelsContext.overlayLegacyMarkup, /data-model-catalog-profile="legacy"/);
@@ -423,8 +505,27 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /const waitForPillMainMenuFromShortcut = async \(\) =>[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\)/,
-  'pill refresh should use the shared working main-menu opener',
+  /const waitForPillMainMenuFromShortcut = async \(\) =>[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(opened\)/,
+  'pill refresh should use the shared main-menu opener and expand Advanced before returning',
+);
+const pillAdvancedSource = contentSource.slice(
+  contentSource.indexOf('const getPillAdvancedToggle ='),
+  contentSource.indexOf('const getOpenPillSubmenuForTrigger ='),
+);
+assert.match(
+  pillAdvancedSource,
+  /getPillAdvancedToggle\(mainMenu\)[\s\S]*?!isPillAdvancedToggleExpanded\(initialToggle\)[\s\S]*?smartClickSafe\(initialToggle\)/,
+  'a collapsed Advanced control should be clicked before submenu work begins',
+);
+assert.match(
+  pillAdvancedSource,
+  /getPillSubmenuTriggers\(current\)\.length >= 2 \? current : null/,
+  'Advanced expansion should wait until the required Model and Effort triggers are ready',
+);
+assert.doesNotMatch(
+  pillAdvancedSource,
+  /['"](?:Advanced|Show advanced options|Show compact options)['"]/,
+  'Advanced expansion must not depend on localized control text',
 );
 assert.match(
   contentSource,
@@ -461,8 +562,8 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /const getPillModelTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length === 3 \? triggers\[0\] : null/,
-  'the current three-submenu pill should expose Model through its verified first structural trigger',
+  /const getPillModelTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length >= 2 \? triggers\[0\] : null/,
+  'both current compact pills should expose Model through their verified first structural trigger',
 );
 assert.doesNotMatch(
   contentSource.slice(
@@ -476,6 +577,41 @@ assert.match(
   contentSource,
   /const scrapePillModelCatalogOnce = async \(\{ profile = '' \} = \{\}\) =>[\s\S]*?await waitForPillMainMenuFromShortcut\(\)/,
   'the primary pill scrape must await the shortcut opener before inventorying menus',
+);
+assert.match(
+  contentSource,
+  /const getPillMenuInventory = async \(\) => \{[\s\S]*?ensurePillAdvancedOptionsExpanded\(getOpenPillMainMenu\(\)\)/,
+  'every full pill inventory should independently enforce Advanced expansion',
+);
+assert.match(
+  contentSource,
+  /const getPillMenuInventory = async \(\) =>[\s\S]*?triggers\.model && triggers\.effort \? \{ main, triggers \} : null/,
+  'compact pill inventory should require Model and Effort while allowing Speed to be absent on Chat',
+);
+assert.match(
+  contentSource,
+  /const expectedTypes = \['model', 'effort', 'speed'\][\s\S]*?expectedType === 'effort' && type/,
+  'submenu discovery should use structural order so a two-row Effort menu is not mistaken for Speed',
+);
+assert.match(
+  contentSource,
+  /selectorShape: hasSpeedMenu \? 'pill-three-submenu' : 'pill-two-submenu'[\s\S]*?pillSpeedMenu: hasSpeedMenu[\s\S]*?pillResetAvailable: hasResetItem/,
+  'scraped catalogs should persist the observed two-versus-three submenu and reset capabilities',
+);
+assert.match(
+  contentSource,
+  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?selectPillModelNameDuringScrape\(action\)[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
+  'a Chat scrape should switch models through either menu shape when o3 changes the selector shell',
+);
+assert.match(
+  contentSource,
+  /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?getIntegratedFrontendRowsFromState/,
+  'a two-submenu Chat scrape should preserve GPT effort rows and collect integrated o3 effort rows in one catalog',
+);
+assert.match(
+  contentSource,
+  /const getProfileForCatalog = \(catalog\) => \{[\s\S]*?selectorShape === 'pill-two-submenu'[\s\S]*?MODEL_PICKER_PROFILE_LEGACY/,
+  'a generic two-submenu compact catalog should fall back to the Chat profile',
 );
 assert.match(contentSource, /runPillSpeedToggleAction/);
 assert.match(contentSource, /runPillResetAction/);
@@ -505,8 +641,17 @@ assert.doesNotMatch(
 );
 assert.match(
   pillSpeedToggleSource,
-  /getPillSpeedTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'speed'[\s\S]*?getPillMenuInventory\(\)/,
-  'Speed should use the verified third-trigger fast path before falling back to full submenu discovery',
+  /ensurePillAdvancedOptionsExpanded\(getOpenPillMainMenu\(\)\)[\s\S]*?getPillSpeedTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'speed'[\s\S]*?getPillMenuInventory\(\)/,
+  'Speed should expand Advanced before its verified third-trigger fast path and inventory fallback',
+);
+const pillResetSource = contentSource.slice(
+  contentSource.indexOf('const runPillResetAction = async'),
+  contentSource.indexOf('const INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS'),
+);
+assert.match(
+  pillResetSource,
+  /ensurePillAdvancedOptionsExpanded\(state\.main\)[\s\S]*?getPillResetMenuItem\(mainMenu\)/,
+  'Reset should expand Advanced before resolving its menu item',
 );
 const pillHintSource = contentSource.slice(
   contentSource.indexOf('function getOpenPillSubmenuByKind'),
@@ -648,8 +793,8 @@ const modelPickerRunnerSource = contentSource.slice(
 );
 assert.match(
   modelPickerRunnerSource,
-  /async function findHintedTargetAfterOpeningMenus\(sourceSlot\)[\s\S]*?typeof window\.toggleModelSelector === 'function'[\s\S]*?window\.toggleModelSelector\(\);[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\);[\s\S]*?getUniqueVisibleMenuItemForSlot\([\s\S]*?sourceSlot,[\s\S]*?mainMenu,[\s\S]*?getPillSubmenuTriggers\(mainMenu\)[\s\S]*?openPillSubmenu\(trigger\)[\s\S]*?getUniqueVisibleMenuItemForSlot\(sourceSlot, submenu\)/,
-  'fallback hint discovery should still scan exposed submenus when direct action routing cannot resolve a target',
+  /async function findHintedTargetAfterOpeningMenus\(sourceSlot\)[\s\S]*?typeof window\.toggleModelSelector === 'function'[\s\S]*?window\.toggleModelSelector\(\);[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\);[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)[\s\S]*?getUniqueVisibleMenuItemForSlot\([\s\S]*?sourceSlot,[\s\S]*?readyMainMenu,[\s\S]*?getPillSubmenuTriggers\(readyMainMenu\)[\s\S]*?openPillSubmenu\(trigger\)[\s\S]*?getUniqueVisibleMenuItemForSlot\(sourceSlot, submenu\)/,
+  'fallback hint discovery should expand Advanced before scanning exposed submenus',
 );
 assert.doesNotMatch(
   modelPickerRunnerSource,

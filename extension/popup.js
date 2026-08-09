@@ -56,7 +56,6 @@ const FALLBACK_MODEL_ACTION_GROUPS = [
         storageKey: 'shortcutKeyToggleChatWork',
       },
       { slot: 13, id: 'toggle-speed', group: 'pill-utility', label: 'Toggle Speed', actionKind: 'pill-speed-toggle' },
-      { slot: 14, id: 'reset-default', group: 'pill-utility', label: 'Reset to default', actionKind: 'pill-reset' },
     ],
   },
 ];
@@ -87,7 +86,7 @@ const resolveModelActionableNames = (incoming) =>
         'Extra High',
         'Max',
         'Toggle Speed',
-        'Reset to default',
+        '',
       ];
 const FALLBACK_LEGACY_MODEL_NAMES = [
   'Instant',
