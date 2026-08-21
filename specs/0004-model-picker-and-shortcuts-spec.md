@@ -105,6 +105,10 @@ Mode selection must use the blank-chat two-radio structure and reciprocal checke
 
 Chat is a hybrid selector surface: current GPT models use the compact two-submenu Power/Advanced shell, while selecting o3 changes the same surface to the integrated Intelligence menu. One Chat scrape must retain the GPT model/effort rows already collected from the compact shell, collect o3 effort rows from the integrated shell, and switch or restore model names through whichever shell is currently active.
 
+Model actions must choose the route from the currently open menu shape. A cached catalog may advertise pill capabilities for both shells, but it must not force an integrated o3 menu through the pill-only action path.
+
+Visible model-picker shortcut actions are serialized until the current picker closes. A missing effort row (for example Max on GPT-5.5) is a valid unavailable action: it must not change the model and must leave the picker closed. Hidden scrape actions remain independent of the visible-action queue.
+
 Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Popup hydration and profile-change events follow the same rule.
 
 `Toggle Chat / Work` uses the same native New Conversation helper as the configurable new-chat shortcut. On a nonblank conversation it starts a blank conversation, waits 500 ms for the native two-radio surface selector, then selects the unchecked radio. On an already blank conversation it toggles directly. Runtime detection uses structural radio order and reciprocal checked state, never localized labels.

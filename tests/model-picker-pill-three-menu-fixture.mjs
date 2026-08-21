@@ -608,6 +608,25 @@ assert.match(
   /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?getIntegratedFrontendRowsFromState/,
   'a two-submenu Chat scrape should preserve GPT effort rows and collect integrated o3 effort rows in one catalog',
 );
+const modelActionRoutingSource = contentSource.slice(
+  contentSource.indexOf('const runIntegratedModelNameAction = async'),
+  contentSource.indexOf('const findPillEffortItemForAction', contentSource.indexOf('const runIntegratedModelNameAction = async')),
+);
+assert.match(
+  modelActionRoutingSource,
+  /catalog\?\.integratedEffort === true \|\| catalog\?\.pillMenu === true/,
+  'hybrid model actions should remain available when either scraped menu capability is present',
+);
+assert.match(
+  modelActionRoutingSource,
+  /const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?selectPillModelNameDuringScrape/,
+  'model actions should use the pill route only when the currently open menu is actually a pill menu',
+);
+assert.match(
+  modelActionRoutingSource,
+  /const currentState = getVisibleModelMenuState\(\)[\s\S]*?const pillMain = getOpenPillMainMenu\(\)[\s\S]*?openModelVersionSubmenu\(initialState \|\| currentState\)/,
+  'model actions should fall back to the integrated model submenu after opening an integrated menu',
+);
 assert.match(
   contentSource,
   /const getProfileForCatalog = \(catalog\) => \{[\s\S]*?selectorShape === 'pill-two-submenu'[\s\S]*?MODEL_PICKER_PROFILE_LEGACY/,
@@ -826,6 +845,16 @@ assert.ok(
       'dispatchActionWithoutVisibleHint(action, options, complete);',
     ),
   'the visible hinted item must win before Work-mode pill submenu routing',
+);
+assert.match(
+  modelPickerRunnerSource,
+  /let modelPickerActionQueue = Promise\.resolve\(\)[\s\S]*?options\.hideUi === true[\s\S]*?\.then\(run\)/,
+  'visible shortcut actions should serialize rapid model and effort transitions while hidden scrape actions stay independent',
+);
+assert.match(
+  modelPickerRunnerSource,
+  /const settleVisibleModelPickerAction = async[\s\S]*?isModelMenuLikelyActive\(\)[\s\S]*?clearOpenModelMenuBeforeSequentialReplay\(\)/,
+  'visible shortcut queue entries should wait for the picker to close and clean up unavailable actions',
 );
 assert.match(
   modelPickerRunnerSource,

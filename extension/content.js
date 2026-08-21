@@ -13066,9 +13066,20 @@ form.w-full[data-type="unified-composer"] {
         action,
         { hideUi = false, initialState = null } = {},
       ) => {
-        if (!action?.id || window.__modelCatalog?.integratedEffort !== true) return false;
+        const catalog = window.__modelCatalog;
+        if (
+          !action?.id ||
+          !(catalog?.integratedEffort === true || catalog?.pillMenu === true)
+        ) {
+          return false;
+        }
         return withTemporarilyHiddenModelUi(hideUi, async () => {
-          if (window.__modelCatalog?.pillMenu === true) {
+          // A catalog can describe both shells: ChatGPT may expose the compact
+          // Power/Advanced menu for GPT models and the integrated Intelligence
+          // menu for o3. Route from the menu that is actually open rather than
+          // from the cached catalog's broad capability flag.
+          const openPillMain = getOpenPillMainMenu();
+          if (openPillMain) {
             const selected = await selectPillModelNameDuringScrape(action);
             if (!selected) return false;
             if (!hideUi) flashBottomBar();
@@ -13077,7 +13088,16 @@ form.w-full[data-type="unified-composer"] {
 
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
-          const opened = await openModelVersionSubmenu(initialState || getVisibleModelMenuState());
+          const currentState = getVisibleModelMenuState();
+          const pillMain = getOpenPillMainMenu();
+          if (pillMain) {
+            const selected = await selectPillModelNameDuringScrape(action);
+            if (!selected) return false;
+            if (!hideUi) flashBottomBar();
+            return true;
+          }
+
+          const opened = await openModelVersionSubmenu(initialState || currentState);
           const menu = opened?.menu || null;
           if (!(menu instanceof Element)) return false;
           if (hideUi) hideOpenModelUiForScrape(getVisibleModelMenuState());
@@ -13132,7 +13152,10 @@ form.w-full[data-type="unified-composer"] {
               item = findPillEffortItemForAction(menu, action);
             }
           }
-          if (!(item instanceof Element)) return false;
+          if (!(item instanceof Element)) {
+            if (!hideUi) await clearOpenModelMenuBeforeSequentialReplay();
+            return false;
+          }
 
           if (!hideUi && window.gsap) flashMenuItem(item);
           if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
@@ -13765,17 +13788,80 @@ form.w-full[data-type="unified-composer"] {
           );
         }
 
+        const MODEL_PICKER_ACTION_QUEUE_SETTLE_MS = 140;
+        const MODEL_PICKER_ACTION_QUEUE_TIMEOUT_MS = 5000;
+        const settleVisibleModelPickerAction = async (ok, { hideUi = false } = {}) => {
+          if (hideUi) return;
+          if (!ok) {
+            await clearOpenModelMenuBeforeSequentialReplay();
+            return;
+          }
+          await waitForAsync(
+            () => (isModelMenuLikelyActive() ? null : true),
+            { timeout: 1800, interval: 30 },
+          );
+          await sleepAsync(MODEL_PICKER_ACTION_QUEUE_SETTLE_MS);
+        };
+        let modelPickerActionQueue = Promise.resolve();
+
         function execute(action, options = {}) {
           if (!action) return false;
-          const complete = createCompletion(action, options);
-          // A scraped Work model already identifies its structural destination.
-          // Open the verified first Model submenu directly; hint discovery remains fallback-only.
-          if (dispatchDirectPillModelAction(action, options, complete)) return true;
-          // When the open menu already labels one exact item with this shortcut, activate that
-          // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
-          // catalogs route the same actions through submenus; the visible hint is authoritative.
-          if (dispatchVisibleHintedMenuAction(action, options, complete)) return true;
-          dispatchActionWithoutVisibleHint(action, options, complete);
+          const run = () =>
+            new Promise((resolve) => {
+              let completed = false;
+              let settled = false;
+              let timeoutId = 0;
+              const resolveAfterPickerSettles = (ok) => {
+                if (completed) return;
+                completed = true;
+                void settleVisibleModelPickerAction(ok, { hideUi: options.hideUi === true }).finally(() => {
+                  if (settled) return;
+                  settled = true;
+                  if (timeoutId) clearTimeout(timeoutId);
+                  resolve(ok);
+                });
+              };
+              const complete = createCompletion(action, {
+                ...options,
+                onComplete: (ok) => {
+                  try {
+                    options.onComplete?.(ok);
+                  } finally {
+                    resolveAfterPickerSettles(ok);
+                  }
+                },
+              });
+              if (options.hideUi !== true) {
+                timeoutId = window.setTimeout(() => {
+                  if (completed || settled) return;
+                  completed = true;
+                  void clearOpenModelMenuBeforeSequentialReplay().finally(() => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(false);
+                  });
+                }, MODEL_PICKER_ACTION_QUEUE_TIMEOUT_MS);
+              }
+              // A scraped Work model already identifies its structural destination.
+              // Open the verified first Model submenu directly; hint discovery remains fallback-only.
+              if (dispatchDirectPillModelAction(action, options, complete)) return;
+              // When the open menu already labels one exact item with this shortcut, activate that
+              // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
+              // catalogs route the same actions through submenus; the visible hint is authoritative.
+              if (dispatchVisibleHintedMenuAction(action, options, complete)) return;
+              dispatchActionWithoutVisibleHint(action, options, complete);
+            });
+
+          // Scrape/runtime actions that hide the UI already have their own bounded flow. Visible
+          // keyboard actions are serialized so rapid shortcuts cannot race ChatGPT's menu updates.
+          if (options.hideUi === true) {
+            void run();
+            return true;
+          }
+          modelPickerActionQueue = modelPickerActionQueue
+            .catch(() => false)
+            .then(run)
+            .catch(() => false);
           return true;
         }
 

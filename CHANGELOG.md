@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 08.20.2026
+- Fixed: Model shortcuts switch reliably between ChatGPT's Advanced and o3 model menus, including rapid changes.
+
 #### 08.08.2026
 - Fixed: Model refresh and model shortcuts work with ChatGPT's new Advanced model menus in Chat and Work.
 - Fixed: Reset to Default no longer appears when ChatGPT does not offer it.
