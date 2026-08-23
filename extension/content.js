@@ -2824,6 +2824,10 @@ const clickElementLikeUser = (el) => {
     'div[role="menuitemcheckbox"]',
   ].join(', ');
   const COMPOSER_TOOL_MENU_CUE_TOKENS = [
+    '#paperclip',
+    '#create-image-plugin',
+    '#skill-globe-dark',
+    '#skill-deep-research-dark',
     '#712359',
     '#ccfd18',
     '#6d72eb',
@@ -3101,7 +3105,11 @@ const clickElementLikeUser = (el) => {
     const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
 
     const btnSelector = MENU_SELECTORS.buttonPath(firstBtnPathPrefix);
-    const btn = lowestVisibleFromPaths(btnSelector, 'button', excludeAncestorSelector);
+    const semanticTriggerSelector = options.triggerSelector || '';
+    const btn =
+      (semanticTriggerSelector &&
+        lowestVisibleFromPaths(semanticTriggerSelector, 'button', excludeAncestorSelector)) ||
+      lowestVisibleFromPaths(btnSelector, 'button', excludeAncestorSelector);
     if (!btn) return false;
 
     if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
@@ -3164,7 +3172,10 @@ const clickElementLikeUser = (el) => {
 
   function runRadixMenuActionFocusInput(firstBtnPathPrefix, inputSelector, options = {}) {
     const delays = { ...DEFAULT_MENU_DELAYS, ...(options.delays || {}) };
-    const btn = lowestVisibleFromPaths(MENU_SELECTORS.buttonPath(firstBtnPathPrefix), 'button');
+    const btn =
+      (options.triggerSelector &&
+        lowestVisibleFromPaths(options.triggerSelector, 'button')) ||
+      lowestVisibleFromPaths(MENU_SELECTORS.buttonPath(firstBtnPathPrefix), 'button');
     if (!btn) return false;
 
     if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
@@ -3552,7 +3563,10 @@ const clickElementLikeUser = (el) => {
   const NARROW_SIDEBAR_POPOVER_SELECTORS = [
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
-  const SEARCH_CONVERSATION_SELECTORS = ['button[data-testid="search-conversation-button"]'];
+  const SEARCH_CONVERSATION_SELECTORS = [
+    'button[data-testid="search-conversation-button"]',
+    '#sidebar-header button[aria-label="Search"]',
+  ];
   const NEW_CHAT_SELECTORS = [
     'a[data-testid="create-new-chat-button"]',
     'button[data-testid="create-new-chat-button"]',
@@ -3564,8 +3578,10 @@ const clickElementLikeUser = (el) => {
     '#thread-bottom-container #prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"]',
     '#thread-bottom-container textarea[name="prompt-textarea"]',
   ];
-  const SEARCH_SPRITE_FRAGMENT = '#ac6d36';
-  const NEW_CHAT_SPRITE_FRAGMENT = '#3a5c87';
+  const SEARCH_SPRITE_FRAGMENT = '#sidebar-search';
+  const SEARCH_SPRITE_FALLBACK_FRAGMENT = '#ac6d36';
+  const NEW_CHAT_SPRITE_FRAGMENT = '#compose';
+  const NEW_CHAT_SPRITE_FALLBACK_FRAGMENT = '#3a5c87';
 
   function isDirectActionVisible(el) {
     if (!(el instanceof Element) || !el.isConnected) return false;
@@ -3684,6 +3700,8 @@ const clickElementLikeUser = (el) => {
     const spriteMatch = await waitForFirstVisibleElement([
       `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
       `button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
+      `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FALLBACK_FRAGMENT}"]`,
+      `button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FALLBACK_FRAGMENT}"]`,
     ]);
     const target = spriteMatch?.closest?.(
       '[data-testid="create-new-chat-button"], [data-sidebar-item="true"]',
@@ -3704,6 +3722,7 @@ const clickElementLikeUser = (el) => {
 
     const spriteMatch = await waitForFirstVisibleElement([
       `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
+      `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FALLBACK_FRAGMENT}"]`,
     ]);
     const target = spriteMatch?.closest?.('button[data-sidebar-item="true"]');
     return safeClick(target);
@@ -3715,7 +3734,7 @@ const clickElementLikeUser = (el) => {
 
     const spriteMatch = Array.from(
       document.querySelectorAll(
-        `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"]`,
+        `a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FRAGMENT}"], a[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FALLBACK_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${NEW_CHAT_SPRITE_FALLBACK_FRAGMENT}"]`,
       ),
     )
       .map((iconUse) => iconUse.closest('[data-testid="create-new-chat-button"], [data-sidebar-item="true"]'))
@@ -3843,9 +3862,7 @@ const clickElementLikeUser = (el) => {
   }
 
   function triggerNativeSearchConversationButton() {
-    const direct = Array.from(document.querySelectorAll(SEARCH_CONVERSATION_SELECTORS[0])).find(
-      (el) => isDirectActionVisible(el),
-    );
+    const direct = findFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
     if (safeClick(direct)) return true;
 
     const structural = findStructuralSearchConversationButton();
@@ -3853,7 +3870,7 @@ const clickElementLikeUser = (el) => {
 
     const spriteMatch = Array.from(
       document.querySelectorAll(
-        `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
+        `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FALLBACK_FRAGMENT}"]`,
       ),
     )
       .map((iconUse) => iconUse.closest('button[data-sidebar-item="true"]'))
@@ -5314,7 +5331,11 @@ const clickElementLikeUser = (el) => {
       const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
       const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
       const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
-      const editSelectors = [withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button')];
+      const EDIT_BUTTON_SELECTOR = 'button[aria-label="Edit message"]';
+      const editSelectors = [
+        EDIT_BUTTON_SELECTOR,
+        withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
+      ];
 
       const getEditButtonData = (root = document) => {
         const queryRoot = root && typeof root.querySelectorAll === 'function' ? root : document;
@@ -6080,17 +6101,17 @@ const clickElementLikeUser = (el) => {
     }
 
     const SHORTCUT_ICON_TOKENS = {
-      addPhotosFiles: ['#712359', 'M4.33496 12.5V7.5C4.33496'],
+      addPhotosFiles: ['#paperclip', '#712359', 'M4.33496 12.5V7.5C4.33496'],
       askToChangeResponseInputMenu: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
       branchInNewChatMenuItem: ['M3.32996 10H8.01173C8.7455', '#03583c'],
-      createImage: ['#ccfd18', '#266724', 'M9.38759 8.53403C10.0712'],
-      deepResearch: ['#46f45a'],
-      dontSearchTheWebMenuItem: ['#9254a2'],
-      moreDotsMenuButton: ['M15.498 8.50159C16.3254', '#f6d0e2'],
-      newGptConversationMenuItem: ['M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
+      createImage: ['#create-image-plugin', '#ccfd18', '#266724', 'M9.38759 8.53403C10.0712'],
+      deepResearch: ['#skill-deep-research-dark', '#46f45a'],
+      dontSearchTheWebMenuItem: ['#ffd536', '#9254a2'],
+      moreDotsMenuButton: ['#623957', 'M15.498 8.50159C16.3254', '#f6d0e2'],
+      newGptConversationMenuItem: ['#compose', 'M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
       regenerateMenuButton: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
-      searchWeb: ['#6d72eb', '#6b0d8c', 'M10 2.125C14.3492'],
+      searchWeb: ['#skill-globe-dark', '#6d72eb', '#6b0d8c', 'M10 2.125C14.3492'],
       thinkingMenuButton: ['#127a53', '#c9d737'],
     };
 
@@ -6150,6 +6171,7 @@ const clickElementLikeUser = (el) => {
         SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
         SHORTCUT_ICON_TOKENS.readAloudMenuItem,
         BOTTOM_BAR_CONTAINER_SELECTOR,
+        { triggerSelector: 'button[aria-label="More actions"]' },
       );
     }
 
@@ -6158,6 +6180,7 @@ const clickElementLikeUser = (el) => {
         SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
         SHORTCUT_ICON_TOKENS.branchInNewChatMenuItem,
         BOTTOM_BAR_CONTAINER_SELECTOR,
+        { triggerSelector: 'button[aria-label="More actions"]' },
       );
     }
 
@@ -6165,6 +6188,8 @@ const clickElementLikeUser = (el) => {
       clickLowestSvgThenSubItemSvg(
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
+        undefined,
+        { triggerSelector: 'button[aria-label="Switch model"]' },
       );
     }
 
@@ -6172,6 +6197,8 @@ const clickElementLikeUser = (el) => {
       clickLowestSvgThenSubItemSvg(
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
         SHORTCUT_ICON_TOKENS.dontSearchTheWebMenuItem,
+        undefined,
+        { triggerSelector: 'button[aria-label="Switch model"]' },
       );
     }
 
@@ -6182,6 +6209,7 @@ const clickElementLikeUser = (el) => {
         {
           caret: 'end',
           selectAll: false,
+          triggerSelector: 'button[aria-label="Switch model"]',
         },
       );
     }
@@ -6207,6 +6235,9 @@ const clickElementLikeUser = (el) => {
     function runTemporaryChatShortcut() {
       const root = document.querySelector('#conversation-header-actions') || document;
       const el =
+        root.querySelector('button[aria-label="Temporary chat"]') ||
+        root.querySelector('button[aria-label="Turn off temporary chat"]') ||
+        root.querySelector('button svg use[href*="#chat-temp"]')?.closest('button') ||
         root.querySelector('button svg use[href*="#28a8a0"]')?.closest('button') ||
         root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button');
       if (!el) return;
@@ -6223,10 +6254,10 @@ const clickElementLikeUser = (el) => {
       let toggleInProgress = false;
 
       const SPRITE_IDS = {
-        cancel: ['#85f94b'],
-        dictate: ['#33d595', '#29f921'],
-        send: ['#01bab7'],
-        submitDictation: ['#fa1dbd'],
+        cancel: ['#2dc143', '#85f94b'],
+        dictate: ['#microphone-regular-24', '#33d595', '#29f921'],
+        send: ['#send-prompt-style-thin', '#01bab7'],
+        submitDictation: ['#75ee4d', '#fa1dbd'],
       };
 
       function getComposerRoot() {
@@ -6287,14 +6318,15 @@ const clickElementLikeUser = (el) => {
 
         // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
         // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
-        const submitDictationBtn = findClickableBySpriteId(
-          composerRoot,
-          SPRITE_IDS.submitDictation,
-        );
+        const submitDictationBtn =
+          findFirstClickable(composerRoot, 'button[aria-label="Send dictated message"]') ||
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation);
         if (clickComposerControl(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn = findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate);
+        const dictateBtn =
+          findFirstClickable(composerRoot, 'button[aria-label="Start dictation"]') ||
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate);
         if (clickComposerControl(dictateBtn)) return;
 
         // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
@@ -6312,6 +6344,7 @@ const clickElementLikeUser = (el) => {
       async function runCancel() {
         const composerRoot = getComposerRoot();
         const btn =
+          findFirstClickable(composerRoot, 'button[aria-label="Cancel dictation"]') ||
           findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel);
 
         // Only stop if the active dictation cancel control is currently available; otherwise no-op.
@@ -12272,9 +12305,14 @@ form.w-full[data-type="unified-composer"] {
       };
       const selectPillModelNameDuringScrape = async (action) => {
         if (!action?.id) return false;
+        // The compact Power menu can render its Model/Effort rows before the
+        // Advanced view has finished expanding. Re-assert the structural gate
+        // immediately before opening Model so a scrape never races that view
+        // transition (or switches through a stale collapsed menu).
         const mainMenu = await waitForPillMainMenuFromShortcut();
-        if (!mainMenu) return false;
-        const directTrigger = getPillModelTriggerFromCurrentOrder(mainMenu);
+        const expandedMainMenu = await ensurePillAdvancedOptionsExpanded(mainMenu);
+        if (!expandedMainMenu) return false;
+        const directTrigger = getPillModelTriggerFromCurrentOrder(expandedMainMenu);
         let menu = directTrigger ? await openPillSubmenu(directTrigger) : null;
         if (classifyPillSubmenu(menu) !== 'model') {
           const inventory = await getPillMenuInventory();
@@ -12288,7 +12326,42 @@ form.w-full[data-type="unified-composer"] {
         return true;
       };
       const selectHybridModelNameDuringScrape = async (action) => {
-        if (await selectPillModelNameDuringScrape(action)) return true;
+        // A single Chat catalog can cross shells: GPT models use the compact
+        // Power/Advanced menu while o3 uses the integrated Intelligence menu.
+        // Decide from the live open surface first; cached catalog flags are
+        // intentionally not authoritative during a refresh transition.
+        const openPillMain = getOpenPillMainMenu();
+        if (openPillMain) {
+          logModelRefreshDebug('scrape:model-route', {
+            route: 'pill',
+            actionId: action?.id || '',
+          });
+          return selectPillModelNameDuringScrape(action);
+        }
+
+        const currentState = getVisibleModelMenuState();
+        const openIntegratedMain =
+          currentState.main instanceof Element &&
+          !!currentState.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+        if (openIntegratedMain) {
+          logModelRefreshDebug('scrape:model-route', {
+            route: 'integrated',
+            actionId: action?.id || '',
+          });
+          return selectIntegratedModelNameDuringScrape(action);
+        }
+
+        if (await selectPillModelNameDuringScrape(action)) {
+          logModelRefreshDebug('scrape:model-route', {
+            route: 'pill-fallback',
+            actionId: action?.id || '',
+          });
+          return true;
+        }
+        logModelRefreshDebug('scrape:model-route', {
+          route: 'integrated-fallback',
+          actionId: action?.id || '',
+        });
         return selectIntegratedModelNameDuringScrape(action);
       };
       const scrapePillModelCatalogOnce = async ({ profile = '' } = {}) => {
@@ -12523,6 +12596,23 @@ form.w-full[data-type="unified-composer"] {
 
         if (initialActiveModelName?.id) {
           await selectIntegratedModelNameDuringScrape(initialActiveModelName);
+        }
+
+        const incompleteModelNames = availableModelNames.filter(
+          (modelName) => {
+            const rows = frontendByConfig[modelName.id];
+            return (
+              !Array.isArray(rows) ||
+              !rows.some((row) => PILL_EFFORT_ACTION_IDS_BY_ROW.includes(row?.id))
+            );
+          },
+        );
+        if (incompleteModelNames.length) {
+          logModelRefreshDebug('integrated:incomplete', {
+            expectedModelIds: availableModelNames.map((modelName) => modelName.id),
+            missingModelIds: incompleteModelNames.map((modelName) => modelName.id),
+          });
+          return { ok: false, error: 'INTEGRATED_MODEL_OPTIONS_INCOMPLETE' };
         }
 
         const catalog = {

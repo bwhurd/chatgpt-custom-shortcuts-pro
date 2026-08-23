@@ -308,8 +308,10 @@
         'assistant-turn-web-buttons-exposed',
       ],
     }),
-    byIconToken('edit-message-button', ['#6d87e1', 'aria-label="Edit message"'], {
-      identifier: 'svg-token=#6d87e1|aria-label=Edit message',
+    bySelectorList('edit-message-button', ['button[aria-label="Edit message"]'], {
+      identifier: 'button[aria-label="Edit message"]',
+      searchNeedles: ['aria-label="Edit message"'],
+      matchGroups: [['aria-label="Edit message"']],
       uiStateRefs: ['user-turn-buttons-exposed'],
     }),
     manualTarget('edit-send-button', 'active-edit-send-button', {
@@ -343,6 +345,8 @@
     byMenuChain('search-conversation-button', 'native-search-conversation-control', {
       matchGroups: [
         ['data-testid="search-conversation-button"'],
+        ['id="sidebar-header"', 'aria-label="Search"'],
+        ['id="sidebar-header"', '#sidebar-search'],
         ['id="sidebar-header"', 'data-testid="close-sidebar-button"'],
         [
           'id="stage-sidebar-tiny-bar"',
@@ -468,13 +472,13 @@
       identifier: 'svg-token=#ec66f0 (regenerate submenu item)',
       uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
     }),
-    byIconToken('assistant-web-regenerate-item-different-model', '#9254a2', {
+    byIconToken('assistant-web-regenerate-item-different-model', ['#ffd536', '#9254a2'], {
       uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
     }),
     byInputName('assistant-web-regenerate-input', 'contextual-retry-dropdown-input', {
       uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
     }),
-    byIconToken('assistant-more-actions-trigger', '#f6d0e2', {
+    byIconToken('assistant-more-actions-trigger', ['#623957', '#f6d0e2'], {
       uiStateRefs: [
         'user-turn-buttons-exposed',
         'assistant-turn-non-web-buttons-exposed',
@@ -503,35 +507,39 @@
     byIconToken('assistant-thinking-option-heavy', '#3c5754', {
       notes: 'Thinking effort menu options are not yet part of the scrape dump family.',
     }),
-    byIconToken('temporary-chat-button', ['#28a8a0', '#6eabdf'], {
-      matchGroups: [['#28a8a0'], ['#6eabdf']],
-      notes: 'Only exposed on a blank new conversation, not the fixed conversation fixture.',
-    }),
-    byIconToken('composer-web-search-action', ['#6d72eb', '#6b0d8c'], {
-      matchGroups: [['#6d72eb'], ['#6b0d8c']],
+    byIconToken(
+      'temporary-chat-button',
+      ['#chat-temp', '#chat-temp-checked', '#28a8a0', '#6eabdf'],
+      {
+        matchGroups: [['#chat-temp'], ['#chat-temp-checked'], ['#28a8a0'], ['#6eabdf']],
+        notes: 'Only exposed on a blank new conversation, not the fixed conversation fixture.',
+      },
+    ),
+    byIconToken('composer-web-search-action', ['#skill-globe-dark', '#6d72eb', '#6b0d8c'], {
+      matchGroups: [['#skill-globe-dark'], ['#6d72eb'], ['#6b0d8c']],
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-study-action', '#1fa93b', {
       uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('composer-create-image-action', ['#ccfd18', '#266724'], {
-      matchGroups: [['#ccfd18'], ['#266724']],
+    byIconToken('composer-create-image-action', ['#create-image-plugin', '#ccfd18', '#266724'], {
+      matchGroups: [['#create-image-plugin'], ['#ccfd18'], ['#266724']],
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('composer-deep-research-action', '#46f45a', {
+    byIconToken('composer-deep-research-action', ['#skill-deep-research-dark', '#46f45a'], {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('dictate-start-button', ['#33d595', '#29f921'], {
-      identifier: 'svg-token=#33d595|#29f921',
-      matchGroups: [['#33d595'], ['#29f921']],
+    byIconToken('dictate-start-button', ['#microphone-regular-24', '#33d595', '#29f921'], {
+      identifier: 'svg-token=#microphone-regular-24|#33d595|#29f921',
+      matchGroups: [['#microphone-regular-24'], ['#33d595'], ['#29f921']],
       uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
     }),
-    manualTarget('dictate-submit-button', 'svg-token=#fa1dbd', {
-      searchNeedles: ['#fa1dbd'],
+    manualTarget('dictate-submit-button', 'svg-token=#75ee4d|#fa1dbd', {
+      searchNeedles: ['#75ee4d', '#fa1dbd'],
       notes: 'Only available after dictation has already started.',
     }),
-    manualTarget('cancel-dictation-button', 'svg-token=#85f94b', {
-      searchNeedles: ['#85f94b'],
+    manualTarget('cancel-dictation-button', 'svg-token=#2dc143|#85f94b', {
+      searchNeedles: ['#2dc143', '#85f94b'],
       notes: 'Only available while dictation is active.',
     }),
     byTestId('share-chat-button', 'share-chat-button', {
@@ -540,14 +548,14 @@
     byIconToken('composer-think-longer-action', '#e717cc', {
       uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('composer-add-photos-files-action', '#712359', {
+    byIconToken('composer-add-photos-files-action', ['#paperclip', '#712359'], {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-more-submenu-trigger', '#f6d0e2', {
       identifier: 'svg-token=#f6d0e2 (composer More submenu)',
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('new-gpt-conversation-item', '#3a5c87', {
+    byIconToken('new-gpt-conversation-item', ['#compose', '#3a5c87'], {
       notes:
         'Validated by live activation from the GPT conversation fixture; not part of the main scrape dump family.',
     }),

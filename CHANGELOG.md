@@ -8,6 +8,8 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 #### 08.20.2026
 - Fixed: Model shortcuts switch reliably between ChatGPT's Advanced and o3 model menus, including rapid changes.
+- Fixed: Model refresh follows the active ChatGPT menu shell while collecting Chat and Work model options.
+- Fixed: Shortcut targets follow ChatGPT's current composer, dictation, temporary-chat, and message-menu controls.
 
 #### 08.08.2026
 - Fixed: Model refresh and model shortcuts work with ChatGPT's new Advanced model menus in Chat and Work.

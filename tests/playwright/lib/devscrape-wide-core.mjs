@@ -547,7 +547,12 @@ function getTurnMenuProbeConfig(menuKind = 'more-actions') {
       triggerSelectors: [
         'button[aria-label="Switch model"]',
       ],
-      expectedNeedles: ['contextual-retry-dropdown-input', '#9254a2', '#ec66f0'],
+      expectedNeedles: [
+        'contextual-retry-dropdown-input',
+        '#ffd536',
+        '#9254a2',
+        '#ec66f0',
+      ],
     };
   }
   return {
@@ -828,7 +833,11 @@ async function openComposerPlusMenu(page) {
     const html = await getLatestOpenMenuHtml(page);
     if (
       html &&
-      (html.includes('#712359') ||
+      (html.includes('#paperclip') ||
+        html.includes('#create-image-plugin') ||
+        html.includes('#skill-globe-dark') ||
+        html.includes('#skill-deep-research-dark') ||
+        html.includes('#712359') ||
         html.includes('#ccfd18') ||
         html.includes('#6d72eb') ||
         html.includes('#46f45a') ||
@@ -845,7 +854,11 @@ async function openComposerPlusMenu(page) {
 function isComposerPlusMenuHtml(html) {
   return (
     Boolean(html) &&
-    (html.includes('#712359') ||
+    (html.includes('#paperclip') ||
+      html.includes('#create-image-plugin') ||
+      html.includes('#skill-globe-dark') ||
+      html.includes('#skill-deep-research-dark') ||
+      html.includes('#712359') ||
       html.includes('#ccfd18') ||
       html.includes('#6d72eb') ||
       html.includes('#46f45a') ||
@@ -1896,12 +1909,13 @@ async function prepareDictationActiveProbeState(page, fixtureUrl) {
   await prepareNewConversationProbeState(page, fixtureUrl);
   await page.context().grantPermissions(['microphone'], { origin: 'https://chatgpt.com' }).catch(() => {});
   await clickEnabledButton(page, [
+    'button[aria-label="Start dictation"]',
     'button:has(svg use[href*="#33d595"])',
     'button:has(svg use[href*="#29f921"])',
   ]);
   await page.waitForTimeout(700);
   await waitForLiveProbeTargetPresence(page, {
-    matchGroups: [['#85f94b']],
+    matchGroups: [['#2dc143'], ['#85f94b']],
   });
 }
 

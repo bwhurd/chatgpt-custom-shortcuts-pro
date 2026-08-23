@@ -605,8 +605,27 @@ assert.match(
 );
 assert.match(
   contentSource,
+  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?const currentState = getVisibleModelMenuState\(\)[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
+  'hybrid scrape model switching should choose the currently open compact or Intelligence shell before using fallbacks',
+);
+assert.match(
+  contentSource,
+  /const selectPillModelNameDuringScrape = async \(action\) => \{[\s\S]*?waitForPillMainMenuFromShortcut\(\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)/,
+  'every compact-menu scrape model switch should re-assert Advanced expansion before opening Model',
+);
+assert.match(
+  contentSource,
   /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?getIntegratedFrontendRowsFromState/,
   'a two-submenu Chat scrape should preserve GPT effort rows and collect integrated o3 effort rows in one catalog',
+);
+const integratedScrapeSource = contentSource.slice(
+  contentSource.indexOf('const scrapeIntegratedModelCatalogOnce'),
+  contentSource.indexOf('const scrapeModelCatalogOnce'),
+);
+assert.match(
+  integratedScrapeSource,
+  /const incompleteModelNames = availableModelNames\.filter[\s\S]*?frontendByConfig\[modelName\.id\][\s\S]*?INTEGRATED_MODEL_OPTIONS_INCOMPLETE/,
+  'the integrated scrape must fail loudly instead of persisting a catalog that missed a model effort surface',
 );
 const modelActionRoutingSource = contentSource.slice(
   contentSource.indexOf('const runIntegratedModelNameAction = async'),
@@ -863,7 +882,7 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /const selectPillModelNameDuringScrape = async \(action\)[\s\S]*?getPillModelTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'model'[\s\S]*?getPillMenuInventory\(\)/,
+  /const selectPillModelNameDuringScrape = async \(action\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)[\s\S]*?getPillModelTriggerFromCurrentOrder\(expandedMainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'model'[\s\S]*?getPillMenuInventory\(\)/,
   'Work model activation should verify the first-trigger fast path before full inventory fallback',
 );
 assert.match(

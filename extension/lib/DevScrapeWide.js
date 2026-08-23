@@ -270,10 +270,9 @@ const DUMP_REGISTRY = Object.freeze([
     filename: '2l_Composer_AddFilesAndMore_More_Submenu.txt',
     stateId: 'composer-add-files-and-more-more-submenu',
     label: 'Composer Add files and more More submenu',
-    steps: [
-      { type: 'open-composer-plus-menu', label: 'open composer Add files and more menu' },
-      { type: 'open-composer-more-submenu', label: 'open composer More submenu' },
-    ],
+    aliasOf: '2k_Composer_AddFilesAndMore_Menu.txt',
+    notes:
+      'Current ChatGPT exposes the composer tools directly; the former nested More submenu is retained as a compatibility alias.',
     capture: { type: 'latest-open-menu' },
   },
   {

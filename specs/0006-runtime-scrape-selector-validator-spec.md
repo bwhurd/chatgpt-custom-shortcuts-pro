@@ -167,7 +167,7 @@ Keep that implementation simple and exact. Prefer the same stable targets used b
 
 After the model-refresh menu family, the same no-reload scrape pass should also capture:
 - the composer `Add files and more` menu opened from `button[data-testid="composer-plus-btn"]`
-- the deeper submenu reached from the composer menu's nested `More` trigger
+- the former deeper submenu state as a compatibility alias when the current composer exposes its tools directly (the current site no longer renders a nested `More` trigger)
 - the header conversation menu opened from `button[data-testid="conversation-options-button"]` while `MoveTopBarToBottom` is still disabled
 - a narrow-viewport header scrape for `button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]`, because that target is responsive-only and should not be expected in the normal desktop header dump
 

@@ -105,7 +105,7 @@ Mode selection must use the blank-chat two-radio structure and reciprocal checke
 
 Chat is a hybrid selector surface: current GPT models use the compact two-submenu Power/Advanced shell, while selecting o3 changes the same surface to the integrated Intelligence menu. One Chat scrape must retain the GPT model/effort rows already collected from the compact shell, collect o3 effort rows from the integrated shell, and switch or restore model names through whichever shell is currently active.
 
-Model actions must choose the route from the currently open menu shape. A cached catalog may advertise pill capabilities for both shells, but it must not force an integrated o3 menu through the pill-only action path.
+Model actions and hidden scrape model switches must choose the route from the currently open menu shape. A cached catalog may advertise pill capabilities for both shells, but it must not force an integrated o3 menu through the pill-only action path. Compact scrape switches must re-assert the structural Advanced expansion immediately before opening Model, and an integrated scrape must fail rather than persist a catalog missing any discovered model's effort rows.
 
 Visible model-picker shortcut actions are serialized until the current picker closes. A missing effort row (for example Max on GPT-5.5) is a valid unavailable action: it must not change the model and must leave the picker closed. Hidden scrape actions remain independent of the visible-action queue.
 
@@ -156,6 +156,8 @@ Current direct-DOM pattern:
 - do not leave temporary standalone IIFEs in parallel once the main shortcut path owns the action
 
 Search Chats no longer assumes `data-testid="search-conversation-button"` or a fixed sprite fragment. Its primary language-independent targets are the button immediately before `close-sidebar-button` in `#sidebar-header`, or the `data-sidebar-item` immediately after `create-new-chat-button` in the collapsed or narrow sidebar. The old test id, sprite match, and narrow-popover opening route remain ordered fallbacks.
+
+Live icon-backed targets must keep the current sprite IDs as the primary match while retaining older IDs only as compatibility fallbacks. The current signed-in ChatGPT surface exposes More actions as `aria-label="More actions"` / `#623957`, composer tools as `#paperclip`, `#create-image-plugin`, `#skill-globe-dark`, and `#skill-deep-research-dark`, Temporary Chat as `aria-label="Temporary chat"` / `#chat-temp`, dictation as `#microphone-regular-24`, `#2dc143`, and `#75ee4d`, and the regenerate menu's former different-model action as `Use Thinking` / `#ffd536`. Runtime handlers should prefer stable ARIA or test-id selectors when available, then fall back to the sprite mapping.
 
 For dev-only runtime selector validation, the deterministic shortcut inventory should derive from:
 - `extension/shared/shortcut-action-metadata.js` for explicit shortcut validation metadata
