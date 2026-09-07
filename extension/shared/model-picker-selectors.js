@@ -75,6 +75,36 @@
     return isPillAdvancedToggle(element) && element.getAttribute('aria-expanded') === 'true';
   }
 
+  // The current integrated picker keeps its model list in the same Radix menu
+  // and exposes the view switch as a structural menuitem rather than the old
+  // aria-haspopup submenu trigger. Keep this attribute-based so it survives
+  // hashed class/name changes and localized visible text.
+  function isModelSelectionViewTrigger(element) {
+    if (
+      !element ||
+      element.getAttribute?.('role') !== 'menuitem' ||
+      !element.closest?.('[data-model-selection-view="true"]')
+    ) {
+      return false;
+    }
+
+    // Chat currently marks the view toggle interactive and exposes
+    // aria-expanded. Work uses the same structural row but marks it
+    // data-interactive="false" and omits aria-expanded. In both cases the
+    // row is the only view-control menuitem with a data-interactive state and
+    // no separate aria label/ submenu ownership; Power, speed, reset, and
+    // effort controls carry their own structural markers or labels.
+    const interactiveState = element.getAttribute?.('data-interactive');
+    if (interactiveState !== 'true' && interactiveState !== 'false') return false;
+    if (element.hasAttribute?.('aria-haspopup')) return false;
+    // Chat exposes a localized/accessibility label together with
+    // aria-expanded; Work's non-interactive row has no label. Other labelled
+    // controls (for example Power) do not carry data-interactive.
+    if (interactiveState === 'false' && element.hasAttribute?.('aria-label')) return false;
+    if (interactiveState === 'true' && !element.hasAttribute?.('aria-expanded')) return false;
+    return true;
+  }
+
   function unique(values) {
     return [...new Set((values || []).filter(Boolean))];
   }
@@ -245,6 +275,7 @@
     classifyPillSubmenuLabels,
     isPillAdvancedToggle,
     isPillAdvancedToggleExpanded,
+    isModelSelectionViewTrigger,
     unique,
     getChatWorkSurfaceToggleSelectors,
     getChatWorkSurfaceToggleMatchGroups,

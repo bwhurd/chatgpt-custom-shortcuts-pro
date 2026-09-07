@@ -6,6 +6,15 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.05.2026
+- Fixed: Update Model List finds the authenticated ChatGPT tab while the popup is focused and adapts to ChatGPT's current integrated model picker.
+- Fixed: Model refresh exposes ChatGPT's current 1.5x speed and Reset to default controls, with shortcut hints centered beneath each control.
+- Fixed: Work model refresh follows the dynamic central Advanced trigger, keeps all five current model rows addressable, and removes stray effort/reset hints.
+- Fixed: Work model refresh reads the active Advanced panel directly, preserving native order and avoiding central-trigger duplicates or partial lists.
+- Fixed: Effort shortcuts now reopen the simple Power control after Advanced closes, while stale model-row hints are cleared during surface changes.
+- Fixed: Effort shortcuts activate one Power position, dismiss the picker promptly, and no longer trigger a duplicate legacy action.
+- Fixed: Speed and Reset to default shortcuts now activate ChatGPT's live picker controls from either picker view.
+
 #### 08.20.2026
 - Fixed: Model shortcuts switch reliably between ChatGPT's Advanced and o3 model menus, including rapid changes.
 - Fixed: Model refresh follows the active ChatGPT menu shell while collecting Chat and Work model options.

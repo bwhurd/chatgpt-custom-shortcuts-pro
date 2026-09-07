@@ -112,6 +112,63 @@ assert.equal(
   'old first-row latest should become a dynamic model when a higher version is visible',
 );
 
+const currentWorkModelLabels = [
+  'Default',
+  'GPT-6 Astra',
+  'GPT-5.6 Sol',
+  'GPT-5.6 Terra',
+  'GPT-5.6 Luna',
+  'GPT-5.5',
+];
+const currentWorkActions = currentWorkModelLabels.map((label, index) =>
+  ModelLabels.getModelNameActionForLabelInList(label, index, currentWorkModelLabels),
+);
+assert.equal(
+  currentWorkActions[0]?.id,
+  'configure-latest',
+  'the native Default row should retain the latest action identity while the scraper can omit it from extension slots',
+);
+assert.deepEqual(
+  Array.from(currentWorkActions.slice(1), (action) => action?.slot),
+  [8, 9, 10, 4, 5],
+  'the five current Work model rows should fit unique catalog-backed slots without displacing utility slots',
+);
+const currentWorkCatalog = {
+  configureOptions: currentWorkActions.slice(1).map((action) => ({
+    id: action.id,
+    slot: action.slot,
+    label: action.label,
+  })),
+  integratedEffort: true,
+  integratedSpeedMenu: true,
+  integratedResetAvailable: true,
+  frontendByConfig: {},
+};
+const currentWorkGroups = ModelLabels.getPopupPresentationGroups(
+  'configure-dynamic-gpt-5-5',
+  [],
+  currentWorkCatalog,
+);
+const currentWorkConfigure = currentWorkGroups.find((group) => group.id === 'configure')?.actions || [];
+assert.deepEqual(
+  Array.from(currentWorkConfigure, (action) => action.label),
+  currentWorkModelLabels.slice(1),
+  'the current Work catalog should retain Astra, Sol, Terra, Luna, and 5.5 as separate model rows',
+);
+assert.deepEqual(
+  Array.from(currentWorkConfigure, (action) => action.id),
+  currentWorkActions.slice(1).map((action) => action.id),
+  'dynamic Work catalog rows should retain their own action identities instead of inheriting static latest',
+);
+assert.deepEqual(
+  Array.from(currentWorkConfigure, (action) => action.slot),
+  [8, 9, 10, 4, 5],
+  'dynamic Work catalog rows should retain their distinct shortcut slots',
+);
+const currentWorkCodes = ModelLabels.buildDefaultKeyCodesFromPresentationGroups(currentWorkGroups);
+assert.equal(currentWorkCodes[13], 'Digit6', 'Work speed should keep Alt+6 after the model list grows');
+assert.equal(currentWorkCodes[14], 'Digit7', 'Work reset should use Alt+7 after it is observed');
+
 const dynamicSelfPrimaryCatalog = {
   configureOptions: [
     { id: 'configure-latest', slot: 3, label: 'Latest • 5.5' },

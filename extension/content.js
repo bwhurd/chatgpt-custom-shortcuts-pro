@@ -6586,6 +6586,17 @@ const clickElementLikeUser = (el) => {
       return modelCodes.findIndex((code) => codeEquals(code, `Digit${digit}`));
     };
 
+    // The model-picker runtime owns any key currently assigned in its active
+    // profile. Legacy optional effort handlers must stand down for that same
+    // event; otherwise an F-key can launch the picker action and then schedule
+    // a second legacy menu command a few hundred milliseconds later.
+    const isModelPickerAssignedShortcutEvent = (event) => {
+      const codes = window.__modelPickerKeyCodes;
+      const codeEquals = window.ShortcutUtils?.codeEquals;
+      if (!Array.isArray(codes) || typeof codeEquals !== 'function') return false;
+      return codes.some((code) => typeof code === 'string' && code && codeEquals(code, event.code));
+    };
+
     const ALT_SHORTCUT_ACTION_KEYS = Object.keys(altShortcutActions);
     const isModelToggleShortcutEvent = (event) =>
       matchesShortcutKey(getEffectiveShortcutSetting('shortcutKeyToggleModelSelector'), event);
@@ -6645,6 +6656,7 @@ const clickElementLikeUser = (el) => {
     flushUsageAnalytics('content-start');
 
     const runDynamicThinkingEffortShortcut = (event) => {
+      if (isModelPickerAssignedShortcutEvent(event)) return false;
       const matched = THINKING_EFFORT_DYNAMIC_SHORTCUTS.find(({ storageKey }) =>
         matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event),
       );
@@ -6656,6 +6668,7 @@ const clickElementLikeUser = (el) => {
       return true;
     };
     const runDynamicProThinkingEffortShortcut = (event) => {
+      if (isModelPickerAssignedShortcutEvent(event)) return false;
       const matched = PRO_THINKING_EFFORT_DYNAMIC_SHORTCUTS.find(({ storageKey }) =>
         matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event),
       );
@@ -9147,6 +9160,8 @@ form.w-full[data-type="unified-composer"] {
   const PILL_RESET_MENU_ITEM_SELECTOR =
     ModelPickerSelectors.PILL_RESET_MENU_ITEM_SELECTOR ||
     '[role="menuitem"][class*="_ResetToDefault"]';
+  const INTEGRATED_SPEED_TOGGLE_SELECTOR =
+    '[role="menuitemcheckbox"][data-fast-mode-enabled]';
   // Radix portals keep submenus outside their parent menu, so descendant role matching
   // remains menu-scoped while supporting the pill's deeper internal wrapper hierarchy.
   const MODEL_MENU_ITEM_SELECTOR =
@@ -9295,7 +9310,7 @@ form.w-full[data-type="unified-composer"] {
           out[11] = 'F4';
           out[12] = 'F5';
           out[13] = 'Digit6';
-          out[14] = 'Digit0';
+          out[14] = 'Digit7';
         } else {
           out[6] = 'Digit4';
         }
@@ -9311,7 +9326,10 @@ form.w-full[data-type="unified-composer"] {
     mode === 'work' ? MODEL_PICKER_PROFILE_LATEST : MODEL_PICKER_PROFILE_LEGACY;
   const getProfileForCatalog = (catalog) => {
     if (catalog?.selectorShape === 'pill-two-submenu') return MODEL_PICKER_PROFILE_LEGACY;
-    return catalog?.pillMenu === true || catalog?.selectorShape === 'pill-three-submenu'
+    return catalog?.pillMenu === true ||
+      catalog?.integratedModelMenu === true ||
+      catalog?.selectorShape === 'pill-three-submenu' ||
+      catalog?.selectorShape === 'integrated-model-selection'
       ? MODEL_PICKER_PROFILE_LATEST
       : MODEL_PICKER_PROFILE_LEGACY;
   };
@@ -9639,6 +9657,12 @@ form.w-full[data-type="unified-composer"] {
 
   const isModelSubmenuTriggerItem = (item) => {
     if (!(item instanceof Element)) return false;
+    if (
+      typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
+      ModelPickerSelectors.isModelSelectionViewTrigger(item)
+    ) {
+      return true;
+    }
     if (item.matches(MODEL_THINKING_EFFORT_ACTION_SELECTOR)) return false;
     if (item.matches(MODEL_SUBMENU_TRIGGER_SELECTOR) || item.hasAttribute('data-has-submenu')) {
       return true;
@@ -9667,6 +9691,7 @@ form.w-full[data-type="unified-composer"] {
       .trim()
       .toLowerCase();
     if (!text) return false;
+    if (/^default\b/i.test(text)) return true;
     if (['instant', 'medium', 'high', 'standard', 'extended', 'light', 'heavy'].includes(text)) {
       return false;
     }
@@ -9745,6 +9770,26 @@ form.w-full[data-type="unified-composer"] {
       ),
     );
 
+  // The current integrated picker keeps the model list behind a central
+  // model/effort menuitem instead of an aria-haspopup submenu. The visible
+  // model name is dynamic, so this structural target is deliberately based on
+  // role/data attributes rather than localized text.
+  const getIntegratedModelSelectionViewTrigger = (menuEl) => {
+    if (!(menuEl instanceof Element)) return null;
+    const matchesStructuralTrigger = (item) =>
+      typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
+      ModelPickerSelectors.isModelSelectionViewTrigger(item);
+    const direct = getDirectModelMenuItems(menuEl).find(matchesStructuralTrigger);
+    if (direct) return direct;
+    return (
+      Array.from(
+        menuEl.querySelectorAll(
+          '[data-model-selection-view="true"] [role="menuitem"][data-interactive]',
+        ),
+      ).find(matchesStructuralTrigger) || null
+    );
+  };
+
   const findModelSubmenuTrigger = (menuEl) => {
     if (!(menuEl instanceof Element)) return null;
 
@@ -9753,6 +9798,9 @@ form.w-full[data-type="unified-composer"] {
       (item) => normModelTid(item.getAttribute('data-testid')) === 'legacy models-submenu',
     );
     if (exact) return exact;
+
+    const integrated = getIntegratedModelSelectionViewTrigger(menuEl);
+    if (integrated) return integrated;
 
     const candidates = directItems.filter(isModelSubmenuTriggerItem);
     const current = candidates.find(isCurrentModelSubmenuTriggerItem);
@@ -9804,7 +9852,11 @@ form.w-full[data-type="unified-composer"] {
   // Submenu polling loop in keydown flow
 
   // Activation delay (post-labeling) in keydown flow
-  const DELAY_ACTIVATE_TARGET_MS = 375; // was 750
+  // Keep the visible shortcut flash long enough to be perceptible, but do not
+  // make every model switch wait through the old 375 ms animation window.
+  // ChatGPT now commits picker rows synchronously and the runner below waits
+  // for a structural state change when one is needed.
+  const DELAY_ACTIVATE_TARGET_MS = 180; // was 375
   const DELAY_CONFIGURE_STEP_MS = 70;
   const DELAY_CONFIGURE_CLOSE_MS = 90;
   const DELAY_CONFIGURE_FINAL_CLICK_MS = DELAY_ACTIVATE_TARGET_MS;
@@ -10031,14 +10083,32 @@ form.w-full[data-type="unified-composer"] {
       const ModelPickerHints = (() => {
         const STYLE_ID = '__altHintStyle';
         const HINT_CLASS = 'alt-hint';
+        const INTEGRATED_HINT_GUARD_MARKER = 'csp-integrated-hint-guard';
         let scheduleToken = 0;
         let nextOpenSurfaceId = 1;
         let observedOpenSurfaceSignature = '';
         const openSurfaceIds = new WeakMap();
 
         function ensureStyle() {
-          if (document.getElementById(STYLE_ID)) return;
-          const style = document.createElement('style');
+          const integratedHintGuardCss = `
+                /* The integrated picker owns the effort slider's native hint.
+                   It is not a model target and must not carry effort shortcuts. */
+                [data-model-selection-view="true"] [data-testid="composer-model-picker-slider-simple-view"] .${HINT_CLASS} {
+                    display: none !important;
+                }
+                /* Replace ChatGPT's native reset hint with the extension's
+                   configured utility hint without relying on localized text. */
+                [data-model-selection-view="true"] [role="menuitem"][class*="_ResetToDefault"] .${HINT_CLASS}:not([data-csp-alt-hint="true"]) {
+                    display: none !important;
+                }`;
+          let style = document.getElementById(STYLE_ID);
+          if (style instanceof HTMLStyleElement) {
+            if (!style.textContent.includes(INTEGRATED_HINT_GUARD_MARKER)) {
+              style.textContent += `\n/* ${INTEGRATED_HINT_GUARD_MARKER} */\n${integratedHintGuardCss}`;
+            }
+            return;
+          }
+          style = document.createElement('style');
           style.id = STYLE_ID;
           style.textContent = `
                 @keyframes csp-alt-hint-fade-in {
@@ -10061,21 +10131,67 @@ form.w-full[data-type="unified-composer"] {
                     align-items: center;
                     animation: csp-alt-hint-fade-in 140ms ease-out;
                 }`;
+          style.textContent += `
+                .csp-alt-hint-utility {
+                    flex-direction: column !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    gap: 2px !important;
+                }
+                .csp-alt-hint-utility .${HINT_CLASS} {
+                    margin-left: 0;
+                    margin-top: 2px;
+                    line-height: 1;
+                }
+                /* ${INTEGRATED_HINT_GUARD_MARKER} */
+                ${integratedHintGuardCss}`;
           document.head.appendChild(style);
         }
 
         function removeAllLabels() {
-          document.querySelectorAll(`.${HINT_CLASS}`).forEach((el) => {
+          document.querySelectorAll(`.${HINT_CLASS}[data-csp-alt-hint="true"]`).forEach((el) => {
             el.remove();
           });
         }
 
+        function removeExtensionLabels(el) {
+          if (!(el instanceof Element)) return;
+          el.querySelectorAll(`.${HINT_CLASS}[data-csp-alt-hint="true"]`).forEach((hint) => {
+            hint.remove();
+          });
+        }
+
         function addLabel(el, labelText) {
-          if (!el || el.querySelector(`.${HINT_CLASS}`)) return;
           if (!labelText || labelText === '—') return;
+          const utilityHintTarget =
+            el instanceof Element &&
+            (el.matches(INTEGRATED_SPEED_TOGGLE_SELECTOR) ||
+              el.matches(PILL_RESET_MENU_ITEM_SELECTOR));
+          if (utilityHintTarget) el.classList.add('csp-alt-hint-utility');
+          if (!el) return;
+          if (utilityHintTarget) {
+            // ChatGPT renders its own Alt+F3 hint on Reset. Replace any native
+            // or stale extension hint so only the configured utility shortcut
+            // remains visible.
+            el.querySelectorAll(`.${HINT_CLASS}`).forEach((hint) => {
+              hint.remove();
+            });
+          } else {
+            const extensionHint = el.querySelector(
+              `.${HINT_CLASS}[data-csp-alt-hint="true"]`,
+            );
+            if (extensionHint) return;
+            // Model rows are extension-controlled targets. Replace a stale
+            // native hint on those rows so the configured shortcut remains
+            // authoritative; native-only rows are skipped by their caller.
+            el.querySelectorAll(`.${HINT_CLASS}`).forEach((hint) => {
+              hint.remove();
+            });
+          }
           const target = el.querySelector('.flex.items-center') || el.querySelector('.flex') || el;
           const span = document.createElement('span');
           span.className = HINT_CLASS;
+          span.setAttribute('data-csp-alt-hint', 'true');
           span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
           (target || el).appendChild(span);
         }
@@ -10190,22 +10306,91 @@ form.w-full[data-type="unified-composer"] {
         }
 
         function applyModelVersionSubmenuHints() {
-          const menu = getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
+          // ChatGPT keeps both slider panels mounted and changes the panel's
+          // own data-active state; the outer data-model-selection-view may be
+          // on either data-view="simple" or data-view="advanced" while the
+          // advanced panel is already the visible target.
+          const integratedAdvancedView = document.querySelector(
+            '[data-model-selection-view="true"] [data-testid="composer-model-picker-slider-advanced-view"][data-active="true"]',
+          );
+          const integratedItems =
+            integratedAdvancedView instanceof Element
+              ? Array.from(integratedAdvancedView.querySelectorAll(':scope [role="menuitemradio"]')).filter(
+                  (item) => isLikelyModelVersionLabel(getModelTextWithoutHints(item)),
+                )
+              : [];
+          const menu =
+            integratedItems.length > 0
+              ? integratedAdvancedView
+              : getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
           if (!(menu instanceof Element)) return false;
           let applied = false;
-          const items = getModelVersionMenuItems(menu);
+          const items = integratedItems.length > 0 ? integratedItems : getModelVersionMenuItems(menu);
+          // The integrated picker is shared by Chat and Work, but their
+          // shortcut assignments remain independent profiles. Resolve the
+          // live native surface first so Chat rows never receive Work effort
+          // codes (and vice versa) when both menus use the same DOM shell.
+          const integratedProfile =
+            typeof getRuntimeModelPickerProfile === 'function'
+              ? getRuntimeModelPickerProfile()
+              : ACTIVE_MODEL_PICKER_PROFILE;
+          const hintCodes = integratedItems.length > 0
+            ? normalizeProfileModelPickerCodes(
+                MODEL_PICKER_CODES_BY_PROFILE[integratedProfile],
+                integratedProfile,
+              )
+            : KEY_CODES;
           const listLabels = items.map(getModelVersionMenuItemLabel);
-          items.forEach((item, index) => {
+          const hasDefaultRow = listLabels.some((candidate) => /^default\b/i.test(candidate));
+          const effectiveListLabels =
+            integratedItems.length > 0 && !hasDefaultRow
+              ? ['Default', ...listLabels]
+              : listLabels;
+          const getHintAction = (item, index) => {
             const action = getModelNameActionForMenuItem(
               item,
               index,
               window.__modelCatalog,
               listLabels,
             );
+            if (action?.nativeOnly) return action;
+            if (isModelNameHintAction(action)) return action;
+
+            // A stale catalog can contain a model id with an effort/utility
+            // slot. Re-derive the live row from the visible Advanced order,
+            // which is the authoritative model identity for this menu.
+            if (typeof window.ModelLabels?.getModelNameActionForLabelInList === 'function') {
+              const label = getModelVersionMenuItemLabel(item);
+              const effectiveIndex =
+                integratedItems.length > 0 && !hasDefaultRow ? index + 1 : index;
+              const listAction = window.ModelLabels.getModelNameActionForLabelInList(
+                label,
+                effectiveIndex,
+                effectiveListLabels,
+              );
+              if (listAction?.nativeOnly || isModelNameHintAction(listAction)) return listAction;
+            }
+            return null;
+          };
+          items.forEach((item, index) => {
+            const action = getHintAction(item, index);
+            if (action?.nativeOnly) {
+              removeExtensionLabels(item);
+              return;
+            }
             const slot = Number(action?.slot);
-            if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return;
-            const label = displayFromCode(KEY_CODES[slot]);
-            if (!label || label === '—') return;
+            if (!Number.isInteger(slot) || slot < 0 || slot >= hintCodes.length) {
+              // A row can briefly outlive its catalog entry while ChatGPT
+              // swaps Chat and Work surfaces. Never leave the previous
+              // surface's hint behind during that transition.
+              removeExtensionLabels(item);
+              return;
+            }
+            const label = displayFromCode(hintCodes[slot]);
+            if (!label || label === '—') {
+              removeExtensionLabels(item);
+              return;
+            }
             addLabel(item, label);
             applied = true;
           });
@@ -10269,6 +10454,51 @@ form.w-full[data-type="unified-composer"] {
           return applied;
         }
 
+        function applyIntegratedUtilityHints() {
+          const mainMenu = getVisibleModelMenuState().main;
+          if (!isIntegratedComposerMenu(mainMenu)) return false;
+          // The slider's Alt+F4 is ChatGPT's native power shortcut, not the
+          // extension's speed shortcut. Remove it from the integrated view so
+          // the utility row shows only Alt+6 / Alt+7 below its own controls.
+          mainMenu
+            .querySelector('[data-testid="composer-model-picker-slider-simple-view"]')
+            ?.querySelectorAll(`.${HINT_CLASS}`)
+            .forEach((hint) => {
+              hint.remove();
+            });
+          const ensureUtilityCode = (actionId, preferredCode) => {
+            const action = getModelActionById(actionId);
+            const slot = Number(action?.slot);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= KEY_CODES.length) return -1;
+            const current = KEY_CODES[slot];
+            if (current && !(actionId === 'reset-default' && current === 'Digit0')) return slot;
+            KEY_CODES[slot] = preferredCode;
+            const profileCodes = MODEL_PICKER_CODES_BY_PROFILE[ACTIVE_MODEL_PICKER_PROFILE];
+            if (Array.isArray(profileCodes)) {
+              profileCodes[slot] = preferredCode;
+              const storageKey =
+                MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[ACTIVE_MODEL_PICKER_PROFILE];
+              if (storageKey) chrome.storage.sync.set({ [storageKey]: profileCodes.slice() }, () => {});
+            }
+            return slot;
+          };
+          let applied = false;
+          const utilities = [
+            [getIntegratedSpeedToggle(mainMenu), 'toggle-speed', 'Digit6'],
+            [getIntegratedResetMenuItem(mainMenu), 'reset-default', 'Digit7'],
+          ];
+          utilities.forEach(([item, actionId, preferredCode]) => {
+            if (!(item instanceof Element)) return;
+            const slot = ensureUtilityCode(actionId, preferredCode);
+            if (slot < 0) return;
+            const label = displayFromCode(KEY_CODES[slot]);
+            if (!label || label === '—') return;
+            addLabel(item, label);
+            applied = true;
+          });
+          return applied;
+        }
+
         function applyConfigureFrontendRowHints() {
           const dialog = findConfigureDialog();
           if (!(dialog instanceof Element) || !isUsablyVisibleModelElement(dialog)) return false;
@@ -10295,16 +10525,37 @@ form.w-full[data-type="unified-composer"] {
           applied = applyModelVersionSubmenuHints() || applied;
           applied = applyPillEffortSubmenuHints() || applied;
           applied = applyPillSpeedSubmenuHints() || applied;
+          applied = applyIntegratedUtilityHints() || applied;
           return applied;
         }
 
         function apply(state = getVisibleModelMenuState()) {
-          const primaryPairs = getPrimaryMenuActionPairs(state);
+          // The popup keeps Chat and Work assignments in independent profiles.
+          // A menu can be opened without a preceding radio click, so resolve
+          // the native surface at the point hints are rendered and switch the
+          // in-memory catalog/code view before mapping any rows.
+          let currentState = state;
+          const runtimeProfile = getRuntimeModelPickerProfile();
+          if (runtimeProfile !== ACTIVE_MODEL_PICKER_PROFILE) {
+            activateRuntimeModelPickerProfile(runtimeProfile, 'hints:apply');
+            currentState = getVisibleModelMenuState();
+          }
+          // The integrated composer owns the central model/effort row and
+          // Power slider. They are not extension shortcut targets; model-row
+          // hints are applied from the active Advanced panel below, while
+          // utility hints are applied by their structural controls. Keep the
+          // routing pairs intact for action execution, but do not let the
+          // generic primary fallback paint an effort code onto that shell.
+          const primaryPairs = getPrimaryMenuActionPairs(currentState).filter(
+            ({ item }) =>
+              !(item?.el instanceof Element &&
+                item.el.closest('[data-model-selection-view="true"]')),
+          );
           const selectHintsApplied = applyOpenSelectListboxHints();
           if (!primaryPairs.length) return selectHintsApplied;
           const expectedHintTexts = getExpectedPrimaryHintTexts(primaryPairs);
           if (primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts)) {
-            syncActiveConfigFromMenuState(state, { persist: true });
+            syncActiveConfigFromMenuState(currentState, { persist: true });
             ModelPickerNameCache.maybePersistFromOpenMenus();
             return true;
           }
@@ -10315,7 +10566,7 @@ form.w-full[data-type="unified-composer"] {
             addLabel(item.el, displayFromCode(KEY_CODES[slot]));
           }
           applyOpenSelectListboxHints();
-          syncActiveConfigFromMenuState(state, { persist: true });
+          syncActiveConfigFromMenuState(currentState, { persist: true });
           // Persist labels -> names once menus are present; submenu must be open for full set.
           ModelPickerNameCache.maybePersistFromOpenMenus();
           return true;
@@ -10412,6 +10663,18 @@ form.w-full[data-type="unified-composer"] {
           if (submenuTriggerClicked) {
             setTimeout(() => schedule({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }), 0);
           }
+
+          // The integrated Work picker opens its advanced panel by toggling
+          // aria-expanded/data-active on a structural view trigger; it is not
+          // a Radix submenu trigger and therefore misses the branch above.
+          const integratedViewTrigger =
+            typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
+            target && ModelPickerSelectors.isModelSelectionViewTrigger(target)
+              ? target
+              : target?.closest?.('[data-model-selection-view="true"] [role="menuitem"][data-interactive][aria-expanded]');
+          if (integratedViewTrigger) {
+            setTimeout(() => schedule({ retries: 4, interval: 25 }), 0);
+          }
         }
 
         function getOpenSelectListboxCount() {
@@ -10442,7 +10705,20 @@ form.w-full[data-type="unified-composer"] {
               const roleShape = ['menuitem', 'menuitemradio', 'option']
                 .map((role) => surface.querySelectorAll(`[role="${role}"]`).length)
                 .join(':');
-              return `${openSurfaceIds.get(surface)}:${roleShape}`;
+              const integratedView = surface.querySelector('[data-model-selection-view="true"]');
+              const advancedState = integratedView
+                ? Array.from(
+                    integratedView.querySelectorAll(
+                      '[data-testid="composer-model-picker-slider-advanced-view"]',
+                    ),
+                  )
+                    .map(
+                      (panel) =>
+                        `${panel.getAttribute('data-active') || ''}:${panel.hasAttribute('inert') ? 'inert' : 'live'}`,
+                    )
+                    .join(',')
+                : '';
+              return `${openSurfaceIds.get(surface)}:${roleShape}:view=${integratedView?.getAttribute('data-view') || ''}:advanced=${advancedState}`;
             })
             .join('|');
         }
@@ -10460,12 +10736,19 @@ form.w-full[data-type="unified-composer"] {
         }
 
         function installInteractionListeners() {
-          document.addEventListener('click', scheduleAfterMenuInteraction);
+          // Capture the integrated view-toggle click before ChatGPT's menu
+          // handler can stop propagation. One scheduled pass is enough for the
+          // panel's attribute flip; the small retry budget only covers React's
+          // next-frame commit and avoids a continuous poller.
+          document.addEventListener('click', scheduleAfterMenuInteraction, true);
 
           const observer = new MutationObserver(scheduleWhenOpenSurfaceChanges);
           observer.observe(document.documentElement, {
             childList: true,
             subtree: true,
+            // The structural view-toggle click above handles the in-place
+            // Advanced transition directly. Keep this observer child-list-only
+            // for menu mounts; no continuous attribute watcher is needed.
           });
 
           if (isModelMenuLikelyActive()) {
@@ -10490,6 +10773,19 @@ form.w-full[data-type="unified-composer"] {
       function getModelTextWithoutHints(el) {
         if (!(el instanceof Element)) return window.ModelLabels.textNoHint(el);
         const clone = el.cloneNode(true);
+        // The current integrated composer trigger contains the model and
+        // effort labels in one menu item (for example "GPT-5.6 SolHigh").
+        // ChatGPT has used both data-maximum and data-max-effort on the effort
+        // span. Remove either structural marker before model-name inference so
+        // the effort value never becomes part of a scraped model label.
+        if (
+          typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
+          ModelPickerSelectors.isModelSelectionViewTrigger(el)
+        ) {
+          clone.querySelectorAll('[data-maximum], [data-max-effort]').forEach((node) => {
+            node.remove();
+          });
+        }
         clone
           .querySelectorAll('[data-model-picker-thinking-effort-label-extra]')
           .forEach((node) => {
@@ -11128,6 +11424,29 @@ form.w-full[data-type="unified-composer"] {
         );
       };
 
+      // Slider ticks are pointer targets, not menuitems. Do not send the
+      // generic Enter confirmation after clicking one: that bubbles through
+      // the enclosing Power menuitem and can commit a second command.
+      const activateIntegratedEffortTick = (el) => {
+        if (!(el instanceof Element)) return false;
+        const rect = el.getBoundingClientRect();
+        const init = {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+          buttons: 1,
+        };
+        el.dispatchEvent(new MouseEvent('pointerover', init));
+        el.dispatchEvent(new MouseEvent('pointerenter', { ...init, bubbles: false }));
+        el.dispatchEvent(new MouseEvent('pointerdown', init));
+        el.dispatchEvent(new MouseEvent('mousedown', init));
+        el.dispatchEvent(new MouseEvent('pointerup', { ...init, buttons: 0 }));
+        el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+        el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+        return true;
+      };
+
       const pressElementKey = (el, key, code = key) => {
         if (!el) return;
         el.dispatchEvent(
@@ -11219,8 +11538,7 @@ form.w-full[data-type="unified-composer"] {
       const isPillConfiguratorMenu = (mainMenu) =>
         mainMenu instanceof Element &&
         !!mainMenu.querySelector('[role="slider"]') &&
-        (getPillAdvancedToggle(mainMenu) instanceof Element ||
-          getPillSubmenuTriggers(mainMenu).length >= 2);
+        getPillSubmenuTriggers(mainMenu).length >= 2;
       const getOpenPillMainMenu = (button = getModelMenuButton()) => {
         const triggerId = button?.id || '';
         if (!triggerId) return null;
@@ -11357,6 +11675,79 @@ form.w-full[data-type="unified-composer"] {
               item.matches(PILL_RESET_MENU_ITEM_SELECTOR),
             ) || null
           : null;
+      const getIntegratedSpeedToggle = (mainMenu) =>
+        mainMenu instanceof Element
+          ? mainMenu.querySelector(INTEGRATED_SPEED_TOGGLE_SELECTOR)
+          : null;
+      const getIntegratedResetMenuItem = (mainMenu) =>
+        mainMenu instanceof Element
+          ? mainMenu.querySelector(PILL_RESET_MENU_ITEM_SELECTOR)
+          : null;
+      const INTEGRATED_EFFORT_ACTION_IDS = Object.freeze([
+        'instant',
+        'thinking',
+        'pro',
+        'effort-extra-high',
+        'effort-max',
+      ]);
+      // Chat's compact Power control currently exposes three positions
+      // (Instant, Medium, High). Work exposes the same shortcuts over a
+      // five-position control with an additional low-power step between
+      // Instant and Medium. Keep the action order for catalog/popup storage,
+      // but resolve the live Work target by its semantic position rather
+      // than treating the shortcut row index as the slider value.
+      const INTEGRATED_EFFORT_WORK_OFFSETS = Object.freeze({
+        instant: 0,
+        thinking: 2,
+        pro: 3,
+        'effort-extra-high': 4,
+        'effort-max': 4,
+      });
+      const getIntegratedEffortTargetOffset = (actionId, span) => {
+        const id = String(actionId || '').trim();
+        const normalizedSpan = Number.isInteger(span) && span >= 0 ? span : 0;
+        // A three-position Chat slider has no low-power gap, so its action
+        // ids map directly to 0/1/2. Work and any future four/five-position
+        // slider use the semantic offsets above, clamped to the observed
+        // range so unavailable higher levels safely resolve to the maximum.
+        if (normalizedSpan <= 2) {
+          const directIndex = INTEGRATED_EFFORT_ACTION_IDS.indexOf(id);
+          return directIndex >= 0 ? Math.min(directIndex, normalizedSpan) : -1;
+        }
+        const semanticOffset = INTEGRATED_EFFORT_WORK_OFFSETS[id];
+        return Number.isInteger(semanticOffset) ? Math.min(semanticOffset, normalizedSpan) : -1;
+      };
+      const getIntegratedEffortSlider = (mainMenu) =>
+        mainMenu instanceof Element
+          ? mainMenu.querySelector(
+              '[data-testid="composer-model-picker-slider-simple-view"] [role="slider"][aria-valuemin][aria-valuemax]',
+            ) || mainMenu.querySelector('[role="slider"][aria-valuemin][aria-valuemax]')
+          : null;
+      const isIntegratedComposerMenu = (mainMenu) =>
+        mainMenu instanceof Element &&
+        (mainMenu.matches('[data-model-selection-view="true"]') ||
+          !!mainMenu.querySelector(
+            `${COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR}, [data-model-selection-view="true"]`,
+          ));
+      const collectIntegratedSpeedRows = (mainMenu) => {
+        const toggle = getIntegratedSpeedToggle(mainMenu);
+        if (!(toggle instanceof Element)) return [];
+        const fastEnabled = toggle.getAttribute('data-fast-mode-enabled') === 'true';
+        return [
+          {
+            id: 'speed-standard',
+            available: true,
+            selected: !fastEnabled,
+            label: 'Standard',
+          },
+          {
+            id: 'speed-fast',
+            available: true,
+            selected: fastEnabled,
+            label: '1.5x',
+          },
+        ];
+      };
 
       const getTargetMenuItemForAction = (action, state = getVisibleModelMenuState()) => {
         if (!action) return null;
@@ -11929,10 +12320,19 @@ form.w-full[data-type="unified-composer"] {
       )
         ? Number(window.ModelLabels.MODEL_NAME_DYNAMIC_SLOT_END)
         : MAX_SLOTS - 1;
+      const isCatalogDynamicScrapeSlot = (slot) =>
+        Number.isInteger(Number(slot)) &&
+        (Number(slot) >= DYNAMIC_SCRAPE_SLOT_START || [4, 5, 6].includes(Number(slot)));
       const isDynamicScrapeAction = (action) =>
         action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
       const createScrapeSlotAllocator = (actions, startSlot = DYNAMIC_SCRAPE_SLOT_START) => {
-        let nextDynamicSlot = startSlot;
+        const dynamicFallbackSlots = Array.from(
+          { length: Math.max(0, DYNAMIC_SCRAPE_SLOT_END - startSlot + 1) },
+          (_, index) => startSlot + index,
+        ).concat([4, 5, 6]).filter((slot, index, slots) =>
+          slot >= 0 && slot < MAX_SLOTS && slots.indexOf(slot) === index,
+        );
+        let nextDynamicSlotIndex = 0;
         const usedSlots = new Set();
         const reservedCatalogSlots = new Set(
           actions
@@ -11951,24 +12351,30 @@ form.w-full[data-type="unified-composer"] {
           const isDynamic = isDynamicScrapeAction(action);
           let slot = Number(action?.slot);
           if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
-          if (isDynamic && !action?.fromCatalog) slot = -1;
-          if (slot >= 0 && !usedSlots.has(slot)) {
+          if (isDynamic && !action?.fromCatalog && !isCatalogDynamicScrapeSlot(slot)) slot = -1;
+          const canUseDirectSlot =
+            slot >= 0 &&
+            !usedSlots.has(slot) &&
+            (!isDynamic ||
+              action?.fromCatalog === true ||
+              (!reservedCatalogSlots.has(slot) && !reservedStaticSlots.has(slot)));
+          if (canUseDirectSlot) {
             usedSlots.add(slot);
             return slot;
           }
           if (!isDynamic) return -1;
           while (
-            nextDynamicSlot <= DYNAMIC_SCRAPE_SLOT_END &&
-            (usedSlots.has(nextDynamicSlot) ||
-              reservedCatalogSlots.has(nextDynamicSlot) ||
-              reservedStaticSlots.has(nextDynamicSlot))
+            nextDynamicSlotIndex < dynamicFallbackSlots.length &&
+            (usedSlots.has(dynamicFallbackSlots[nextDynamicSlotIndex]) ||
+              reservedCatalogSlots.has(dynamicFallbackSlots[nextDynamicSlotIndex]) ||
+              reservedStaticSlots.has(dynamicFallbackSlots[nextDynamicSlotIndex]))
           ) {
-            nextDynamicSlot += 1;
+            nextDynamicSlotIndex += 1;
           }
-          if (nextDynamicSlot > DYNAMIC_SCRAPE_SLOT_END) return -1;
-          slot = nextDynamicSlot;
+          if (nextDynamicSlotIndex >= dynamicFallbackSlots.length) return -1;
+          slot = dynamicFallbackSlots[nextDynamicSlotIndex];
           usedSlots.add(slot);
-          nextDynamicSlot += 1;
+          nextDynamicSlotIndex += 1;
           return slot;
         };
       };
@@ -11977,7 +12383,7 @@ form.w-full[data-type="unified-composer"] {
         return elements
           .map((element, index) => {
             const action = actions[index];
-            if (!action?.id) return null;
+            if (!action?.id || action.nativeOnly === true) return null;
             const slot = takeSlot(action);
             if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
             return {
@@ -11994,16 +12400,20 @@ form.w-full[data-type="unified-composer"] {
           ? catalog.configureOptions
           : [];
         configureOptions.forEach((option, optionIndex) => {
+          const storedId = String(option?.id || '').trim();
           const action =
-            typeof window.ModelLabels?.getModelNameActionForLabel === 'function'
+            (storedId && typeof window.ModelLabels?.getCatalogActionById === 'function'
+              ? window.ModelLabels.getCatalogActionById(storedId, catalog, [])
+              : null) ||
+            (typeof window.ModelLabels?.getModelNameActionForLabel === 'function'
               ? window.ModelLabels.getModelNameActionForLabel(
                   option?.label || '',
                   optionIndex,
                   option?.slot,
                 )
               : typeof window.ModelLabels?.getActionById === 'function'
-                ? window.ModelLabels.getActionById(option?.id)
-                : null;
+                ? window.ModelLabels.getActionById(storedId)
+                : null);
           const slot = Number.isInteger(Number(option?.slot))
             ? Number(option.slot)
             : Number(action?.slot);
@@ -12101,11 +12511,47 @@ form.w-full[data-type="unified-composer"] {
       ) => {
         const label = getModelVersionMenuItemLabel(item);
         if (!label) return null;
+        const integratedSurface = item?.closest?.('[data-model-selection-view="true"]');
+        const hasDefaultRow = Array.isArray(listLabels)
+          ? listLabels.some((candidate) => /^default\b/i.test(String(candidate || '').trim()))
+          : false;
+        // In Chat mode the integrated Advanced list can omit the native
+        // Default row and start directly with the current model (currently
+        // GPT-5.6 Sol). Treat that row as a dynamic model, not as the legacy
+        // positional "latest" alias. A synthetic Default anchor preserves
+        // the dynamic slot allocator without depending on localized text.
+        const effectiveListLabels =
+          integratedSurface instanceof Element && Array.isArray(listLabels) && listLabels.length && !hasDefaultRow
+            ? ['Default', ...listLabels]
+            : listLabels;
+        const effectiveItemIndex =
+          integratedSurface instanceof Element && Array.isArray(listLabels) && listLabels.length && !hasDefaultRow
+            ? Number(itemIndex) + 1
+            : itemIndex;
+        // ChatGPT's current Work list includes a native-only Default row. It
+        // is part of the observed menu (and keeps its native Alt+F5 hint), but
+        // it is not an extension model slot. Do not let it displace the real
+        // model rows in the scraped catalog.
+        if (/^default\b/i.test(label)) {
+          return {
+            id: 'configure-latest',
+            slot: 3,
+            group: 'configure',
+            label,
+            actionKind: 'configure-option',
+            optionKind: 'first',
+            nativeOnly: true,
+          };
+        }
         const listAction =
           Array.isArray(listLabels) &&
           listLabels.length &&
           typeof window.ModelLabels?.getModelNameActionForLabelInList === 'function'
-            ? window.ModelLabels.getModelNameActionForLabelInList(label, itemIndex, listLabels)
+            ? window.ModelLabels.getModelNameActionForLabelInList(
+                label,
+                effectiveItemIndex,
+                effectiveListLabels,
+              )
             : null;
         if (typeof window.ModelLabels?.getCatalogModelNameActionForLabel === 'function') {
           const catalogAction = window.ModelLabels.getCatalogModelNameActionForLabel(
@@ -12113,8 +12559,22 @@ form.w-full[data-type="unified-composer"] {
             itemIndex,
             catalog || null,
           );
-          if (listAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID) return listAction;
-          if (catalogAction?.id === DEFAULT_ACTIVE_MODEL_CONFIG_ID && listAction?.id) {
+          // The live list is authoritative for row order and identity. Reuse
+          // a matching catalog action only for its persisted slot so a stale
+          // catalog cannot promote a later model (for example Terra) into the
+          // first popup card or duplicate it under the wrong id.
+          if (listAction?.id) {
+            // A catalog action matched by the live row label is authoritative
+            // even when its id differs from the positional fallback. This is
+            // what keeps a row such as GPT-5.6 Sol on its assigned model slot
+            // instead of reclassifying it from its current list index.
+            if (
+              catalogAction?.fromCatalog === true &&
+              catalogAction.actionKind === 'configure-option' &&
+              catalogAction.group === 'configure'
+            ) {
+              return { ...listAction, ...catalogAction, label };
+            }
             return listAction;
           }
           if (catalogAction) return catalogAction;
@@ -12125,8 +12585,30 @@ form.w-full[data-type="unified-composer"] {
         }
         return null;
       };
+      const isModelNameHintAction = (action) => {
+        if (!action || action.nativeOnly === true) return false;
+        const actionKind = String(action.actionKind || '').trim();
+        const group = String(action.group || '').trim();
+        const slot = Number(action.slot);
+        // Model rows may use the static legacy slots (3-6) or the dynamic
+        // catalog slots (8-10). Effort, speed, reset, and primary slots are
+        // deliberately excluded even if a stale catalog reports one of
+        // those slots for the same model id.
+        return (
+          actionKind === 'configure-option' &&
+          group === 'configure' &&
+          Number.isInteger(slot) &&
+          [3, 4, 5, 6, 8, 9, 10].includes(slot)
+        );
+      };
       const getOpenModelVersionSubmenu = (trigger = null) => {
-        const triggerControls = trigger?.getAttribute?.('aria-controls') || '';
+        const effectiveTrigger =
+          trigger instanceof Element
+            ? trigger
+            : getOpenModelMenus()
+                .map((menu) => getIntegratedModelSelectionViewTrigger(menu))
+                .find((candidate) => candidate instanceof Element) || null;
+        const triggerControls = effectiveTrigger?.getAttribute?.('aria-controls') || '';
         const controlled = triggerControls ? document.getElementById(triggerControls) : null;
         if (
           controlled instanceof Element &&
@@ -12137,8 +12619,21 @@ form.w-full[data-type="unified-composer"] {
           return controlled;
         }
 
-        const triggerId = trigger?.id || '';
-        const parentMenu = trigger?.closest?.('[data-radix-menu-content]') || null;
+        const triggerId = effectiveTrigger?.id || '';
+        const parentMenu = effectiveTrigger?.closest?.('[data-radix-menu-content]') || null;
+        const integratedAdvancedView = parentMenu?.querySelector?.(
+          '[data-model-selection-view="true"] [data-testid="composer-model-picker-slider-advanced-view"][data-active="true"]',
+        );
+        if (
+          integratedAdvancedView instanceof Element &&
+          getModelVersionMenuItems(integratedAdvancedView).length
+        ) {
+          // Return the active advanced panel itself. Returning the Radix
+          // parent also includes the central model/effort trigger, which is
+          // not a model row and caused selected-model duplicates/partial
+          // catalogs during refresh.
+          return integratedAdvancedView;
+        }
         const menus = Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).filter(
           (menu) => menu instanceof Element && isUsablyVisibleModelElement(menu),
         );
@@ -12160,8 +12655,30 @@ form.w-full[data-type="unified-composer"] {
             : null) || getOpenModelVersionSubmenu(state.submenuTrigger);
         if (existing) return { menu: existing, opened: false };
 
-        const trigger = state.submenuTrigger;
+        const trigger =
+          state.submenuTrigger instanceof Element
+            ? state.submenuTrigger
+            : getIntegratedModelSelectionViewTrigger(state.main);
         if (!(trigger instanceof Element)) return null;
+
+        // The current integrated picker flips its Advanced panel in place;
+        // there is no portal submenu to wait through the legacy 1.8 s hover
+        // retry loop. One structural click plus a short bounded commit wait
+        // keeps shortcut selection responsive while still tolerating React's
+        // next-frame render.
+        if (trigger.closest('[data-model-selection-view="true"]')) {
+          smartClickSafe(trigger);
+          const quickMenu = await waitForAsync(
+            () => {
+              const candidate = getOpenModelVersionSubmenu(trigger);
+              return candidate instanceof Element && getModelVersionMenuItems(candidate).length
+                ? candidate
+                : null;
+            },
+            { timeout: 650, interval: 25 },
+          );
+          if (quickMenu instanceof Element) return { menu: quickMenu, opened: true };
+        }
 
         const openAttempt = (attemptIndex) => {
           trigger.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
@@ -12204,7 +12721,7 @@ form.w-full[data-type="unified-composer"] {
         const main = state.main;
         if (!(main instanceof Element)) return [];
         const seen = new Set();
-        return getDirectModelMenuItems(main)
+        const directRows = getDirectModelMenuItems(main)
           .filter((item) => !isModelSubmenuTriggerItem(item))
           .map((item) => {
             const label = getModelTextWithoutHints(item).replace(/\s+/g, ' ').trim();
@@ -12227,12 +12744,49 @@ form.w-full[data-type="unified-composer"] {
             };
           })
           .filter(Boolean);
+        if (directRows.length) return directRows;
+
+        // The current integrated picker represents effort as a Power slider in
+        // the simple view, while model rows live in the Advanced view. Preserve
+        // the structural row order used by the shortcut catalog without relying
+        // on localized slider labels or hashed classes.
+        const slider = main.querySelector(
+          '[data-testid="composer-model-picker-slider-simple-view"] [role="slider"][aria-valuemin][aria-valuemax]',
+        );
+        if (!(slider instanceof Element)) return [];
+        const min = Number(slider.getAttribute('aria-valuemin'));
+        const max = Number(slider.getAttribute('aria-valuemax'));
+        const effortIds = ['instant', 'thinking', 'pro', 'effort-extra-high', 'effort-max'];
+        const count =
+          Number.isInteger(min) && Number.isInteger(max) && max >= min
+            ? Math.min(effortIds.length, max - min + 1)
+            : 0;
+        return effortIds.slice(0, count).map((actionId) => {
+          const action = getModelActionById(actionId);
+          const slot = Number(action?.slot);
+          if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
+          return {
+            id: actionId,
+            slot,
+            available: true,
+            label:
+              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
+                ? window.ModelLabels.getCanonicalActionLabel(actionId, action.label)
+                : action.label,
+          };
+        }).filter(Boolean);
       };
       const findModelVersionMenuItemForAction = (menu, action) => {
         const items = getModelVersionMenuItems(menu);
+        const listLabels = items.map(getModelVersionMenuItemLabel);
         return (
           items.find((item, index) => {
-            const itemAction = getModelNameActionForMenuItem(item, index, window.__modelCatalog);
+            const itemAction = getModelNameActionForMenuItem(
+              item,
+              index,
+              window.__modelCatalog,
+              listLabels,
+            );
             return itemAction?.id === action?.id;
           }) || null
         );
@@ -12248,7 +12802,47 @@ form.w-full[data-type="unified-composer"] {
         if (!(item instanceof Element)) return false;
         activateMenuItem(item);
         persistActiveModelConfigId(action.id);
-        await sleepAsync(180);
+        // Selecting a Work row closes the list before the composer surface
+        // finishes updating. Confirm the structural central trigger now
+        // reflects the selected row before collecting effort/speed controls;
+        // otherwise a slower row (currently Sol) can be scraped as the prior
+        // model and make the whole refresh look partial.
+        const expectedLabel = String(action.label || '').replace(/\s+/g, ' ').trim();
+        const settled = await waitForAsync(
+          () => {
+            const reopened = ensureMainMenuOpen();
+            if (!reopened) return null;
+            const currentState = getVisibleModelMenuState();
+            const trigger = getIntegratedModelSelectionViewTrigger(currentState.main);
+            if (!(trigger instanceof Element)) return null;
+            const currentLabel = getModelTextWithoutHints(trigger).replace(/\s+/g, ' ').trim();
+            if (expectedLabel && currentLabel === expectedLabel) return trigger;
+
+            // Chat mode's central button displays only the effort label (for
+            // example, "High"). The model selection itself remains mounted
+            // in the structural Advanced view and exposes its settled value
+            // through aria-checked/data-state, so use that marker when the
+            // button intentionally omits the model name.
+            const selectedAdvancedRow = Array.from(
+              document.querySelectorAll(
+                '[data-model-selection-view="true"] [data-testid="composer-model-picker-slider-advanced-view"] [role="menuitemradio"]',
+              ),
+            ).find(
+              (row) =>
+                row.getAttribute('aria-checked') === 'true' ||
+                row.getAttribute('data-state') === 'checked',
+            );
+            const selectedAdvancedLabel = selectedAdvancedRow
+              ? getModelTextWithoutHints(selectedAdvancedRow).replace(/\s+/g, ' ').trim()
+              : '';
+            return expectedLabel && selectedAdvancedLabel === expectedLabel
+              ? selectedAdvancedRow
+              : null;
+          },
+          { timeout: 2200, interval: 60 },
+        );
+        if (!(settled instanceof Element)) return false;
+        await sleepAsync(220);
         return true;
       };
       const PILL_EFFORT_ACTION_IDS_BY_ROW = Object.freeze([
@@ -12340,9 +12934,7 @@ form.w-full[data-type="unified-composer"] {
         }
 
         const currentState = getVisibleModelMenuState();
-        const openIntegratedMain =
-          currentState.main instanceof Element &&
-          !!currentState.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+        const openIntegratedMain = isIntegratedComposerMenu(currentState.main);
         if (openIntegratedMain) {
           logModelRefreshDebug('scrape:model-route', {
             route: 'integrated',
@@ -12401,8 +12993,12 @@ form.w-full[data-type="unified-composer"] {
             item.getAttribute('aria-checked') === 'true' ||
             item.getAttribute('data-state') === 'checked',
         );
+        const activeLabel =
+          activeIndex >= 0 ? getModelVersionMenuItemLabel(modelNameItems[activeIndex]) : '';
         const initialActiveModelName =
-          availableModelNames[Math.max(0, activeIndex)] || availableModelNames[0] || null;
+          availableModelNames.find((modelName) => modelName.label === activeLabel) ||
+          availableModelNames[0] ||
+          null;
         const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
         const frontendByConfig = {};
         const speedByConfig = {};
@@ -12428,9 +13024,7 @@ form.w-full[data-type="unified-composer"] {
             const alreadyOpen = ensureMainMenuOpen();
             await sleepAsync(alreadyOpen ? 100 : 160);
             const integratedState = getVisibleModelMenuState();
-            const isIntegratedMenu =
-              integratedState.main instanceof Element &&
-              !!integratedState.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+            const isIntegratedMenu = isIntegratedComposerMenu(integratedState.main);
             if (!isIntegratedMenu) continue;
             frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(
               integratedState,
@@ -12508,9 +13102,7 @@ form.w-full[data-type="unified-composer"] {
         const alreadyOpen = ensureMainMenuOpen();
         await sleepAsync(alreadyOpen ? 120 : 180);
         let state = getVisibleModelMenuState();
-        const isIntegratedMenu =
-          state.main instanceof Element &&
-          !!state.main.querySelector(COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR);
+        const isIntegratedMenu = isIntegratedComposerMenu(state.main);
         logModelRefreshDebug('integrated:menu-state', {
           isIntegratedMenu,
           menu: getModelRefreshDebugMenuSummary(state),
@@ -12556,6 +13148,30 @@ form.w-full[data-type="unified-composer"] {
           modelNameActions,
           getModelVersionMenuItemLabel,
         );
+        // The selected model can move during a scrape, but the native menu
+        // order is stable. Re-apply that observed structural order before any
+        // selection loop or persistence so the popup never starts with Luna
+        // (or another selected row) ahead of Astra/Sol/Terra.
+        const observedOrderById = new Map(
+          modelNameActions
+            .map((action, index) => [String(action?.id || '').trim(), index])
+            .filter(([id]) => id),
+        );
+        availableModelNames.sort(
+          (left, right) =>
+            (observedOrderById.get(String(left?.id || '').trim()) ?? Number.MAX_SAFE_INTEGER) -
+            (observedOrderById.get(String(right?.id || '').trim()) ?? Number.MAX_SAFE_INTEGER),
+        );
+        logModelRefreshDebug('integrated:model-rows', {
+          labels: modelNameLabels,
+          actions: modelNameActions.map((action) => ({
+            id: action?.id || '',
+            slot: action?.slot,
+            optionKind: action?.optionKind || '',
+            fromCatalog: action?.fromCatalog === true,
+          })),
+          available: availableModelNames.map((action) => ({ id: action.id, slot: action.slot })),
+        });
         if (!availableModelNames.length) {
           const currentState = getVisibleModelMenuState();
           const noSwitcher = isModelMenuWithoutSwitchingSurface(currentState, {
@@ -12575,14 +13191,28 @@ form.w-full[data-type="unified-composer"] {
             item.getAttribute('aria-checked') === 'true' ||
             item.getAttribute('data-state') === 'checked',
         );
+        // `availableModelNames` deliberately omits the native-only Default row,
+        // so its array index no longer matches the DOM index. Resolve the
+        // active model by action identity first; otherwise a selected Terra or
+        // Luna row is shifted to the next model and the popup's primary card
+        // is rendered out of order/duplicated.
+        const activeModelAction =
+          activeIndex >= 0 ? modelNameActions[activeIndex] : null;
         const initialActiveModelName =
-          availableModelNames[Math.max(0, activeIndex)] || availableModelNames[0] || null;
+          availableModelNames.find((modelName) => modelName.id === activeModelAction?.id) ||
+          availableModelNames[0] ||
+          null;
         const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
         const frontendByConfig = {};
+        const speedByConfig = {};
+        const initialIntegratedSpeedRows = collectIntegratedSpeedRows(state.main);
+        const hasIntegratedSpeedMenu = initialIntegratedSpeedRows.length === 2;
+        const hasIntegratedReset = getIntegratedResetMenuItem(state.main) instanceof Element;
         frontendByConfig[initialActiveConfigId] = getIntegratedFrontendRowsFromState(
           state,
           initialActiveConfigId,
         );
+        speedByConfig[initialActiveConfigId] = initialIntegratedSpeedRows;
 
         for (const modelName of availableModelNames) {
           if (modelName.id === initialActiveConfigId) continue;
@@ -12592,6 +13222,7 @@ form.w-full[data-type="unified-composer"] {
           await sleepAsync(reopened ? 100 : 160);
           state = getVisibleModelMenuState();
           frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(state, modelName.id);
+          speedByConfig[modelName.id] = collectIntegratedSpeedRows(state.main);
         }
 
         if (initialActiveModelName?.id) {
@@ -12603,7 +13234,10 @@ form.w-full[data-type="unified-composer"] {
             const rows = frontendByConfig[modelName.id];
             return (
               !Array.isArray(rows) ||
-              !rows.some((row) => PILL_EFFORT_ACTION_IDS_BY_ROW.includes(row?.id))
+              !rows.some((row) => PILL_EFFORT_ACTION_IDS_BY_ROW.includes(row?.id)) ||
+              (hasIntegratedSpeedMenu &&
+                (!Array.isArray(speedByConfig[modelName.id]) ||
+                  speedByConfig[modelName.id].length !== 2))
             );
           },
         );
@@ -12616,7 +13250,11 @@ form.w-full[data-type="unified-composer"] {
         }
 
         const catalog = {
-          version: 3,
+          version: 4,
+          selectorShape: 'integrated-model-selection',
+          integratedModelMenu: true,
+          integratedSpeedMenu: hasIntegratedSpeedMenu,
+          integratedResetAvailable: hasIntegratedReset,
           scrapedAt: Date.now(),
           integratedEffort: true,
           configureOptions: availableModelNames.map((modelName) => ({
@@ -12629,6 +13267,7 @@ form.w-full[data-type="unified-composer"] {
           })),
           thinkingEffortIds: [],
           frontendByConfig,
+          speedByConfig,
         };
         const modelNames = persistScrapedModelCatalog(catalog, {
           activeModelConfigId: initialActiveConfigId,
@@ -13276,7 +13915,240 @@ form.w-full[data-type="unified-composer"] {
         window.__modelCatalog = nextCatalog;
         MODEL_CATALOG_BY_PROFILE[ACTIVE_MODEL_PICKER_PROFILE] = nextCatalog;
       };
+      const ensureIntegratedSimplePicker = async (state) => {
+        let currentState = state || getVisibleModelMenuState();
+        const main = currentState?.main;
+        if (!(main instanceof Element)) return null;
+        const advancedView = main.querySelector(
+          '[data-testid="composer-model-picker-slider-advanced-view"][data-active="true"]',
+        );
+        if (advancedView instanceof Element) {
+          // Speed and Reset live in the simple shell. Advanced keeps that
+          // shell mounted but inert, so close the picker and reopen it before
+          // resolving either utility target.
+          pressElementKey(advancedView, 'Escape', 'Escape');
+          const closed = await waitForAsync(
+            () => (getModelMenuButton()?.getAttribute('aria-expanded') === 'false' ? true : null),
+            { timeout: 450, interval: 20 },
+          );
+          if (!closed) {
+            // Some current Radix builds ignore an untrusted Escape dispatched
+            // to the inert Advanced panel. A single direct click on the
+            // composer pill is the native close path; use it only when the
+            // Escape attempt did not dismiss the outer picker.
+            const button = getModelMenuButton();
+            try {
+              button?.click?.();
+            } catch {}
+            await waitForAsync(
+              () => (getModelMenuButton()?.getAttribute('aria-expanded') === 'false' ? true : null),
+              { timeout: 350, interval: 20 },
+            );
+          }
+          if (getModelMenuButton()?.getAttribute('aria-expanded') === 'true') return null;
+          ensureMainMenuOpen();
+          currentState = await waitForAsync(
+            () => {
+              const next = getVisibleModelMenuState();
+              return next.main instanceof Element ? next : null;
+            },
+            { timeout: 700, interval: 25 },
+          );
+          if (currentState?.main instanceof Element) {
+            const simpleView = currentState.main.querySelector(
+              '[data-testid="composer-model-picker-slider-simple-view"][data-active="true"]',
+            );
+            if (!(simpleView instanceof Element) || simpleView.hasAttribute('inert')) {
+              // The picker remembers Advanced across a close/reopen cycle on
+              // some builds. Toggle the structural model view once so the
+              // live Simple controls (Speed/Reset/Power) become targetable.
+              const modelViewTrigger = getIntegratedModelSelectionViewTrigger(currentState.main);
+              if (!(modelViewTrigger instanceof Element)) return null;
+              smartClickSafe(modelViewTrigger);
+              currentState = await waitForAsync(
+                () => {
+                  const next = getVisibleModelMenuState();
+                  const liveSimple = next.main?.querySelector(
+                    '[data-testid="composer-model-picker-slider-simple-view"][data-active="true"]',
+                  );
+                  return next.main instanceof Element &&
+                    liveSimple instanceof Element &&
+                    !liveSimple.hasAttribute('inert')
+                    ? next
+                    : null;
+                },
+                { timeout: 700, interval: 25 },
+              );
+            }
+          }
+        }
+        return currentState || null;
+      };
+      const runIntegratedSpeedToggleAction = async ({ hideUi = false } = {}) => {
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 80 : 140);
+          const state = await ensureIntegratedSimplePicker(getVisibleModelMenuState());
+          if (!state || !isIntegratedComposerMenu(state.main)) return false;
+          const toggle = getIntegratedSpeedToggle(state.main);
+          if (!(toggle instanceof Element)) return false;
+          const before = toggle.getAttribute('data-fast-mode-enabled') === 'true';
+          if (!hideUi && window.gsap) flashMenuItem(toggle);
+          if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
+          // The integrated Speed control is a Radix menuitemcheckbox.  Its
+          // React handler accepts the real pointer/click sequence, but the
+          // generic synthetic menu-item activator (which also dispatches an
+          // Enter key) is ignored by the current shell.  Use the existing
+          // user-like click helper and keep this to one activation so the
+          // shortcut cannot flash or toggle twice.
+          if (!smartClickSafe(toggle)) return false;
+          const changed = await waitForAsync(
+            () => {
+              const current = getIntegratedSpeedToggle(getVisibleModelMenuState().main);
+              if (!(current instanceof Element)) return null;
+              const next = current.getAttribute('data-fast-mode-enabled') === 'true';
+              return next !== before ? current : null;
+            },
+            { timeout: 1200, interval: 35 },
+          );
+          if (!hideUi) flashBottomBar();
+          return !!changed;
+        });
+      };
+      const runIntegratedEffortAction = async (action, { hideUi = false } = {}) => {
+        if (!INTEGRATED_EFFORT_ACTION_IDS.includes(String(action?.id || '').trim())) return false;
+        return withTemporarilyHiddenModelUi(hideUi, async () => {
+          const closePickerAfterCommit = async () => {
+            if (hideUi) return;
+            const button = getModelMenuButton();
+            if (button?.getAttribute('aria-expanded') !== 'true') return;
+            // The composer pill owns the outer open state. Sending Escape to
+            // the mounted view can only change its inner panel on Work; send
+            // one Escape to the pill itself so both Chat and Work dismiss the
+            // picker without replaying a second menu command.
+            pressElementKey(button, 'Escape', 'Escape');
+            await waitForAsync(
+              () => (button.getAttribute('aria-expanded') === 'false' ? true : null),
+              { timeout: 350, interval: 20 },
+            );
+          };
+          const alreadyOpen = ensureMainMenuOpen();
+          await sleepAsync(alreadyOpen ? 40 : 80);
+          let state = getVisibleModelMenuState();
+          const main = state.main;
+          const advancedView =
+            main instanceof Element
+              ? main.querySelector(
+                  '[data-testid="composer-model-picker-slider-advanced-view"][data-active="true"]',
+                )
+              : null;
+          if (advancedView instanceof Element) {
+            // The Power slider is inert while Advanced is active. Close the
+            // mounted picker and reopen the composer pill so the simple slider
+            // becomes the live keyboard target, matching the user-visible flow.
+            // The outer menu handles Escape as a view toggle on the current
+            // ChatGPT shell. Dispatch it to the active Advanced panel itself
+            // so the native picker closes completely before we reopen the
+            // composer pill and target the live simple Power slider.
+            pressElementKey(advancedView, 'Escape', 'Escape');
+            await waitForAsync(
+              () => (getModelMenuButton()?.getAttribute('aria-expanded') === 'false' ? true : null),
+              { timeout: 450, interval: 20 },
+            );
+            ensureMainMenuOpen();
+            state = await waitForAsync(
+              () => {
+                const next = getVisibleModelMenuState();
+                const slider = getIntegratedEffortSlider(next.main);
+                const simple = slider?.closest(
+                  '[data-testid="composer-model-picker-slider-simple-view"]',
+                );
+                return slider instanceof Element && !simple?.hasAttribute('inert') ? next : null;
+              },
+              { timeout: 700, interval: 25 },
+            );
+          }
+          if (!state || !(state.main instanceof Element)) return false;
+          if (!isIntegratedComposerMenu(state.main)) return false;
+
+          const slider = getIntegratedEffortSlider(state.main);
+          if (!(slider instanceof Element)) return false;
+          const min = Number(slider.getAttribute('aria-valuemin'));
+          const max = Number(slider.getAttribute('aria-valuemax'));
+          const effortSpan = max - min;
+          const effortOffset = getIntegratedEffortTargetOffset(action.id, effortSpan);
+          if (
+            !Number.isInteger(min) ||
+            !Number.isInteger(max) ||
+            effortOffset < 0 ||
+            min + effortOffset > max
+          ) {
+            return false;
+          }
+
+          const targetValue = min + effortOffset;
+          const control = slider.closest('[role="menuitem"]') || slider;
+          const currentValue = () => Number(slider.getAttribute('aria-valuenow'));
+          let value = currentValue();
+          if (!Number.isInteger(value)) return false;
+          if (value === targetValue) {
+            await closePickerAfterCommit();
+            return true;
+          }
+
+          // Radix exposes one structural [data-selected] tick per live effort
+          // position. Activate the destination tick directly so a shortcut
+          // does not replay every intermediate ArrowLeft/ArrowRight state (the
+          // old path made one Alt+F keypress look like several commands and
+          // caused visible flashing while the slider traversed the bar).
+          const ticks = Array.from(control.querySelectorAll('[data-selected][data-locked]'));
+          const targetTick = ticks[targetValue - min] || null;
+          if (
+            targetTick instanceof Element &&
+            targetTick.getAttribute('data-locked') !== 'true'
+          ) {
+            activateIntegratedEffortTick(targetTick);
+            const clickedValue = await waitForAsync(
+              () => {
+                const candidate = currentValue();
+                return Number.isInteger(candidate) && candidate === targetValue ? candidate : null;
+              },
+              { timeout: 320, interval: 20 },
+            );
+            if (clickedValue === targetValue) {
+              await closePickerAfterCommit();
+              return true;
+            }
+            value = currentValue();
+          }
+
+          // Defensive fallback for a future shell that omits tick metadata.
+          // This remains bounded and is reached only when direct structural
+          // activation cannot commit the requested value.
+          control.focus?.();
+          const direction = targetValue > value ? 'ArrowRight' : 'ArrowLeft';
+          const maxSteps = Math.max(1, max - min + 1);
+          for (let step = 0; step < maxSteps && value !== targetValue; step += 1) {
+            pressElementKey(control, direction, direction);
+            const next = await waitForAsync(
+              () => {
+                const candidate = currentValue();
+                return Number.isInteger(candidate) && candidate !== value ? candidate : null;
+              },
+              { timeout: 180, interval: 15 },
+            );
+            if (!Number.isInteger(next)) break;
+            value = next;
+          }
+          if (value === targetValue) await closePickerAfterCommit();
+          return value === targetValue;
+        });
+      };
       const runPillSpeedToggleAction = async ({ hideUi = false } = {}) => {
+        const currentState = getVisibleModelMenuState();
+        if (isIntegratedComposerMenu(currentState.main)) {
+          return runIntegratedSpeedToggleAction({ hideUi });
+        }
         return withTemporarilyHiddenModelUi(hideUi, async () => {
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
@@ -13307,11 +14179,30 @@ form.w-full[data-type="unified-composer"] {
         });
       };
       const runPillResetAction = async ({ hideUi = false } = {}) => {
-        if (window.__modelCatalog?.pillMenu !== true) return false;
         return withTemporarilyHiddenModelUi(hideUi, async () => {
           const alreadyOpen = ensureMainMenuOpen();
           await sleepAsync(alreadyOpen ? 80 : 140);
-          const state = getVisibleModelMenuState();
+          const state = await ensureIntegratedSimplePicker(getVisibleModelMenuState());
+          if (state && isIntegratedComposerMenu(state.main)) {
+            const integratedReset = getIntegratedResetMenuItem(state.main);
+            if (!(integratedReset instanceof Element)) return false;
+            if (!hideUi && window.gsap) flashMenuItem(integratedReset);
+            if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
+            // Reset uses the same Radix menu-item event path as Speed.  Keep
+            // the native click sequence here; synthetic Enter/click replay is
+            // no longer accepted by the current integrated picker shell.
+            if (!smartClickSafe(integratedReset)) return false;
+            await waitForAsync(
+              () =>
+                getIntegratedResetMenuItem(getVisibleModelMenuState().main) === null ||
+                !isModelMenuLikelyActive(),
+              { timeout: 700, interval: 25 },
+            );
+            persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
+            if (!hideUi) flashBottomBar();
+            return true;
+          }
+          if (window.__modelCatalog?.pillMenu !== true) return false;
           const mainMenu = await ensurePillAdvancedOptionsExpanded(state.main);
           if (!mainMenu) return false;
           const item = getPillResetMenuItem(mainMenu);
@@ -13760,6 +14651,25 @@ form.w-full[data-type="unified-composer"] {
           return true;
         }
 
+        function dispatchIntegratedEffortAction(action, options, complete) {
+          if (!INTEGRATED_EFFORT_ACTION_IDS.includes(String(action?.id || '').trim())) {
+            return false;
+          }
+          void runIntegratedEffortAction(action, {
+            hideUi: options.hideUi === true,
+          }).then((result) => {
+            if (result) {
+              complete(true);
+              return;
+            }
+            // The same effort ids are also used by older pill/configure
+            // surfaces. If the current menu is not the integrated slider,
+            // continue through the established legacy route.
+            dispatchActionWithoutVisibleHint(action, options, complete);
+          });
+          return true;
+        }
+
         function dispatchDirectPillModelAction(action, options, complete) {
           if (
             window.__modelCatalog?.pillMenu !== true ||
@@ -13787,15 +14697,27 @@ form.w-full[data-type="unified-composer"] {
         const isHintedSubmenuTrigger = (item) =>
           item instanceof Element &&
           item.getAttribute('role') === 'menuitem' &&
-          (item.getAttribute('aria-haspopup') === 'menu' || item.hasAttribute('data-has-submenu'));
+          (item.getAttribute('aria-haspopup') === 'menu' ||
+            item.hasAttribute('data-has-submenu') ||
+            (typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
+              ModelPickerSelectors.isModelSelectionViewTrigger(item)));
 
         async function findHintedTargetAfterOpeningMenus(sourceSlot) {
-          if (typeof window.toggleModelSelector === 'function') {
-            window.toggleModelSelector();
-          } else if (typeof window.__cspOpenModelPickerMainMenu === 'function') {
-            window.__cspOpenModelPickerMainMenu();
-          } else {
-            ensureMainMenuOpen();
+          // Do not toggle an already-open picker closed while looking for a
+          // hint. This race made shortcuts intermittent whenever the click
+          // that exposed Advanced had not finished its first render pass.
+          const existingMain = getVisibleModelMenuState().main;
+          if (!(existingMain instanceof Element)) {
+            if (
+              typeof window.toggleModelSelector === 'function' &&
+              typeof window.__cspOpenModelPickerMainMenu !== 'function'
+            ) {
+              window.toggleModelSelector();
+            } else if (typeof window.__cspOpenModelPickerMainMenu === 'function') {
+              window.__cspOpenModelPickerMainMenu();
+            } else {
+              ensureMainMenuOpen();
+            }
           }
           const mainMenu = await waitForAsync(
             () => {
@@ -13841,7 +14763,23 @@ form.w-full[data-type="unified-composer"] {
           // Both Speed radio rows intentionally carry the same toggle shortcut, so
           // the generic unique-hint resolver cannot choose the unchecked target.
           // Route this utility action through its structural checked-row toggle.
-          if (action.actionKind === 'pill-speed-toggle') return false;
+          // Reset likewise has a structural target in the integrated simple
+          // view, and must not be activated through the generic synthetic
+          // menu-item path while Advanced is mounted.
+          if (action.actionKind === 'pill-speed-toggle' || action.actionKind === 'pill-reset') {
+            return false;
+          }
+          // Integrated model rows are revealed behind the central view toggle.
+          // A stale hint on that toggle must never be treated as the model
+          // destination; route through the structural Advanced opener so the
+          // live row identity is resolved before activation.
+          if (
+            action.actionKind === 'configure-option' &&
+            (window.__modelCatalog?.integratedModelMenu === true ||
+              window.__modelCatalog?.integratedEffort === true)
+          ) {
+            return false;
+          }
           if (options.hideUi === true) return false;
           const sourceSlot = Number(options.sourceSlot);
           if (!Number.isInteger(sourceSlot)) return false;
@@ -13878,7 +14816,7 @@ form.w-full[data-type="unified-composer"] {
           );
         }
 
-        const MODEL_PICKER_ACTION_QUEUE_SETTLE_MS = 140;
+        const MODEL_PICKER_ACTION_QUEUE_SETTLE_MS = 55;
         const MODEL_PICKER_ACTION_QUEUE_TIMEOUT_MS = 5000;
         const settleVisibleModelPickerAction = async (ok, { hideUi = false } = {}) => {
           if (hideUi) return;
@@ -13886,11 +14824,19 @@ form.w-full[data-type="unified-composer"] {
             await clearOpenModelMenuBeforeSequentialReplay();
             return;
           }
+          const integratedPickerOpen =
+            getVisibleModelMenuState().main?.querySelector?.('[data-model-selection-view="true"]')
+              instanceof Element;
+          // The integrated picker intentionally keeps its Radix shell mounted
+          // after a model/effort selection. Waiting for aria-expanded=false in
+          // that shell consumed the old 1.8 s timeout on every shortcut and
+          // serialized the next key long after the selection had committed.
+          const closeTimeout = integratedPickerOpen ? 260 : 900;
           await waitForAsync(
             () => (isModelMenuLikelyActive() ? null : true),
-            { timeout: 1800, interval: 30 },
+            { timeout: closeTimeout, interval: 25 },
           );
-          await sleepAsync(MODEL_PICKER_ACTION_QUEUE_SETTLE_MS);
+          await sleepAsync(integratedPickerOpen ? 35 : MODEL_PICKER_ACTION_QUEUE_SETTLE_MS);
         };
         let modelPickerActionQueue = Promise.resolve();
 
@@ -13934,6 +14880,7 @@ form.w-full[data-type="unified-composer"] {
               }
               // A scraped Work model already identifies its structural destination.
               // Open the verified first Model submenu directly; hint discovery remains fallback-only.
+              if (dispatchIntegratedEffortAction(action, options, complete)) return;
               if (dispatchDirectPillModelAction(action, options, complete)) return;
               // When the open menu already labels one exact item with this shortcut, activate that
               // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
@@ -13992,6 +14939,11 @@ form.w-full[data-type="unified-composer"] {
           if (!action) return;
 
           e.preventDefault();
+          // A manually reloaded MV3 extension can briefly leave an older
+          // content-script listener attached to the same window. Stop other
+          // listeners on this event as soon as this profile has claimed the
+          // shortcut so one key press cannot enqueue two picker actions.
+          e.stopImmediatePropagation?.();
           e.stopPropagation();
           runModelPickerShortcutSlot(idx, { fallbackAction: action });
         },
@@ -15049,7 +16001,10 @@ function resetCollapsedSlimSidebarScroll(host) {
 
   const getOverlayModelCatalogProfile = (catalog) => {
     if (!catalog || typeof catalog !== 'object') return '';
-    return catalog.pillMenu === true || catalog.selectorShape === 'pill-three-submenu'
+    return catalog.pillMenu === true ||
+      catalog.integratedModelMenu === true ||
+      catalog.selectorShape === 'pill-three-submenu' ||
+      catalog.selectorShape === 'integrated-model-selection'
       ? OVERLAY_MODEL_PROFILE_LATEST
       : OVERLAY_MODEL_PROFILE_LEGACY;
   };

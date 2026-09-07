@@ -510,7 +510,7 @@
     'Digit8',
     'Digit9',
   ]);
-  const DEFAULT_RESET_MODEL_CODE = 'Digit0';
+  const DEFAULT_RESET_MODEL_CODE = 'Digit7';
   const DEFAULT_GROUP_MODEL_CODES = Object.freeze({
     primary: Object.freeze(['F1', 'F2', 'F3', 'F4', 'F5']),
     configure: DEFAULT_SEQUENTIAL_MODEL_CODES,
@@ -539,6 +539,13 @@
         if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS || seenSlots.has(slot)) return;
 
         seenSlots.add(slot);
+
+        if (base?.id === 'toggle-speed') {
+          // Utility shortcuts stay stable when a refreshed Work catalog adds
+          // more model rows ahead of them.
+          out[slot] = 'Digit6';
+          return;
+        }
 
         if (base?.id === 'reset-default') {
           out[slot] = DEFAULT_RESET_MODEL_CODE;
@@ -700,11 +707,15 @@
   };
   const toValidDynamicModelNameSlot = (value) => {
     const slot = toValidSlot(value);
-    return slot >= MODEL_NAME_DYNAMIC_SLOT_START ? slot : -1;
+    // Slots 4-6 are reserved by legacy configure actions, but are available
+    // to catalog-backed Work model rows because Chat and Work assignments are
+    // independent. Keep the historical 8+ range first for stable mappings.
+    return slot >= MODEL_NAME_DYNAMIC_SLOT_START || [4, 5, 6].includes(slot) ? slot : -1;
   };
+  const MODEL_NAME_FALLBACK_SLOTS = Object.freeze([8, 9, 10, 4, 5, 6]);
   const getDynamicModelNameFallbackSlot = (optionIndex) => {
     const index = Number.isInteger(Number(optionIndex)) ? Number(optionIndex) : 0;
-    return MODEL_NAME_DYNAMIC_SLOTS[Math.max(0, index - 1)] ?? -1;
+    return MODEL_NAME_FALLBACK_SLOTS[Math.max(0, index - 1)] ?? -1;
   };
 
   const getActionById = (id) => ACTION_BY_ID[String(id || '').trim()] || null;
@@ -746,9 +757,17 @@
     labels = [],
     slotHint = -1,
   ) => {
-    const latestIndex = getLatestModelNameIndex(labels);
     const text = normalizeModelNameLabel(label);
-    const staticAction = getStaticModelNameActionForLabel(text, optionIndex, latestIndex);
+    const normalizedLabels = Array.isArray(labels) ? labels : [];
+    const hasDefaultRow = normalizedLabels.some((candidate) =>
+      /^default\b/i.test(normalizeModelNameLabel(candidate)),
+    );
+    const latestIndex = hasDefaultRow ? -1 : getLatestModelNameIndex(normalizedLabels);
+    const staticAction = hasDefaultRow
+      ? /^default\b/i.test(text)
+        ? getActionById('configure-latest')
+        : null
+      : getStaticModelNameActionForLabel(text, optionIndex, latestIndex);
     if (staticAction) return { ...staticAction };
     if (!text) return null;
     const hintedSlot = toValidDynamicModelNameSlot(slotHint);
@@ -804,7 +823,7 @@
         if (isDynamic) {
           const optionSlot = toValidDynamicModelNameSlot(option?.slot);
           slot = optionSlot >= 0 ? optionSlot : -1;
-          if (slot < MODEL_NAME_DYNAMIC_SLOT_START || usedSlots.has(slot)) {
+          if (slot < 0 || usedSlots.has(slot)) {
             slot = takeNextDynamicSlot();
           }
           if (slot < 0) return null;
@@ -813,11 +832,24 @@
         }
         seenActionIds.add(actionId);
         usedSlots.add(slot);
+        // A dynamic catalog id must win over the positional fallback used to
+        // infer `base`. The first Work row can otherwise look like the static
+        // latest action simply because it is option index 0 after the native
+        // Default row has been omitted from the persisted options.
+        const effectiveBase =
+          isDynamic && base.id !== actionId
+            ? {
+                ...base,
+                id: actionId,
+                optionKind: 'value',
+                optionValue: option?.label || base.optionValue || '',
+              }
+            : base;
         const label =
           getCanonicalActionLabel(actionId, option?.label || '') ||
-          resolveModelNameDisplayLabel(base, incomingNames);
+          resolveModelNameDisplayLabel(effectiveBase, incomingNames);
         return {
-          ...base,
+          ...effectiveBase,
           slot,
           label,
         };
@@ -1180,11 +1212,19 @@
         viewKey: `model-toggles:${CHAT_WORK_TOGGLE_ACTION.id}`,
         active: false,
       },
-      ...(effectiveCatalog.pillMenu === true
+      ...(effectiveCatalog.pillMenu === true ||
+      effectiveCatalog.integratedSpeedMenu === true ||
+      effectiveCatalog.integratedResetAvailable === true
         ? PILL_UTILITY_ACTIONS.filter((action) => {
-            if (action.id === 'toggle-speed') return effectiveCatalog.pillSpeedMenu !== false;
+            if (action.id === 'toggle-speed') {
+              return effectiveCatalog.pillMenu === true
+                ? effectiveCatalog.pillSpeedMenu !== false
+                : effectiveCatalog.integratedSpeedMenu === true;
+            }
             if (action.id === 'reset-default') {
-              return effectiveCatalog.pillResetAvailable === true;
+              return effectiveCatalog.pillMenu === true
+                ? effectiveCatalog.pillResetAvailable === true
+                : effectiveCatalog.integratedResetAvailable === true;
             }
             return true;
           }).map((action) => ({

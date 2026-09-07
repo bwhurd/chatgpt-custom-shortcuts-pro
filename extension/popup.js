@@ -120,7 +120,10 @@ const normalizeModelCatalogProfile = (profile) =>
     : MODEL_CATALOG_PROFILE_LEGACY;
 const getModelCatalogProfileForCatalog = (catalog) => {
   if (!catalog || typeof catalog !== 'object') return '';
-  return catalog.pillMenu === true || catalog.selectorShape === 'pill-three-submenu'
+  return catalog.pillMenu === true ||
+    catalog.integratedModelMenu === true ||
+    catalog.selectorShape === 'pill-three-submenu' ||
+    catalog.selectorShape === 'integrated-model-selection'
     ? MODEL_CATALOG_PROFILE_LATEST
     : MODEL_CATALOG_PROFILE_LEGACY;
 };
@@ -198,7 +201,7 @@ const buildDefaultModelPickerCodes = ({
     out[11] = 'F4';
     out[12] = 'F5';
     out[13] = 'Digit6';
-    out[14] = 'Digit0';
+    out[14] = 'Digit7';
   }
   return out;
 };
@@ -278,19 +281,44 @@ const queryTabsAsync = (queryInfo) =>
     }
   });
 const pickBestChatGptTab = (tabs) => {
-  const list = Array.isArray(tabs) ? tabs.filter((tab) => tab?.id) : [];
+  // The popup/action window is itself the active window while this code runs.
+  // Never fall back to that extension tab: it cannot receive the content-script
+  // model-refresh message and would surface the misleading "Open a ChatGPT tab"
+  // error even when an authenticated ChatGPT tab is already open elsewhere.
+  const list = Array.isArray(tabs)
+    ? tabs.filter((tab) => tab?.id && isChatGptUrl(tab.url))
+    : [];
   if (!list.length) return null;
-  const explicitMatch = list.find((tab) => isChatGptUrl(tab.url));
-  if (explicitMatch) return explicitMatch;
+  return list
+    .slice()
+    .sort((a, b) => Number(b?.lastAccessed || 0) - Number(a?.lastAccessed || 0))[0] || null;
+};
+const pickFirstTabWithId = (tabs) => {
+  const list = Array.isArray(tabs) ? tabs.filter((tab) => tab?.id) : [];
   return list[0] || null;
 };
 const queryCurrentChatGptTab = async () => {
-  const activeCurrentWindow = pickBestChatGptTab(
-    await queryTabsAsync({ active: true, currentWindow: true }),
-  );
+  const activeCurrentWindowTabs = await queryTabsAsync({ active: true, currentWindow: true });
+  // `tab.url` is not guaranteed in an MV3 popup without the optional tabs/host
+  // URL permission. The active tab ID is still available and is enough for a
+  // content-script probe, so use it before relying on URL visibility.
+  const activeCurrentWindow =
+    pickBestChatGptTab(activeCurrentWindowTabs) || pickFirstTabWithId(activeCurrentWindowTabs);
   if (activeCurrentWindow) return activeCurrentWindow;
 
-  return pickBestChatGptTab(await queryTabsAsync({ active: true, lastFocusedWindow: true }));
+  const activeLastFocusedWindowTabs = await queryTabsAsync({
+    active: true,
+    lastFocusedWindow: true,
+  });
+  const activeLastFocusedWindow =
+    pickBestChatGptTab(activeLastFocusedWindowTabs) || pickFirstTabWithId(activeLastFocusedWindowTabs);
+  if (activeLastFocusedWindow) return activeLastFocusedWindow;
+
+  // When a detached popup/action window is focused, both active-window queries
+  // point at the popup itself. Search all open ChatGPT tabs before giving up.
+  return pickBestChatGptTab(
+    await queryTabsAsync({ url: ['*://chatgpt.com/*', '*://*.chatgpt.com/*'] }),
+  );
 };
 const sendModelMessageToTab = async (message) => {
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -348,6 +376,11 @@ const getDynamicModelNameSlotStart = () => {
 const toValidModelPickerSlot = (value) => {
   const slot = Number(value);
   return Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS ? slot : -1;
+};
+const isCatalogDynamicModelSlot = (value) => {
+  const slot = toValidModelPickerSlot(value);
+  const dynamicStart = getDynamicModelNameSlotStart();
+  return slot >= dynamicStart || [4, 5, 6].includes(slot);
 };
 const isDynamicModelNameActionId = (value) =>
   /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
@@ -429,12 +462,14 @@ const normalizeModelCatalog = (catalog) => {
     Number.isInteger(sharedDynamicEnd) && sharedDynamicEnd >= nextDynamicModelNameSlot
       ? sharedDynamicEnd
       : MODEL_PICKER_MAX_SLOTS - 1;
+  const integratedModelCatalog = catalog.integratedModelMenu === true;
+  const seenModelNameActionIds = new Set();
   const takeModelNameSlot = (action, option) => {
     const actionId = String(action?.id || option?.id || '').trim();
     const isDynamic = isDynamicModelNameActionId(actionId);
     let slot = toValidModelPickerSlot(option?.slot);
     if (slot < 0) slot = toValidModelPickerSlot(action?.slot);
-    if (isDynamic && slot < nextDynamicModelNameSlot) slot = -1;
+    if (isDynamic && !isCatalogDynamicModelSlot(slot)) slot = -1;
     if (slot >= 0 && !usedModelNameSlots.has(slot)) {
       usedModelNameSlots.add(slot);
       return slot;
@@ -458,19 +493,37 @@ const normalizeModelCatalog = (catalog) => {
     scrapedAt: Number(catalog.scrapedAt) || 0,
     selectorShape: String(catalog.selectorShape || '').trim(),
     pillMenu: catalog.pillMenu === true,
+    pillSpeedMenu: catalog.pillSpeedMenu === true,
+    pillResetAvailable: catalog.pillResetAvailable === true,
+    integratedModelMenu: catalog.integratedModelMenu === true,
+    integratedSpeedMenu: catalog.integratedSpeedMenu === true,
+    integratedResetAvailable: catalog.integratedResetAvailable === true,
     integratedEffort: catalog.integratedEffort === true,
     configureOptions: Array.isArray(catalog.configureOptions)
       ? catalog.configureOptions
           .map((option, optionIndex) => {
+            const storedId = String(option?.id || '').trim();
+            const actionByStoredId =
+              storedId && typeof window.ModelLabels?.getCatalogActionById === 'function'
+                ? window.ModelLabels.getCatalogActionById(storedId, catalog, [])
+                : null;
             const action =
-              typeof window.ModelLabels?.getModelNameActionForLabel === 'function'
+              actionByStoredId ||
+              (typeof window.ModelLabels?.getModelNameActionForLabel === 'function'
                 ? window.ModelLabels.getModelNameActionForLabel(
                     option?.label || '',
                     optionIndex,
                     option?.slot,
                   )
-                : null;
-            const id = action?.id || normalizeActiveModelConfigId(option?.id);
+                : null);
+            const id = action?.id || storedId || normalizeActiveModelConfigId(option?.id);
+            // Integrated Work's native Default row is intentionally not an
+            // extension model slot. Older cached catalogs could persist it as
+            // configure-latest; drop that stale alias so it cannot duplicate
+            // the first real model in the popup.
+            if (integratedModelCatalog && id === 'configure-latest') return null;
+            if (!id || seenModelNameActionIds.has(id)) return null;
+            seenModelNameActionIds.add(id);
             const slot = takeModelNameSlot(action, option);
             return {
               id,
@@ -478,7 +531,7 @@ const normalizeModelCatalog = (catalog) => {
               slot,
             };
           })
-          .filter((option) => option.slot >= 0)
+          .filter((option) => option && option.slot >= 0)
       : [],
     thinkingEffortIds,
     frontendByConfig,
@@ -577,11 +630,39 @@ const setModelNamesProfileCache = (names, profile, source = 'storage') => {
   }
   return window.__modelNamesProfiles[targetProfile];
 };
+const ensureIntegratedUtilityShortcutDefaults = (catalog, profile) => {
+  if (!catalog || profile !== MODEL_CATALOG_PROFILE_LATEST) return;
+  const codes = window.__modelPickerKeyCodesProfiles?.[profile];
+  if (!Array.isArray(codes)) return;
+  const next = codes.slice(0, MODEL_PICKER_MAX_SLOTS);
+  while (next.length < MODEL_PICKER_MAX_SLOTS) next.push('');
+  let changed = false;
+  if (
+    catalog.integratedSpeedMenu === true &&
+    (!next[13] || next[13] === 'Digit0')
+  ) {
+    next[13] = 'Digit6';
+    changed = true;
+  }
+  if (
+    catalog.integratedResetAvailable === true &&
+    (!next[14] || next[14] === 'Digit0')
+  ) {
+    next[14] = 'Digit7';
+    changed = true;
+  }
+  if (!changed) return;
+  window.__modelPickerKeyCodesProfiles[profile] = next;
+  if (getSelectedModelCatalogProfile() === profile) window.__modelPickerKeyCodes = next;
+  const storageKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[profile];
+  if (storageKey) chrome.storage.sync.set({ [storageKey]: next }, () => {});
+};
 const setModelCatalogCache = (catalog, source = 'storage', profileHint = '') => {
   const nextCatalog = normalizeModelCatalog(catalog);
   const profile = profileHint || (nextCatalog ? getModelCatalogProfileForCatalog(nextCatalog) : '');
   if (!profile) return null;
   window.__modelCatalogProfiles[profile] = nextCatalog;
+  ensureIntegratedUtilityShortcutDefaults(nextCatalog, profile);
   if (getSelectedModelCatalogProfile() === profile) {
     window.__modelCatalog = nextCatalog || getDefaultModelCatalogForProfile(profile);
     window.dispatchEvent(

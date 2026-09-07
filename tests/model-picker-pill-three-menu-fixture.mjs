@@ -605,7 +605,7 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?const currentState = getVisibleModelMenuState\(\)[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
+  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?const currentState = getVisibleModelMenuState\(\)[\s\S]*?isIntegratedComposerMenu\(currentState\.main\)[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
   'hybrid scrape model switching should choose the currently open compact or Intelligence shell before using fallbacks',
 );
 assert.match(
@@ -615,7 +615,7 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR[\s\S]*?getIntegratedFrontendRowsFromState/,
+  /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?isIntegratedComposerMenu\(integratedState\.main\)[\s\S]*?getIntegratedFrontendRowsFromState/,
   'a two-submenu Chat scrape should preserve GPT effort rows and collect integrated o3 effort rows in one catalog',
 );
 const integratedScrapeSource = contentSource.slice(
@@ -654,6 +654,11 @@ assert.match(
 assert.match(contentSource, /runPillSpeedToggleAction/);
 assert.match(contentSource, /runPillResetAction/);
 assert.match(contentSource, /speedByConfig/);
+assert.match(
+  contentSource,
+  /const ensureIntegratedSimplePicker = async[\s\S]*?composer-model-picker-slider-advanced-view[\s\S]*?pressElementKey\(advancedView, 'Escape', 'Escape'\)[\s\S]*?composer-model-picker-slider-simple-view/,
+  'integrated Speed and Reset actions should reopen the live simple picker after Advanced is active',
+);
 const pillSpeedSelectionUpdateSource = contentSource.slice(
   contentSource.indexOf('const updatePillSpeedSelectionInMemory ='),
   contentSource.indexOf('const runPillSpeedToggleAction = async'),
@@ -841,8 +846,8 @@ assert.doesNotMatch(
 );
 assert.match(
   modelPickerRunnerSource,
-  /function dispatchVisibleHintedMenuAction\(action, options, complete\)\s*{\s*[\s\S]*?if \(action\.actionKind === 'pill-speed-toggle'\) return false;/,
-  'the shared Speed shortcut should bypass unique-hint routing because both radio rows intentionally carry the same hint',
+  /function dispatchVisibleHintedMenuAction\(action, options, complete\)\s*{\s*[\s\S]*?if \(action\.actionKind === 'pill-speed-toggle' \|\| action\.actionKind === 'pill-reset'\)\s*\{\s*return false;/,
+  'Speed and Reset shortcuts should bypass generic hint routing and use their structural utility targets',
 );
 const modelPickerExecuteSource = modelPickerRunnerSource.slice(
   modelPickerRunnerSource.indexOf('function execute(action, options = {})'),

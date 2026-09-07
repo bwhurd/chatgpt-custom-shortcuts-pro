@@ -161,6 +161,7 @@ The model-refresh dump family should mirror the bounded primary pill flow in `ex
 - capture the structurally controlled Model submenu
 - capture the structurally controlled Effort submenu
 - capture the structurally controlled Speed submenu when present
+- when the integrated Intelligence menu exposes a single `role="menuitemcheckbox"[data-fast-mode-enabled]`, capture its 1.5x/fast capability and the structural Reset to default row as explicit catalog capabilities
 - retain integrated/two-level and Configure-dialog captures only as ordered compatibility fallbacks when those surfaces are present
 
 Keep that implementation simple and exact. Prefer the same stable targets used by the refresh-model scrape path over adding another generic submenu abstraction.
