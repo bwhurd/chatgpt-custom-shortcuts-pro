@@ -3465,10 +3465,10 @@ const clickElementLikeUser = (el) => {
   /* ---------- Copy text transformers (pure helpers) ---------- */
 
   function removeMarkdownOnCopyEnabled() {
-    return (
-      typeof window.removeMarkdownOnCopyCheckbox !== 'undefined' &&
-      !!window.removeMarkdownOnCopyCheckbox
-    );
+    if (typeof window.removeMarkdownOnCopyCheckbox !== 'undefined') {
+      return !!window.removeMarkdownOnCopyCheckbox;
+    }
+    return !!VISIBILITY_DEFAULTS.removeMarkdownOnCopyCheckbox;
   }
 
   function sanitizeCopiedText(text, { isMsgCopy = false, protectedCodeTexts = [] } = {}) {
@@ -4137,16 +4137,154 @@ const clickElementLikeUser = (el) => {
       return regions;
     }
 
-    function stripMarkdownOutsideCodeblocks(text) {
-      return splitByCodeFences(text)
-        .map((seg) =>
-          seg.isCode || seg.isInline ? seg.text : removeMarkdown(seg.text, { trimResult: false }),
-        )
-        .join('');
+    function normalizeHeaderSpacing(text) {
+      const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+      const output = [];
+      let hasContentBefore = false;
+      let lastWasHeader = false;
+
+      for (const line of lines) {
+        const headingMatch = line.match(/^[ \t\u00a0]{0,3}#{1,6}[ \t\u00a0]+(.*)$/u);
+        if (headingMatch) {
+          if (hasContentBefore) {
+            while (output.length && !output.at(-1).trim()) output.pop();
+            if (!lastWasHeader) output.push('');
+          }
+          output.push(headingMatch[1]);
+          hasContentBefore = true;
+          lastWasHeader = true;
+          continue;
+        }
+
+        if (lastWasHeader && !line.trim()) continue;
+        lastWasHeader = false;
+        output.push(line);
+        if (line.trim()) hasContentBefore = true;
+      }
+
+      return output.join('\n');
     }
 
-    function removeMarkdown(text, { trimResult = true } = {}) {
-      const result = text
+    function findUnusedCopyMaskToken(text, usedTokens, index) {
+      let token = `\u0000CSP_CODE_${index}\u0000`;
+      let suffix = index;
+      while (text.includes(token) || usedTokens.has(token)) {
+        suffix += 1;
+        token = `\u0000CSP_CODE_${suffix}\u0000`;
+      }
+      usedTokens.add(token);
+      return token;
+    }
+
+    function normalizeUnorderedListIndentation(text) {
+      const lines = String(text || '').split('\n');
+      const output = [];
+      let listBlock = [];
+
+      const flushListBlock = () => {
+        if (!listBlock.length) return;
+
+        const bulletItems = listBlock.filter((item) => item.text !== null);
+        const sourceIndents = [...new Set(bulletItems.map((item) => item.indent))].sort(
+          (a, b) => a - b,
+        );
+        const levels = new Map(sourceIndents.map((indent, index) => [indent, index]));
+        const baseWhitespace = (bulletItems[0]?.leadingWhitespace || '')
+          .replace(/\t/g, '    ')
+          .replace(/\u00a0/g, ' ');
+
+        listBlock.forEach((item, itemIndex) => {
+          if (item.text === null) {
+            const hasFollowingBullet = listBlock
+              .slice(itemIndex + 1)
+              .some((nextItem) => nextItem.text !== null);
+            if (!hasFollowingBullet) output.push(item.line);
+            return;
+          }
+
+          const level = levels.get(item.indent) || 0;
+          output.push(`${baseWhitespace}${' '.repeat(level * 4)}- ${item.text}`);
+        });
+        listBlock = [];
+      };
+
+      for (const line of lines) {
+        const match = line.match(
+          /^([ \t\u00a0]*)(?:[-*+•◦‣⁃▪▫·])[ \t\u00a0]+(.*)$/u,
+        );
+        if (match) {
+          const leadingWhitespace = match[1];
+          const normalizedWhitespace = leadingWhitespace
+            .replace(/\t/g, '    ')
+            .replace(/\u00a0/g, ' ');
+          listBlock.push({
+            indent: normalizedWhitespace.length,
+            leadingWhitespace,
+            line,
+            text: match[2],
+          });
+        } else if (listBlock.length && !line.trim()) {
+          listBlock.push({ indent: 0, line, text: null });
+        } else {
+          flushListBlock();
+          output.push(line);
+        }
+      }
+      flushListBlock();
+
+      return output.join('\n');
+    }
+
+    function normalizeHeaderSpacingOutsideCodeblocks(segments) {
+      const codeSegments = segments.filter((seg) => seg.isCode || seg.isInline);
+      if (!codeSegments.length) return normalizeHeaderSpacing(segments.map((seg) => seg.text).join(''));
+
+      const sourceText = segments.map((seg) => seg.text).join('');
+      const usedTokens = new Set();
+      const masks = [];
+      const masked = segments
+        .map((seg, index) => {
+          if (!seg.isCode && !seg.isInline) return seg.text;
+          const startToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_START`);
+          const bodyToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_BODY`);
+          const endToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_END`);
+          masks.push({ endToken, startToken, text: seg.text });
+          return `${startToken}${seg.text.replace(/[^\n]/g, bodyToken)}${endToken}`;
+        })
+        .join('');
+
+      let normalized = normalizeHeaderSpacing(masked);
+      masks.forEach(({ endToken, startToken, text: codeText }) => {
+        const start = normalized.indexOf(startToken);
+        const end = normalized.indexOf(endToken, start + startToken.length);
+        if (start < 0 || end < 0) return;
+        normalized =
+          normalized.slice(0, start) + codeText + normalized.slice(end + endToken.length);
+      });
+      return normalized;
+    }
+
+    function stripMarkdownOutsideCodeblocks(text) {
+      const processedSegments = splitByCodeFences(text).map((seg) => ({
+        ...seg,
+        text:
+          seg.isCode || seg.isInline
+            ? seg.text
+            : removeMarkdown(seg.text, {
+              normalizeHeaders: false,
+              stripHeadings: false,
+              trimResult: false,
+            }),
+      }));
+      return normalizeHeaderSpacingOutsideCodeblocks(processedSegments);
+    }
+
+    function removeMarkdown(
+      text,
+      { normalizeHeaders = true, stripHeadings = true, trimResult = true } = {},
+    ) {
+      const normalizedText = normalizeHeaders ? normalizeHeaderSpacing(text) : String(text || '');
+      let result = normalizedText
         // Images: ![alt](url) → alt
         .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
         // Links: [text](url) → text
@@ -4160,15 +4298,12 @@ const clickElementLikeUser = (el) => {
         // Fallback: strip any remaining bold markers
         .replace(/\*\*(.*?)\*\*/g, '$1')
         .replace(/__(.*?)__/g, '$1')
-        // Headings
-        .replace(/^\s{0,3}#{1,6}\s+/gm, '')
         // Blockquotes
-        .replace(/^\s{0,3}>\s?/gm, '')
-        // Ordered / unordered lists (preserve indentation)
-        .replace(/^([ \t]*)(\d+)\.\s+/gm, '$1$2. ')
-        .replace(/^([ \t]*)[-*+]\s+/gm, '$1- ')
+        .replace(/^[ \t\u00a0]{0,3}>[ \t\u00a0]?/gmu, '')
+        // Ordered lists
+        .replace(/^([ \t]*)(\d+\.)[ \t]+/gm, '$1$2 ')
         // Horizontal rules
-        .replace(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
+        .replace(/^[ \t]{0,3}(-{3,}|\*{3,}|_{3,})[ \t]*$/gm, '')
         // Collapse extra blank lines
         .replace(/\n{3,}/g, '\n\n')
         // Strip any remaining stray bold markers (e.g., split across inline code)
@@ -4176,6 +4311,9 @@ const clickElementLikeUser = (el) => {
         .replace(/__/g, '')
         // Unescape common escapes
         .replace(/\\([_*[\](){}#+\-!.>])/g, '$1');
+
+      result = normalizeUnorderedListIndentation(result);
+      if (stripHeadings) result = result.replace(/^[ \t\u00a0]{0,3}#{1,6}[ \t\u00a0]+/gmu, '');
 
       return trimResult ? result.trim() : result;
     }
@@ -4694,10 +4832,243 @@ const clickElementLikeUser = (el) => {
       }
     }
 
+    const COPY_PLAIN_TEXT_BLOCK_TAGS = new Set([
+      'article',
+      'blockquote',
+      'dd',
+      'div',
+      'dt',
+      'figcaption',
+      'figure',
+      'footer',
+      'header',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'p',
+      'section',
+      'table',
+      'tbody',
+      'tr',
+      'tfoot',
+      'thead',
+    ]);
+
+    function getCopyPlainTextTag(node) {
+      return node?.nodeType === 1 ? String(node.tagName || '').toLowerCase() : '';
+    }
+
+    function normalizeCopyPlainTextInline(value, preserveWhitespace = false) {
+      const normalized = String(value || '').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
+      return preserveWhitespace ? normalized : normalized.replace(/[ \t\n\r\f]+/g, ' ');
+    }
+
+    function normalizeCopyPlainTextBlock(value, preserveWhitespace = false) {
+      const normalized = String(value || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ');
+      if (!preserveWhitespace) {
+        return normalized
+          .split('\n')
+          .map((line) => line.replace(/[ \t]+/g, ' '))
+          .join('\n')
+          .trim();
+      }
+      return normalized.trim();
+    }
+
+    function renderCopyPlainTextInlineNodes(nodes, preserveWhitespace = false) {
+      return Array.from(nodes || [])
+        .map((node) => {
+          if (node.nodeType === 3) {
+            return normalizeCopyPlainTextInline(node.nodeValue, preserveWhitespace);
+          }
+          if (node.nodeType !== 1) return '';
+
+          const tag = getCopyPlainTextTag(node);
+          if (tag === 'br') return '\n';
+          if (tag === 'img') return node.getAttribute('alt') || '';
+          if (tag === 'ul' || tag === 'ol' || tag === 'pre') return '';
+          return renderCopyPlainTextInlineNodes(node.childNodes, preserveWhitespace);
+        })
+        .join('');
+    }
+
+    function makeCopyPlainTextBlock(text, options = {}) {
+      const normalized = normalizeCopyPlainTextBlock(text, options.preserveWhitespace);
+      return normalized ? { heading: !!options.heading, text: normalized } : null;
+    }
+
+    function renderCopyPlainTextBlocksFromNodes(nodes, options = {}) {
+      const blocks = [];
+      const preserveWhitespace = !!options.preserveWhitespace;
+      let inlineText = '';
+
+      const flushInlineText = () => {
+        const block = makeCopyPlainTextBlock(inlineText, { preserveWhitespace });
+        if (block) blocks.push(block);
+        inlineText = '';
+      };
+
+      for (const node of Array.from(nodes || [])) {
+        if (node.nodeType === 3) {
+          inlineText += normalizeCopyPlainTextInline(node.nodeValue, preserveWhitespace);
+          continue;
+        }
+        if (node.nodeType !== 1) continue;
+
+        const tag = getCopyPlainTextTag(node);
+        if (tag === 'ul' || tag === 'ol') {
+          flushInlineText();
+          const listText = renderCopyPlainTextList(node, options.listDepth || 0, options);
+          if (listText) blocks.push({ list: true, text: listText });
+          continue;
+        }
+        if (tag === 'pre') {
+          flushInlineText();
+          const codeText = normalizeCopyPlainTextBlock(node.textContent || '', true);
+          if (codeText) blocks.push({ code: true, text: codeText });
+          continue;
+        }
+        if (tag === 'hr') {
+          flushInlineText();
+          continue;
+        }
+        if (tag === 'br') {
+          inlineText += '\n';
+          continue;
+        }
+        if (COPY_PLAIN_TEXT_BLOCK_TAGS.has(tag)) {
+          flushInlineText();
+          blocks.push(...renderCopyPlainTextBlockElement(node, options));
+          continue;
+        }
+
+        inlineText += renderCopyPlainTextInlineNodes([node], preserveWhitespace);
+      }
+
+      flushInlineText();
+      return blocks;
+    }
+
+    function renderCopyPlainTextBlockElement(element, options = {}) {
+      const tag = getCopyPlainTextTag(element);
+      const preserveWhitespace = !!options.preserveWhitespace;
+
+      if (/^h[1-6]$/.test(tag)) {
+        const heading = makeCopyPlainTextBlock(
+          renderCopyPlainTextInlineNodes(element.childNodes, preserveWhitespace),
+          { heading: true, preserveWhitespace },
+        );
+        return heading ? [heading] : [];
+      }
+
+      if (tag === 'tr') {
+        const cells = Array.from(element.children || [])
+          .filter((cell) => ['td', 'th'].includes(getCopyPlainTextTag(cell)))
+          .map((cell) =>
+            normalizeCopyPlainTextBlock(
+              renderCopyPlainTextInlineNodes(cell.childNodes, preserveWhitespace),
+              preserveWhitespace,
+            ),
+          )
+          .filter(Boolean);
+        const row = makeCopyPlainTextBlock(cells.join('\t'), { preserveWhitespace });
+        return row ? [row] : [];
+      }
+
+      const childBlocks = renderCopyPlainTextBlocksFromNodes(element.childNodes, options);
+      if (childBlocks.length) return childBlocks;
+
+      const fallback = makeCopyPlainTextBlock(
+        renderCopyPlainTextInlineNodes(element.childNodes, preserveWhitespace),
+        { preserveWhitespace },
+      );
+      return fallback ? [fallback] : [];
+    }
+
+    function renderCopyPlainTextList(list, depth = 0, options = {}) {
+      const tag = getCopyPlainTextTag(list);
+      const items = Array.from(list.children || []).filter(
+        (child) => getCopyPlainTextTag(child) === 'li',
+      );
+      if (!items.length) return '';
+
+      const ordered = tag === 'ol';
+      const startValue = Number.parseInt(list.getAttribute('start') || '1', 10);
+      const start = Number.isFinite(startValue) ? startValue : 1;
+      const lines = [];
+      const listIndent = ' '.repeat(Math.max(0, depth) * 4);
+
+      items.forEach((item, itemIndex) => {
+        const contentNodes = [];
+        const nestedLists = [];
+        for (const child of Array.from(item.childNodes || [])) {
+          const childTag = getCopyPlainTextTag(child);
+          if (childTag === 'ul' || childTag === 'ol') nestedLists.push(child);
+          else contentNodes.push(child);
+        }
+
+        const itemBlocks = renderCopyPlainTextBlocksFromNodes(contentNodes, {
+          ...options,
+          listDepth: depth + 1,
+        });
+        const marker = ordered ? `${start + itemIndex}.` : '-';
+        const markerPrefix = `${listIndent}${marker} `;
+        const continuationIndent = ' '.repeat(listIndent.length + marker.length + 1);
+
+        if (!itemBlocks.length) {
+          lines.push(markerPrefix.trimEnd());
+        } else {
+          itemBlocks.forEach((block, blockIndex) => {
+            if (blockIndex > 0) lines.push('');
+            const blockLines = block.text.split('\n');
+            lines.push(`${blockIndex === 0 ? markerPrefix : continuationIndent}${blockLines[0]}`);
+            blockLines.slice(1).forEach((line) => {
+              lines.push(`${continuationIndent}${line}`);
+            });
+          });
+        }
+
+        nestedLists.forEach((nestedList) => {
+          const nestedText = renderCopyPlainTextList(nestedList, depth + 1, options);
+          if (nestedText) lines.push(nestedText);
+        });
+      });
+
+      return lines.join('\n');
+    }
+
+    function joinCopyPlainTextBlocks(blocks) {
+      let output = '';
+      let previous = null;
+      for (const block of blocks) {
+        if (!block?.text) continue;
+        if (output) {
+          output += previous?.heading ? '\n' : block.heading ? '\n\n' : '\n\n';
+        }
+        output += block.text;
+        previous = block;
+      }
+      return output;
+    }
+
+    function buildStructuredCopyPlainText(root) {
+      return joinCopyPlainTextBlocks(
+        renderCopyPlainTextBlocksFromNodes(root?.childNodes, {
+          preserveWhitespace: root?.matches?.('.whitespace-pre-wrap, textarea') || false,
+        }),
+      );
+    }
+
     function buildPlainTextWithFences(root) {
       const clone = root.cloneNode(true);
       normalizeCodeBlocksInClone(clone, root);
-      return getAttachedCopyInnerText(clone).replace(/\u00A0/g, ' ').trim();
+      const structuredText = buildStructuredCopyPlainText(clone);
+      return (structuredText || getAttachedCopyInnerText(clone)).replace(/\u00A0/g, ' ').trim();
     }
 
     function getThreadNavigationScrollAnchorPct() {
@@ -11650,7 +12021,11 @@ form.w-full[data-type="unified-composer"] {
         }
         return found;
       };
-      const commitPillRadioItem = async (item, settleMs = 160) => {
+      const commitPillRadioItem = async (
+        item,
+        settleMs = 160,
+        { preferUserClick = false } = {},
+      ) => {
         if (!(item instanceof Element)) return false;
         if (
           item.getAttribute('aria-checked') === 'true' ||
@@ -11658,7 +12033,11 @@ form.w-full[data-type="unified-composer"] {
         ) {
           return true;
         }
-        activateMenuItem(item);
+        if (preferUserClick) {
+          if (!smartClickSafe(item)) return false;
+        } else {
+          activateMenuItem(item);
+        }
         const committed = await waitForAsync(
           () =>
             !item.isConnected ||
@@ -14172,7 +14551,10 @@ form.w-full[data-type="unified-composer"] {
           if (!(target instanceof Element)) return false;
           if (!hideUi && window.gsap) flashMenuItem(target);
           if (!hideUi) await sleepAsync(DELAY_ACTIVATE_TARGET_MS);
-          await commitPillRadioItem(target, 120);
+          const committed = await commitPillRadioItem(target, 120, {
+            preferUserClick: true,
+          });
+          if (!committed) return false;
           updatePillSpeedSelectionInMemory(target);
           if (!hideUi) flashBottomBar();
           return true;

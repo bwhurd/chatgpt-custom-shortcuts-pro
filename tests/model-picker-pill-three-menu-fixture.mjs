@@ -677,6 +677,11 @@ const pillSpeedToggleSource = contentSource.slice(
   contentSource.indexOf('const runPillSpeedToggleAction = async'),
   contentSource.indexOf('const runPillResetAction = async'),
 );
+assert.match(
+  pillSpeedToggleSource,
+  /const committed = await commitPillRadioItem\(target, 120, \{[\s\S]*?preferUserClick: true[\s\S]*?\}\);[\s\S]*?if \(!committed\) return false;/,
+  'Work Speed should use a user-like click and require the native radio state to commit',
+);
 assert.doesNotMatch(
   pillSpeedToggleSource,
   /window\.__modelCatalog\?\.pillMenu/,
