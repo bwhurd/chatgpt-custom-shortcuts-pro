@@ -9,6 +9,7 @@ import { chromium } from 'playwright';
 
 import {
   buildCheckReport,
+  buildCurrentShortcutInventory,
   ensureInspectorCapturesRoot,
   evaluateWideScrapePageInfo,
   getInspectorCapturesRoot,
@@ -23,9 +24,16 @@ import {
   waitForEndpointReady,
   waitForFixtureConversationReady,
   writeCheckReportFiles,
+  writeInventoryOnlyShortcutAuditRun,
   writeLiveProbeReport,
   writeScrapeRun,
 } from './lib/devscrape-wide-core.mjs';
+import {
+  buildShortcutAuditReport,
+  buildStorageRecoveryReport,
+  evaluateShortcutAuditExit,
+  writeShortcutAuditArtifacts,
+} from './lib/shortcut-audit-artifacts.mjs';
 
 const args = process.argv.slice(2);
 
@@ -109,6 +117,18 @@ function shouldPauseForExtensionSetup() {
   return hasFlag('--pause-for-extension-setup');
 }
 
+function getAuditPhase() {
+  const phase = getArgValue('--phase', 'all');
+  if (!['global', 'model', 'all'].includes(phase)) {
+    throw new Error(`Unknown audit phase "${phase}". Use global, model, or all.`);
+  }
+  return phase;
+}
+
+function getAuditActionIds() {
+  return getArgValues('--shortcut-action-id');
+}
+
 function printUsage() {
   console.log(`Usage:
   node tests/playwright/devscrape-wide.mjs --action setup-login
@@ -116,6 +136,7 @@ function printUsage() {
   node tests/playwright/devscrape-wide.mjs --action check-wide [--folder FOLDER_NAME]
   node tests/playwright/devscrape-wide.mjs --action validate-wide
   node tests/playwright/devscrape-wide.mjs --action probe-shortcuts [--shortcut-action-id ACTION_ID]
+  node tests/playwright/devscrape-wide.mjs --action audit-shortcuts [--inventory-only]
 
 Options:
   --cdp-endpoint URL       Force one CDP endpoint instead of probing the usual candidates
@@ -127,6 +148,14 @@ Options:
                            Fail validate-wide if the optional extension-backed 1c dump is not captured
   --probe-shortcuts        Run no-token-safe live shortcut activation probes after scrape
   --shortcut-action-id ID  Limit probe-shortcuts to one shortcut. May be repeated.
+  --phase PHASE            audit-shortcuts phase: global, model, or all (default: all)
+  --fixed-contract-id ID   Limit a fixed-contract rerun to one contract.
+  --model-profile NAME     Limit a model rerun to legacy or latest.
+  --model-slot N           Limit a model rerun to one zero-based slot.
+  --model-action-id ID     Limit a model rerun to one action id.
+  --inventory-only         Build the audit universe and artifacts without browser access.
+  --open-report            Open an inventory-only HTML report explicitly.
+  --no-open-report         Do not open the generated check-report.html.
   --pause-for-extension-setup
                            Pause after Chrome/CDP startup so the unpacked extension can be loaded manually
   --folder NAME            Folder to check instead of the newest scrape
@@ -416,6 +445,8 @@ async function scrapeWide({
   autoLaunch = shouldAutoLaunchChrome(),
   requireExtensionCapture = shouldRequireExtensionCapture(),
   probeShortcuts = shouldProbeShortcuts(),
+  phase = 'all',
+  onlyActionIds = [],
 } = {}) {
   const { exports } = await loadDevScrapeWideContract();
   await ensureInspectorCapturesRoot();
@@ -463,11 +494,42 @@ async function scrapeWide({
     );
     const normalizedArtifacts = await normalizeArtifactsInPage(page, artifactsToNormalize);
     const writeResult = await writeScrapeRun({ scrapeResult, normalizedArtifacts });
+    let liveProbeReport = null;
     if (probeShortcuts) {
-      const liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
-        fixtureUrl,
-        extensionProfileDir: getProfileDir(),
-      });
+      try {
+        liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
+          fixtureUrl,
+          extensionProfileDir: getProfileDir(),
+          phase,
+          onlyActionIds,
+        });
+      } catch (error) {
+        liveProbeReport = {
+          schemaVersion: 1,
+          generatedAt: new Date().toISOString(),
+          fixtureUrl,
+          phase,
+          runStatus: 'failed',
+          rows: [],
+          summary: {
+            runStatus: 'failed',
+            total: 0,
+            executable: 0,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            environmentFailed: 1,
+            manual: 0,
+            notApplicable: 0,
+            notLiveProbed: 0,
+          },
+          storageRecovery: buildStorageRecoveryReport({
+            status: 'failed',
+            reason: error?.message || String(error) || 'Live probe execution failed.',
+          }),
+        };
+        console.error(`Live shortcut probes failed; preserving partial evidence: ${error?.message || error}`);
+      }
       const liveProbePath = await writeLiveProbeReport(writeResult.folderPath, liveProbeReport);
       console.log(
         `Live shortcut probes: ${liveProbeReport.summary.passed} passed, ${liveProbeReport.summary.failed} failed, ${liveProbeReport.summary.environmentFailed} environment-failed, ${liveProbeReport.summary.notLiveProbed} not live-probed.`,
@@ -479,7 +541,7 @@ async function scrapeWide({
     console.log(summary);
     console.log(`Run folder: ${writeResult.folderPath}`);
     console.log(`Capture root: ${getInspectorCapturesRoot()}`);
-    return writeResult;
+    return { ...writeResult, liveProbeReport };
   } finally {
     await page.close().catch(() => {});
     await browser.close().catch(() => {});
@@ -529,6 +591,190 @@ async function validateWide() {
     );
   }
   return { folderName: writeResult.folderName, reportFiles };
+}
+
+function getAuditFilters() {
+  const modelProfile = getArgValue('--model-profile', '');
+  if (modelProfile && !['legacy', 'latest'].includes(modelProfile)) {
+    throw new Error(`Unknown model profile "${modelProfile}". Use legacy or latest.`);
+  }
+  const modelSlotText = getArgValue('--model-slot', null);
+  const modelSlot = modelSlotText === null ? null : Number.parseInt(modelSlotText, 10);
+  if (modelSlotText !== null && (!Number.isInteger(modelSlot) || modelSlot < 0 || modelSlot > 14)) {
+    throw new Error(`Invalid --model-slot "${modelSlotText}". Use a zero-based slot from 0 through 14.`);
+  }
+  return {
+    onlyActionIds: getAuditActionIds(),
+    fixedContractIds: getArgValues('--fixed-contract-id'),
+    modelProfile,
+    modelSlot,
+    modelActionId: getArgValue('--model-action-id', ''),
+  };
+}
+
+async function writeAuditArtifactsForRun({
+  folderName,
+  folderPath,
+  liveProbeReport = null,
+  phase,
+  runMode = 'live',
+  filters,
+} = {}) {
+  const { exports } = await loadDevScrapeWideContract();
+  const scrapeStateRegistry = [
+    ...(exports.DUMP_REGISTRY || []),
+    ...(exports.DEFERRED_ARTIFACTS || []),
+  ];
+  const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
+  const recoveryReport =
+    liveProbeReport?.storageRecovery ||
+    buildStorageRecoveryReport({
+      status: 'not-needed',
+      reason: 'No validation-only shortcut assignments were written.',
+    });
+  const auditReport = buildShortcutAuditReport({
+    inventory,
+    liveProbeReport,
+    phase,
+    runMode,
+    runFolderName: folderName,
+    runFolderPath: folderPath,
+    recoveryStatus: recoveryReport.status,
+    ...filters,
+  });
+  const artifactResult = await writeShortcutAuditArtifacts(
+    folderPath,
+    auditReport,
+    recoveryReport,
+  );
+  const checkReport = await buildCheckReport({ folderName });
+  checkReport.auditArtifacts = Object.fromEntries(
+    Object.entries(artifactResult.paths)
+      .filter(([key]) => key.endsWith('Path'))
+      .map(([key, value]) => [key, value]),
+  );
+  checkReport.storageRecovery = recoveryReport;
+  checkReport.auditPhase = phase;
+  checkReport.inventoryOnly = false;
+  checkReport.auditReportSchemaVersion = artifactResult.report.schemaVersion;
+  const checkReportFiles = await writeCheckReportFiles(checkReport);
+  return {
+    inventory,
+    auditReport: artifactResult.report,
+    recoveryReport,
+    checkReport,
+    checkReportFiles,
+    artifactPaths: artifactResult.paths,
+  };
+}
+
+async function auditShortcuts() {
+  const phase = getAuditPhase();
+  const filters = getAuditFilters();
+  const inventoryOnly = hasFlag('--inventory-only');
+  if (inventoryOnly) {
+    const result = await writeInventoryOnlyShortcutAuditRun({ phase, ...filters });
+    console.log(`Shortcut audit inventory-only run: ${result.folderName}`);
+    console.log(`Audit JSON: ${result.artifactPaths.jsonPath}`);
+    console.log(`Audit CSV: ${result.artifactPaths.csvPath}`);
+    console.log(`Repair backlog: ${result.artifactPaths.backlogPath}`);
+    console.log(`Recovery report: ${result.artifactPaths.recoveryPath}`);
+    console.log(`HTML report: ${result.checkReportFiles.htmlPath}`);
+    if (hasFlag('--open-report') && !hasFlag('--no-open-report')) {
+      openLocalFile(result.checkReportFiles.htmlPath);
+    }
+    const decision = evaluateShortcutAuditExit(result.auditReport, result.recoveryReport, {
+      inventoryOnly: true,
+    });
+    if (!decision.ok) throw new Error(`Shortcut audit failed: ${decision.reasons.join('; ')}`);
+    return result;
+  }
+
+  let scrapeResult = null;
+  try {
+    scrapeResult = await scrapeWide({
+      autoLaunch: shouldAutoLaunchChrome(),
+      requireExtensionCapture: true,
+      probeShortcuts: true,
+      phase,
+      onlyActionIds: filters.onlyActionIds,
+    });
+    const result = await writeAuditArtifactsForRun({
+      folderName: scrapeResult.folderName,
+      folderPath: scrapeResult.folderPath,
+      liveProbeReport: scrapeResult.liveProbeReport,
+      phase,
+      filters,
+    });
+    console.log(`Shortcut audit run: ${scrapeResult.folderName}`);
+    console.log(`Audit JSON: ${result.artifactPaths.jsonPath}`);
+    console.log(`Audit CSV: ${result.artifactPaths.csvPath}`);
+    console.log(`Repair backlog: ${result.artifactPaths.backlogPath}`);
+    console.log(`Recovery report: ${result.artifactPaths.recoveryPath}`);
+    console.log(`HTML report: ${result.checkReportFiles.htmlPath}`);
+    if (!hasFlag('--no-open-report')) openLocalFile(result.checkReportFiles.htmlPath);
+    const decision = evaluateShortcutAuditExit(result.auditReport, result.recoveryReport);
+    const artifactFailures =
+      (result.checkReport.missingArtifacts || []).length +
+      (result.checkReport.missingExpectedFiles || []).length;
+    if (artifactFailures) decision.reasons.push(`${artifactFailures} required scrape artifact failure(s)`);
+    if (artifactFailures) decision.ok = false;
+    if (!decision.ok) throw new Error(`Shortcut audit failed: ${decision.reasons.join('; ')}`);
+    return result;
+  } catch (error) {
+    const reason = error?.message || String(error) || 'Shortcut audit failed before artifacts were finalized.';
+    if (scrapeResult?.folderName && scrapeResult?.folderPath) {
+      try {
+        const result = await writeAuditArtifactsForRun({
+          folderName: scrapeResult.folderName,
+          folderPath: scrapeResult.folderPath,
+          liveProbeReport: scrapeResult.liveProbeReport || {
+            schemaVersion: 1,
+            generatedAt: new Date().toISOString(),
+            fixtureUrl: '',
+            phase,
+            runStatus: 'failed',
+            rows: [],
+            summary: {
+              runStatus: 'failed',
+              total: 0,
+              executable: 0,
+              passed: 0,
+              failed: 0,
+              skipped: 0,
+              environmentFailed: 1,
+              manual: 0,
+              notApplicable: 0,
+              notLiveProbed: 0,
+            },
+            storageRecovery: buildStorageRecoveryReport({
+              status: 'failed',
+              reason,
+            }),
+          },
+          phase,
+          runMode: 'environment-fail',
+          filters,
+        });
+        console.error(`Shortcut audit retained partial evidence in ${result.artifactPaths.jsonPath}`);
+      } catch (artifactError) {
+        console.error(`Could not finalize partial shortcut audit artifacts: ${artifactError?.message || artifactError}`);
+      }
+    } else {
+      try {
+        const fallback = await writeInventoryOnlyShortcutAuditRun({
+          phase,
+          runMode: 'environment-fail',
+          reason,
+          ...filters,
+        });
+        console.error(`Shortcut audit fallback evidence: ${fallback.artifactPaths.jsonPath}`);
+      } catch (fallbackError) {
+        console.error(`Could not write fallback shortcut audit artifacts: ${fallbackError?.message || fallbackError}`);
+      }
+    }
+    throw error;
+  }
 }
 
 async function probeShortcutsOnly() {
@@ -612,6 +858,11 @@ async function main() {
 
   if (action === 'validate-wide') {
     await validateWide();
+    return;
+  }
+
+  if (action === 'audit-shortcuts') {
+    await auditShortcuts();
     return;
   }
 

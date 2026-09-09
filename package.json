@@ -28,6 +28,7 @@
     "playwright:chatgpt:devscrape-wide": "node tests/playwright/devscrape-wide.mjs --action scrape-wide",
     "playwright:chatgpt:check-scrape": "node tests/playwright/devscrape-wide.mjs --action check-wide",
     "playwright:chatgpt:validate-scrape": "node tests/playwright/devscrape-wide.mjs --action validate-wide",
+    "playwright:chatgpt:audit-shortcuts": "node tests/playwright/devscrape-wide.mjs --action audit-shortcuts",
     "playwright:chatgpt:benchmark": "node tests/playwright/chatgpt-scenario-benchmark.mjs",
     "playwright:chatgpt:wiggle-check": "node tests/playwright/chatgpt-wiggle-check.mjs",
     "test:popup-visual": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1",

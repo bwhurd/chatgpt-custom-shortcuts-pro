@@ -1,7 +1,116 @@
 import shortcutActionMetadata from '../../../extension/shared/shortcut-action-metadata.js';
 
 const SHORTCUT_DEFAULTS_PATTERN = /const shortcutDefaults = \{([\s\S]*?)\n\s*\};/;
-const SHORTCUT_HANDLER_KEY_PATTERN = /^\s*\[shortcuts\.(\w+)\]:/gm;
+const OPTIONS_DEFAULTS_PATTERN = /const OPTIONS_DEFAULTS = \{([\s\S]*?)\n\};/;
+const ALT_SHORTCUT_ACTIONS_PATTERN =
+  /const altShortcutActions = \{([\s\S]*?)\n\s*\};\s*\/\/ Close altShortcutActions registry/;
+const COMPUTED_SHORTCUT_HANDLER_KEY_PATTERN = /^\s*\[shortcuts\.(\w+)\]:/gm;
+const NAMED_SHORTCUT_HANDLER_KEY_PATTERN = /^ {6}([A-Za-z][A-Za-z0-9_]*):/gm;
+const KEYDOWN_LISTENER_PATTERN = /\b(document|window)\.addEventListener\(\s*['"]keydown['"]/g;
+
+const MODEL_PICKER_PROFILE_NAMES = Object.freeze(['legacy', 'latest']);
+const MODEL_PICKER_PROFILE_STORAGE_KEYS = Object.freeze({
+  latest: 'modelPickerKeyCodesLatest',
+  legacy: 'modelPickerKeyCodesLegacy',
+});
+const MODEL_PICKER_PROFILE_NAME_STORAGE_KEYS = Object.freeze({
+  latest: 'modelNamesLatest',
+  legacy: 'modelNamesLegacy',
+});
+const MODEL_PICKER_PROFILE_CATALOG_STORAGE_KEYS = Object.freeze({
+  latest: 'modelCatalogLatest',
+  legacy: 'modelCatalogLegacy',
+});
+const EXPECTED_KEYBOARD_LISTENER_CONTRACTS = Object.freeze([
+  Object.freeze({
+    contractId: 'runtime-shortcut-dispatch',
+    owner: 'document',
+    handlerRef: 'shouldIgnoreShortcutEvent',
+    classification: 'shortcut-dispatch',
+  }),
+  Object.freeze({
+    contractId: 'page-up-down-takeover',
+    owner: 'document',
+    handlerRef: 'handleKeyDown',
+    classification: 'page-scroll-takeover',
+  }),
+  Object.freeze({
+    contractId: 'model-picker-slot-dispatch',
+    owner: 'window',
+    handlerRef: 'modPressed',
+    classification: 'model-picker-slot-dispatch',
+  }),
+  Object.freeze({
+    contractId: 'model-picker-refresh-support',
+    owner: 'document',
+    handlerRef: 'scheduleInteractionRefresh',
+    classification: 'model-picker-refresh-support',
+  }),
+  Object.freeze({
+    contractId: 'shortcut-overlay-dismissal',
+    owner: 'document',
+    handlerRef: 'onEsc',
+    classification: 'overlay-dismissal',
+  }),
+  Object.freeze({
+    contractId: 'shortcut-overlay-opener',
+    owner: 'document',
+    handlerRef: 'onKeyDown',
+    classification: 'overlay-opener',
+  }),
+]);
+const EXPECTED_SOURCE_KEYBOARD_CONTRACTS = Object.freeze([
+  Object.freeze({
+    contractId: 'alt-modifier-isolation',
+    classification: 'modifier-isolation',
+    sourceNeedles: Object.freeze([
+      'const hasUnexpectedAltShortcutModifier =',
+      'if (hasUnexpectedAltShortcutModifier(event)) return false;',
+    ]),
+  }),
+  Object.freeze({
+    contractId: 'response-navigation-preview',
+    classification: 'response-navigation-preview',
+    sourceNeedles: Object.freeze([
+      'const runPreviewThreadShortcut =',
+      "runPreviewThreadShortcut('shortcutKeyPreviousThread', event)",
+      "runPreviewThreadShortcut('shortcutKeyNextThread', event)",
+    ]),
+  }),
+  Object.freeze({
+    contractId: 'ctrl-send-gate',
+    classification: 'ctrl-send-gate',
+    sourceNeedles: Object.freeze([
+      'enableSendWithControlEnterCheckbox',
+      "recordShortcutUsage('shortcutKeyClickSendButton')",
+    ]),
+  }),
+  Object.freeze({
+    contractId: 'ctrl-stop-gate',
+    classification: 'ctrl-stop-gate',
+    sourceNeedles: Object.freeze([
+      'enableStopWithControlBackspaceCheckbox',
+      "recordShortcutUsage('shortcutKeyClickStopButton')",
+      'Only intercept if a visible Stop button exists',
+    ]),
+  }),
+  Object.freeze({
+    contractId: 'page-up-down-enable-gate',
+    classification: 'page-scroll-enable-gate',
+    sourceNeedles: Object.freeze([
+      "chrome.storage.sync.get(['pageUpDownTakeover']",
+      'toggleEventListener(enabled)',
+    ]),
+  }),
+  Object.freeze({
+    contractId: 'overlay-alt-only-capture',
+    classification: 'overlay-alt-only-gate',
+    sourceNeedles: Object.freeze([
+      'const altOnly = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;',
+      'const onKeyDown = (e) => {',
+    ]),
+  }),
+]);
 
 const { ACTIVATION_PROBE_MODES, SHORTCUT_ACTIONS, TARGET_DESCRIPTORS } = shortcutActionMetadata;
 const EXECUTABLE_ACTIVATION_PROBE_MODES = Object.freeze([
@@ -48,12 +157,119 @@ export function parseShortcutDefaultsFromContent(contentSource) {
   return factory((_, fallback) => fallback);
 }
 
+export function parseOptionsDefaultsFromSource(optionsSource) {
+  const match = OPTIONS_DEFAULTS_PATTERN.exec(String(optionsSource || ''));
+  if (!match) {
+    throw new Error('Could not locate OPTIONS_DEFAULTS in options-storage.js');
+  }
+  const factory = new Function(`return ({${match[1]}});`);
+  return factory();
+}
+
+export function parseModelPickerLabelsSource(modelPickerLabelsSource) {
+  const windowObj = {};
+  const factory = new Function('window', String(modelPickerLabelsSource || ''));
+  factory(windowObj);
+  if (!windowObj.ModelLabels) {
+    throw new Error('Could not initialize ModelLabels from model-picker-labels.js');
+  }
+  return windowObj.ModelLabels;
+}
+
 export function parseRuntimeHandlerActionIds(contentSource) {
-  return uniqueSorted(
-    [...String(contentSource || '').matchAll(SHORTCUT_HANDLER_KEY_PATTERN)].map(
-      (match) => match[1],
-    ),
+  const source = String(contentSource || '');
+  const handlerActionIds = [
+    ...source.matchAll(COMPUTED_SHORTCUT_HANDLER_KEY_PATTERN),
+  ].map((match) => match[1]);
+  const registryMatch = ALT_SHORTCUT_ACTIONS_PATTERN.exec(source);
+  if (registryMatch) {
+    handlerActionIds.push(
+      ...[...registryMatch[1].matchAll(NAMED_SHORTCUT_HANDLER_KEY_PATTERN)].map(
+        (match) => match[1],
+      ),
+    );
+  }
+  return uniqueSorted(handlerActionIds);
+}
+
+function getLineNumber(source, index) {
+  return source.slice(0, index).split('\n').length;
+}
+
+function classifyKeyboardListener(source, match) {
+  const tail = source.slice(match.index, match.index + 700);
+  const expected = EXPECTED_KEYBOARD_LISTENER_CONTRACTS.find(
+    (contract) =>
+      contract.owner === match[1] &&
+      tail.includes(contract.handlerRef),
   );
+  if (expected) {
+    return {
+      ...expected,
+      line: getLineNumber(source, match.index),
+      sourceExcerpt: tail.split('\n').slice(0, 8).join('\n').trim(),
+    };
+  }
+  return {
+    contractId: `unknown-${match[1]}-${getLineNumber(source, match.index)}`,
+    owner: match[1],
+    handlerRef: '',
+    classification: 'unknown',
+    line: getLineNumber(source, match.index),
+    sourceExcerpt: tail.split('\n').slice(0, 8).join('\n').trim(),
+  };
+}
+
+export function parseKeyboardListenerContracts(contentSource) {
+  const source = String(contentSource || '');
+  return [...source.matchAll(KEYDOWN_LISTENER_PATTERN)].map((match) =>
+    classifyKeyboardListener(source, match),
+  );
+}
+
+export function getExpectedKeyboardListenerContracts() {
+  return EXPECTED_KEYBOARD_LISTENER_CONTRACTS.map((contract) => ({ ...contract }));
+}
+
+export function getExpectedSourceKeyboardContracts() {
+  return EXPECTED_SOURCE_KEYBOARD_CONTRACTS.map(({ sourceNeedles, ...contract }) => ({
+    ...contract,
+  }));
+}
+
+function buildSourceKeyboardContractInventory(contentSource) {
+  const source = String(contentSource || '');
+  const contracts = EXPECTED_SOURCE_KEYBOARD_CONTRACTS.map((expected) => {
+    const positions = expected.sourceNeedles.map((needle) => source.indexOf(needle));
+    const missingNeedles = expected.sourceNeedles.filter((needle) => !source.includes(needle));
+    const firstPosition = positions.find((position) => position >= 0) ?? -1;
+    const { sourceNeedles, ...descriptor } = expected;
+    return {
+      ...descriptor,
+      line: firstPosition >= 0 ? getLineNumber(source, firstPosition) : null,
+      sourceExcerpt:
+        firstPosition >= 0
+          ? source
+              .slice(firstPosition, firstPosition + 500)
+              .split('\n')
+              .slice(0, 8)
+              .join('\n')
+              .trim()
+          : '',
+      missingNeedles,
+      status: missingNeedles.length ? 'missing' : 'present',
+    };
+  });
+  const issues = contracts
+    .filter((contract) => contract.status === 'missing')
+    .map((contract) => ({
+      type: 'missing-keyboard-source-contract',
+      contractId: contract.contractId,
+      line: contract.line,
+      missingNeedles: contract.missingNeedles,
+      message: `Keyboard source contract ${contract.contractId} is missing: ${contract.missingNeedles.join(', ')}.`,
+    }));
+  return { contracts, issues };
 }
 
 function getSectionInfoByActionId(settingsSchema) {
@@ -109,6 +325,198 @@ function resolveFilesForStateRefs(uiStateRefs, scrapeStateInfoById) {
 
 function findUnknownStateRefs(uiStateRefs, scrapeStateInfoById) {
   return uniqueSorted((uiStateRefs || []).filter((stateId) => !scrapeStateInfoById[stateId]));
+}
+
+function normalizeModelPickerCodes(codes, slotCount) {
+  const normalized = Array.isArray(codes) ? codes.slice(0, slotCount) : [];
+  while (normalized.length < slotCount) normalized.push('');
+  return normalized.map((code) => (typeof code === 'string' ? code : ''));
+}
+
+function getModelPickerPresentationGroups({
+  modelLabels,
+  profile,
+  optionsDefaults,
+  catalogsByProfile,
+  namesByProfile,
+  activeConfigId,
+}) {
+  if (typeof modelLabels?.getPopupPresentationGroups !== 'function') return [];
+
+  const namesKey = MODEL_PICKER_PROFILE_NAME_STORAGE_KEYS[profile];
+  const catalogKey = MODEL_PICKER_PROFILE_CATALOG_STORAGE_KEYS[profile];
+  const configuredNames = namesByProfile?.[profile] ?? optionsDefaults?.[namesKey];
+  const names = Array.isArray(configuredNames)
+    ? configuredNames
+    : profile === 'legacy'
+      ? modelLabels.defaultLegacyNames?.() || []
+      : modelLabels.defaultNames?.() || [];
+  const configuredCatalog = catalogsByProfile?.[profile] ?? optionsDefaults?.[catalogKey];
+  const catalog =
+    profile === 'legacy' &&
+    (!configuredCatalog || typeof configuredCatalog !== 'object') &&
+    typeof modelLabels.getDefaultLegacyCatalog === 'function'
+      ? modelLabels.getDefaultLegacyCatalog()
+      : configuredCatalog;
+
+  try {
+    return modelLabels.getPopupPresentationGroups(
+      activeConfigId || modelLabels.DEFAULT_ACTIVE_CONFIG_ID || 'configure-latest',
+      names,
+      catalog,
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function buildModelPickerSlotInventory({
+  optionsDefaults = {},
+  modelLabels,
+  catalogsByProfile = {},
+  namesByProfile = {},
+  activeConfigId = '',
+} = {}) {
+  const slotCount =
+    Number.isInteger(modelLabels?.MAX_SLOTS) && modelLabels.MAX_SLOTS > 0
+      ? modelLabels.MAX_SLOTS
+      : 15;
+  const rows = [];
+  const issues = [];
+  const profiles = {};
+
+  MODEL_PICKER_PROFILE_NAMES.forEach((profile) => {
+    const storageKey = MODEL_PICKER_PROFILE_STORAGE_KEYS[profile];
+    const codes = normalizeModelPickerCodes(optionsDefaults?.[storageKey], slotCount);
+    const groups = getModelPickerPresentationGroups({
+      modelLabels,
+      profile,
+      optionsDefaults,
+      catalogsByProfile,
+      namesByProfile,
+      activeConfigId,
+    });
+    const actionsBySlot = new Map();
+    groups.forEach((group) => {
+      (group?.actions || []).forEach((action) => {
+        const slot = Number(action?.slot);
+        if (!Number.isInteger(slot) || slot < 0 || slot >= slotCount) return;
+        const existing = actionsBySlot.get(slot) || [];
+        if (!existing.some((item) => item.id === action.id)) existing.push({ ...action });
+        actionsBySlot.set(slot, existing);
+      });
+    });
+
+    const profileRows = [];
+    for (let slot = 0; slot < slotCount; slot += 1) {
+      const actions = actionsBySlot.get(slot) || [];
+      const canonicalAction =
+        typeof modelLabels?.getActionBySlot === 'function'
+          ? modelLabels.getActionBySlot(slot)
+          : null;
+      const actionIds = actions.map((action) => action.id).filter(Boolean);
+      const code = codes[slot];
+      const hasAssignment = Boolean(code && code !== '\u00a0');
+      const availability = actionIds.length
+        ? 'presented'
+        : canonicalAction || hasAssignment
+          ? 'unavailable'
+          : 'empty';
+      const row = {
+        rowId: `model:${profile}:${slot}:${actionIds.join('+') || 'empty'}`,
+        profile,
+        slot,
+        storageKey,
+        code,
+        assigned: hasAssignment,
+        availability,
+        actionId: actionIds[0] || '',
+        actionIds,
+        labels: actions.map((action) => action.label || action.id).filter(Boolean),
+        actionKinds: actions.map((action) => action.actionKind || '').filter(Boolean),
+        canonicalActionId: canonicalAction?.id || '',
+      };
+      profileRows.push(row);
+      rows.push(row);
+    }
+    profiles[profile] = {
+      profile,
+      storageKey,
+      slotCount,
+      assignedCount: profileRows.filter((row) => row.assigned).length,
+      presentedCount: profileRows.filter((row) => row.availability === 'presented').length,
+      unavailableCount: profileRows.filter((row) => row.availability === 'unavailable').length,
+      emptyCount: profileRows.filter((row) => row.availability === 'empty').length,
+      rows: profileRows,
+    };
+  });
+
+  if (!modelLabels) {
+    issues.push({
+      type: 'missing-model-label-source',
+      message: 'Model picker slot inventory could not load ModelLabels.',
+    });
+  }
+
+  return {
+    slotCount,
+    rows,
+    profiles,
+    issues,
+  };
+}
+
+function buildKeyboardListenerInventory(contentSource) {
+  const listeners = parseKeyboardListenerContracts(contentSource);
+  const observedById = Object.fromEntries(
+    listeners
+      .filter((listener) => listener.classification !== 'unknown')
+      .map((listener) => [listener.contractId, listener]),
+  );
+  const contracts = EXPECTED_KEYBOARD_LISTENER_CONTRACTS.map((expected) => ({
+    ...expected,
+    observed: observedById[expected.contractId] || null,
+    status: observedById[expected.contractId] ? 'present' : 'missing',
+  }));
+  const issues = [];
+  const seenIds = new Set();
+  listeners.forEach((listener) => {
+    if (listener.classification === 'unknown') {
+      issues.push({
+        type: 'unclassified-keyboard-listener',
+        listenerId: listener.contractId,
+        line: listener.line,
+        message: `Keyboard listener at line ${listener.line} is not classified: ${listener.sourceExcerpt}`,
+      });
+      return;
+    }
+    if (seenIds.has(listener.contractId)) {
+      issues.push({
+        type: 'duplicate-keyboard-listener-contract',
+        listenerId: listener.contractId,
+        line: listener.line,
+        message: `Keyboard listener contract ${listener.contractId} appears more than once.`,
+      });
+    }
+    seenIds.add(listener.contractId);
+  });
+  contracts
+    .filter((contract) => contract.status === 'missing')
+    .forEach((contract) => {
+      issues.push({
+        type: 'missing-keyboard-listener-contract',
+        listenerId: contract.contractId,
+        message: `Keyboard listener contract ${contract.contractId} is missing from content.js.`,
+      });
+    });
+
+  const sourceContractInventory = buildSourceKeyboardContractInventory(contentSource);
+
+  return {
+    listeners,
+    contracts: [...contracts, ...sourceContractInventory.contracts],
+    issues: [...issues, ...sourceContractInventory.issues],
+  };
 }
 
 function buildShortcutRow({
@@ -180,12 +588,25 @@ export function buildShortcutValidationInventory({
   settingsSchema,
   localeMessages = null,
   scrapeStateRegistry = [],
+  optionsDefaults = {},
+  modelLabels = null,
+  modelPickerCatalogs = {},
+  modelPickerNames = {},
+  activeModelConfigId = '',
 } = {}) {
   const defaults = parseShortcutDefaultsFromContent(contentSource);
   const handlerActionIds = parseRuntimeHandlerActionIds(contentSource);
   const defaultActionIds = uniqueSorted(Object.keys(defaults));
   const allRuntimeActionIds = uniqueSorted([...defaultActionIds, ...handlerActionIds]);
   const scrapeStateInfoById = buildScrapeStateInfoById(scrapeStateRegistry);
+  const keyboardListenerInventory = buildKeyboardListenerInventory(contentSource);
+  const modelPickerInventory = buildModelPickerSlotInventory({
+    optionsDefaults,
+    modelLabels,
+    catalogsByProfile: modelPickerCatalogs,
+    namesByProfile: modelPickerNames,
+    activeConfigId: activeModelConfigId,
+  });
 
   const shortcutDefinitionById = Object.fromEntries(
     SHORTCUT_ACTIONS.map((definition) => [definition.actionId, definition]),
@@ -332,6 +753,8 @@ export function buildShortcutValidationInventory({
   }));
 
   const inventoryIssues = [];
+  keyboardListenerInventory.issues.forEach((issue) => inventoryIssues.push(issue));
+  modelPickerInventory.issues.forEach((issue) => inventoryIssues.push(issue));
   duplicateShortcutActionIds.forEach((actionId) => {
     inventoryIssues.push({
       type: 'duplicate-shortcut-metadata',
@@ -460,6 +883,11 @@ export function buildShortcutValidationInventory({
     handlerActionIds,
     allRuntimeActionIds,
     scrapeStateInfoById,
+    keyboardListeners: keyboardListenerInventory.listeners,
+    fixedKeyboardContracts: keyboardListenerInventory.contracts,
+    modelPickerSlotRows: modelPickerInventory.rows,
+    modelPickerProfiles: modelPickerInventory.profiles,
+    modelPickerSlotCount: modelPickerInventory.slotCount,
     shortcuts,
     targets,
     inventoryIssues,

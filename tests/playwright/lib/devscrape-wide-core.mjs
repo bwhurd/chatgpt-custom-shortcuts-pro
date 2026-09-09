@@ -5,8 +5,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import modelPickerSelectors from '../../../extension/shared/model-picker-selectors.js';
 import {
   buildShortcutValidationInventory,
+  parseModelPickerLabelsSource,
+  parseOptionsDefaultsFromSource,
   parseSettingsSchemaSource,
 } from './shortcut-target-inventory.mjs';
+import {
+  buildShortcutAuditReport,
+  buildStorageRecoveryPlan,
+  buildStorageRecoveryReport,
+  createStorageMutationLedger,
+  finalizeStorageRecoveryPlan,
+  writeShortcutAuditArtifacts,
+} from './shortcut-audit-artifacts.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +30,13 @@ const modelPickerSelectorsPath = path.join(
 );
 const contentSourcePath = path.join(repoRoot, 'extension', 'content.js');
 const settingsSchemaPath = path.join(repoRoot, 'extension', 'settings-schema.js');
+const optionsStorageSourcePath = path.join(repoRoot, 'extension', 'options-storage.js');
+const modelPickerLabelsSourcePath = path.join(
+  repoRoot,
+  'extension',
+  'shared',
+  'model-picker-labels.js',
+);
 const englishLocaleMessagesPath = path.join(
   repoRoot,
   'extension',
@@ -2280,6 +2297,28 @@ function isModelEffortShortcut(shortcut) {
   return MODEL_EFFORT_ACTION_IDS.includes(shortcut?.actionId);
 }
 
+function isModelPhaseShortcut(shortcut) {
+  if (!shortcut) return false;
+  if (isModelEffortShortcut(shortcut)) return true;
+  if (
+    [
+      'shortcutKeyToggleModelSelector',
+      'shortcutKeyToggleChatWork',
+      'shortcutKeyThinkingExtended',
+      'shortcutKeyThinkingStandard',
+      'shortcutKeyThinkingLight',
+      'shortcutKeyThinkingHeavy',
+      'shortcutKeyProStandard',
+      'shortcutKeyProExtended',
+    ].includes(shortcut.actionId)
+  ) {
+    return true;
+  }
+  return (shortcut.targetIds || []).some((targetId) =>
+    String(targetId).startsWith('model-'),
+  );
+}
+
 function getOppositeResponseNavigationActionId(actionId) {
   return actionId === NEXT_THREAD_ACTION_ID ? PREVIOUS_THREAD_ACTION_ID : NEXT_THREAD_ACTION_ID;
 }
@@ -2640,6 +2679,67 @@ function buildTemporaryShortcutAssignments(shortcuts, activeShortcutCodes = {}) 
   return assignments;
 }
 
+async function recoverTemporaryShortcutAssignments({
+  context,
+  extensionId,
+  originalActiveShortcutCodes,
+  temporaryShortcutAssignments,
+} = {}) {
+  const auditKeys = Object.keys(temporaryShortcutAssignments || {});
+  if (!auditKeys.length) {
+    return buildStorageRecoveryReport({
+      status: 'not-needed',
+      reason: 'No validation-only shortcut assignments were written.',
+    });
+  }
+  const ledger = createStorageMutationLedger(
+    originalActiveShortcutCodes || {},
+    temporaryShortcutAssignments,
+  );
+  let plan = null;
+  try {
+    const observedBeforeRestore = await readExtensionSyncStorage(
+      context,
+      extensionId,
+      auditKeys,
+    );
+    plan = buildStorageRecoveryPlan(ledger, observedBeforeRestore);
+    if (Object.keys(plan.setValues).length > 0) {
+      await mutateExtensionSyncStorage(context, extensionId, {
+        op: 'set',
+        payload: plan.setValues,
+      });
+    }
+    if (plan.removeKeys.length > 0) {
+      await mutateExtensionSyncStorage(context, extensionId, {
+        op: 'remove',
+        payload: plan.removeKeys,
+      });
+    }
+    const finalStorage = await readExtensionSyncStorage(context, extensionId, auditKeys);
+    const finalized = finalizeStorageRecoveryPlan(plan, finalStorage);
+    return buildStorageRecoveryReport({
+      status: finalized.status,
+      reason:
+        finalized.status === 'conflict'
+          ? `Concurrent edits were preserved for: ${finalized.conflictKeys.join(', ')}.`
+          : '',
+      plan: finalized,
+    });
+  } catch (error) {
+    const fallbackPlan = plan || {
+      entries: ledger,
+      conflictCount: 0,
+      failedCount: 1,
+    };
+    return buildStorageRecoveryReport({
+      status: 'failed',
+      reason: error?.message || String(error) || 'Storage recovery failed.',
+      plan: fallbackPlan,
+    });
+  }
+}
+
 async function dispatchLiveShortcut(page, code) {
   try {
     await waitBeforeBrowserInteraction();
@@ -2764,6 +2864,7 @@ function buildSkippedLiveProbeRow(shortcut, status, reason, dispatchCode = '') {
 
 export async function runLiveShortcutActivationProbes(page, context, options = {}) {
   const onlyActionIds = new Set(options.onlyActionIds || []);
+  const phase = ['global', 'model', 'all'].includes(options.phase) ? options.phase : 'all';
   const { exports } = await loadDevScrapeWideContract();
   const fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
   const scrapeStateRegistry = [
@@ -2772,8 +2873,12 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   ];
   const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
   const targetById = Object.fromEntries(inventory.targets.map((target) => [target.targetId, target]));
+  const phaseShortcuts = inventory.shortcuts.filter((shortcut) =>
+    phase === 'all' || (phase === 'model' ? isModelPhaseShortcut(shortcut) : !isModelPhaseShortcut(shortcut)),
+  );
   const executableProbeShortcuts = inventory.shortcuts.filter(
     (shortcut) =>
+      phaseShortcuts.includes(shortcut) &&
       EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) &&
       shortcut.activationProbeSafe,
   );
@@ -2782,6 +2887,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   let originalActiveShortcutCodes = {};
   let extensionId = '';
   let temporaryShortcutAssignments = {};
+  let storageRecovery = null;
   let extensionStorageWarning = '';
   const codeboxProbeSession = createCodeboxProbeSession();
   try {
@@ -2810,12 +2916,14 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   } catch (error) {
     extensionStorageWarning = `${error?.message || error} Active extension storage was not reachable; live probes will use shipped defaults only and skip validation-only temporary key assignment.`;
     activeShortcutCodes = {};
-    originalActiveShortcutCodes = {};
-    temporaryShortcutAssignments = {};
+    if (!extensionId) {
+      originalActiveShortcutCodes = {};
+      temporaryShortcutAssignments = {};
+    }
   }
 
   const rows = [];
-  const orderedShortcuts = orderLiveProbeShortcuts(inventory.shortcuts);
+  const orderedShortcuts = orderLiveProbeShortcuts(phaseShortcuts);
   let blankConversationReadyFromShortcut = false;
   try {
     for (const shortcut of orderedShortcuts) {
@@ -3044,27 +3152,20 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       }
     }
   } finally {
-    const temporaryKeys = Object.keys(temporaryShortcutAssignments);
-    if (temporaryKeys.length > 0 && extensionId) {
-      const valuesToRestore = {};
-      const keysToRemove = [];
-      for (const key of temporaryKeys) {
-        if (Object.hasOwn(originalActiveShortcutCodes, key)) {
-          valuesToRestore[key] = originalActiveShortcutCodes[key];
-        } else {
-          keysToRemove.push(key);
-        }
-      }
-      if (Object.keys(valuesToRestore).length > 0) {
-        await mutateExtensionSyncStorage(context, extensionId, { op: 'set', payload: valuesToRestore }).catch(
-          () => {},
-        );
-      }
-      if (keysToRemove.length > 0) {
-        await mutateExtensionSyncStorage(context, extensionId, { op: 'remove', payload: keysToRemove }).catch(
-          () => {},
-        );
-      }
+    if (extensionId && Object.keys(temporaryShortcutAssignments).length > 0) {
+      storageRecovery = await recoverTemporaryShortcutAssignments({
+        context,
+        extensionId,
+        originalActiveShortcutCodes,
+        temporaryShortcutAssignments,
+      });
+    } else {
+      storageRecovery = buildStorageRecoveryReport({
+        status: extensionId ? 'not-needed' : 'environment-fail',
+        reason: extensionId
+          ? 'No validation-only shortcut assignments were written.'
+          : extensionStorageWarning || 'Extension storage was not reachable.',
+      });
     }
   }
 
@@ -3073,8 +3174,10 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     fixtureUrl,
+    phase,
     rows,
     summary: buildLiveProbeSummary(rows),
+    storageRecovery,
   };
 }
 
@@ -3162,6 +3265,125 @@ export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
     deferredCount: manifest.deferredCount,
     writtenFiles,
     manifest,
+  };
+}
+
+export async function writeInventoryOnlyShortcutAuditRun({
+  phase = 'all',
+  reason = '',
+  runMode = 'inventory-only',
+  onlyActionIds = [],
+  fixedContractIds = [],
+  modelProfile = '',
+  modelSlot = null,
+  modelActionId = '',
+} = {}) {
+  const { exports } = await loadDevScrapeWideContract();
+  await ensureInspectorCapturesRoot();
+  const startedAt = new Date().toISOString();
+  const runDirectory = await createUniqueRunDirectory(exports.buildRunFolderName(new Date()));
+  const scrapeStateRegistry = [
+    ...(exports.DUMP_REGISTRY || []),
+    ...(exports.DEFERRED_ARTIFACTS || []),
+  ];
+  const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
+  const manifest = {
+    schemaVersion: 2,
+    runKind: 'shortcut-audit',
+    mode: runMode,
+    auditPhase: phase,
+    folderName: runDirectory.name,
+    fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    pageInfo: null,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    capturedCount: 0,
+    failedCount: 0,
+    deferredCount: 0,
+    writtenFiles: [],
+    artifacts: scrapeStateRegistry.map((definition) => ({
+      filename: definition.filename,
+      stateId: definition.stateId,
+      label: definition.label,
+      status: 'not-run',
+      error: reason || 'Inventory-only run did not attach to a browser.',
+      aliasOf: definition.aliasOf || null,
+      captureBytes: 0,
+      clickPath: Array.isArray(definition.steps)
+        ? definition.steps.map((step) => step.label)
+        : [],
+    })),
+  };
+  await writeFile(
+    path.join(runDirectory.path, 'run-manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    'utf8',
+  );
+  const recoveryReport = buildStorageRecoveryReport({
+    status: 'not-run',
+    reason: reason || 'No browser or extension storage mutation occurred in inventory-only mode.',
+  });
+  const liveProbeReport = {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    fixtureUrl: manifest.fixtureUrl,
+    runStatus: 'not-run',
+    phase,
+    rows: [],
+    summary: {
+      runStatus: 'not-run',
+      total: 0,
+      executable: 0,
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      environmentFailed: 0,
+      manual: 0,
+      notApplicable: 0,
+      notLiveProbed: 0,
+    },
+    storageRecovery: recoveryReport,
+  };
+  await writeLiveProbeReport(runDirectory.path, liveProbeReport);
+  const auditReport = buildShortcutAuditReport({
+    inventory,
+    liveProbeReport: null,
+    phase,
+    onlyActionIds,
+    fixedContractIds,
+    modelProfile,
+    modelSlot,
+    modelActionId,
+    runMode,
+    runFolderName: runDirectory.name,
+    runFolderPath: runDirectory.path,
+    recoveryStatus: recoveryReport.status,
+  });
+  const artifactResult = await writeShortcutAuditArtifacts(
+    runDirectory.path,
+    auditReport,
+    recoveryReport,
+  );
+  const checkReport = await buildCheckReport({ folderName: runDirectory.name });
+  checkReport.auditArtifacts = Object.fromEntries(
+    Object.entries(artifactResult.paths)
+      .filter(([key]) => key.endsWith('Path'))
+      .map(([key, value]) => [key, value]),
+  );
+  checkReport.storageRecovery = recoveryReport;
+  checkReport.auditPhase = phase;
+  checkReport.inventoryOnly = true;
+  const checkReportFiles = await writeCheckReportFiles(checkReport);
+  return {
+    folderName: runDirectory.name,
+    folderPath: runDirectory.path,
+    manifest,
+    inventory,
+    auditReport: artifactResult.report,
+    recoveryReport,
+    checkReport,
+    checkReportFiles,
+    artifactPaths: artifactResult.paths,
   };
 }
 
@@ -3274,10 +3496,17 @@ export async function getLatestRunFolder() {
         const folderPath = path.join(inspectorCapturesRoot, entry.name);
         const folderSortKey = parseRunFolderSortKey(entry.name);
         if (folderSortKey) {
+          try {
+            const manifest = await loadRunManifest(folderPath);
+            if (manifest?.runKind === 'shortcut-audit') return null;
+          } catch {
+            // Older scrape folders do not have a manifest; keep their legacy sort behavior.
+          }
           return { name: entry.name, path: folderPath, sortKey: folderSortKey };
         }
         try {
           const manifest = await loadRunManifest(folderPath);
+          if (manifest?.runKind === 'shortcut-audit') return null;
           const sortKey = parseManifestSortKey(manifest);
           return sortKey ? { name: entry.name, path: folderPath, sortKey } : null;
         } catch {
@@ -3374,18 +3603,187 @@ function targetMatchesText(target, text) {
   });
 }
 
-async function buildCurrentShortcutInventory(scrapeStateRegistry) {
-  const [contentSource, settingsSchemaSource, localeMessages] = await Promise.all([
+export async function buildCurrentShortcutInventory(scrapeStateRegistry) {
+  const [
+    contentSource,
+    settingsSchemaSource,
+    localeMessages,
+    optionsStorageSource,
+    modelPickerLabelsSource,
+  ] = await Promise.all([
     readCurrentRuntimeSource(),
     readSettingsSchemaSource(),
     readEnglishLocaleMessages(),
+    readFile(optionsStorageSourcePath, 'utf8'),
+    readFile(modelPickerLabelsSourcePath, 'utf8'),
   ]);
   return buildShortcutValidationInventory({
     contentSource,
     settingsSchema: parseSettingsSchemaSource(settingsSchemaSource),
     localeMessages,
     scrapeStateRegistry,
+    optionsDefaults: parseOptionsDefaultsFromSource(optionsStorageSource),
+    modelLabels: parseModelPickerLabelsSource(modelPickerLabelsSource),
   });
+}
+
+function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, inventory }) {
+  const inventoryOnly = ['inventory-only', 'environment-fail'].includes(run?.manifest?.mode);
+  const runMode = run?.manifest?.mode || 'inventory-only';
+  const targetRows = (inventory.targets || []).map((target) => ({
+    targetId: target.targetId,
+    identifier: target.identifier,
+    canonicalIdentifier: target.identifier,
+    kind: target.kind,
+    usedByActionIds: target.usedByActionIds,
+    expectedUiStateRefs: target.expectedUiStateRefs || [],
+    expectedFiles: target.expectedFiles || [],
+    matchGroups: target.matchGroups || [],
+    matchedExpectedFiles: [],
+    allMatchedFiles: [],
+    missingExpectedFiles: [],
+    unknownUiStateRefs: target.unknownUiStateRefs || [],
+    missingMatchGroups: target.missingMatchGroups || false,
+    status: 'not-run',
+    statusReason: 'Inventory-only run; no browser scrape dumps were captured.',
+    notes: target.notes || '',
+  }));
+  const shortcutRows = (inventory.shortcuts || []).map((shortcut) => {
+    const sourceIssues = (inventory.inventoryIssues || [])
+      .filter((issue) => issue.actionId === shortcut.actionId)
+      .map((issue) => issue.message || issue.type || 'Inventory issue');
+    const status = sourceIssues.length
+      ? 'fail'
+      : runMode === 'environment-fail'
+        ? 'environment-fail'
+        : 'not-run';
+    return {
+      actionId: shortcut.actionId,
+      label: shortcut.label,
+      labelKey: shortcut.labelKey,
+      sectionHeader: shortcut.sectionHeader,
+      defaultCode: shortcut.defaultCode,
+      validationMode: shortcut.validationMode,
+      targetIds: shortcut.targetIds,
+      targetRefs: shortcut.targetRefs || shortcut.targetIds,
+      requiredUiStateRefs: shortcut.requiredUiStateRefs || [],
+      requiredFiles: shortcut.requiredFiles || [],
+      unknownTargetRefs: shortcut.unknownTargetRefs || [],
+      unknownUiStateRefs: shortcut.unknownUiStateRefs || [],
+      activationProbe: shortcut.activationProbe || null,
+      activationProbeMode: shortcut.activationProbeMode || '',
+      activationProbeExpectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
+      activationProbeUiStateRefs: shortcut.activationProbeUiStateRefs || [],
+      activationProbeSetup: shortcut.activationProbeSetup || '',
+      activationProbeUrl: shortcut.activationProbeUrl || '',
+      activationProbeRequiredFiles: shortcut.activationProbeRequiredFiles || [],
+      activationProbeSafe: shortcut.activationProbeSafe === true,
+      unknownActivationProbeUiStateRefs: shortcut.unknownActivationProbeUiStateRefs || [],
+      targetStatuses: [],
+      handlerRef: shortcut.handlerRef || '',
+      handlerPresent: shortcut.handlerPresent,
+      defaultPresent: shortcut.defaultPresent,
+      missingMetadata: shortcut.missingMetadata || false,
+      status,
+      statusReason:
+        sourceIssues.join('; ') ||
+        (runMode === 'environment-fail'
+          ? run?.manifest?.artifacts?.find((artifact) => artifact.error)?.error ||
+            'Browser audit could not start.'
+          : 'Live activation and scrape coverage were not run in this phase.'),
+      notes: shortcut.notes || '',
+    };
+  });
+  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows)
+    ? run.liveProbeReport.rows
+    : [];
+  const shortcutSummary = {
+    total: shortcutRows.length,
+    passed: shortcutRows.filter((row) => row.status === 'pass').length,
+    failed: shortcutRows.filter((row) => row.status === 'fail').length,
+    partial: 0,
+    manual: 0,
+    notApplicable: shortcutRows.filter((row) => row.validationMode === 'not-applicable').length,
+    notRun: shortcutRows.filter((row) => row.status === 'not-run').length,
+    environmentFailed: shortcutRows.filter((row) => row.status === 'environment-fail').length,
+  };
+  const targetSummary = {
+    total: targetRows.length,
+    passed: 0,
+    failed: 0,
+    noScrapeCoverage: targetRows.length,
+    notRun: targetRows.length,
+  };
+  const sortedCurrentIndex = sortedRunFolders.findIndex((item) => item.name === run.folderName);
+  const latestRun = sortedRunFolders[sortedRunFolders.length - 1] || null;
+  const previousReportLinks = sortedRunFolders
+    .slice(0, sortedCurrentIndex >= 0 ? sortedCurrentIndex : sortedRunFolders.length)
+    .slice(-5)
+    .reverse()
+    .map((item) => ({
+      folderName: item.name,
+      folderPath: item.path,
+      sortKey: item.sortKey,
+      htmlPath: path.join(item.path, 'check-report.html'),
+    }));
+  return {
+    schemaVersion: 4,
+    generatedAt: new Date().toISOString(),
+    fixtureUrl: run?.manifest?.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    folderName: run.folderName,
+    folderPath: run.folderPath,
+    runManifest: run.manifest,
+    reportHistory: {
+      latest:
+        latestRun && latestRun.name !== run.folderName
+          ? {
+              folderName: latestRun.name,
+              folderPath: latestRun.path,
+              sortKey: latestRun.sortKey,
+              htmlPath: path.join(latestRun.path, 'check-report.html'),
+            }
+          : null,
+      previous: previousReportLinks,
+    },
+    rows: targetRows,
+    shortcutRows,
+    targetRows,
+    liveProbeRows,
+    failingShortcutRows: shortcutRows.filter((row) => row.status === 'fail'),
+    partialShortcutRows: [],
+    manualShortcutRows: [],
+    needsCoverageShortcutRows: [],
+    inventoryIssues: inventory.inventoryIssues || [],
+    missingArtifacts: [],
+    missingExpectedFiles: [],
+    inventoryOnly,
+    runMode,
+    fixedKeyboardContracts: inventory.fixedKeyboardContracts || [],
+    modelPickerProfiles: inventory.modelPickerProfiles || {},
+    modelPickerSlotRows: inventory.modelPickerSlotRows || [],
+    summary: {
+      total: shortcutRows.length,
+      passed: shortcutSummary.passed,
+      failed: shortcutSummary.failed,
+      partial: 0,
+      manual: 0,
+      notApplicable: shortcutSummary.notApplicable,
+      shortcuts: shortcutSummary,
+      targets: targetSummary,
+      liveProbes: run.liveProbeReport?.summary || {
+        runStatus: 'not-run',
+        total: 0,
+        executable: 0,
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+        environmentFailed: 0,
+        manual: 0,
+        notApplicable: 0,
+        notLiveProbed: 0,
+      },
+    },
+  };
 }
 
 export async function buildCheckReport({ folderName = null } = {}) {
@@ -3399,6 +3797,10 @@ export async function buildCheckReport({ folderName = null } = {}) {
     ...(exports.DEFERRED_ARTIFACTS || []),
   ];
   const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
+
+  if (['inventory-only', 'environment-fail'].includes(run.manifest?.mode)) {
+    return buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, inventory });
+  }
 
   const missingArtifacts = (run.manifest.artifacts || [])
     .filter((artifact) => artifact.status === 'failed')
@@ -3765,12 +4167,17 @@ export function renderCheckReportHtml(report) {
   const shortcutSummary = report?.summary?.shortcuts || {};
   const targetSummary = report?.summary?.targets || {};
   const liveProbeSummary = report?.summary?.liveProbes || { runStatus: 'not-run' };
+  const inventoryOnly = report?.inventoryOnly === true;
+  const runMode = report?.runMode || (inventoryOnly ? 'inventory-only' : 'live');
+  const auditArtifacts = report?.auditArtifacts || {};
   const statusTextByShortcutStatus = {
     pass: 'PASS',
     fail: 'FAIL',
     partial: 'PARTIAL',
     manual: 'MANUAL',
     'not-applicable': 'N/A',
+    'not-run': 'NOT RUN',
+    'environment-fail': 'ENVIRONMENT FAIL',
   };
   const artifactFailureCount = missingArtifacts.length + missingExpectedFiles.length;
   const dashboardRows = [
@@ -3785,24 +4192,32 @@ export function renderCheckReportHtml(report) {
     },
     {
       area: 'Scrape Artifacts',
-      status: artifactFailureCount ? 'Needs Fix' : 'Pass',
+      status: inventoryOnly ? 'Not Run' : artifactFailureCount ? 'Needs Fix' : 'Pass',
       good: report?.runManifest?.capturedCount || 0,
-      needs: artifactFailureCount,
-      meaning: artifactFailureCount
-        ? 'One or more required dumps failed or expected scrape files are missing.'
-        : 'Saved dumps are available for the target audit.',
+      needs: inventoryOnly ? 0 : artifactFailureCount,
+      meaning: inventoryOnly
+        ? 'Inventory-only mode intentionally captured no browser dumps.'
+        : artifactFailureCount
+          ? 'One or more required dumps failed or expected scrape files are missing.'
+          : 'Saved dumps are available for the target audit.',
     },
     {
       area: 'Shortcut Target Audit',
       status:
-        (shortcutSummary.failed || 0) > 0
-          ? 'Needs Fix'
-          : actionablePartialShortcutRows.length > 0
-            ? 'Partial'
-            : 'Pass',
+        inventoryOnly
+          ? 'Not Run'
+          : (shortcutSummary.failed || 0) > 0
+            ? 'Needs Fix'
+            : actionablePartialShortcutRows.length > 0
+              ? 'Partial'
+              : 'Pass',
       good: shortcutSummary.passed || 0,
-      needs: (shortcutSummary.failed || 0) + actionablePartialShortcutRows.length,
-      meaning: `${shortcutSummary.failed || 0} failed, ${actionablePartialShortcutRows.length} unresolved partial, ${shortcutSummary.manual || 0} manual follow-up.`,
+      needs: inventoryOnly
+        ? shortcutSummary.notRun || 0
+        : (shortcutSummary.failed || 0) + actionablePartialShortcutRows.length,
+      meaning: inventoryOnly
+        ? `${shortcutSummary.notRun || 0} shortcuts await live activation proof.`
+        : `${shortcutSummary.failed || 0} failed, ${actionablePartialShortcutRows.length} unresolved partial, ${shortcutSummary.manual || 0} manual follow-up.`,
     },
     {
       area: 'Live Activation Probes',
@@ -3823,6 +4238,18 @@ export function renderCheckReportHtml(report) {
     },
   ];
   const followUpRows = [
+    ...(inventoryOnly && (shortcutSummary.notRun || shortcutSummary.environmentFailed)
+      ? [
+          {
+            kind: runMode === 'environment-fail' ? 'Setup issue' : 'Awaiting live coverage',
+            item: `${shortcutSummary.notRun || shortcutSummary.environmentFailed} shortcut rows`,
+            reason:
+              runMode === 'environment-fail'
+                ? 'Browser/CDP or extension setup prevented live activation; rerun with an authenticated profile and strict extension capture.'
+                : 'Inventory-only mode intentionally skipped browser capture and activation; run the strict live audit to close these rows.',
+          },
+        ]
+      : []),
     ...failingShortcutRows.map((row) => ({
       kind: 'Broken shortcut',
       item: row.actionId,
@@ -3873,6 +4300,20 @@ export function renderCheckReportHtml(report) {
     '<div class="tab-labels"><label for="tab-summary">Dashboard</label><label for="tab-details">Details</label></div>',
     '<div class="tab-panels"><section class="tab-panel" id="summary-panel">',
     `<p><strong>Folder:</strong> ${folderPathLinkHtml(report?.folderPath || '')}</p>`,
+    inventoryOnly
+      ? '<p class="warn"><strong>Inventory-only:</strong> browser capture and live activation were intentionally not run.</p>'
+      : '',
+    Object.keys(auditArtifacts).length
+      ? [
+          '<div class="section"><strong>Shortcut Audit Artifacts</strong><ul>',
+          ...Object.entries(auditArtifacts).map(([key, value]) => {
+            const label = key.replace(/Path$/, '').replaceAll(/([a-z])([A-Z])/g, '$1 $2');
+            const href = pathToFileURL(value).href;
+            return `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></li>`;
+          }),
+          '</ul></div>',
+        ].join('')
+      : '',
     '<table class="dashboard-table"><thead><tr><th>Check</th><th>Status</th><th>Good</th><th>Needs Attention</th><th>Meaning</th></tr></thead><tbody>',
     dashboardRows
       .map((row) => {
@@ -3913,7 +4354,7 @@ export function renderCheckReportHtml(report) {
     `<p><strong>Fixture:</strong> <span class="mono">${escapeHtml(report?.fixtureUrl || '')}</span></p>`,
     `<p><strong>Folder:</strong> <span class="mono">${escapeHtml(report?.folderName || '')}</span></p>`,
     `<p><strong>Summary:</strong> ${escapeHtml(
-      `${shortcutSummary.total ?? 0} shortcuts checked: ${shortcutSummary.passed ?? 0} passed, ${shortcutSummary.failed ?? 0} failed, ${shortcutSummary.partial ?? 0} partial, ${shortcutSummary.manual ?? 0} manual-only, ${shortcutSummary.notApplicable ?? 0} not applicable.`,
+      `${shortcutSummary.total ?? 0} shortcuts inventoried: ${shortcutSummary.passed ?? 0} passed, ${shortcutSummary.failed ?? 0} failed, ${shortcutSummary.partial ?? 0} partial, ${shortcutSummary.manual ?? 0} manual-only, ${shortcutSummary.notApplicable ?? 0} not applicable, ${shortcutSummary.notRun ?? 0} not run.`,
     )}</p>`,
     `<p><strong>Live probes:</strong> ${escapeHtml(
       liveProbeSummary.runStatus === 'not-run'
@@ -4016,7 +4457,7 @@ export function renderCheckReportHtml(report) {
           `<td class="mono">${escapeHtml((row.matchGroups || []).map((group) => `[${(group || []).join(' + ')}]`).join(' OR ') || '(none)')}</td>`,
           `<td><div class="mono">${escapeHtml((row.expectedUiStateRefs || []).join(', ') || '(not covered by current scrape family)')}</div><div class="muted mono">${escapeHtml((row.expectedFiles || []).join(', ') || '(no scrape file requirement)')}</div></td>`,
           `<td class="mono">${escapeHtml((row.matchedExpectedFiles || row.allMatchedFiles || []).join(', ') || '(none)')}</td>`,
-          `<td class="${className}">${escapeHtml(row.status === 'no-scrape-coverage' ? 'NO SCRAPE COVERAGE' : row.status.toUpperCase())}<div class="muted">${escapeHtml(row.statusReason || '')}</div></td>`,
+          `<td class="${className}">${escapeHtml(row.status === 'no-scrape-coverage' ? 'NO SCRAPE COVERAGE' : String(row.status || '').replaceAll('-', ' ').toUpperCase())}<div class="muted">${escapeHtml(row.statusReason || '')}</div></td>`,
           `<td class="mono">${escapeHtml((row.usedByActionIds || []).join(', ') || '(none)')}</td>`,
           '</tr>',
         ].join('');

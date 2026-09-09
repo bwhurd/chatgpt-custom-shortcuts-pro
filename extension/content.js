@@ -12069,26 +12069,23 @@ form.w-full[data-type="unified-composer"] {
         'effort-extra-high',
         'effort-max',
       ]);
-      // Chat's compact Power control currently exposes three positions
-      // (Instant, Medium, High). Work exposes the same shortcuts over a
-      // five-position control with an additional low-power step between
-      // Instant and Medium. Keep the action order for catalog/popup storage,
-      // but resolve the live Work target by its semantic position rather
-      // than treating the shortcut row index as the slider value.
+      // The live Power sliders use the same semantic order as the catalog:
+      // Light/Instant, Medium, High, Extra High, Max. Keep an explicit map
+      // for Work's extended slider rather than relying on a catalog row index.
       const INTEGRATED_EFFORT_WORK_OFFSETS = Object.freeze({
         instant: 0,
-        thinking: 2,
-        pro: 3,
-        'effort-extra-high': 4,
+        thinking: 1,
+        pro: 2,
+        'effort-extra-high': 3,
         'effort-max': 4,
       });
       const getIntegratedEffortTargetOffset = (actionId, span) => {
         const id = String(actionId || '').trim();
         const normalizedSpan = Number.isInteger(span) && span >= 0 ? span : 0;
-        // A three-position Chat slider has no low-power gap, so its action
-        // ids map directly to 0/1/2. Work and any future four/five-position
-        // slider use the semantic offsets above, clamped to the observed
-        // range so unavailable higher levels safely resolve to the maximum.
+        // A three-position slider maps directly to 0/1/2. Work and any future
+        // four/five-position slider use the semantic offsets above, clamped
+        // to the observed range so unavailable higher levels safely resolve
+        // to the maximum.
         if (normalizedSpan <= 2) {
           const directIndex = INTEGRATED_EFFORT_ACTION_IDS.indexOf(id);
           return directIndex >= 0 ? Math.min(directIndex, normalizedSpan) : -1;
@@ -14294,6 +14291,27 @@ form.w-full[data-type="unified-composer"] {
         window.__modelCatalog = nextCatalog;
         MODEL_CATALOG_BY_PROFILE[ACTIVE_MODEL_PICKER_PROFILE] = nextCatalog;
       };
+      const getOrOpenModelPickerState = async () => {
+        const currentState = getVisibleModelMenuState();
+        if (currentState.main instanceof Element) return currentState;
+
+        // The late-bound opener waits for the real composer picker and has a
+        // click fallback when the synthetic Space event is ignored. Do not
+        // infer the menu shape before that live state exists.
+        if (typeof window.__cspOpenModelPickerMainMenu === 'function') {
+          const openedState = await window.__cspOpenModelPickerMainMenu();
+          if (openedState?.main instanceof Element) return openedState;
+        }
+
+        ensureMainMenuOpen();
+        return waitForAsync(
+          () => {
+            const nextState = getVisibleModelMenuState();
+            return nextState.main instanceof Element ? nextState : null;
+          },
+          { timeout: 900, interval: 25 },
+        );
+      };
       const ensureIntegratedSimplePicker = async (state) => {
         let currentState = state || getVisibleModelMenuState();
         const main = currentState?.main;
@@ -14365,9 +14383,8 @@ form.w-full[data-type="unified-composer"] {
       };
       const runIntegratedSpeedToggleAction = async ({ hideUi = false } = {}) => {
         return withTemporarilyHiddenModelUi(hideUi, async () => {
-          const alreadyOpen = ensureMainMenuOpen();
-          await sleepAsync(alreadyOpen ? 80 : 140);
-          const state = await ensureIntegratedSimplePicker(getVisibleModelMenuState());
+          const openedState = await getOrOpenModelPickerState();
+          const state = await ensureIntegratedSimplePicker(openedState);
           if (!state || !isIntegratedComposerMenu(state.main)) return false;
           const toggle = getIntegratedSpeedToggle(state.main);
           if (!(toggle instanceof Element)) return false;
@@ -14401,19 +14418,22 @@ form.w-full[data-type="unified-composer"] {
             if (hideUi) return;
             const button = getModelMenuButton();
             if (button?.getAttribute('aria-expanded') !== 'true') return;
-            // The composer pill owns the outer open state. Sending Escape to
-            // the mounted view can only change its inner panel on Work; send
-            // one Escape to the pill itself so both Chat and Work dismiss the
-            // picker without replaying a second menu command.
-            pressElementKey(button, 'Escape', 'Escape');
+            // The composer pill is the native outer-menu toggle. Click it once
+            // instead of first waiting for the Work shell to process a
+            // synthetic Escape, which left the picker visibly open after a
+            // successful Light/Medium/High change.
+            try {
+              button.click();
+            } catch {
+              return;
+            }
             await waitForAsync(
               () => (button.getAttribute('aria-expanded') === 'false' ? true : null),
-              { timeout: 350, interval: 20 },
+              { timeout: 180, interval: 15 },
             );
           };
-          const alreadyOpen = ensureMainMenuOpen();
-          await sleepAsync(alreadyOpen ? 40 : 80);
-          let state = getVisibleModelMenuState();
+          let state = await getOrOpenModelPickerState();
+          if (!state || !(state.main instanceof Element)) return false;
           const main = state.main;
           const advancedView =
             main instanceof Element
@@ -14524,13 +14544,12 @@ form.w-full[data-type="unified-composer"] {
         });
       };
       const runPillSpeedToggleAction = async ({ hideUi = false } = {}) => {
-        const currentState = getVisibleModelMenuState();
+        const currentState = await getOrOpenModelPickerState();
+        if (!currentState || !(currentState.main instanceof Element)) return false;
         if (isIntegratedComposerMenu(currentState.main)) {
           return runIntegratedSpeedToggleAction({ hideUi });
         }
         return withTemporarilyHiddenModelUi(hideUi, async () => {
-          const alreadyOpen = ensureMainMenuOpen();
-          await sleepAsync(alreadyOpen ? 80 : 140);
           const mainMenu = await ensurePillAdvancedOptionsExpanded(getOpenPillMainMenu());
           if (!mainMenu) return false;
           const directTrigger = getPillSpeedTriggerFromCurrentOrder(mainMenu);
@@ -14599,7 +14618,6 @@ form.w-full[data-type="unified-composer"] {
           return true;
         });
       };
-      const INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS = 100;
       const clearOpenModelMenuBeforeSequentialReplay = async () => {
         if (!isModelMenuLikelyActive()) return;
         const state = getVisibleModelMenuState();
@@ -14613,70 +14631,6 @@ form.w-full[data-type="unified-composer"] {
           pressElementKey(target, 'Escape', 'Escape');
         });
         await sleepAsync(30);
-      };
-      const BASELINE_INTEGRATED_EFFORT_ACTION_IDS = new Set(['instant', 'thinking', 'pro']);
-      const isIntegratedBaselineEffortAction = (action) =>
-        window.__modelCatalog?.integratedEffort === true &&
-        BASELINE_INTEGRATED_EFFORT_ACTION_IDS.has(String(action?.id || '').trim());
-      const latestModelSupportsEffortAction = (action) => {
-        const rows = window.__modelCatalog?.frontendByConfig?.[DEFAULT_ACTIVE_MODEL_CONFIG_ID];
-        if (!Array.isArray(rows)) return true;
-        return rows.some(
-          (row) =>
-            row?.available === true &&
-            String(row?.id || '').trim() === String(action?.id || '').trim(),
-        );
-      };
-      const getLatestModelShortcutSlot = () => {
-        const latestAction = getModelActionById(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-        const slot = Number(latestAction?.slot);
-        return Number.isInteger(slot) && slot >= 0 && slot < KEY_CODES.length ? slot : -1;
-      };
-      const shouldFallbackToLatestForMissingLiveEffort = (
-        action,
-        state = getVisibleModelMenuState(),
-      ) => {
-        if (!isIntegratedBaselineEffortAction(action)) return false;
-        if (!latestModelSupportsEffortAction(action)) return false;
-        if (!(state?.main instanceof Element)) return false;
-        return getPrimaryMenuActionPairs(state).some((pair) =>
-          BASELINE_INTEGRATED_EFFORT_ACTION_IDS.has(String(pair.action?.id || '').trim()),
-        );
-      };
-      const runIntegratedEffortFallbackAction = async (
-        action,
-        { hideUi = false, initialState = null, sourceSlot = -1 } = {},
-      ) => {
-        if (!shouldFallbackToLatestForMissingLiveEffort(action, initialState)) return false;
-        const fallbackAction = getModelActionById(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-        if (!fallbackAction) return false;
-        const fallbackSlot = getLatestModelShortcutSlot();
-        if (fallbackSlot < 0) return false;
-
-        const replaySlot = Number.isInteger(Number(sourceSlot))
-          ? Number(sourceSlot)
-          : Number(action?.slot);
-        const replayAction = getModelActionBySlot(replaySlot) || action;
-
-        runModelPickerShortcutSlot(fallbackSlot, {
-          hideUi,
-          skipIntegratedEffortFallback: true,
-          fallbackAction,
-          skipUsageRecord: true,
-          onComplete: async (switched) => {
-            if (!switched) return;
-            persistActiveModelConfigId(DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-            await sleepAsync(INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS);
-            await clearOpenModelMenuBeforeSequentialReplay();
-            runModelPickerShortcutSlot(replaySlot, {
-              hideUi,
-              skipIntegratedEffortFallback: true,
-              fallbackAction: replayAction,
-              skipUsageRecord: true,
-            });
-          },
-        });
-        return true;
       };
       const runConfigureFrontendRowAction = async (action) => {
         const ready = await waitForMainMenuActionTarget(getModelActionById('configure'));
@@ -14865,7 +14819,7 @@ form.w-full[data-type="unified-composer"] {
           };
         }
 
-        function waitForMenuActionTarget(nextAction, done, options = {}) {
+        function waitForMenuActionTarget(nextAction, done) {
           ensureMainMenuOpen();
 
           let mainPolls = 0;
@@ -14875,13 +14829,6 @@ form.w-full[data-type="unified-composer"] {
             if (state?.menus?.length || state?.items?.length) lastState = state;
             const target = getTargetMenuItemForAction(nextAction, state);
             if (!target) {
-              if (
-                options.allowIntegratedEffortFallback !== false &&
-                shouldFallbackToLatestForMissingLiveEffort(nextAction, state)
-              ) {
-                done({ state, target: null });
-                return;
-              }
               if (mainPolls++ > 50) {
                 done(lastState ? { state: lastState, target: null } : null);
                 return;
@@ -14921,19 +14868,7 @@ form.w-full[data-type="unified-composer"] {
           return true;
         }
 
-        function dispatchIntegratedEffortFallbackIfNeeded(action, ready, options, complete) {
-          if (options.skipIntegratedEffortFallback === true) return false;
-          if (!shouldFallbackToLatestForMissingLiveEffort(action, ready?.state || null)) return false;
-          void runIntegratedEffortFallbackAction(action, {
-            hideUi: options.hideUi === true,
-            initialState: ready?.state || null,
-            sourceSlot: options.sourceSlot,
-          }).then((result) => complete(result !== false));
-          return true;
-        }
-
-        function dispatchMissingTargetAction(action, ready, options, complete) {
-          if (dispatchIntegratedEffortFallbackIfNeeded(action, ready, options, complete)) return;
+        function dispatchMissingTargetAction(action, _ready, _options, complete) {
           if (action.actionKind === 'main-row' || action.actionKind === 'configure-frontend-row') {
             void runConfigureFrontendRowAction(action).then((result) => complete(result !== false));
             return;
@@ -15191,7 +15126,6 @@ form.w-full[data-type="unified-composer"] {
               waitForMenuActionTarget(
                 action,
                 (ready) => dispatchReadyAction(action, ready, options, complete),
-                { allowIntegratedEffortFallback: options.skipIntegratedEffortFallback !== true },
               );
             },
             alreadyOpen ? DELAY_MAIN_MENU_SETTLE_EXPANDED_MS : DELAY_MAIN_MENU_SETTLE_OPEN_MS,
@@ -15302,7 +15236,6 @@ form.w-full[data-type="unified-composer"] {
         executeModelAction(action, {
           hideUi: options.hideUi === true,
           preferPreparedSession: options.preferPreparedSession === true,
-          skipIntegratedEffortFallback: options.skipIntegratedEffortFallback === true,
           sourceSlot: idx,
           onComplete: options.onComplete,
         });

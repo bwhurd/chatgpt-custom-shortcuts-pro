@@ -213,8 +213,13 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /runIntegratedEffortAction = async \(action[\s\S]*?data-testid="composer-model-picker-slider-simple-view"[\s\S]*?pressElementKey\(control, direction, direction\)/,
+  /runIntegratedEffortAction = async \(action[\s\S]*?getOrOpenModelPickerState\(\)[\s\S]*?data-testid="composer-model-picker-slider-simple-view"[\s\S]*?pressElementKey\(control, direction, direction\)/,
   'integrated effort shortcuts should move the live slider with structural arrow controls',
+);
+assert.doesNotMatch(
+  contentSource,
+  /shouldFallbackToLatestForMissingLiveEffort|runIntegratedEffortFallbackAction|skipIntegratedEffortFallback/,
+  'an unavailable Work effort must not switch to another model and replay the shortcut',
 );
 assert.match(
   contentSource,
@@ -233,13 +238,13 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /closePickerAfterCommit[\s\S]*?pressElementKey\(button, 'Escape', 'Escape'\)/,
-  'integrated effort shortcuts should dismiss the picker after the tick commits',
+  /closePickerAfterCommit[\s\S]*?button\.click\(\);[\s\S]*?aria-expanded'\) === 'false'[\s\S]*?timeout: 180/,
+  'integrated effort shortcuts should close the picker through its native composer-pill toggle',
 );
 assert.match(
   contentSource,
-  /INTEGRATED_EFFORT_WORK_OFFSETS[\s\S]*?thinking:\s*2[\s\S]*?pro:\s*3/,
-  'Work effort shortcuts should account for the extra low-power slider position',
+  /INTEGRATED_EFFORT_WORK_OFFSETS[\s\S]*?instant:\s*0[\s\S]*?thinking:\s*1[\s\S]*?pro:\s*2/,
+  'Work effort shortcuts should map Light, Medium, and High to their live slider positions',
 );
 assert.match(
   contentSource,

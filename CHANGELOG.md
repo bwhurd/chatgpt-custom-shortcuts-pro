@@ -14,7 +14,7 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 - Fixed: Effort shortcuts now reopen the simple Power control after Advanced closes, while stale model-row hints are cleared during surface changes.
 - Fixed: Effort shortcuts activate one Power position, dismiss the picker promptly, and no longer trigger a duplicate legacy action.
 - Fixed: Speed and Reset to default shortcuts now activate ChatGPT's live picker controls from either picker view.
-- Fixed: Toggle Speed now clicks and confirms the live Work-mode speed control instead of only showing its shortcut hint.
+- Fixed: Work Medium shortcuts and picker close delay.
 
 #### 08.20.2026
 - Fixed: Model shortcuts switch reliably between ChatGPT's Advanced and o3 model menus, including rapid changes.

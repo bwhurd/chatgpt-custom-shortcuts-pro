@@ -679,6 +679,11 @@ const pillSpeedToggleSource = contentSource.slice(
 );
 assert.match(
   pillSpeedToggleSource,
+  /const currentState = await getOrOpenModelPickerState\(\);[\s\S]*?isIntegratedComposerMenu\(currentState\.main\)[\s\S]*?runIntegratedSpeedToggleAction/,
+  'closed Speed shortcuts should wait for the live picker, then route to its integrated control when present',
+);
+assert.match(
+  pillSpeedToggleSource,
   /const committed = await commitPillRadioItem\(target, 120, \{[\s\S]*?preferUserClick: true[\s\S]*?\}\);[\s\S]*?if \(!committed\) return false;/,
   'Work Speed should use a user-like click and require the native radio state to commit',
 );
@@ -694,7 +699,7 @@ assert.match(
 );
 const pillResetSource = contentSource.slice(
   contentSource.indexOf('const runPillResetAction = async'),
-  contentSource.indexOf('const INTEGRATED_EFFORT_FALLBACK_STEP_DELAY_MS'),
+  contentSource.indexOf('const clearOpenModelMenuBeforeSequentialReplay'),
 );
 assert.match(
   pillResetSource,
