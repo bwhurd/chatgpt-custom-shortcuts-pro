@@ -7,7 +7,7 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 ---
 
 #### 09.19.2026
-- Fixed: Alt+C now reliably copies formatted response text, normalizes em dashes and headings, and shows copy confirmation feedback.
+- Fixed: Response Copy keeps ChatGPT's native Markdown, while Alt+C reliably copies stripped text with normalized dashes, headings, and copy confirmation feedback.
 
 #### 09.09.2026
 - Fixed: Join + Copy All Messages loads lazy conversation history before copying and returns to your original position.
