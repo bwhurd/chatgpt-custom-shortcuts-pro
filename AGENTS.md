@@ -33,6 +33,7 @@ Use:
 
 ## Start here
 
+- For every troubleshooting task, search the relevant official support documentation and upstream/community forum discussions first. Use those sources to identify known causes and supported fixes before attempting speculative diagnosis, trial-and-error changes, or guess-and-check testing.
 - Read `AGENTS.md` first.
 - Open `PROJECT_SPEC.md` only for project overview, cross-cutting rules, or area-specific validation/tooling.
 - If the task matches an `active spec trigger` below, open only the mapped `specs/` file.

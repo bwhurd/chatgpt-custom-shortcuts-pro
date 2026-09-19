@@ -3232,6 +3232,7 @@ const clickElementLikeUser = (el) => {
 
   // copy-lowest run coordination to avoid overlapping delays
   let copyLowestRunToken = 0;
+  let copyMessageFromButton = null;
   const copyLowestDelayCancels = new Set();
 
   const cancelCopyLowestDelays = () => {
@@ -3438,11 +3439,21 @@ const clickElementLikeUser = (el) => {
       window.flashBorder(btn);
     }
 
-    const shouldClick = await delayCopyLowest(delayBeforeClick, runToken);
-    if (!shouldClick || runToken !== copyLowestRunToken) return;
+    // Keep the native click in the original keyboard-event task when the caller
+    // requests no delay. Both ChatGPT's native copy handler and our formatted
+    // copy handler depend on transient user activation for their clipboard write.
+    const shouldClick =
+      delayBeforeClick > 0
+        ? await delayCopyLowest(delayBeforeClick, runToken)
+        : runToken === copyLowestRunToken;
+    if (!shouldClick || runToken !== copyLowestRunToken || !btn.isConnected) return;
+    // Alt+C writes the formatted message once, directly from the keydown task.
+    // Clicking the native button here would start a second, racing clipboard write.
+    if (isMsgCopy && copyMessageFromButton?.(btn, { altC: true })) return;
     btn.click();
-    // Codebox copy controls already write exact code text; leave their clipboard payload untouched.
-    if (isCodeBoxCopy) return;
+    // Codebox controls own their exact payload. Native message copy remains a
+    // fallback if the formatted message could not be resolved.
+    if (isCodeBoxCopy || isMsgCopy) return;
 
     const shouldRead = await delayCopyLowest(delayClipboardRead, runToken);
     if (!shouldRead || runToken !== copyLowestRunToken) return;
@@ -4377,16 +4388,17 @@ const clickElementLikeUser = (el) => {
           /* fall back to copy event */
         }
       }
-      document.addEventListener(
-        'copy',
-        (e) => {
-          e.clipboardData.setData('text/html', html);
-          e.clipboardData.setData('text/plain', text);
-          e.preventDefault();
-        },
-        { once: true },
-      );
-      document.execCommand('copy');
+      const handleCopy = (e) => {
+        e.clipboardData.setData('text/html', html);
+        e.clipboardData.setData('text/plain', text);
+        e.preventDefault();
+      };
+      document.addEventListener('copy', handleCopy);
+      try {
+        if (!document.execCommand('copy')) throw new Error('Clipboard copy was not accepted');
+      } finally {
+        document.removeEventListener('copy', handleCopy);
+      }
     }
 
     async function copyClipboardPayload(payload) {
@@ -4959,8 +4971,9 @@ const clickElementLikeUser = (el) => {
       const preserveWhitespace = !!options.preserveWhitespace;
 
       if (/^h[1-6]$/.test(tag)) {
+        const headingText = renderCopyPlainTextInlineNodes(element.childNodes, preserveWhitespace);
         const heading = makeCopyPlainTextBlock(
-          renderCopyPlainTextInlineNodes(element.childNodes, preserveWhitespace),
+          options.preserveHeadingMarker ? `# ${headingText}` : headingText,
           { heading: true, preserveWhitespace },
         );
         return heading ? [heading] : [];
@@ -5056,18 +5069,19 @@ const clickElementLikeUser = (el) => {
       return output;
     }
 
-    function buildStructuredCopyPlainText(root) {
+    function buildStructuredCopyPlainText(root, options = {}) {
       return joinCopyPlainTextBlocks(
         renderCopyPlainTextBlocksFromNodes(root?.childNodes, {
+          ...options,
           preserveWhitespace: root?.matches?.('.whitespace-pre-wrap, textarea') || false,
         }),
       );
     }
 
-    function buildPlainTextWithFences(root) {
+    function buildPlainTextWithFences(root, options = {}) {
       const clone = root.cloneNode(true);
       normalizeCodeBlocksInClone(clone, root);
-      const structuredText = buildStructuredCopyPlainText(clone);
+      const structuredText = buildStructuredCopyPlainText(clone, options);
       return (structuredText || getAttachedCopyInnerText(clone)).replace(/\u00A0/g, ' ').trim();
     }
 
@@ -5426,7 +5440,43 @@ const clickElementLikeUser = (el) => {
       }, initialDelay);
     }
 
-    function buildSingleMessageClipboardPayload(contentEls) {
+    function formatAltCCopyText(text) {
+      const sourceText = String(text || '');
+      const usedTokens = new Set();
+      const masks = [];
+      const masked = splitByCodeFences(sourceText)
+        .map((segment, index) => {
+          if (!segment.isCode && !segment.isInline) return segment.text;
+          const startToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_START`);
+          const bodyToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_BODY`);
+          const endToken = findUnusedCopyMaskToken(sourceText, usedTokens, `${index}_END`);
+          masks.push({ startToken, endToken, text: segment.text });
+          return `${startToken}${segment.text.replace(/[^\n]/g, bodyToken)}${endToken}`;
+        })
+        .join('');
+
+      let formatted = masked
+        .replace(/—/g, '-')
+        .replace(/^[ \t]*(?:#[ \t]*){2,}(?=\S)/gm, '# ')
+        .replace(/[ \t]+$/gm, '');
+      masks.forEach(({ startToken, endToken, text: codeText }) => {
+        const start = formatted.indexOf(startToken);
+        const end = formatted.indexOf(endToken, start + startToken.length);
+        if (start < 0 || end < 0) return;
+        formatted = formatted.slice(0, start) + codeText + formatted.slice(end + endToken.length);
+      });
+      return formatted;
+    }
+
+    function replaceAltCCopyHtmlDashes(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement?.closest('pre, code')) continue;
+        node.nodeValue = node.nodeValue.replace(/—/g, '-');
+      }
+    }
+
+    function buildSingleMessageClipboardPayload(contentEls, options = {}) {
       const elements = normalizeCopyContentElements(contentEls);
       if (!elements.length) return { html: '', text: '' };
 
@@ -5458,32 +5508,82 @@ const clickElementLikeUser = (el) => {
         guardSingleMessageAutoListStartsForWord(bodyDiv);
 
         turnWrapper.appendChild(bodyDiv);
-        textParts.push(buildPlainTextWithFences(contentEl));
+        textParts.push(buildPlainTextWithFences(contentEl, {
+          preserveHeadingMarker: !!options.altC,
+        }));
       }
+
+      if (options.altC) replaceAltCCopyHtmlDashes(turnWrapper);
 
       const html =
         '<div data-export="chatgpt-shortcuts-single-message">' +
         turnWrapper.outerHTML +
         '</div>';
-      const text = textParts.filter(Boolean).join('\n\n');
+      const plainText = textParts.filter(Boolean).join('\n\n');
+      const text = options.altC ? formatAltCCopyText(plainText) : plainText;
 
       return { html, text };
     }
 
-    async function copySingleMessagePayloadFromElements(contentEls) {
-      await copyClipboardPayload(buildSingleMessageClipboardPayload(contentEls));
+    async function copySingleMessagePayloadFromElements(contentEls, options = {}) {
+      await copyClipboardPayload(buildSingleMessageClipboardPayload(contentEls, options));
     }
 
-    function selectAndMaybeCopySingleMessage(contentEls, shouldCopy = true) {
+    const ALT_C_CHECK_PATH =
+      'M15.8938 3.76175C16.1024 3.45946 16.5173 3.38422 16.8196 3.59281C17.1214 3.80153 17.197 4.21553 16.9886 4.51761L9.00711 16.085C8.72796 16.4912 8.14868 16.545 7.7991 16.1973L3.06863 11.5049C2.80796 11.2463 2.8071 10.8252 3.0657 10.5645C3.32438 10.3038 3.74542 10.3019 4.00613 10.5606L8.27761 14.7998L15.8938 3.76175Z';
+    const altCCopyFeedback = new WeakMap();
+
+    function showAltCCopyFeedback(button) {
+      if (!button?.isConnected) return;
+      const svg = button.querySelector('svg');
+      if (!svg) return;
+
+      const previous = altCCopyFeedback.get(button);
+      if (previous) clearTimeout(previous.timer);
+      const originalSvg = previous?.originalSvg || svg.innerHTML;
+      const originalLabel = previous?.originalLabel || button.getAttribute('aria-label');
+      svg.innerHTML = `<path d="${ALT_C_CHECK_PATH}" fill="currentColor"></path>`;
+      button.setAttribute('aria-label', 'Copied');
+
+      const timer = setTimeout(() => {
+        if (button.isConnected && svg.querySelector('path')?.getAttribute('d') === ALT_C_CHECK_PATH) {
+          svg.innerHTML = originalSvg;
+          if (button.getAttribute('aria-label') === 'Copied') {
+            if (originalLabel) button.setAttribute('aria-label', originalLabel);
+            else button.removeAttribute('aria-label');
+          }
+        }
+        altCCopyFeedback.delete(button);
+      }, 2000);
+      altCCopyFeedback.set(button, { originalSvg, originalLabel, timer });
+    }
+
+    function selectAndMaybeCopySingleMessage(contentEls, shouldCopy = true, options = {}) {
       try {
         const elements = normalizeCopyContentElements(contentEls);
-        if (!elements.length) return;
+        if (!elements.length) return false;
         selectElementsForCopyFeedback(elements, { fallback: 'first-element' });
-        if (shouldCopy) void copySingleMessagePayloadFromElements(elements);
+        if (shouldCopy) {
+          void copySingleMessagePayloadFromElements(elements, options)
+            .then(() => {
+              if (options.altC) showAltCCopyFeedback(options.feedbackButton);
+            })
+            .catch((err) => console.warn('[CSP] Message copy failed:', err));
+        }
+        return true;
       } catch (err) {
         if (COPY_SHORTCUT_DEBUG) console.debug('selectAndMaybeCopySingleMessage failed:', err);
+        return false;
       }
     }
+
+    copyMessageFromButton = (btn, options = {}) => {
+      const contentEls = getCopyButtonContentElements(btn);
+      return selectAndMaybeCopySingleMessage(contentEls, true, {
+        ...options,
+        feedbackButton: btn,
+      });
+    };
 
     function installSelectThenCopyButtonHandler() {
       if (window.__selectThenCopyCopyHandlerAttached) return;
@@ -5491,11 +5591,7 @@ const clickElementLikeUser = (el) => {
         const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
         if (!btn) return;
         if (isCodeBoxCopyControl(btn)) return;
-
-        const contentEls = getCopyButtonContentElements(btn);
-        if (contentEls.length) {
-          selectAndMaybeCopySingleMessage(contentEls, true);
-        }
+        copyMessageFromButton(btn);
       });
       window.__selectThenCopyCopyHandlerAttached = true;
     }
@@ -5650,45 +5746,208 @@ const clickElementLikeUser = (el) => {
       return { html, text, contentEls: selectionEls };
     }
 
-    function runSelectThenCopyAllMessagesShortcut() {
-      setTimeout(() => {
-        try {
-          const onlyAssistant = resolveConversationCopyFlag(
-            window.selectThenCopyAllMessagesOnlyAssistant || false,
+    const COPY_ALL_LAZY_LOAD_MIN_PASSES = 4;
+    const COPY_ALL_LAZY_LOAD_MAX_PASSES = 8;
+    const COPY_ALL_LAZY_LOAD_NUDGE_SETTLE_MS = 40;
+    const COPY_ALL_LAZY_LOAD_SETTLE_MS = 350;
+    const COPY_ALL_LAZY_LOAD_STABLE_PASSES = 2;
+    let copyAllMessagesShortcutInFlight = false;
+
+    function waitForCopyAllLazyLoad(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function getCopyAllScrollContainer(snapshot = null) {
+      const savedContainer = snapshot?.scrollContainer;
+      if (savedContainer instanceof HTMLElement && savedContainer.isConnected) {
+        return savedContainer;
+      }
+
+      return getScrollableContainer();
+    }
+
+    function getCopyAllScrollAnchor(scrollContainer) {
+      if (!(scrollContainer instanceof HTMLElement)) return null;
+
+      const viewportTop = getScrollContainerTopEdge(scrollContainer);
+      const viewportBottom =
+        scrollContainer === document.scrollingElement ||
+        scrollContainer === document.documentElement ||
+        scrollContainer === document.body
+          ? window.innerHeight || document.documentElement.clientHeight
+          : scrollContainer.getBoundingClientRect().bottom;
+
+      return (
+        Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR)).find((turn) => {
+          const rect = turn.getBoundingClientRect();
+          return rect.bottom > viewportTop && rect.top < viewportBottom;
+        }) || null
+      );
+    }
+
+    function captureCopyAllScrollPosition() {
+      const scrollContainer = getCopyAllScrollContainer();
+      if (!(scrollContainer instanceof HTMLElement)) return null;
+
+      const anchor = getCopyAllScrollAnchor(scrollContainer);
+      const anchorOffset = anchor
+        ? anchor.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer)
+        : NaN;
+
+      return {
+        anchor,
+        anchorTestId: anchor?.getAttribute('data-testid') || '',
+        anchorOffset,
+        scrollContainer,
+        scrollTop: Number(scrollContainer.scrollTop) || 0,
+      };
+    }
+
+    function findCopyAllScrollAnchor(snapshot) {
+      if (snapshot?.anchor instanceof HTMLElement && snapshot.anchor.isConnected) {
+        return snapshot.anchor;
+      }
+      if (!snapshot?.anchorTestId) return null;
+
+      return (
+        Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR)).find(
+          (turn) => turn.getAttribute('data-testid') === snapshot.anchorTestId,
+        ) || null
+      );
+    }
+
+    function setCopyAllScrollTop(scrollContainer, scrollTop) {
+      if (!(scrollContainer instanceof HTMLElement) || !scrollContainer.isConnected) return;
+      stabilizeConversationScrollContainer(scrollContainer);
+      scrollContainer.scrollTop = clampScrollTop(scrollContainer, scrollTop);
+    }
+
+    function getCopyAllLazyLoadFingerprint(scrollContainer) {
+      return [
+        document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR).length,
+        Math.round(Number(scrollContainer?.scrollHeight) || 0),
+      ].join(':');
+    }
+
+    async function preloadConversationForCopyAll(scrollSnapshot) {
+      let previousFingerprint = '';
+      let stablePasses = 0;
+
+      for (let pass = 0; pass < COPY_ALL_LAZY_LOAD_MAX_PASSES; pass++) {
+        const scrollContainer = getCopyAllScrollContainer(scrollSnapshot);
+        if (!(scrollContainer instanceof HTMLElement)) return;
+
+        if (pass > 0) {
+          const maxScrollTop = Math.max(
+            0,
+            scrollContainer.scrollHeight - scrollContainer.clientHeight,
           );
-          const onlyUser = resolveConversationCopyFlag(
-            window.selectThenCopyAllMessagesOnlyUser || false,
+          const nudge = Math.min(
+            maxScrollTop,
+            Math.max(1, Math.round(scrollContainer.clientHeight / 3)),
           );
-          let includeAssistant = true;
-          let includeUser = true;
-          if (onlyAssistant) {
-            includeUser = false;
-          } else if (onlyUser) {
-            includeAssistant = false;
+          if (nudge > 0) {
+            setCopyAllScrollTop(scrollContainer, nudge);
+            await waitForCopyAllLazyLoad(COPY_ALL_LAZY_LOAD_NUDGE_SETTLE_MS);
           }
-
-          const omitViaSeparators = resolveConversationCopyFlag(
-            window.includeLabelsAndSeparatorsCheckbox,
-          );
-          const omitViaDoNotInclude = resolveConversationCopyFlag(window.doNotIncludeLabelsCheckbox);
-          const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
-
-          const { html, text, contentEls } = buildConversationClipboardPayload({
-            includeAssistant,
-            includeUser,
-            includeLabels,
-          });
-
-          if (!html && !text) return;
-
-          if (contentEls?.length) {
-            selectElementsForCopyFeedback(contentEls);
-          }
-
-          void copyClipboardPayload({ html, text });
-        } catch (err) {
-          if (COPY_SHORTCUT_DEBUG) console.debug('selectThenCopyAllMessages error:', err);
         }
+
+        setCopyAllScrollTop(scrollContainer, 0);
+        await waitForCopyAllLazyLoad(COPY_ALL_LAZY_LOAD_SETTLE_MS);
+
+        const fingerprint = getCopyAllLazyLoadFingerprint(scrollContainer);
+        stablePasses = fingerprint === previousFingerprint ? stablePasses + 1 : 0;
+        previousFingerprint = fingerprint;
+
+        if (
+          pass + 1 >= COPY_ALL_LAZY_LOAD_MIN_PASSES &&
+          stablePasses >= COPY_ALL_LAZY_LOAD_STABLE_PASSES
+        ) {
+          return;
+        }
+      }
+    }
+
+    function restoreCopyAllScrollPosition(scrollSnapshot) {
+      if (!scrollSnapshot) return;
+
+      const restore = () => {
+        const scrollContainer = getCopyAllScrollContainer(scrollSnapshot);
+        if (!(scrollContainer instanceof HTMLElement)) return;
+
+        let targetScrollTop = scrollSnapshot.scrollTop;
+        const anchor = findCopyAllScrollAnchor(scrollSnapshot);
+        if (anchor && Number.isFinite(scrollSnapshot.anchorOffset)) {
+          const currentAnchorOffset =
+            anchor.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
+          if (Number.isFinite(currentAnchorOffset)) {
+            targetScrollTop =
+              scrollContainer.scrollTop + currentAnchorOffset - scrollSnapshot.anchorOffset;
+          }
+        }
+
+        setCopyAllScrollTop(scrollContainer, targetScrollTop);
+      };
+
+      restore();
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => requestAnimationFrame(restore));
+      }
+    }
+
+    async function activateSelectThenCopyAllMessagesShortcut() {
+      const scrollSnapshot = captureCopyAllScrollPosition();
+
+      try {
+        await preloadConversationForCopyAll(scrollSnapshot);
+
+        const onlyAssistant = resolveConversationCopyFlag(
+          window.selectThenCopyAllMessagesOnlyAssistant || false,
+        );
+        const onlyUser = resolveConversationCopyFlag(
+          window.selectThenCopyAllMessagesOnlyUser || false,
+        );
+        let includeAssistant = true;
+        let includeUser = true;
+        if (onlyAssistant) {
+          includeUser = false;
+        } else if (onlyUser) {
+          includeAssistant = false;
+        }
+
+        const omitViaSeparators = resolveConversationCopyFlag(
+          window.includeLabelsAndSeparatorsCheckbox,
+        );
+        const omitViaDoNotInclude = resolveConversationCopyFlag(window.doNotIncludeLabelsCheckbox);
+        const includeLabels = !(omitViaSeparators || omitViaDoNotInclude);
+
+        const { html, text, contentEls } = buildConversationClipboardPayload({
+          includeAssistant,
+          includeUser,
+          includeLabels,
+        });
+
+        if (!html && !text) return;
+
+        if (contentEls?.length) {
+          selectElementsForCopyFeedback(contentEls);
+        }
+
+        await copyClipboardPayload({ html, text });
+      } catch (err) {
+        if (COPY_SHORTCUT_DEBUG) console.debug('selectThenCopyAllMessages error:', err);
+      } finally {
+        restoreCopyAllScrollPosition(scrollSnapshot);
+        copyAllMessagesShortcutInFlight = false;
+      }
+    }
+
+    function runSelectThenCopyAllMessagesShortcut() {
+      if (copyAllMessagesShortcutInFlight) return;
+      copyAllMessagesShortcutInFlight = true;
+
+      setTimeout(() => {
+        void activateSelectThenCopyAllMessagesShortcut();
       }, 50);
     }
 
@@ -6765,10 +7024,7 @@ const clickElementLikeUser = (el) => {
       },
       shortcutKeyCopyLowest: () => {
         const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
-        copyFromLowestButton(copyPath, {
-          delayBeforeClick: 350,
-          delayClipboardRead: 350,
-        });
+        copyFromLowestButton(copyPath, { delayBeforeClick: 0 });
       },
       shortcutKeyEdit: runEditMessageShortcut,
       shortcutKeySendEdit: runSendEditShortcut,

@@ -6,6 +6,12 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.19.2026
+- Fixed: Alt+C now reliably copies formatted response text, normalizes em dashes and headings, and shows copy confirmation feedback.
+
+#### 09.09.2026
+- Fixed: Join + Copy All Messages loads lazy conversation history before copying and returns to your original position.
+
 #### 09.05.2026
 - Fixed: Update Model List finds the authenticated ChatGPT tab while the popup is focused and adapts to ChatGPT's current integrated model picker.
 - Fixed: Model refresh exposes ChatGPT's current 1.5x speed and Reset to default controls, with shortcut hints centered beneath each control.
