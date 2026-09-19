@@ -4290,16 +4290,84 @@ const clickElementLikeUser = (el) => {
       return normalizeHeaderSpacingOutsideCodeblocks(processedSegments);
     }
 
+    function findMatchingMarkdownDelimiter(text, start, opening, closing) {
+      let depth = 0;
+      for (let index = start; index < text.length; index += 1) {
+        if (text[index] === '\\') {
+          index += 1;
+          continue;
+        }
+        if (text[index] === opening) {
+          depth += 1;
+        } else if (text[index] === closing) {
+          depth -= 1;
+          if (depth === 0) return index;
+        }
+      }
+      return -1;
+    }
+
+    function simplifyMarkdownLinks(text) {
+      let result = String(text || '');
+      let changed = true;
+
+      while (changed) {
+        changed = false;
+        for (let index = 0; index < result.length; index += 1) {
+          const imageMarker = result[index] === '!' && result[index + 1] === '[';
+          if (result[index] !== '[' && !imageMarker) continue;
+
+          const labelStart = imageMarker ? index + 1 : index;
+          const labelEnd = findMatchingMarkdownDelimiter(result, labelStart, '[', ']');
+          if (labelEnd < 0) continue;
+
+          let destinationStart = labelEnd + 1;
+          while (/\s/.test(result[destinationStart] || '')) destinationStart += 1;
+
+          let destinationEnd = -1;
+          if (result[destinationStart] === '[') {
+            destinationEnd = findMatchingMarkdownDelimiter(result, destinationStart, '[', ']');
+          } else {
+            if (result[destinationStart] !== '(') continue;
+            destinationEnd = findMatchingMarkdownDelimiter(
+              result,
+              destinationStart,
+              '(',
+              ')',
+            );
+          }
+
+          if (destinationEnd < 0) continue;
+
+          let label = result.slice(labelStart + 1, labelEnd);
+          label = label.replace(/^image(?=[A-Z]|\s|$)/i, '');
+          const wrapperStart = index > 0 && result[index - 1] === '(' ? index - 1 : index;
+          const wrapperEnd = result[destinationEnd + 1] === ')' ? destinationEnd + 2 : destinationEnd + 1;
+          const shouldRemoveWrapper =
+            wrapperStart < index &&
+            wrapperEnd > destinationEnd + 1 &&
+            result.slice(wrapperStart, index) === '(' &&
+            result.slice(destinationEnd + 1, wrapperEnd) === ')';
+          result =
+            result.slice(0, wrapperStart) +
+            (shouldRemoveWrapper ? label : result.slice(wrapperStart, index) + label) +
+            result.slice(wrapperEnd);
+          changed = true;
+          break;
+        }
+      }
+
+      return result.replace(/\(\s*\)/g, '');
+    }
+
     function removeMarkdown(
       text,
       { normalizeHeaders = true, stripHeadings = true, trimResult = true } = {},
     ) {
       const normalizedText = normalizeHeaders ? normalizeHeaderSpacing(text) : String(text || '');
-      let result = normalizedText
-        // Images: ![alt](url) → alt
-        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-        // Links: [text](url) → text
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      let result = simplifyMarkdownLinks(
+        normalizedText.replace(/\\([_*[\](){}#+\-!.>])/g, '$1'),
+      )
         // Bold: **text** or __text__ (only when not inside words)
         .replace(/(^|[^\w\\])\*\*(.*?)\*\*(?!\w)/g, '$1$2')
         .replace(/(^|[^\w])__(.*?)__(?!\w)/g, '$1$2')
@@ -4390,6 +4458,27 @@ const clickElementLikeUser = (el) => {
       }
       const handleCopy = (e) => {
         e.clipboardData.setData('text/html', html);
+        e.clipboardData.setData('text/plain', text);
+        e.preventDefault();
+      };
+      document.addEventListener('copy', handleCopy);
+      try {
+        if (!document.execCommand('copy')) throw new Error('Clipboard copy was not accepted');
+      } finally {
+        document.removeEventListener('copy', handleCopy);
+      }
+    }
+
+    async function writeClipboardPlainText(text) {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch (_) {
+          /* fall back to copy event */
+        }
+      }
+      const handleCopy = (e) => {
         e.clipboardData.setData('text/plain', text);
         e.preventDefault();
       };
@@ -5455,7 +5544,17 @@ const clickElementLikeUser = (el) => {
         })
         .join('');
 
-      let formatted = masked
+      let formatted = masked;
+      const shouldStripMarkdown =
+        typeof removeMarkdownOnCopyEnabled !== 'function' || removeMarkdownOnCopyEnabled();
+      if (shouldStripMarkdown) {
+        formatted = removeMarkdown(formatted, {
+          normalizeHeaders: false,
+          stripHeadings: false,
+          trimResult: false,
+        });
+      }
+      formatted = formatted
         .replace(/—/g, '-')
         .replace(/^[ \t]*(?:#[ \t]*){2,}(?=\S)/gm, '# ')
         .replace(/[ \t]+$/gm, '');
@@ -5468,17 +5567,16 @@ const clickElementLikeUser = (el) => {
       return formatted;
     }
 
-    function replaceAltCCopyHtmlDashes(root) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (node.parentElement?.closest('pre, code')) continue;
-        node.nodeValue = node.nodeValue.replace(/—/g, '-');
-      }
-    }
-
     function buildSingleMessageClipboardPayload(contentEls, options = {}) {
       const elements = normalizeCopyContentElements(contentEls);
       if (!elements.length) return { html: '', text: '' };
+      if (options.altC) {
+        const plainText = elements
+          .map((contentEl) => buildPlainTextWithFences(contentEl, { preserveHeadingMarker: true }))
+          .filter(Boolean)
+          .join('\n\n');
+        return { html: '', text: formatAltCCopyText(plainText) };
+      }
 
       const turnWrapper = document.createElement('div');
       turnWrapper.setAttribute('data-export', 'chatgpt-shortcuts-single-message');
@@ -5508,25 +5606,24 @@ const clickElementLikeUser = (el) => {
         guardSingleMessageAutoListStartsForWord(bodyDiv);
 
         turnWrapper.appendChild(bodyDiv);
-        textParts.push(buildPlainTextWithFences(contentEl, {
-          preserveHeadingMarker: !!options.altC,
-        }));
+        textParts.push(buildPlainTextWithFences(contentEl));
       }
-
-      if (options.altC) replaceAltCCopyHtmlDashes(turnWrapper);
 
       const html =
         '<div data-export="chatgpt-shortcuts-single-message">' +
         turnWrapper.outerHTML +
         '</div>';
       const plainText = textParts.filter(Boolean).join('\n\n');
-      const text = options.altC ? formatAltCCopyText(plainText) : plainText;
-
-      return { html, text };
+      return { html, text: plainText };
     }
 
     async function copySingleMessagePayloadFromElements(contentEls, options = {}) {
-      await copyClipboardPayload(buildSingleMessageClipboardPayload(contentEls, options));
+      const payload = buildSingleMessageClipboardPayload(contentEls, options);
+      if (options.altC) {
+        await writeClipboardPlainText(payload.text);
+      } else {
+        await copyClipboardPayload(payload);
+      }
     }
 
     const ALT_C_CHECK_PATH =
@@ -5584,17 +5681,6 @@ const clickElementLikeUser = (el) => {
         feedbackButton: btn,
       });
     };
-
-    function installSelectThenCopyButtonHandler() {
-      if (window.__selectThenCopyCopyHandlerAttached) return;
-      document.addEventListener('click', (e) => {
-        const btn = e.target.closest?.('[data-testid="copy-turn-action-button"]');
-        if (!btn) return;
-        if (isCodeBoxCopyControl(btn)) return;
-        copyMessageFromButton(btn);
-      });
-      window.__selectThenCopyCopyHandlerAttached = true;
-    }
 
     function runSelectThenCopyShortcut() {
       setTimeout(() => {
@@ -5951,7 +6037,6 @@ const clickElementLikeUser = (el) => {
       }, 50);
     }
 
-    installSelectThenCopyButtonHandler();
     window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
 
     const EditMessageShortcut = (() => {

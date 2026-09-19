@@ -54,6 +54,54 @@ assert.equal(
   '# `inline — code` - prose',
   'Alt+C should collapse headings around inline code without changing code text',
 );
+assert.equal(
+  formatAltCCopyText('[Docs](https://example.com) **bold** __strong__ *italic*'),
+  'Docs bold strong italic',
+  'Alt+C should simplify links and remove inline Markdown emphasis markers',
+);
+assert.equal(
+  removeMarkdown(
+    String.raw`For the material, expand into the following \*\*Labor & Delivery core curriculum\*\*. [imageThe ObG Project]\([https://www.obgproject.com/page](https://www.obgproject.com/page)\)`,
+  ),
+  'For the material, expand into the following Labor & Delivery core curriculum. The ObG Project',
+  'Alt+C should clean escaped emphasis and nested image-link Markdown',
+);
+assert.equal(
+  removeMarkdown('([The ObG Project][1]) ([image][2])'),
+  'The ObG Project',
+  'Alt+C should simplify reference links and remove image citation wrappers',
+);
+assert.equal(
+  formatAltCCopyText('**outside**\n```md\n[keep](https://example.com) **keep** — unchanged\n```'),
+  'outside\n```md\n[keep](https://example.com) **keep** — unchanged\n```',
+  'Alt+C should preserve Markdown syntax inside fenced code',
+);
+
+const plainWriterStart = contentSource.indexOf('    async function writeClipboardPlainText(text)');
+const plainWriterEnd = contentSource.indexOf('    async function copyClipboardPayload', plainWriterStart);
+const messageWriterStart = contentSource.indexOf('    async function copySingleMessagePayloadFromElements');
+const messageWriterEnd = contentSource.indexOf('    const ALT_C_CHECK_PATH', messageWriterStart);
+assert.ok(plainWriterStart >= 0 && plainWriterEnd > plainWriterStart);
+assert.ok(messageWriterStart >= 0 && messageWriterEnd > messageWriterStart);
+const clipboardCalls = [];
+const clipboardContext = vm.createContext({
+  navigator: { clipboard: { writeText: async (value) => clipboardCalls.push(['plain', value]) } },
+  buildSingleMessageClipboardPayload: () => ({ html: '<strong>Bold</strong>', text: 'Bold' }),
+  copyClipboardPayload: async (payload) => clipboardCalls.push(['rich', payload]),
+});
+vm.runInContext(
+  `${contentSource.slice(plainWriterStart, plainWriterEnd)}\n${contentSource.slice(messageWriterStart, messageWriterEnd)}\nglobalThis.copyMessage = copySingleMessagePayloadFromElements;`,
+  clipboardContext,
+);
+await clipboardContext.copyMessage([{}], { altC: true });
+assert.deepEqual(clipboardCalls, [['plain', 'Bold']], 'Alt+C must write only cleaned plain text');
+clipboardCalls.length = 0;
+await clipboardContext.copyMessage([{}]);
+assert.deepEqual(
+  clipboardCalls,
+  [['rich', { html: '<strong>Bold</strong>', text: 'Bold' }]],
+  'other extension copy paths should retain their rich payload',
+);
 
 const nestedBullets = [
   '* first level bullet',
@@ -201,19 +249,6 @@ try {
     'rendered headings should have one preceding blank line and no following blank line',
   );
 
-  const htmlDashStart = contentSource.indexOf('    function replaceAltCCopyHtmlDashes(root)');
-  const htmlDashEnd = contentSource.indexOf('    function buildSingleMessageClipboardPayload', htmlDashStart);
-  assert.notEqual(htmlDashStart, -1, 'Alt+C HTML dash helper is missing');
-  const htmlDashSource = contentSource.slice(htmlDashStart, htmlDashEnd).replace(/^    /gm, '');
-  await page.setContent('<div id="copy"><p>Before — after</p><code>code — unchanged</code></div>');
-  const richText = await page.evaluate(({ source }) => {
-    const replaceDashes = new Function(`${source}\nreturn replaceAltCCopyHtmlDashes;`)();
-    const root = document.getElementById('copy');
-    replaceDashes(root);
-    return root.textContent;
-  }, { source: htmlDashSource });
-  assert.equal(richText, 'Before - aftercode — unchanged', 'rich clipboard HTML should replace prose dashes');
-
   const feedbackStart = contentSource.indexOf('    const ALT_C_CHECK_PATH =');
   const feedbackEnd = contentSource.indexOf('    function selectAndMaybeCopySingleMessage', feedbackStart);
   assert.notEqual(feedbackStart, -1, 'Alt+C checkmark feedback is missing');
@@ -247,4 +282,4 @@ try {
   await browser.close();
 }
 
-console.log('Alt+C text, rich HTML, heading markers, and copy-icon feedback passed');
+console.log('Alt+C plain text, heading markers, and copy-icon feedback passed');
