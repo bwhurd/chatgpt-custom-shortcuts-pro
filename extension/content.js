@@ -28,7 +28,8 @@ const CONVERSATION_TURN_SELECTOR = '[data-turn-key], [data-testid^="conversation
 
 function getConversationTurns() {
   return Array.from(document.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
-    (turn) => turn instanceof HTMLElement && turn.isConnected,
+    // ChatGPT keeps hidden thread containers of cached chats mounted; skip their turns.
+    (turn) => turn instanceof HTMLElement && turn.isConnected && turn.getClientRects().length > 0,
   );
 }
 
