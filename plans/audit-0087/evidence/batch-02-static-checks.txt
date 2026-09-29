@@ -1,0 +1,32 @@
+Audit 0087 — Batch 02 static checks
+Date: 2026-09-29
+
+Read-only manifest and reference inventory
+- A direct Node JSON.parse first stopped at the UTF-8 BOM at the beginning of extension/manifest.json.
+- Repeated the read after stripping the BOM: exit 0. Manifest version 3; extension version 4.7.0.2; required permission storage; optional permission identity; no host_permissions, optional_host_permissions, or web_accessible_resources.
+- Checked manifest worker, action popup, action and extension icons, content scripts/styles, popup-local scripts/styles, default English messages path, and dynamic popup.css path. Each source path exists and is selected by scripts/build-zip.js through an explicit include or recursive directory rule.
+
+JavaScript syntax
+- Command: node --check extension/background.js
+- Exit: 0; no diagnostic output.
+
+Build-rule inventory
+- Explicit script exclusions: lib/DevScrapeWide.js, lib/DevScrapeNarrow.js, shared/shortcut-action-metadata.js.
+- Explicit excluded prefix: vendor/aptabase-browser/.
+- analytics.js, usage-report.html/css/js, and dev-scrape/report.html/css/js exist in extension source but are not selected by includeItems; background.js has optional CSPUsageAnalytics property lookups but no importScripts call.
+- popup.css is selected by includeItems. Its separate page-origin use in the ChatGPT overlay is not made accessible by that inclusion.
+- The archive build command was not run; ZIP contents and store package state remain unverified.
+
+Message-fixture search
+- Searched tests for the audited relay/auth message types and malformed/rejected background-message coverage.
+- Found wiring assertions for model-catalog refresh and a DevScrape Playwright helper that sends csp.relayToSenderTab. No isolated rejected-sender or malformed-background-message security fixture was found.
+- No tests were run.
+
+Dependency declarations
+- package.json has no runtime dependencies; all eight declarations are devDependencies.
+- package-lock.json lockfileVersion 3 resolves: @biomejs/biome 2.3.2; @playwright/test 1.58.2; acorn 8.18.0; archiver 7.0.1; cheerio 1.1.2; playwright 1.58.2; strip-json-comments 3.1.1; webext-options-sync 4.3.0.
+- No dependency was installed. No registry/network provenance or vulnerability audit was performed. Bundled vendor bodies were not opened.
+
+Other limits
+- No browser session, page, OAuth flow, network request, Drive data, ZIP, or Chrome Web Store dashboard/listing was inspected or modified.
+- The official Chrome and Chrome Web Store rules used for findings are recorded with direct URLs and access date in batch-02-official-docs.md.

@@ -22,14 +22,24 @@ assert.match(
   'the current app-shell sidebar should be preferred over retired stage hosts',
 );
 assert.match(
+  contentSource.slice(helperStart, runtimeStart),
+  /button\[aria-controls="app-shell-sidebar"\]\[aria-expanded\]/,
+  'the current shell state should use its language-independent expanded toggle',
+);
+assert.match(
+  contentSource.slice(helperStart, runtimeStart),
+  /getElementById\('stage-sidebar-tiny-bar'\)[\s\S]*getElementById\('app-shell-sidebar'\)/,
+  'the legacy tiny bar should remain preferred when available',
+);
+assert.match(
   runtimeSource,
   /hoverTarget\.addEventListener\('mouseenter', onEnter, true\)/,
   'hover should bind to the stable sidebar host',
 );
 assert.match(
   runtimeSource,
-  /attributeFilter: \['class', 'style', 'data-state'\]/,
-  'the current host state should drive open and close handling',
+  /attributeFilter:\s*\['aria-expanded'\]/,
+  'the current shell toggle should drive open and close handling',
 );
 assert.match(
   runtimeSource,
@@ -98,8 +108,16 @@ class TestElement extends TestNode {
     this.listeners.delete(type);
   }
 
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
+
   get offsetWidth() {
     return 1;
+  }
+
+  getBoundingClientRect() {
+    return { width: 20, height: 20 };
   }
 }
 class TestHTMLElement extends TestElement {}
@@ -123,21 +141,29 @@ const runTimersTo = (target) => {
   now = target;
 };
 const currentHost = new TestHTMLElement('app-shell-sidebar');
-currentHost.setAttribute('data-state', 'closed');
 const stageHost = new TestHTMLElement('stage-slideover-sidebar');
 stageHost.setAttribute('data-state', 'open');
 const legacyHost = new TestHTMLElement('stage-sidebar');
-const bar = new TestHTMLElement('stage-sidebar-tiny-bar');
+const legacyBar = new TestHTMLElement('stage-sidebar-tiny-bar');
+const currentToggle = new TestHTMLElement('app-shell-sidebar-toggle');
+currentToggle.setAttribute('aria-controls', 'app-shell-sidebar');
+currentToggle.setAttribute('aria-expanded', 'true');
 const helperElements = new Map([
   [currentHost.id, currentHost],
   [stageHost.id, stageHost],
   [legacyHost.id, legacyHost],
 ]);
 const helperContext = vm.createContext({
-  document: { getElementById: (id) => helperElements.get(id) ?? null },
+  document: {
+    getElementById: (id) => helperElements.get(id) ?? null,
+    querySelectorAll: (selector) =>
+      selector === 'button[aria-controls="app-shell-sidebar"][aria-expanded]'
+        ? [currentToggle]
+        : [],
+  },
   window: {
     getComputedStyle: (host) =>
-      host === legacyHost
+      host === legacyHost || host === currentToggle
         ? { display: 'block', visibility: 'visible', opacity: '1' }
         : { display: 'none', visibility: 'hidden', opacity: '0' },
   },
@@ -145,37 +171,51 @@ const helperContext = vm.createContext({
 vm.runInContext(
   `${contentSource.slice(helperStart, runtimeStart)}
 globalThis.getHost = getSlimSidebarHost;
+globalThis.getFadeTarget = getSlimSidebarFadeTarget;
 globalThis.isOpen = isSlimSidebarHostOpen;
 globalThis.resetScroll = resetCollapsedSlimSidebarScroll;`,
   helperContext,
   { filename: 'fade-slim-sidebar-host-helpers.js' },
 );
 assert.equal(helperContext.getHost(), currentHost, 'the current app-shell host should win');
-assert.equal(helperContext.isOpen(currentHost), false, 'data-state="closed" should be collapsed');
+assert.equal(helperContext.getFadeTarget(), currentHost, 'the app-shell should be the current fallback target');
+assert.equal(helperContext.isOpen(currentHost), true, 'aria-expanded="true" should be expanded');
+currentHost.setAttribute('data-state', 'closed');
+assert.equal(helperContext.isOpen(currentHost), false, 'explicit host data-state should take precedence');
+currentHost.removeAttribute('data-state');
+currentToggle.setAttribute('aria-expanded', 'false');
+assert.equal(helperContext.isOpen(currentHost), false, 'aria-expanded="false" should be collapsed');
 helperContext.resetScroll(currentHost);
 assert.equal(currentHost.scrollLeft, 0, 'collapsed host scroll should return to the rail edge');
-currentHost.setAttribute('data-state', 'open');
+currentToggle.setAttribute('aria-expanded', 'true');
 currentHost.scrollLeft = 189;
 helperContext.resetScroll(currentHost);
 assert.equal(currentHost.scrollLeft, 189, 'expanded host scroll should not be changed');
+helperElements.set(legacyBar.id, legacyBar);
+assert.equal(helperContext.getFadeTarget(), legacyBar, 'the legacy tiny bar should remain the primary target');
+helperElements.delete(legacyBar.id);
 helperElements.delete('app-shell-sidebar');
 assert.equal(helperContext.getHost(), stageHost, 'stage-slideover should remain a fallback');
 helperElements.delete('stage-slideover-sidebar');
 assert.equal(helperContext.getHost(), legacyHost, 'legacy stage-sidebar should remain a fallback');
 assert.equal(helperContext.isOpen(legacyHost), true, 'visible legacy sidebar should count as open');
-currentHost.setAttribute('data-state', 'closed');
 currentHost.scrollLeft = 71;
+currentToggle.setAttribute('aria-expanded', 'false');
 
 const elements = new Map([
   [currentHost.id, currentHost],
   [stageHost.id, stageHost],
   [legacyHost.id, legacyHost],
-  [bar.id, bar],
+  [currentToggle.id, currentToggle],
 ]);
 const document = {
   readyState: 'complete',
   body: new TestNode(),
   getElementById: (id) => elements.get(id) ?? null,
+  querySelectorAll: (selector) =>
+    selector === 'button[aria-controls="app-shell-sidebar"][aria-expanded]'
+      ? [currentToggle]
+      : [],
   querySelector: () => null,
   addEventListener() {},
   removeEventListener() {},
@@ -259,27 +299,33 @@ assert.equal(
   'retired stage hosts should not receive current-host hover handlers',
 );
 runTimersTo(3700);
-assert.equal(bar.styleValues.get('opacity'), '0.3', 'idle should use the configured opacity');
+assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'collapsed idle should use configured opacity');
 
 currentHost.hovered = true;
 currentHost.listeners.get('mouseenter')();
-assert.equal(bar.styleValues.get('opacity'), '1', 'entering the collapsed host should reveal the bar');
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'entering the collapsed host should reveal the rail');
 runTimersTo(now + 5000);
-assert.equal(bar.styleValues.get('opacity'), '1', 'a steady hover should prevent the idle fade');
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'a steady hover should prevent the idle fade');
 
 currentHost.hovered = false;
 currentHost.listeners.get('mouseleave')();
 runTimersTo(now + 2500);
-assert.equal(bar.styleValues.get('opacity'), '0.3', 'leaving the host should fade to idle');
+assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'leaving the collapsed rail should fade to idle');
 
-currentHost.setAttribute('data-state', 'open');
+currentToggle.setAttribute('aria-expanded', 'true');
 observers.at(-1).callback([]);
-assert.equal(bar.styleValues.get('opacity'), '0', 'opening the current sidebar should hide the slim bar');
-currentHost.setAttribute('data-state', 'closed');
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'expanding the shell should restore full opacity');
+assert.equal(currentHost.style.pointerEvents, '', 'expanded sidebar pointer interaction should remain intact');
+runTimersTo(now + 5000);
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'expanded idle must never fade the full sidebar');
+
+currentToggle.setAttribute('aria-expanded', 'false');
 observers.at(-1).callback([]);
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'collapsing should reveal the rail before idling');
 runTimersTo(now);
-assert.equal(bar.styleValues.get('opacity'), '1', 'closing the sidebar should restore the collapsed bar');
+assert.equal(currentHost.styleValues.get('opacity'), '1', 'collapsed transition should restore the rail');
 runTimersTo(now + 2500);
-assert.equal(bar.styleValues.get('opacity'), '0.3', 'the restored bar should return to idle opacity');
+assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'the collapsed rail should return to idle opacity');
+assert.equal(currentHost.style.pointerEvents, '', 'collapsed idle should preserve pointer interaction');
 
-console.log('Fade Slim Sidebar tracks current app-shell host and idle behavior');
+console.log('Fade Slim Sidebar fades the collapsed app-shell rail and preserves the expanded sidebar');

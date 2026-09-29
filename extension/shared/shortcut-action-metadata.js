@@ -388,6 +388,7 @@
     }),
     byMenuChain('search-conversation-button', 'native-search-conversation-control', {
       matchGroups: [
+        ['<button', 'M7.32849 1.91016'],
         ['data-testid="search-conversation-button"'],
         ['id="sidebar-header"', 'aria-label="Search"'],
         ['id="sidebar-header"', '#sidebar-search'],
@@ -410,7 +411,7 @@
         'narrow-header-sidebar-popover-control',
       ],
       notes:
-        'Search may be the control immediately before Close sidebar or the sidebar item immediately after New Chat; the old test id and sprite remain compatibility fallbacks.',
+        'Prefer the current language-independent titlebar Search button SVG path; otherwise use sidebar adjacency, with the old test id and sprite retained as compatibility fallbacks.',
     }),
     byMenuChain('search-chats-dialog', 'role=dialog|placeholder=Search chats', {
       matchGroups: [['role="dialog"', 'placeholder="Search chats..."']],
@@ -651,14 +652,53 @@
           'The current Dictate button is identified by its SVG path prefix inside the observed composer form structures; the distinct Start Voice and composer-send controls are excluded without relying on localized labels or legacy SVG use IDs.',
       },
     ),
-    manualTarget('dictate-submit-button', 'svg-token=#75ee4d|#fa1dbd', {
-      searchNeedles: ['#75ee4d', '#fa1dbd'],
-      notes: 'Only available after dictation has already started.',
-    }),
-    manualTarget('cancel-dictation-button', 'svg-token=#2dc143|#85f94b', {
-      searchNeedles: ['#2dc143', '#85f94b'],
-      notes: 'Only available while dictation is active.',
-    }),
+    bySelectorList(
+      'dictate-submit-button',
+      [
+        'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
+        'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
+      ],
+      {
+        matchGroups: [
+          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M9.31697 3.08317'],
+          ['data-chatgpt-composer', 'button[type="button"]:has', 'M9.31697 3.08317'],
+        ],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        notes:
+          'The active Dictation Transcribe-and-send control is identified by its observed SVG path on a type=button inside the composer; this avoids localized labels and legacy SVG use IDs.',
+      },
+    ),
+    bySelectorList(
+      'stop-dictation-button',
+      [
+        'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
+        'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
+      ],
+      {
+        matchGroups: [
+          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M13.0834 3.91846'],
+          ['data-chatgpt-composer', 'button[type="button"]:has', 'M13.0834 3.91846'],
+        ],
+        notes:
+          'The active Dictation Stop control is identified by its observed SVG path on a type=button inside the composer; clicking it transcribes into the unsent composer draft.',
+      },
+    ),
+    bySelectorList(
+      'cancel-dictation-button',
+      [
+        'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
+        'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
+      ],
+      {
+        matchGroups: [
+          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M14.779 4.27903'],
+          ['data-chatgpt-composer', 'button[type="button"]:has', 'M14.779 4.27903'],
+        ],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        notes:
+          'The active Dictation Cancel control is identified by its observed SVG path on a type=button inside the composer; this avoids localized labels and legacy SVG use IDs.',
+      },
+    ),
     bySelectorList(
       'share-chat-button',
       [
@@ -1219,6 +1259,16 @@
         notes: 'Disposable blank conversation exposes the dictate start control.',
       }),
       notes: 'Dual-state behavior that changes targets when dictation is active.',
+    }),
+    manualOnly('shortcutKeyStopAndTranscribeDictation', {
+      targetRefs: ['stop-dictation-button'],
+      uiStateRefs: [],
+      activationProbe: {
+        notes:
+          'Requires an already-active dictation recording; automated validation must not start recording or activate this stateful control.',
+      },
+      notes:
+        'Stops active dictation and transcribes into the composer without sending; only available while recording.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyCancelDictation',

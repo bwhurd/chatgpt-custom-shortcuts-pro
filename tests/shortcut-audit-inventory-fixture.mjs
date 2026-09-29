@@ -55,6 +55,13 @@ assert.deepEqual(
   [],
   `shortcut inventory should be coherent: ${JSON.stringify(inventory.inventoryIssues, null, 2)}`,
 );
+const searchConversationTarget = shortcutActionMetadata.TARGET_DESCRIPTORS.find(
+  (target) => target.targetId === 'search-conversation-button',
+);
+assert.ok(
+  searchConversationTarget?.matchGroups[0]?.includes('M7.32849 1.91016'),
+  'Search Conversations should prefer the current language-independent titlebar Search SVG path',
+);
 
 const expectedListenerIds = getExpectedKeyboardListenerContracts().map((contractRow) => contractRow.contractId);
 assert.deepEqual(

@@ -230,6 +230,12 @@
   "tt_toggle_dictate": {
     "message": "एक बार दबाएँ: डिक्टेशन शुरू। फिर से दबाएँ: डिक्टेशन भेजें."
   },
+  "label_stop_transcribe_dictation": {
+    "message": "डिक्टेशन रोकें और ट्रांसक्राइब करें"
+  },
+  "tt_stop_transcribe_dictation": {
+    "message": "डिक्टेशन रोककर बोले गए शब्दों को संदेश बॉक्स में ट्रांसक्राइब करता है, लेकिन भेजता नहीं है।"
+  },
   "label_cancel_dictation": {
     "message": "डिक्टेशन रद्द करें"
   },

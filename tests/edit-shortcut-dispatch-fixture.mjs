@@ -3,7 +3,12 @@ import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
 // This fixture starts at the page-level handler; Chrome's browser-menu accelerator is external.
-const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
+const [contentSource, optionsStorageSource, popupSource, popupHtmlSource] = await Promise.all([
+  readFile(new URL('../extension/content.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/options-storage.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/popup.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/popup.html', import.meta.url), 'utf8'),
+]);
 
 const extractBetween = (startMarker, endMarker, name) => {
   const start = contentSource.indexOf(startMarker);
@@ -77,6 +82,55 @@ assert.match(
 );
 const defaultEditCode = contentSource.match(/^\s*shortcutKeyEdit:\s*'([^']+)',\s*$/m)?.[1];
 assert.ok(defaultEditCode, 'The default Edit shortcut should remain inspectable');
+assert.equal(defaultEditCode, 'KeyE', 'The runtime Edit default should be Alt+E');
+assert.match(popupSource, /shortcutKeyEdit:\s*'KeyE'/);
+assert.match(popupHtmlSource, /id="shortcutKeyEdit"[\s\S]*?value="e"/);
+assert.match(popupHtmlSource, /id="shortcutKeySendEdit"[\s\S]*?value="d"/);
+
+let optionsConfig;
+function OptionsSync(config) {
+  optionsConfig = config;
+}
+OptionsSync.migrations = { removeUnused() {} };
+const optionsContext = { console, OptionsSync };
+optionsContext.globalThis = optionsContext;
+runInNewContext(optionsStorageSource, optionsContext, { filename: 'extension/options-storage.js' });
+assert.equal(optionsConfig.defaults.shortcutKeyEdit, 'e');
+
+const createStoredSettings = (overrides) => {
+  const stored = { ...optionsConfig.defaults };
+  Object.entries(optionsConfig.defaults).forEach(([key, value]) => {
+    if (Array.isArray(value)) stored[key] = value.slice();
+  });
+  return { ...stored, ...overrides };
+};
+const migrateStoredSettings = (stored) => {
+  optionsConfig.migrations.forEach((migration) => migration(stored, optionsConfig.defaults));
+  return stored;
+};
+
+assert.equal(
+  migrateStoredSettings(createStoredSettings({ shortcutKeyEdit: 'e' })).shortcutKeyEdit,
+  'e',
+  'the Alt+E default should remain stored as configured',
+);
+assert.equal(
+  migrateStoredSettings(createStoredSettings({ shortcutKeyEdit: 'KeyE' })).shortcutKeyEdit,
+  'KeyE',
+  'the KeyboardEvent.code representation should remain stored as configured',
+);
+const customCollision = migrateStoredSettings(
+  createStoredSettings({ shortcutKeyEdit: 'e', shortcutKeyToggleSidebar: 'KeyM' }),
+);
+assert.equal(customCollision.shortcutKeyEdit, 'e');
+assert.equal(customCollision.shortcutKeyToggleSidebar, 'KeyM');
+const modelPickerCollision = migrateStoredSettings(
+  createStoredSettings({ shortcutKeyEdit: 'e', modelPickerKeyCodesLatest: ['KeyM'] }),
+);
+assert.equal(modelPickerCollision.shortcutKeyEdit, 'e');
+assert.deepEqual(modelPickerCollision.modelPickerKeyCodesLatest, ['KeyM']);
+const customEditKey = migrateStoredSettings(createStoredSettings({ shortcutKeyEdit: 'z' }));
+assert.equal(customEditKey.shortcutKeyEdit, 'z', 'other custom Edit values must remain');
 
 const directClickSource = contentSource.match(
   /const clickElementLikeUser = \(el\) => \{[\s\S]*?\n\};/,

@@ -230,6 +230,12 @@
   "tt_toggle_dictate": {
     "message": "Нажмите один раз — начать диктовку. Нажмите ещё раз — отправить."
   },
+  "label_stop_transcribe_dictation": {
+    "message": "Остановить и расшифровать диктовку"
+  },
+  "tt_stop_transcribe_dictation": {
+    "message": "Останавливает диктовку и вставляет распознанный текст в поле сообщения, не отправляя его."
+  },
   "label_cancel_dictation": {
     "message": "Отменить диктовку"
   },

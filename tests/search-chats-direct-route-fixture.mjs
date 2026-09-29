@@ -71,10 +71,53 @@ assert.equal(
 const triggerStart = contentSource.indexOf('function triggerNativeSearchConversationButton');
 const triggerEnd = contentSource.indexOf('function triggerDirectComposerActivation', triggerStart);
 const triggerSource = contentSource.slice(triggerStart, triggerEnd);
+const searchClickStart = contentSource.indexOf('function safeClickSearchConversationButton');
+const searchClickEnd = contentSource.indexOf('function waitForFirstVisibleElement', searchClickStart);
+const searchClickSource = contentSource.slice(searchClickStart, searchClickEnd);
+const narrowSearchStart = contentSource.indexOf(
+  'async function triggerNativeSearchConversationFromNarrowPopover',
+);
+const narrowSearchEnd = contentSource.indexOf(
+  'function triggerNativeSearchConversationButton',
+  narrowSearchStart,
+);
+const narrowSearchSource = contentSource.slice(narrowSearchStart, narrowSearchEnd);
 const structuralIndex = triggerSource.indexOf('findStructuralSearchConversationButton');
 const spriteFallbackIndex = triggerSource.indexOf('SEARCH_SPRITE_FRAGMENT');
 const popoverFallbackIndex = triggerSource.indexOf(
   'triggerNativeSearchConversationFromNarrowPopover',
+);
+assert.ok(searchClickStart >= 0 && searchClickEnd > searchClickStart);
+assert.ok(narrowSearchStart >= 0 && narrowSearchEnd > narrowSearchStart);
+assert.match(
+  searchClickSource,
+  /clickElementLikeUser\(el\)/,
+  'Search should activate native targets through the user-like pointer click helper',
+);
+assert.match(
+  triggerSource,
+  /safeClickSearchConversationButton\(direct\)/,
+  'Search should use pointer-aware activation for its direct titlebar target',
+);
+assert.match(
+  triggerSource,
+  /safeClickSearchConversationButton\(structural\)/,
+  'Search should use pointer-aware activation for its structural sidebar fallback',
+);
+assert.match(
+  triggerSource,
+  /safeClickSearchConversationButton\(spriteMatch\)/,
+  'Search should use pointer-aware activation for its sprite fallback',
+);
+assert.doesNotMatch(
+  triggerSource,
+  /\bsafeClick\(/,
+  'Search target activation should not fall back to a click-only native activation path',
+);
+assert.match(
+  narrowSearchSource,
+  /openNarrowSidebarPopover\(safeClickSearchConversationButton\)/,
+  'The narrow-sidebar fallback should use pointer-aware activation to open and select Search',
 );
 assert.ok(
   structuralIndex >= 0 &&

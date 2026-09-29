@@ -1,0 +1,7 @@
+
+> cgcsp-github@1.0.0 validate:keys
+> node tests/validate-keys.js
+
+Settings wiring validation passed.
+Validated 66 popup-backed controls and 13 supplemental keys.
+Prototype checks passed: clickToCopyInlineCodeEnabled, shortcutKeyShowOverlay.

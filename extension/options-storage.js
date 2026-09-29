@@ -26,6 +26,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyToggleCodeboxWrap: '',
   shortcutKeyTemporaryChat: 'p',
   shortcutKeyToggleDictate: 'y',
+  shortcutKeyStopAndTranscribeDictation: '',
   shortcutKeyCancelDictation: '',
   shortcutKeyShare: '',
   shortcutKeySearchWeb: 'q',

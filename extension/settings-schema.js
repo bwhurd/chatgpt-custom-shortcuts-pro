@@ -122,6 +122,7 @@
       shortcutKeyMoreDotsBranchInNewChat: 'label_BranchInNewChat',
       shortcutKeyTemporaryChat: 'label_temp_chat',
       shortcutKeyToggleDictate: 'label_toggle_dictate',
+      shortcutKeyStopAndTranscribeDictation: 'label_stop_transcribe_dictation',
       shortcutKeyCancelDictation: 'label_cancel_dictation',
       shortcutKeyMoreDotsReadAloud: 'label_ReadAloud',
 
@@ -202,6 +203,7 @@
           'shortcutKeyMoreDotsBranchInNewChat',
           'shortcutKeyTemporaryChat',
           'shortcutKeyToggleDictate',
+          'shortcutKeyStopAndTranscribeDictation',
           'shortcutKeyCancelDictation',
           'shortcutKeyMoreDotsReadAloud',
         ],

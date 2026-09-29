@@ -1353,8 +1353,7 @@ const flashBorder = (el) => {
     });
 };
 
-// Prefer the composer button and verify its data-testid is "stop-button".
-// Fallback also checks for both data-testid and data-test-id.
+// Prefer the captured language-neutral Stop icon; aria-label is only a fallback.
 function getVisibleStopButton() {
   const candidates = [];
 
@@ -1367,10 +1366,17 @@ function getVisibleStopButton() {
     candidates.push(composerBtn);
   }
 
-  const q = document.querySelector(
-    'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+  candidates.push(
+    ...document.querySelectorAll(
+      'button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])',
+    ),
   );
-  if (q) candidates.push(q);
+  candidates.push(
+    ...document.querySelectorAll(
+      'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+    ),
+  );
+  candidates.push(...document.querySelectorAll('button[aria-label="Stop"]'));
 
   for (const btn of candidates) {
     if (!btn || btn.disabled) continue;
@@ -3335,10 +3341,12 @@ const clickElementLikeUser = (el) => {
 
     const btnSelector = MENU_SELECTORS.buttonPath(firstBtnPathPrefix);
     const semanticTriggerSelector = options.triggerSelector || '';
-    const btn =
-      (semanticTriggerSelector &&
-        lowestVisibleFromPaths(semanticTriggerSelector, 'button', excludeAncestorSelector)) ||
-      lowestVisibleFromPaths(btnSelector, 'button', excludeAncestorSelector);
+    const semanticTrigger =
+      semanticTriggerSelector &&
+      lowestVisibleFromPaths(semanticTriggerSelector, 'button', excludeAncestorSelector);
+    const btn = options.requireTriggerSelector
+      ? semanticTrigger
+      : semanticTrigger || lowestVisibleFromPaths(btnSelector, 'button', excludeAncestorSelector);
     if (!btn) return false;
 
     if (window.gsap && typeof flashBorder === 'function') flashBorder(btn);
@@ -3913,6 +3921,11 @@ const clickElementLikeUser = (el) => {
     return null;
   }
 
+  function safeClickSearchConversationButton(el) {
+    if (!el || !isDirectActionVisible(el)) return false;
+    return clickElementLikeUser(el);
+  }
+
   function waitForFirstVisibleElement(selectors, timeoutMs = 800) {
     const existing = findFirstVisibleElement(selectors);
     if (existing) return Promise.resolve(existing);
@@ -3944,10 +3957,10 @@ const clickElementLikeUser = (el) => {
     });
   }
 
-  async function openNarrowSidebarPopover() {
+  async function openNarrowSidebarPopover(click = safeClick) {
     const opener = findFirstVisibleElement(NARROW_SIDEBAR_POPOVER_SELECTORS);
     if (!(opener instanceof HTMLElement)) return false;
-    if (opener.getAttribute('aria-expanded') !== 'true' && !safeClick(opener)) return false;
+    if (opener.getAttribute('aria-expanded') !== 'true' && !click(opener)) return false;
     return true;
   }
 
@@ -4004,20 +4017,20 @@ const clickElementLikeUser = (el) => {
   }
 
   async function triggerNativeSearchConversationFromNarrowPopover() {
-    if (!(await openNarrowSidebarPopover())) return false;
+    if (!(await openNarrowSidebarPopover(safeClickSearchConversationButton))) return false;
 
     const direct = await waitForFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
-    if (safeClick(direct)) return true;
+    if (safeClickSearchConversationButton(direct)) return true;
 
     const structural = findStructuralSearchConversationButton();
-    if (safeClick(structural)) return true;
+    if (safeClickSearchConversationButton(structural)) return true;
 
     const spriteMatch = await waitForFirstVisibleElement([
       `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
       `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FALLBACK_FRAGMENT}"]`,
     ]);
     const target = spriteMatch?.closest?.('button[data-sidebar-item="true"]');
-    return safeClick(target);
+    return safeClickSearchConversationButton(target);
   }
 
   function triggerNativeNewConversationButton() {
@@ -4155,10 +4168,10 @@ const clickElementLikeUser = (el) => {
 
   function triggerNativeSearchConversationButton() {
     const direct = findFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
-    if (safeClick(direct)) return true;
+    if (safeClickSearchConversationButton(direct)) return true;
 
     const structural = findStructuralSearchConversationButton();
-    if (safeClick(structural)) return true;
+    if (safeClickSearchConversationButton(structural)) return true;
 
     const spriteMatch = Array.from(
       document.querySelectorAll(
@@ -4168,7 +4181,7 @@ const clickElementLikeUser = (el) => {
       .map((iconUse) => iconUse.closest('button[data-sidebar-item="true"]'))
       .find((el) => isDirectActionVisible(el));
 
-    if (safeClick(spriteMatch)) return true;
+    if (safeClickSearchConversationButton(spriteMatch)) return true;
 
     void triggerNativeSearchConversationFromNarrowPopover();
     return true;
@@ -4251,6 +4264,7 @@ const clickElementLikeUser = (el) => {
     shortcutKeyToggleCanvas: '',
     shortcutKeyDeepResearch: '',
     shortcutKeyToggleDictate: 'KeyY',
+    shortcutKeyStopAndTranscribeDictation: '',
     shortcutKeyCancelDictation: '',
     shortcutKeyShare: '',
     shortcutKeyThinkLonger: '',
@@ -4697,18 +4711,34 @@ const clickElementLikeUser = (el) => {
       }
     }
 
+    const getCtrlShortcutSendButton = () => {
+      const composerSubmitButton = document.querySelector('#composer-submit-button');
+      if (
+        composerSubmitButton &&
+        (composerSubmitButton.getAttribute('data-testid') === 'stop-button' ||
+          composerSubmitButton.getAttribute('data-test-id') === 'stop-button')
+      ) {
+        return null;
+      }
+
+      return (
+        composerSubmitButton ||
+        document.querySelector('button[data-testid="send-button"]') ||
+        document.querySelector('button[aria-label="Send prompt"]')
+      );
+    };
+
     const keyFunctionMappingCtrl = {
-      Enter: () => {
+      Enter: (sendButton) => {
         try {
-          document.querySelector('button[data-testid="send-button"]')?.click();
+          (sendButton || getCtrlShortcutSendButton())?.click();
         } catch (e) {
           console.error('Enter handler failed:', e);
         }
       },
-      Backspace: () => {
+      Backspace: (stopButton) => {
         try {
-          const btn = getVisibleStopButton();
-          btn?.click();
+          stopButton?.click();
         } catch (e) {
           console.error('Backspace handler failed:', e);
         }
@@ -7334,6 +7364,7 @@ const clickElementLikeUser = (el) => {
         {
           triggerSelector:
             '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+          requireTriggerSelector: true,
           menuRootResolver: findOpenMenuForTrigger,
         },
       );
@@ -7405,11 +7436,15 @@ const clickElementLikeUser = (el) => {
       let toggleInProgress = false;
 
       const SPRITE_IDS = {
-        cancel: ['#2dc143', '#85f94b'],
         send: ['#send-prompt-style-thin', '#01bab7'],
-        submitDictation: ['#75ee4d', '#fa1dbd'],
       };
       const DICTATE_START_BUTTON_SELECTOR = 'button:has(svg path[d^="M12.4584 8.96973"])';
+      const DICTATE_SUBMIT_BUTTON_SELECTOR =
+        'button[type="button"]:has(svg path[d^="M9.31697 3.08317"])';
+      const DICTATE_STOP_BUTTON_SELECTOR =
+        'button[type="button"]:has(svg path[d^="M13.0834 3.91846"])';
+      const DICTATE_CANCEL_BUTTON_SELECTOR =
+        'button[type="button"]:has(svg path[d^="M14.779 4.27903"])';
 
       function getComposerRoot() {
         return (
@@ -7466,11 +7501,9 @@ const clickElementLikeUser = (el) => {
         const composerRoot = getComposerRoot();
         if (!composerRoot) return;
 
-        // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
-        // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
-        const submitDictationBtn =
-          findFirstClickable(composerRoot, 'button[aria-label="Send dictated message"]') ||
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation);
+        // While dictation is active, ChatGPT exposes distinct Cancel, Stop, and Transcribe-and-send controls.
+        // The Dictate toggle confirms/sends; Stop-and-Transcribe and Cancel have separate shortcuts.
+        const submitDictationBtn = findFirstClickable(composerRoot, DICTATE_SUBMIT_BUTTON_SELECTOR);
         if (clickComposerControl(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
@@ -7484,17 +7517,21 @@ const clickElementLikeUser = (el) => {
             '#composer-submit-button',
             'button[data-testid="send-button"]',
           ) ||
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.send) ||
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.submitDictation);
+          findClickableBySpriteId(composerRoot, SPRITE_IDS.send);
         clickComposerControl(submitBtn);
+      }
+
+      function runStopAndTranscribe() {
+        const composerRoot = getComposerRoot();
+        if (!composerRoot) return;
+        const stopDictationBtn = findFirstClickable(composerRoot, DICTATE_STOP_BUTTON_SELECTOR);
+        clickComposerControl(stopDictationBtn);
       }
 
       async function runCancel() {
         const composerRoot = getComposerRoot();
         if (!composerRoot) return;
-        const btn =
-          findFirstClickable(composerRoot, 'button[aria-label="Cancel dictation"]') ||
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel);
+        const btn = findFirstClickable(composerRoot, DICTATE_CANCEL_BUTTON_SELECTOR);
 
         // Only stop if the active dictation cancel control is currently available; otherwise no-op.
         if (!btn) return;
@@ -7506,6 +7543,7 @@ const clickElementLikeUser = (el) => {
 
       return {
         runCancel,
+        runStopAndTranscribe,
         runToggle,
       };
     })();
@@ -7640,6 +7678,7 @@ const clickElementLikeUser = (el) => {
       shortcutKeyDeepResearch: () => runIconToolbarShortcut('deepResearch'),
       shortcutKeyAddPhotosFiles: () => runIconToolbarShortcut('addPhotosFiles'),
       shortcutKeyToggleDictate: DictationShortcut.runToggle,
+      shortcutKeyStopAndTranscribeDictation: DictationShortcut.runStopAndTranscribe,
       shortcutKeyCancelDictation: DictationShortcut.runCancel,
       shortcutKeyShare: () => {
         // Keep native Share activation inside the trusted Alt-key task; the
@@ -7906,16 +7945,19 @@ const clickElementLikeUser = (el) => {
         event.preventDefault();
         try {
           recordShortcutUsage('shortcutKeyClickStopButton');
-          ctrlShortcut();
+          ctrlShortcut(stopBtn);
         } catch (e) {
           console.error('Backspace handler failed:', e);
         }
         return true;
       }
 
+      const sendButton = getCtrlShortcutSendButton();
+      if (!sendButton) return false;
+
       event.preventDefault();
       recordShortcutUsage('shortcutKeyClickSendButton');
-      ctrlShortcut();
+      ctrlShortcut(sendButton);
       return true;
     };
 
@@ -7943,11 +7985,12 @@ const clickElementLikeUser = (el) => {
 
     // Function to check if the specific Ctrl/Command + Key shortcut is enabled
     function isCtrlShortcutEnabled(key) {
+      // Stop is a fixed chord controlled by its checkbox, not a saved Alt-key assignment.
+      if (key === 'Backspace') {
+        return window.enableStopWithControlBackspaceCheckbox === true;
+      }
       if (key === shortcuts.shortcutKeyClickSendButton) {
         return window.enableSendWithControlEnterCheckbox === true;
-      }
-      if (key === shortcuts.shortcutKeyClickStopButton) {
-        return window.enableStopWithControlBackspaceCheckbox === true;
       }
       return false;
     }
@@ -15885,12 +15928,49 @@ function getSlimSidebarHost(root = document) {
   );
 }
 
-function isSlimSidebarHostOpen(host) {
+function getSlimSidebarFadeTarget(root = document) {
+  return (
+    root.getElementById('stage-sidebar-tiny-bar') ||
+    root.getElementById('app-shell-sidebar') ||
+    null
+  );
+}
+
+function getVisibleAppShellSidebarToggle(root = document) {
+  const toggles = root.querySelectorAll(
+    'button[aria-controls="app-shell-sidebar"][aria-expanded]',
+  );
+  for (let index = toggles.length - 1; index >= 0; index--) {
+    const toggle = toggles[index];
+    const style = window.getComputedStyle(toggle);
+    const bounds = toggle.getBoundingClientRect();
+    if (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.opacity !== '0' &&
+      bounds.width > 0 &&
+      bounds.height > 0
+    ) {
+      return toggle;
+    }
+  }
+  return null;
+}
+
+function isSlimSidebarHostOpen(host, root = document) {
   if (!host) return false;
 
   const explicitState = host.getAttribute('data-state');
   if (explicitState === 'open') return true;
   if (explicitState === 'closed') return false;
+
+  if (host.id === 'app-shell-sidebar') {
+    const expanded = getVisibleAppShellSidebarToggle(root)?.getAttribute('aria-expanded');
+    if (expanded === 'true') return true;
+    if (expanded === 'false') return false;
+    // Without a collapsed-state signal, keep the full shell visible.
+    return true;
+  }
 
   const style = window.getComputedStyle(host);
   return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
@@ -16000,8 +16080,9 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function stopFeature() {
         disconnectGlobalObservers();
+        const barToReset = bar || document.getElementById('stage-sidebar-tiny-bar');
         detachCurrentBar();
-        resetBarStyles(document.getElementById('stage-sidebar-tiny-bar'));
+        resetBarStyles(barToReset);
       }
 
       function overlayIsOpen() {
@@ -16029,6 +16110,11 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function setOpacity(value) {
         if (!bar || !isFeatureEnabled()) return;
+        if (bar.id === 'app-shell-sidebar' && isSlimSidebarHostOpen(bar)) {
+          bar.style.setProperty('opacity', '1', 'important');
+          bar.style.pointerEvents = '';
+          return;
+        }
         if (overlayIsOpen()) {
           bar.style.setProperty('opacity', '0', 'important');
           bar.style.pointerEvents = 'none';
@@ -16041,6 +16127,10 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function fadeToIdle() {
         if (!bar || !isFeatureEnabled()) return;
+        if (bar.id === 'app-shell-sidebar' && isSlimSidebarHostOpen(bar)) {
+          setOpacity('1');
+          return;
+        }
         if (overlayIsOpen()) {
           setOpacity('0');
           return;
@@ -16109,7 +16199,7 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function refreshBarState() {
         if (!isFeatureEnabled()) return;
-        const el = document.getElementById('stage-sidebar-tiny-bar');
+        const el = getSlimSidebarFadeTarget();
         const nextHoverTarget = getSlimSidebarHost() || el;
         if (el !== bar || nextHoverTarget !== hoverTarget) {
           if (el) {
@@ -16177,7 +16267,9 @@ function resetCollapsedSlimSidebarScroll(host) {
 
           if (isSlimSidebarHostOpen(currentHost)) {
             bar.style.setProperty('transition', 'none', 'important');
-            setOpacity('0');
+            setOpacity(
+              bar === currentHost && bar.id === 'app-shell-sidebar' ? '1' : '0',
+            );
             hover = false;
             clearTimeout(idleTimer);
             idleTimerVersion++;
@@ -16198,10 +16290,18 @@ function resetCollapsedSlimSidebarScroll(host) {
           }
         });
 
-        if (hoverTarget !== bar) {
+        if (hoverTarget) {
           classObserver.observe(hoverTarget, {
             attributes: true,
-            attributeFilter: ['class', 'style', 'data-state'],
+            attributeFilter:
+              hoverTarget === bar ? ['class', 'data-state'] : ['class', 'style', 'data-state'],
+          });
+        }
+        const sidebarToggle = getVisibleAppShellSidebarToggle();
+        if (sidebarToggle && sidebarToggle !== hoverTarget) {
+          classObserver.observe(sidebarToggle, {
+            attributes: true,
+            attributeFilter: ['aria-expanded'],
           });
         }
 
@@ -16231,7 +16331,7 @@ function resetCollapsedSlimSidebarScroll(host) {
       function startFeature() {
         if (!isFeatureEnabled()) return;
         ensureGlobalObservers();
-        const first = document.getElementById('stage-sidebar-tiny-bar');
+        const first = getSlimSidebarFadeTarget();
         if (first) attachToBar(first);
       }
 

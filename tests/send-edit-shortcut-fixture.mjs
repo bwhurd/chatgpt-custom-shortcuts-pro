@@ -2,13 +2,71 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 
-const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
+const [contentSource, optionsStorageSource, popupSource] = await Promise.all([
+  readFile(new URL('../extension/content.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/options-storage.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/popup.js', import.meta.url), 'utf8'),
+]);
 const moduleStart = contentSource.indexOf('    const SendEditShortcut = (() => {');
 const moduleEndMarker = '\n    })();\n\n    function runSendEditShortcut()';
 const moduleEnd = contentSource.indexOf(moduleEndMarker, moduleStart);
 
 assert.notEqual(moduleStart, -1, 'SendEditShortcut module start marker is missing');
 assert.notEqual(moduleEnd, -1, 'SendEditShortcut module end marker is missing');
+
+assert.match(optionsStorageSource, /shortcutKeySendEdit:\s*'d'/);
+assert.match(contentSource, /shortcutKeySendEdit:\s*'KeyD'/);
+assert.match(popupSource, /shortcutKeySendEdit:\s*'KeyD'/);
+assert.match(contentSource, /shortcutKeySendEdit:\s*runSendEditShortcut/);
+
+let optionsConfig;
+function OptionsSync(config) {
+  optionsConfig = config;
+}
+OptionsSync.migrations = { removeUnused() {} };
+const optionsContext = { console, OptionsSync };
+optionsContext.globalThis = optionsContext;
+runInNewContext(optionsStorageSource, optionsContext, { filename: 'extension/options-storage.js' });
+
+const migrateStoredSettings = (stored) => {
+  optionsConfig.migrations.forEach((migration) => migration(stored, optionsConfig.defaults));
+  return stored;
+};
+const createStoredSettings = (overrides) => {
+  const stored = { ...optionsConfig.defaults };
+  Object.entries(optionsConfig.defaults).forEach(([key, value]) => {
+    if (Array.isArray(value)) stored[key] = value.slice();
+  });
+  return { ...stored, ...overrides };
+};
+
+assert.equal(optionsConfig.defaults.shortcutKeySendEdit, 'd');
+assert.equal(
+  migrateStoredSettings(createStoredSettings({ shortcutKeySendEdit: 'd' })).shortcutKeySendEdit,
+  'd',
+  'the Alt+D default should remain stored as configured',
+);
+assert.equal(
+  migrateStoredSettings(createStoredSettings({ shortcutKeySendEdit: 'KeyD' })).shortcutKeySendEdit,
+  'KeyD',
+  'the KeyboardEvent.code representation should remain stored as configured',
+);
+const customCollision = migrateStoredSettings(createStoredSettings({
+  shortcutKeySendEdit: 'd',
+  shortcutKeyToggleSidebar: 'KeyG',
+}));
+assert.equal(customCollision.shortcutKeySendEdit, 'd');
+assert.equal(customCollision.shortcutKeyToggleSidebar, 'KeyG');
+const modelPickerCollision = migrateStoredSettings(createStoredSettings({
+  shortcutKeySendEdit: 'd',
+  modelPickerKeyCodesLatest: ['KeyG'],
+}));
+assert.equal(modelPickerCollision.shortcutKeySendEdit, 'd');
+assert.deepEqual(modelPickerCollision.modelPickerKeyCodesLatest, ['KeyG']);
+const customSendEdit = migrateStoredSettings(createStoredSettings({
+  shortcutKeySendEdit: 'z',
+}));
+assert.equal(customSendEdit.shortcutKeySendEdit, 'z', 'other custom SendEdit values must remain');
 
 const sendEditSource = contentSource
   .slice(moduleStart, moduleEnd + '\n    })();'.length)

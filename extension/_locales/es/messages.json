@@ -230,6 +230,12 @@
   "tt_toggle_dictate": {
     "message": "Pulsa una vez para empezar a dictar. Pulsa de nuevo para enviar el dictado."
   },
+  "label_stop_transcribe_dictation": {
+    "message": "Detener y transcribir dictado"
+  },
+  "tt_stop_transcribe_dictation": {
+    "message": "Detiene el dictado y transcribe el texto en el cuadro de mensaje sin enviarlo."
+  },
   "label_cancel_dictation": {
     "message": "Cancelar dictado"
   },

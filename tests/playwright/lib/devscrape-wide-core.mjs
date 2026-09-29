@@ -79,6 +79,7 @@ const EXECUTABLE_LIVE_PROBE_MODES = Object.freeze([
 const MIN_BROWSER_REQUEST_SPACING_MS = 2500;
 const MIN_BROWSER_INTERACTION_SPACING_MS = 350;
 const MIN_EXTENSION_PAGE_SPACING_MS = 1000;
+const NEW_CONVERSATION_SETTLE_MS = 2500;
 const NEW_CONVERSATION_ACTION_ID = 'shortcutKeyNewConversation';
 const TEMPORARY_CHAT_ACTION_ID = 'shortcutKeyTemporaryChat';
 const PREVIOUS_THREAD_ACTION_ID = 'shortcutKeyPreviousThread';
@@ -2106,7 +2107,11 @@ async function prepareLiveProbeState(page, stateId, scrapeStateRegistry, fixture
   await page.waitForTimeout(300);
 }
 
-async function prepareNewConversationProbeState(page, fixtureUrl) {
+export async function prepareNewConversationProbeState(
+  page,
+  fixtureUrl,
+  { reportSettle = false } = {},
+) {
   await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await waitForFixtureConversationReady(page, 15000, { fixtureUrl: CHATGPT_HOME_URL });
   await closeOpenMenus(page);
@@ -2114,6 +2119,18 @@ async function prepareNewConversationProbeState(page, fixtureUrl) {
   const blankState = await captureLiveProbeSemanticSnapshot(page, null);
   if (blankState.userMessageCount || blankState.assistantMessageCount || blankState.composerHasText) {
     throw new Error('ChatGPT home did not open a blank audit chat; no existing conversation or draft was changed.');
+  }
+  if (reportSettle) {
+    console.log(
+      `Fresh blank ChatGPT conversation verified; waiting ${NEW_CONVERSATION_SETTLE_MS} ms before scanning.`,
+    );
+  }
+  const settleStartedAt = reportSettle ? Date.now() : 0;
+  await page.waitForTimeout(NEW_CONVERSATION_SETTLE_MS);
+  if (reportSettle) {
+    console.log(
+      `Blank-chat settle completed after ${Date.now() - settleStartedAt} ms; starting model refresh and dev scrape.`,
+    );
   }
 }
 
@@ -2397,6 +2414,7 @@ async function createAuditOwnedFixtureConversation(
   if (before.userMessageCount || before.assistantMessageCount || before.composerHasText || /\/c\//.test(before.url)) {
     throw new Error('ChatGPT home was not a blank audit chat; no existing conversation or draft was changed.');
   }
+  await page.waitForTimeout(NEW_CONVERSATION_SETTLE_MS);
 
   try {
     for (let index = 0; index < prompts.length; index += 1) {

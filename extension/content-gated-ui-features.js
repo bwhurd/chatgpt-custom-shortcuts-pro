@@ -93,8 +93,8 @@
   const host = () => document.head || document.documentElement;
 
   const buildCSS = (lightColor, darkColor) => `
-    .light b, .light strong { color: ${lightColor} !important; }
-    .dark  b, .dark  strong { color: ${darkColor} !important; }
+    :root[data-theme="light"] b, :root[data-theme="light"] strong { color: ${lightColor} !important; }
+    :root[data-theme="dark"] b, :root[data-theme="dark"] strong { color: ${darkColor} !important; }
   `;
 
   const enable = (lightColor, darkColor) => {

@@ -236,6 +236,12 @@
   "tt_toggle_dictate": {
     "message": "Press once to start dictation. Press again to submit dictation."
   },
+  "label_stop_transcribe_dictation": {
+    "message": "Stop and Transcribe Dictation"
+  },
+  "tt_stop_transcribe_dictation": {
+    "message": "Stops dictation and transcribes it into the composer without sending."
+  },
   "label_cancel_dictation": {
     "message": "Cancel Dictation"
   },

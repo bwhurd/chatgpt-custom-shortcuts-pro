@@ -230,6 +230,12 @@
   "tt_toggle_dictate": {
     "message": "1回押すと開始。もう一度で送信。"
   },
+  "label_stop_transcribe_dictation": {
+    "message": "音声入力を停止して文字起こし"
+  },
+  "tt_stop_transcribe_dictation": {
+    "message": "音声入力を停止し、文字起こしを送信せずに入力欄へ挿入します。"
+  },
   "label_cancel_dictation": {
     "message": "音声入力をキャンセル"
   },

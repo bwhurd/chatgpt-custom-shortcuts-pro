@@ -23,6 +23,7 @@ import {
   loadAuditOwnedFixtureFromRun,
   loadDevScrapeWideContract,
   normalizeArtifactsInPage,
+  prepareNewConversationProbeState,
   refreshModelCatalogForValidation,
   runLiveShortcutActivationProbes,
   runWideScrapeWithPlaywright,
@@ -476,7 +477,10 @@ async function scrapeWide({
       : null) || (await context.newPage());
 
   try {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await prepareNewConversationProbeState(page, null, { reportSettle: true });
+    await refreshModelCatalogBeforeValidation(page, context, {
+      required: requireExtensionCapture && phase !== 'global',
+    });
     const fixtureUrl = fixtureOwnership?.fixtureUrl || (await chooseAvailableFixtureUrl(page, exports));
     if (fixtureOwnership) {
       if (page.url() !== fixtureUrl) {
@@ -485,9 +489,6 @@ async function scrapeWide({
       await waitForFixtureConversationReady(page, 30000, { fixtureUrl });
       await waitForAuditOwnedFixtureContent(page, fixtureUrl);
     }
-    await refreshModelCatalogBeforeValidation(page, context, {
-      required: requireExtensionCapture && phase !== 'global',
-    });
     await injectDevScrapeWideIntoPage(page);
 
     const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
@@ -821,9 +822,9 @@ async function probeShortcutsOnly() {
   });
   const page = await context.newPage();
   try {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    const fixtureUrl = await chooseAvailableFixtureUrl(page, exports);
+    await prepareNewConversationProbeState(page, null, { reportSettle: true });
     await refreshModelCatalogBeforeValidation(page, context);
+    const fixtureUrl = await chooseAvailableFixtureUrl(page, exports);
     const liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
       fixtureUrl,
       extensionProfileDir: getProfileDir(),

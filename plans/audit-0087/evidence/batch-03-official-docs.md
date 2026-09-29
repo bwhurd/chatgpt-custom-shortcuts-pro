@@ -1,0 +1,12 @@
+# Batch 03 official Chrome documentation
+
+Accessed 2026-09-29. Primary Chrome documentation only.
+
+- [The extension service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle?hl=en) states that service workers may terminate after 30 seconds of inactivity, a single event/API call taking more than five minutes, or a fetch response taking more than 30 seconds. It recommends designing for unexpected termination and persisting required state instead of relying on globals.
+- [chrome.storage API](https://developer.chrome.com/docs/extensions/reference/api/storage?hl=en) describes storage.session as in-memory while the extension is loaded, cleared on disable/reload/update and browser restart, and recommends it for service worker state. It also documents that storage operations are asynchronous and storage areas have quotas.
+- [chrome.identity API](https://developer.chrome.com/docs/extensions/reference/api/identity) says removeCachedAuthToken removes an OAuth2 access token from the Identity API's token cache and recommends retrieving a fresh token through getAuthToken afterward. Inference from repository source: this extension's access token comes from its own broker and is stored in chrome.storage.session, not obtained from chrome.identity.getAuthToken, so removing the broker token from the Identity API cache does not invalidate the extension's session copy.
+- [Chrome keyboard shortcuts](https://support.google.com/chrome/answer/157179?hl=en-HK) lists Alt+D as a shortcut to jump to the address bar on desktop. This supports the migration's stated Chrome shortcut conflict; actual key-event delivery was not tested.
+- [Cross-origin network requests](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests) states that extension pages and service workers need host permissions to fetch remote origins; content-script requests remain constrained by the page origin.
+- [Declare permissions](https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions) documents host_permissions and optional_host_permissions as the manifest mechanisms for those origins and recommends optional permissions where functionality allows. Batch 02 already records the current missing host access as CSP-AUD-001.
+
+These sources support API/lifecycle interpretation only. No Chrome browser, host-permission prompt, token endpoint, or Drive API was exercised in this batch.

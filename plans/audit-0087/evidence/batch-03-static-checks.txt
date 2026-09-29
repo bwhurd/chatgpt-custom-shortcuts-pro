@@ -1,0 +1,37 @@
+Batch 03 static and isolated evidence
+Date: 2026-09-29
+Repository: C:/Users/bwhurd/Dropbox/CGCSP-Github
+
+Source fingerprint check
+- Parsed 42 entries from plans/audit-0087/evidence/batch-01-source-fingerprints.sha256.
+- Current hashes match for relevant files: FP-004 extension/background.js; FP-009 extension/popup.js; FP-010 extension/options-storage.js; FP-011 extension/settings-schema.js; FP-012 extension/shared/model-picker-labels.js; FP-015 extension/auth.js; FP-016 extension/storage.js.
+- No source fingerprint is stale; Batch 01/02 static observations remain current.
+
+Focused checks (exact commands and exits)
+- npm run validate:keys — exit 0.
+  Output:
+  Settings wiring validation passed.
+  Validated 66 popup-backed controls and 13 supplemental keys.
+  Prototype checks passed: clickToCopyInlineCodeEnabled, shortcutKeyShowOverlay.
+- node --check extension/auth.js — exit 0.
+- node --check extension/storage.js — exit 0.
+- node --check extension/options-storage.js — exit 0.
+- node tests/model-catalog-backup-filter-fixture.mjs — exit 0.
+  Output: scraped model catalog state stays out of local and Drive backups
+- Changelog scope review used the last clean commit deaa132 (2026-09-28 19:08:38 -0700). Before the changelog correction, the tree reconciled to the user's +1,263 net label: 875 tracked insertions + 523 untracked lines - 135 tracked deletions. The full diff review added the missing Branch in New Chat actions-menu fix to the September 29 section. The current measured delta is 876 tracked insertions + 524 untracked lines - 135 tracked deletions = net +1,265.
+- `git diff --check -- CHANGELOG.md` passed after the final changelog edit. The changelog reviewer reread the edited section. A whitespace scan of the updated Batch 03 coverage and evidence files was clear.
+- Batch 03 plan/register/evidence files were reread after editing; a whitespace scan found no trailing whitespace.
+
+Existing failure-fixture inventory
+- Search: rg -n -i 'CloudStorage|loadSyncedSettings|saveSyncedSettings|drive\.appdata|TOKEN_URL|cloudAuth\.login' tests --glob '!**/*.png'
+- Only match: tests/model-catalog-backup-filter-fixture.mjs, which proves the local backup allowlist excludes scraped model state and keeps user/profile settings.
+- No existing fixture was found for token expiration, repeated 401/403, malformed Drive responses, popup closure during a write, or concurrent Save/Restore operations.
+- Search: rg -n -C 2 'CSP_TRIGGER_MODEL_ACTION|CSP_RELEASE_MODEL_CONFIG_SESSION|CSP_REFRESH_CHAT_WORK_MODEL_CATALOGS|CSP_SCRAPE_MODEL_CATALOG' extension
+- Result: popup producers exist for model-catalog refresh and prepared-session release. CSP_TRIGGER_MODEL_ACTION has a content handler but no producer under extension/; its acknowledgment is queue acceptance rather than completion, so no packaged caller currently relies on it.
+- The existing filter fixture was inspected before execution. It uses VM mocks and a committed sample settings fixture; it performs no browser, network, auth, Drive, or user-settings mutation.
+
+Unperformed proof
+- Read-only browser inventory found two Chrome contexts (one labeled Brian and one without a profile label), but neither was identified as a prepared disposable audit profile with the extension and disposable settings. No tab was claimed or opened.
+- Consequently, native popup close/reopen and local settings round-trip observations remain unavailable. No user profile was used for test writes.
+- No auth, Drive request, account change, popup interaction, browser-setting change, or user sync-setting mutation was performed.
+- Static wiring and VM fixture results do not prove native browser lifecycle or persistence behavior.

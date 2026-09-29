@@ -2922,6 +2922,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyToggleCanvas: NBSP,
     shortcutKeyDeepResearch: NBSP,
     shortcutKeyToggleDictate: 'KeyY',
+    shortcutKeyStopAndTranscribeDictation: NBSP,
     shortcutKeyCancelDictation: NBSP,
     shortcutKeyShare: NBSP,
     shortcutKeyThinkLonger: NBSP,

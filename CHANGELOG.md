@@ -6,6 +6,17 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.29.2026
+- Fixed: Fade Slim Sidebar tracks ChatGPT's current sidebar state and fades only while collapsed.
+- Fixed: Control+Enter sends through ChatGPT's current composer control.
+- Fixed: Control+Backspace targets ChatGPT's Stop button by its icon, independent of interface language.
+- Added: Stop and Transcribe Dictation shortcut, which transcribes into the draft without sending.
+- Fixed: Dictation toggle, Cancel Dictation, and Stop and Transcribe now target their matching controls.
+- Fixed: Edit Message defaults to Alt+E.
+- Fixed: Send Edit defaults to Alt+D.
+- Fixed: Branch in New Chat targets the selected response's own actions menu and no longer opens the sidebar's Chat actions menu.
+- Fixed: Highlight Bold Text applies the matching light or dark color based on ChatGPT's active theme.
+
 #### 09.28.2026
 - Fixed: Bottom bar persists when switching conversations without reloading.
 - Fixed: Search Web shortcut opens from ChatGPT's current composer.

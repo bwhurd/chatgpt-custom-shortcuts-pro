@@ -16,13 +16,14 @@ const currentTargetTokens = {
   'assistant-more-actions-trigger': 'M3.33362 6.80811',
   'assistant-read-aloud-direct-action': 'M9.75122 4.09203',
   'temporary-chat-button': '#chat-temp',
-  'composer-web-search-action': '#skill-globe-dark',
-  'composer-create-image-action': '#create-image-plugin',
-  'composer-deep-research-action': '#skill-deep-research-dark',
-  'composer-add-photos-files-action': '#paperclip',
+  'composer-web-search-action': 'M12 2c5.522',
+  'composer-create-image-action': 'M7 21.005',
+  'composer-deep-research-action': 'deep_research_app/icon.png',
+  'composer-add-photos-files-action': 'M6.1416 10.1663',
   'dictate-start-button': 'M12.4584 8.96973',
-  'dictate-submit-button': '#75ee4d',
-  'cancel-dictation-button': '#2dc143',
+  'dictate-submit-button': 'M9.31697 3.08317',
+  'stop-dictation-button': 'M13.0834 3.91846',
+  'cancel-dictation-button': 'M14.779 4.27903',
   'new-gpt-conversation-item': '#compose',
 };
 
@@ -303,13 +304,18 @@ assert.match(
 );
 assert.match(
   contentSource,
-  /button\[aria-label="Cancel dictation"\]/,
-  'Dictation cancellation should prefer the stable cancel label',
+  /button\[type="button"\]:has\(svg path\[d\^="M14\.779 4\.27903"\]\)/,
+  'Dictation cancellation should target the observed Cancel icon path structurally',
 );
 assert.match(
   contentSource,
-  /button\[aria-label="Send dictated message"\]/,
-  'Dictation submission should prefer the stable submit label',
+  /button\[type="button"\]:has\(svg path\[d\^="M9\.31697 3\.08317"\]\)/,
+  'Dictation submission should target the observed Transcribe-and-send icon path',
+);
+assert.match(
+  contentSource,
+  /button\[type="button"\]:has\(svg path\[d\^="M13\.0834 3\.91846"\]\)/,
+  'Stop and Transcribe should target only the observed square Stop icon path',
 );
 const dictateStartTarget = descriptorById.get('dictate-start-button');
 const expectedDictateStartSelectors = [
@@ -322,13 +328,54 @@ assert.deepEqual(
   expectedDictateStartSelectors,
   'Dictation start metadata should use the current composer roots and exact observed icon path',
 );
+const dictateSubmitTarget = descriptorById.get('dictate-submit-button');
+const expectedDictateSubmitSelectors = [
+  'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
+  'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
+];
+assert.equal(dictateSubmitTarget.kind, 'selector-list');
+assert.deepEqual(
+  dictateSubmitTarget.searchNeedles,
+  expectedDictateSubmitSelectors,
+  'Dictation submit metadata should use the current composer roots and exact observed icon path',
+);
+const dictateCancelTarget = descriptorById.get('cancel-dictation-button');
+const expectedDictateCancelSelectors = [
+  'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
+  'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
+];
+assert.equal(dictateCancelTarget.kind, 'selector-list');
+assert.deepEqual(
+  dictateCancelTarget.searchNeedles,
+  expectedDictateCancelSelectors,
+  'Dictation cancel metadata should use the current composer roots and exact observed icon path',
+);
+const stopDictationTarget = descriptorById.get('stop-dictation-button');
+const expectedStopDictationSelectors = [
+  'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
+  'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
+];
+assert.equal(stopDictationTarget.kind, 'selector-list');
+assert.deepEqual(
+  stopDictationTarget.searchNeedles,
+  expectedStopDictationSelectors,
+  'Stop and Transcribe metadata should use both current composer roots and the exact Stop icon path',
+);
+const stopAndTranscribeAction = shortcutMetadata.SHORTCUT_ACTIONS.find(
+  (action) => action.actionId === 'shortcutKeyStopAndTranscribeDictation',
+);
+assert.ok(stopAndTranscribeAction, 'Stop and Transcribe should have shortcut action metadata');
+assert.equal(stopAndTranscribeAction.validationMode, 'manual-only');
+assert.deepEqual(stopAndTranscribeAction.targetRefs, ['stop-dictation-button']);
+assert.equal(stopAndTranscribeAction.activationProbe.mode, 'manual-only');
+assert.equal(stopAndTranscribeAction.activationProbe.safe, false);
 const dictationRuntimeSource = contentSource.match(
   /    const DictationShortcut = \(\(\) => \{[\s\S]*?\n    \}\)\(\);/,
 )?.[0];
 assert.ok(dictationRuntimeSource, 'The Dictation shortcut runtime should remain inspectable');
 assert.doesNotMatch(
   dictationRuntimeSource,
-  /Start dictation|microphone-regular-24|#33d595|#29f921|thread-bottom-container|unified-composer|composer-background/,
+  /Start dictation|Send dictated message|Cancel dictation|#2dc143|#85f94b|#75ee4d|#fa1dbd|microphone-regular-24|#33d595|#29f921|thread-bottom-container|unified-composer|composer-background/,
   'Dictation start must not use stale labels, icon ids, or composer roots',
 );
 assert.equal(
@@ -337,7 +384,9 @@ assert.equal(
 );
 
 const activeTargetIds = new Set(
-  shortcutMetadata.SHORTCUT_ACTIONS.filter((action) => action.validationMode === 'scrape-targets')
+  shortcutMetadata.SHORTCUT_ACTIONS.filter((action) =>
+    ['scrape-targets', 'manual-only'].includes(action.validationMode),
+  )
     .flatMap((action) => action.targetRefs),
 );
 for (const targetId of Object.keys(currentTargetTokens)) {
@@ -358,9 +407,18 @@ class FixtureDictationNode {
   }
 
   querySelector(selector) {
-    const pathPrefix = selector.match(/^button:has\(svg path\[d\^="([^"]+)"\]\)$/)?.[1];
-    if (pathPrefix) {
-      return this.buttons.find((button) => button.iconPath.startsWith(pathPrefix)) || null;
+    const pathMatch = selector.match(
+      /^button(?:\[type="([^"]+)"\])?:has\(svg path\[d\^="([^"]+)"\]\)$/,
+    );
+    if (pathMatch) {
+      const [, buttonType, pathPrefix] = pathMatch;
+      return (
+        this.buttons.find(
+          (button) =>
+            (!buttonType || button.getAttribute('type') === buttonType) &&
+            button.iconPath.startsWith(pathPrefix),
+        ) || null
+      );
     }
     if (selector.startsWith('svg use[')) return null;
     const ariaLabel = selector.match(/^button\[aria-label="([^"]+)"\]$/)?.[1];
@@ -396,11 +454,24 @@ const composerSendButton = new FixtureDictationNode({
   attributes: { 'data-testid': 'send-button' },
   iconPath: 'M8 2.5 ...',
 });
+const cancelDictationButton = new FixtureDictationNode({
+  attributes: { type: 'button', 'aria-label': 'Annuler la dictée' },
+  iconPath: 'M14.779 4.27903 ...',
+});
+const stopDictationButton = new FixtureDictationNode({
+  attributes: { type: 'button', 'aria-label': 'Diktat beenden' },
+  iconPath: 'M13.0834 3.91846 ...',
+});
+const transcribeAndSendButton = new FixtureDictationNode({
+  attributes: { type: 'button', 'aria-label': 'Transcrire et envoyer' },
+  iconPath: 'M9.31697 3.08317 ...',
+});
 const dictationComposer = new FixtureDictationNode({
   tagName: 'FORM',
   attributes: { 'data-chatgpt-composer': '' },
   buttons: [voiceModeButton, composerSendButton, dictateButton],
 });
+const scheduledTimers = [];
 const dictationContext = {
   document: {
     querySelector(selector) {
@@ -414,18 +485,53 @@ const dictationContext = {
   escapeAttributeSelectorFragment: (value) => value,
   flashBorder() {},
   getIconTokenList: (tokens) => (Array.isArray(tokens) ? tokens : [tokens]),
-  setTimeout() {},
+  setTimeout(callback) {
+    scheduledTimers.push(callback);
+  },
   sleep: async () => {},
   smartClick: (button) => button.click(),
 };
 runInNewContext(
-  `${dictationRuntimeSource.replace(/^    /gm, '')}\nglobalThis.runDictationToggle = DictationShortcut.runToggle;`,
+  `${dictationRuntimeSource.replace(/^    /gm, '')}\nglobalThis.runDictationToggle = DictationShortcut.runToggle;\nglobalThis.runStopAndTranscribeDictation = DictationShortcut.runStopAndTranscribe;\nglobalThis.runDictationCancel = DictationShortcut.runCancel;`,
   dictationContext,
 );
 dictationContext.runDictationToggle();
 assert.equal(dictateButton.clickCount, 1, 'The observed Dictate button should be clicked exactly once');
 assert.equal(voiceModeButton.clickCount, 0, 'The adjacent Start Voice button must not be clicked');
 assert.equal(composerSendButton.clickCount, 0, 'The composer Send button must not be clicked as Dictate');
+
+dictationComposer.buttons = [cancelDictationButton, stopDictationButton, transcribeAndSendButton];
+scheduledTimers.shift()();
+dictationContext.runDictationToggle();
+assert.equal(
+  transcribeAndSendButton.clickCount,
+  1,
+  'The second Dictation toggle should click Transcribe-and-send exactly once',
+);
+assert.equal(cancelDictationButton.clickCount, 0, 'The active Cancel button must not be clicked');
+assert.equal(stopDictationButton.clickCount, 0, 'The active Stop button must not be clicked');
+assert.equal(composerSendButton.clickCount, 0, 'The idle composer Send button must not be clicked');
+await dictationContext.runDictationCancel();
+assert.equal(cancelDictationButton.clickCount, 1, 'The Cancel shortcut should click only Cancel');
+assert.equal(stopDictationButton.clickCount, 0, 'The Cancel shortcut must not click Stop');
+assert.equal(
+  transcribeAndSendButton.clickCount,
+  1,
+  'The Cancel shortcut must not click Transcribe-and-send',
+);
+dictationContext.runStopAndTranscribeDictation();
+assert.equal(
+  stopDictationButton.clickCount,
+  1,
+  'Stop and Transcribe should click the active square Stop control exactly once',
+);
+assert.equal(cancelDictationButton.clickCount, 1, 'Stop and Transcribe must not click Cancel');
+assert.equal(
+  transcribeAndSendButton.clickCount,
+  1,
+  'Stop and Transcribe must not click Transcribe-and-send',
+);
+assert.equal(composerSendButton.clickCount, 0, 'Stop and Transcribe must not click composer Send');
 
 const branchMenuHelperStart = contentSource.indexOf('  const DEFAULT_MENU_DELAYS = Object.freeze({');
 const branchMenuHelperEnd = contentSource.indexOf(
@@ -448,6 +554,11 @@ assert.match(
   branchShortcutSource,
   /menuRootResolver:\s*findOpenMenuForTrigger/,
   'Branch must resolve the opened menu from its selected overflow trigger',
+);
+assert.match(
+  branchShortcutSource,
+  /requireTriggerSelector:\s*true/,
+  'Branch must not fall back to a global icon match when its message-action trigger is absent',
 );
 assert.match(
   branchMenuHelperSource,
@@ -578,6 +689,15 @@ const latestOverflowButton = new FixtureBranchNode({
   iconPath: 'M3.33362 6.80811 latest',
   rect: { top: 520, left: 10, bottom: 550, right: 80 },
 });
+const sidebarOverflowButton = new FixtureBranchNode({
+  tagName: 'BUTTON',
+  attributes: {
+    id: 'radix-sidebar-actions',
+    'aria-haspopup': 'menu',
+    'aria-controls': 'sidebar-actions-menu',
+  },
+  iconPath: 'M3.33362 6.80811 sidebar Chat actions',
+});
 olderTurnActions.append(olderOverflowButton);
 latestTurnActions.append(latestOverflowButton);
 const olderBranchItem = new FixtureBranchNode({
@@ -590,6 +710,11 @@ const latestBranchItem = new FixtureBranchNode({
   iconPath: 'M11.6672 1.97461 latest branch',
   rect: { top: 300, left: 10, bottom: 330, right: 150 },
 });
+const sidebarBranchItem = new FixtureBranchNode({
+  attributes: { role: 'menuitem' },
+  iconPath: 'M11.6672 1.97461 sidebar branch',
+  rect: { top: 300, left: 10, bottom: 330, right: 150 },
+});
 const olderActionsMenu = new FixtureBranchNode({
   attributes: { role: 'menu', id: 'older-actions-menu', 'data-state': 'open' },
 });
@@ -598,7 +723,11 @@ const latestActionsMenu = new FixtureBranchNode({
 });
 olderActionsMenu.append(olderBranchItem);
 latestActionsMenu.append(latestBranchItem);
-branchMenus.push(olderActionsMenu, latestActionsMenu);
+const sidebarActionsMenu = new FixtureBranchNode({
+  attributes: { role: 'menu', id: 'sidebar-actions-menu', 'data-state': 'closed' },
+});
+sidebarActionsMenu.append(sidebarBranchItem);
+branchMenus.push(olderActionsMenu, latestActionsMenu, sidebarActionsMenu);
 
 const branchTimers = [];
 const branchMenuContext = {
@@ -616,6 +745,12 @@ const branchMenuContext = {
             button.iconPath.startsWith(pathPrefix || '') &&
             button.closest('.turn-action-controls'),
         );
+      }
+      if (selector.startsWith('button[id^="radix-"] ')) {
+        const pathPrefix = selector.match(/svg path\[d\^="([^"]+)"\]/)?.[1];
+        return sidebarOverflowButton.iconPath.startsWith(pathPrefix || '')
+          ? [sidebarOverflowButton]
+          : [];
       }
       return [];
     },
@@ -659,6 +794,30 @@ assert.equal(latestOverflowButton.focusCount, 1, 'Branch should open the lowest 
 assert.equal(olderOverflowButton.focusCount, 0, 'Branch must not open the higher distractor response menu');
 assert.equal(latestBranchItem.clickCount, 1, 'Branch should activate the exact item in the opened menu once');
 assert.equal(olderBranchItem.clickCount, 0, 'Branch must not activate the item in another open response menu');
+
+delete latestOverflowButton.attributes['aria-controls'];
+branchMenuContext.runBranchShortcut();
+while (branchTimers.length) branchTimers.shift().callback();
+assert.equal(
+  latestBranchItem.clickCount,
+  1,
+  'Branch must not activate an item from an open menu when its trigger has no structural association',
+);
+
+olderTurnActions.setAttribute('class', '');
+latestTurnActions.setAttribute('class', '');
+branchMenuContext.runBranchShortcut();
+while (branchTimers.length) branchTimers.shift().callback();
+assert.equal(
+  sidebarOverflowButton.focusCount,
+  0,
+  'Branch must not open the sidebar Chat actions menu when message-action controls are absent',
+);
+assert.equal(
+  sidebarBranchItem.clickCount,
+  0,
+  'Branch must not activate a same-icon sidebar item as a fallback',
+);
 
 const labelledByTrigger = new FixtureBranchNode({
   tagName: 'BUTTON',
@@ -921,6 +1080,9 @@ const searchConversationSelectorsSource = contentSource.match(
 const searchSafeClickSource = contentSource.match(
   /  function safeClick\(el\) \{[\s\S]*?\n  \}/,
 )?.[0];
+const searchPointerClickSource = contentSource.match(
+  /  function safeClickSearchConversationButton\(el\) \{[\s\S]*?\n  \}/,
+)?.[0];
 const searchVisibilitySource = contentSource.match(
   /  function isDirectActionVisible\(el\) \{[\s\S]*?\n  \}/,
 )?.[0];
@@ -933,6 +1095,7 @@ const searchShortcutSource = contentSource.match(
 assert.ok(
   searchConversationSelectorsSource &&
     searchSafeClickSource &&
+    searchPointerClickSource &&
     searchVisibilitySource &&
     searchVisibleFinderSource &&
     searchShortcutSource,
@@ -970,9 +1133,11 @@ const visibleSearchButton = new FixtureSearchButton({
 });
 const currentSearchSelector = 'button:has(svg path[d^="M7.32849 1.91016"])';
 const searchSelectorQueries = [];
+let searchPointerClickCount = 0;
 const searchRuntimeSource = [
   searchConversationSelectorsSource,
   searchSafeClickSource,
+  searchPointerClickSource,
   searchVisibilitySource,
   searchVisibleFinderSource,
   searchShortcutSource,
@@ -991,6 +1156,11 @@ const searchShortcutContext = {
   HTMLElement: FixtureSearchButton,
   window: {
     getComputedStyle: () => ({ display: 'block', visibility: 'visible', pointerEvents: 'auto' }),
+  },
+  clickElementLikeUser: (el) => {
+    searchPointerClickCount += 1;
+    el.click();
+    return true;
   },
   findStructuralSearchConversationButton: () => null,
   triggerNativeSearchConversationFromNarrowPopover: () => false,
@@ -1015,6 +1185,11 @@ assert.equal(
   1,
   'Search should click the visible titlebar control exactly once',
 );
+assert.equal(
+  searchPointerClickCount,
+  1,
+  'Search should use the pointer-aware native-control activation helper exactly once',
+);
 
 const newChatSelectorsSource = contentSource.match(
   /  const NEW_CHAT_SELECTORS = \[[\s\S]*?\n  \];/,
@@ -1026,7 +1201,7 @@ const newChatSpriteTokensSource = contentSource.match(
   /  const NEW_CHAT_SPRITE_FRAGMENT = '[^']+';\n  const NEW_CHAT_SPRITE_FALLBACK_FRAGMENT = '[^']+';/,
 )?.[0];
 const newChatOpenPopoverSource = contentSource.match(
-  /  async function openNarrowSidebarPopover\(\) \{[\s\S]*?\n  \}/,
+  /  async function openNarrowSidebarPopover\([^)]*\) \{[\s\S]*?\n  \}/,
 )?.[0];
 const newChatWaitForTargetSource = contentSource.match(
   /  function waitForFirstVisibleElement\(selectors, timeoutMs = 800\) \{[\s\S]*?\n  \}/,
