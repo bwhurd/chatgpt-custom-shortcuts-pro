@@ -3566,12 +3566,13 @@ const clickElementLikeUser = (el) => {
         btn.closest?.('.turn-action-controls'),
       ),
     );
+    // Copy feedback swaps the icon to a checkmark for ~2s; keep the last target
+    // so repeated presses cycle predictably instead of jumping to another button.
+    const lastEl = window.__copyLowestState?.el;
+    if (lastEl?.isConnected) push([lastEl]);
 
-    const visibleButtons = Array.from(set).filter((btn) => isFullyInViewport(btn));
-    // A visible native code-block Copy action owns its exact code payload, so
-    // prefer those controls over the separate message-level Copy action.
-    const codeBoxButtons = visibleButtons.filter((btn) => isCodeBoxCopyControl(btn));
-    const arr = codeBoxButtons.length ? codeBoxButtons : visibleButtons;
+    // Lowest visible Copy wins (message Copy below a code box); quick repeats cycle upward.
+    const arr = Array.from(set).filter((btn) => isFullyInViewport(btn));
     arr.sort((a, b) => {
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
