@@ -7854,10 +7854,12 @@ const clickElementLikeUser = (el) => {
             label: i18n('palette_first_recent_chat', 'Go to First Recent Chat'),
             binding: '',
             // Only Recents rows carry this key; Pinned and Projects rows do not.
+            // Some accounts lack the key; there Recents is the #history list.
             run: () => {
-              const link = document.querySelector(
-                'nav [data-sidebar-chatgpt-conversation-key] a[href*="/c/"]',
-              );
+              const link =
+                document.querySelector(
+                  'nav [data-sidebar-chatgpt-conversation-key] a[href*="/c/"]',
+                ) || document.querySelector('nav #history a[href*="/c/"]');
               link?.scrollIntoView({ block: 'center' });
               link?.click();
             },
