@@ -7789,6 +7789,7 @@ const clickElementLikeUser = (el) => {
       const currentId = chatId(location.pathname);
       const idx = currentId ? links.findIndex((a) => chatId(a.pathname) === currentId) : -1;
       const target = idx < 0 ? (step > 0 ? links[0] : null) : links[idx + step];
+      target?.scrollIntoView({ block: 'center' });
       target?.click();
     };
 
