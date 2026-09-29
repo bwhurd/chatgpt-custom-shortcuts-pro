@@ -32,6 +32,9 @@ After that first run, stored values are never touched again. Someone who deliber
 - Every entry in `altShortcutActions` (`extension/content.js`) that has a label in `settings-schema.js` `shortcuts.labelI18nByKey`.
 - Inert legacy keys (Study, Canvas, Think Longer, Thinking Standard/Extended) have no label, so they are hidden.
 - Palette-only rows (no shortcut key): **Go to Previous Chat** / **Go to Next Chat** open the sidebar history entry above/below the current chat (`goToAdjacentChat` in `content.js`). They need the sidebar history rendered, and do nothing at the list ends or when the sidebar is collapsed.
+- Palette-only row **Go to First Recent Chat** opens the top chat in the sidebar's Recents section, skipping Pinned and Projects, and scrolls the sidebar to it. Needs the sidebar rendered.
+- Palette-only row **Go to Project…** reopens the palette with every sidebar project. Picking one scrolls the sidebar to it, expands it if collapsed, and opens its first chat (waits up to 2s for the chat list).
+- Palette-only row **Open More Menu** opens the top-right conversation options (…) menu. Does nothing on pages without that button (new chat).
 - Not listed: the palette itself, the shortcut overlay (`Alt + .`), model-picker slots, and the Ctrl send/stop keys.
 
 ## Implementation
@@ -42,6 +45,9 @@ After that first run, stored values are never touched again. Someone who deliber
 | Hotkey dispatch | `altShortcutActions.shortcutKeyCommandPalette` via the regular Alt handler |
 | Running an action | `runAltShortcutAction(key, event)`, the same path as a key press, so usage analytics still records it. Palette-only rows carry their own `run` function instead |
 | Previous / Next Chat | `goToAdjacentChat(step)`: collects `nav a[href*="/c/"]` in sidebar order and clicks the entry one step away from the current chat |
+| First Recent Chat | first `nav [data-sidebar-chatgpt-conversation-key] a[href*="/c/"]`. Only Recents rows carry that attribute (Pinned rows use `data-pinned-content-tab-drop-key`, project rows have none); the section heading attribute is text, so it is not used |
+| Go to Project | `openCommandPalette(subItems)` with one item per `nav [data-app-action-sidebar-project-row]` (label/id from `data-app-action-sidebar-project-label` / `-id`). `goToProject(row)` clicks the row when `data-app-action-sidebar-project-collapsed="true"` (expands in place, no navigation), then polls the row's `[data-sidebar-project-container-id]` for the first `a[href*="/c/"]` |
+| Open More Menu | `clickElementLikeUser` on the first visible `[data-app-shell-header-obstacle="true"] button[aria-haspopup="menu"]` with the dots icon (`svg path[d^="M3.33362 6.80811"]`). The old `data-testid="conversation-options-button"` is gone (2026-09), and the header renders hidden copies of the button, so the visible one is picked. Radix opens on pointerdown, plain `.click()` does not |
 | One-time default move | `settings-schema.js` `shortcuts.migrateCommandPaletteDefault(stored)`, called from the `content.js` shortcut load and the `popup.js` first-run seeder |
 | Defaults | `content.js` `shortcutDefaults`, `popup.js` preset map, `options-storage.js` `OPTIONS_DEFAULTS`, `analytics.js` |
 | Popup row | `popup.html`, below Show Shortcut Overlay |

@@ -7791,8 +7791,24 @@ const clickElementLikeUser = (el) => {
       target?.click();
     };
 
+    // Scrolls to a sidebar project row, expands it if collapsed, then opens its first chat.
+    // ponytail: polls 2s for the chat list to render; slower render or empty project = expand only.
+    const goToProject = (row) => {
+      row.scrollIntoView({ block: 'center' });
+      if (row.getAttribute('data-app-action-sidebar-project-collapsed') === 'true') row.click();
+      const container = row.closest('[data-sidebar-project-container-id]');
+      let tries = 0;
+      const timer = setInterval(() => {
+        const link = container?.querySelector('a[href*="/c/"]');
+        if (!link && ++tries < 20) return;
+        clearInterval(timer);
+        link?.click();
+      }, 100);
+    };
+
     // ponytail: substring filter, no fuzzy ranking; model-picker slots and Ctrl send/stop are not listed.
-    const openCommandPalette = () => {
+    // subItems replaces the command list (used by Go to Project to list projects).
+    const openCommandPalette = (subItems) => {
       document.getElementById('csp-command-palette')?.remove();
       const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
       const i18n = (key, fallback) => {
@@ -7808,7 +7824,9 @@ const clickElementLikeUser = (el) => {
         return `${isMac ? '⌥' : 'Alt+'}${key.length === 1 ? key.toUpperCase() : key}`;
       };
       // Legacy inert keys have no schema label, so the label map doubles as the palette allowlist.
-      const items = Object.keys(altShortcutActions)
+      const items =
+        subItems ||
+        Object.keys(altShortcutActions)
         .filter((key) => key !== 'shortcutKeyCommandPalette' && labelI18nByKey[key])
         .map((key) => ({
           key,
@@ -7828,6 +7846,51 @@ const clickElementLikeUser = (el) => {
             label: i18n('palette_prev_chat', 'Go to Previous Chat'),
             binding: '',
             run: () => goToAdjacentChat(-1),
+          },
+          {
+            key: 'paletteFirstRecentChat',
+            label: i18n('palette_first_recent_chat', 'Go to First Recent Chat'),
+            binding: '',
+            // Only Recents rows carry this key; Pinned and Projects rows do not.
+            run: () => {
+              const link = document.querySelector(
+                'nav [data-sidebar-chatgpt-conversation-key] a[href*="/c/"]',
+              );
+              link?.scrollIntoView({ block: 'center' });
+              link?.click();
+            },
+          },
+          {
+            key: 'paletteGoToProject',
+            label: i18n('palette_go_to_project', 'Go to Project…'),
+            binding: '',
+            run: () =>
+              openCommandPalette(
+                Array.from(
+                  document.querySelectorAll('nav [data-app-action-sidebar-project-row]'),
+                ).map((row) => ({
+                  key: `paletteProject:${row.getAttribute('data-app-action-sidebar-project-id')}`,
+                  label: row.getAttribute('data-app-action-sidebar-project-label') || '',
+                  binding: '',
+                  run: () => goToProject(row),
+                })),
+              ),
+          },
+          {
+            key: 'paletteMoreMenu',
+            label: i18n('palette_more_menu', 'Open More Menu'),
+            binding: '',
+            // Header renders hidden copies of the button; pick the visible one by its dots icon.
+            // Radix menu opens on pointerdown, so a bare .click() is not enough.
+            run: () =>
+              clickElementLikeUser(
+                Array.from(
+                  document.querySelectorAll(
+                    'button[data-testid="conversation-options-button"], ' +
+                      '[data-app-shell-header-obstacle="true"] button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+                  ),
+                ).find((b) => b.offsetWidth > 0),
+              ),
           },
         )
         .sort((a, b) => a.label.localeCompare(b.label));

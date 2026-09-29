@@ -632,6 +632,15 @@
   "palette_placeholder": {
     "message": "Type a command…"
   },
+  "palette_first_recent_chat": {
+    "message": "Go to First Recent Chat"
+  },
+  "palette_go_to_project": {
+    "message": "Go to Project…"
+  },
+  "palette_more_menu": {
+    "message": "Open More Menu"
+  },
   "palette_prev_chat": {
     "message": "Go to Previous Chat"
   },
