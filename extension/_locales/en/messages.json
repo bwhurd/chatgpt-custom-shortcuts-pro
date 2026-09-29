@@ -623,6 +623,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "Displays only assigned shortcuts in chat."
   },
+  "label_commandPalette": {
+    "message": "Command Palette"
+  },
+  "tt_commandPalette_plain": {
+    "message": "Search all shortcut actions by name and run one."
+  },
+  "palette_placeholder": {
+    "message": "Type a command…"
+  },
   "label_cloud_sync": {
     "message": "Cloud Sync"
   }

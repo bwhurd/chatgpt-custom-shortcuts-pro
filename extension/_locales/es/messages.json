@@ -620,6 +620,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "En el chat se muestran solo los atajos asignados."
   },
+  "label_commandPalette": {
+    "message": "Paleta de comandos"
+  },
+  "tt_commandPalette_plain": {
+    "message": "Busca todas las acciones de atajos por nombre y ejecuta una."
+  },
+  "palette_placeholder": {
+    "message": "Escribe un comando…"
+  },
   "label_cloud_sync": {
     "message": "Sinc. en la nube"
   }

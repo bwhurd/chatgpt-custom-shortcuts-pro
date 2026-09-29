@@ -84,11 +84,42 @@
       shortcutKeyShowOverlay: 'Period',
     },
 
+    // One-time move for installs that predate the Command Palette: Temporary Chat
+    // leaves its old P default for I, and the palette takes P only when P is free.
+    // Returns the storage patch to apply ({} once the palette key exists).
+    migrateCommandPaletteDefault(stored) {
+      if (!stored || stored.shortcutKeyCommandPalette !== undefined) return {};
+      const isKey = (value, letter) =>
+        typeof value === 'string' &&
+        [letter, letter.toUpperCase(), `Key${letter.toUpperCase()}`].includes(value.trim());
+      const takenBy = (data, letter, self) =>
+        Object.entries(data).some(
+          ([key, value]) =>
+            key !== self && (Array.isArray(value) ? value : [value]).some((v) => isKey(v, letter)),
+        );
+      const patch = {};
+      if (
+        isKey(stored.shortcutKeyTemporaryChat, 'p') &&
+        !takenBy(stored, 'i', 'shortcutKeyTemporaryChat')
+      ) {
+        patch.shortcutKeyTemporaryChat = 'KeyI';
+      }
+      patch.shortcutKeyCommandPalette = takenBy(
+        { ...stored, ...patch },
+        'p',
+        'shortcutKeyCommandPalette',
+      )
+        ? ' '
+        : 'KeyP';
+      return patch;
+    },
+
     // Overlay label source of truth: storage key -> i18n message key.
     // Keep this aligned with popup.html shortcut labels so the shortcuts overlay matches across locales.
     labelI18nByKey: {
       shortcutKeyToggleModelSelector: 'label_showModelPicker',
       shortcutKeyShowOverlay: 'label_showShortcutOverlay',
+      shortcutKeyCommandPalette: 'label_commandPalette',
       shortcutKeyToggleCodeboxWrap: 'label_toggle_codebox_wrap',
       shortcutKeyThinkingLight: 'label_switchToThinkingLight',
       shortcutKeyThinkingHeavy: 'label_switchToThinkingHeavy',
@@ -143,6 +174,7 @@
         keys: [
           'shortcutKeyToggleModelSelector',
           'shortcutKeyShowOverlay',
+          'shortcutKeyCommandPalette',
           'shortcutKeyToggleChatWork',
           'shortcutKeyThinkingLight',
           'shortcutKeyThinkingHeavy',

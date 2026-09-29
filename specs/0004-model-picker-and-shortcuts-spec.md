@@ -138,6 +138,12 @@ Key wiring:
 
 If a shortcut shows in the popup but lands in the overlay “Other” bucket unexpectedly, check the schema mapping before changing overlay rendering.
 
+## Command palette
+
+- `shortcutKeyCommandPalette` is a normal Alt shortcut (default `Alt + P`) registered in `content.js` `altShortcutActions`; it opens `openCommandPalette()` (`<dialog id="csp-command-palette">`).
+- Rows are `altShortcutActions` keys that have a `labelI18nByKey` entry, so inert legacy keys stay hidden. Running a row calls `runAltShortcutAction`, same path as the key press.
+- Temporary Chat moved from `P` to `I` for it. `settings-schema.js` `shortcuts.migrateCommandPaletteDefault` runs from the content shortcut load and the popup first-run seeder (the `options-storage.js` migrations never execute: the vendored OptionsSync is a stub). It moves an untouched `P` Temporary Chat to `I` when `I` is free, and gives the palette `P` only when `P` is free, otherwise NBSP.
+
 ## Runtime shortcut activation
 
 For ChatGPT-native actions that now have first-party customizable shortcuts, prefer direct DOM activation over simulating the old native keystrokes.

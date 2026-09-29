@@ -620,6 +620,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "У чаті показуються лише призначені гарячі клавіші."
   },
+  "label_commandPalette": {
+    "message": "Палітра команд"
+  },
+  "tt_commandPalette_plain": {
+    "message": "Пошук усіх дій гарячих клавіш за назвою та запуск."
+  },
+  "palette_placeholder": {
+    "message": "Введіть команду…"
+  },
   "label_cloud_sync": {
     "message": "Хмарна синхр."
   }

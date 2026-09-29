@@ -620,6 +620,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "चैट में केवल असाइन किए गए शॉर्टकट दिखते हैं।"
   },
+  "label_commandPalette": {
+    "message": "कमांड पैलेट"
+  },
+  "tt_commandPalette_plain": {
+    "message": "सभी शॉर्टकट क्रियाओं को नाम से खोजें और एक चलाएँ।"
+  },
+  "palette_placeholder": {
+    "message": "कमांड टाइप करें…"
+  },
   "label_cloud_sync": {
     "message": "क्लाउड सिंक"
   }

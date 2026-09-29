@@ -6,6 +6,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.29.2026
+- New: Command Palette (Alt+P) lists every shortcut action. Type to filter, then press Enter to run one, including actions with no key assigned. Rebind it in the popup under Model Picker.
+- Changed: Toggle Temporary Chat now defaults to Alt+I. Installs still on the old Alt+P default move to Alt+I automatically when I is free.
+
 #### 09.28.2026
 - Fixed: Bottom bar persists when switching conversations without reloading.
 - Fixed: Search Web shortcut opens from ChatGPT's current composer.

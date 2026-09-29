@@ -4245,7 +4245,8 @@ const clickElementLikeUser = (el) => {
     shortcutKeyMoreDotsBranchInNewChat: '',
     altPageUp: 'PageUp',
     altPageDown: 'PageDown',
-    shortcutKeyTemporaryChat: 'KeyP',
+    shortcutKeyTemporaryChat: 'KeyI',
+    shortcutKeyCommandPalette: 'KeyP',
     shortcutKeyStudy: '',
     shortcutKeyCreateImage: '',
     shortcutKeyToggleCanvas: '',
@@ -4271,6 +4272,12 @@ const clickElementLikeUser = (el) => {
   };
 
   chrome.storage.sync.get(Object.keys(shortcutDefaults), (data) => {
+    const paletteMigration =
+      window.CSP_SETTINGS_SCHEMA?.shortcuts?.migrateCommandPaletteDefault?.(data) || {};
+    if (Object.keys(paletteMigration).length) {
+      Object.assign(data, paletteMigration);
+      chrome.storage.sync.set(paletteMigration);
+    }
     const shortcuts = {};
     for (const key in shortcutDefaults) {
       if (Object.hasOwn(data, key) && hasUsableShortcutSetting(data[key])) {
@@ -7654,6 +7661,7 @@ const clickElementLikeUser = (el) => {
       },
       shortcutKeyNewGptConversation: runNewGptConversationShortcut,
       selectThenCopyAllMessages: runSelectThenCopyAllMessagesShortcut,
+      shortcutKeyCommandPalette: () => openCommandPalette(),
     }; // Close altShortcutActions registry
 
     // Runtime bridge: popup/debug hooks invoke these core shortcut actions directly.
@@ -7769,6 +7777,106 @@ const clickElementLikeUser = (el) => {
       recordShortcutUsage(storageKey);
       action({ previewOnly: false, event, ...options });
       return true;
+    };
+
+    // ponytail: substring filter, no fuzzy ranking; model-picker slots and Ctrl send/stop are not listed.
+    const openCommandPalette = () => {
+      document.getElementById('csp-command-palette')?.remove();
+      const labelI18nByKey = window.CSP_SETTINGS_SCHEMA?.shortcuts?.labelI18nByKey || {};
+      const i18n = (key, fallback) => {
+        try {
+          return (key && chrome.i18n.getMessage(key)) || fallback;
+        } catch {
+          return fallback;
+        }
+      };
+      const bindingText = (setting) => {
+        if (!hasUsableShortcutSetting(setting) || setting === ' ') return '';
+        const key = String(setting).replace(/^(Key|Digit)/, '');
+        return `${isMac ? '⌥' : 'Alt+'}${key.length === 1 ? key.toUpperCase() : key}`;
+      };
+      // Legacy inert keys have no schema label, so the label map doubles as the palette allowlist.
+      const items = Object.keys(altShortcutActions)
+        .filter((key) => key !== 'shortcutKeyCommandPalette' && labelI18nByKey[key])
+        .map((key) => ({
+          key,
+          label: i18n(labelI18nByKey[key], key.replace(/^shortcutKey/, '')),
+          binding: bindingText(getEffectiveShortcutSetting(key)),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+      const dialog = document.createElement('dialog');
+      dialog.id = 'csp-command-palette';
+      dialog.style.cssText =
+        'position:fixed;top:15vh;margin:0 auto;width:min(520px,90vw);padding:8px;border:1px solid #8884;border-radius:12px;background:Canvas;color:CanvasText;box-shadow:0 12px 40px #0006;z-index:2147483647;';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = i18n('palette_placeholder', 'Type a command…');
+      input.setAttribute('aria-label', input.placeholder);
+      input.style.cssText =
+        'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #8886;border-radius:8px;background:transparent;color:inherit;font:inherit;outline:none;';
+      const list = document.createElement('ul');
+      list.setAttribute('role', 'listbox');
+      list.style.cssText = 'list-style:none;margin:6px 0 0;padding:0;max-height:50vh;overflow-y:auto;';
+      dialog.append(input, list);
+
+      let visible = items;
+      let active = 0;
+      const render = () => {
+        list.replaceChildren(
+          ...visible.map((item, i) => {
+            const li = document.createElement('li');
+            li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', String(i === active));
+            li.style.cssText = `display:flex;justify-content:space-between;gap:12px;padding:6px 10px;border-radius:6px;cursor:pointer;${i === active ? 'background:#8883;' : ''}`;
+            const label = document.createElement('span');
+            label.textContent = item.label;
+            const binding = document.createElement('span');
+            binding.textContent = item.binding;
+            binding.style.opacity = '0.6';
+            li.append(label, binding);
+            li.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              run(item, e);
+            });
+            return li;
+          }),
+        );
+        list.children[active]?.scrollIntoView({ block: 'nearest' });
+      };
+      const run = (item, event) => {
+        dialog.close();
+        requestAnimationFrame(() => runAltShortcutAction(item.key, event));
+      };
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        visible = items.filter((item) => item.label.toLowerCase().includes(q));
+        active = 0;
+        render();
+      });
+      input.addEventListener('keydown', (e) => {
+        // Keep palette typing away from page/extension shortcut listeners.
+        e.stopPropagation();
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (!visible.length) return;
+          active = (active + (e.key === 'ArrowDown' ? 1 : -1) + visible.length) % visible.length;
+          render();
+        } else if (e.key === 'Enter' && visible[active]) {
+          e.preventDefault();
+          run(visible[active], e);
+        }
+      });
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) dialog.close();
+      });
+      dialog.addEventListener('close', () => dialog.remove());
+
+      document.body.append(dialog);
+      render();
+      dialog.showModal();
+      input.focus();
     };
 
     const runPreviewThreadShortcut = (storageKey, event) => {

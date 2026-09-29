@@ -2916,7 +2916,8 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyRegenerateAskToChangeResponse: NBSP,
     shortcutKeyMoreDotsReadAloud: NBSP,
     shortcutKeyMoreDotsBranchInNewChat: NBSP,
-    shortcutKeyTemporaryChat: 'KeyP',
+    shortcutKeyTemporaryChat: 'KeyI',
+    shortcutKeyCommandPalette: 'KeyP',
     shortcutKeyStudy: NBSP,
     shortcutKeyCreateImage: NBSP,
     shortcutKeyToggleCanvas: NBSP,
@@ -3066,6 +3067,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ...Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE),
         MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
       ]);
+
+      Object.assign(
+        patch,
+        window.CSP_SETTINGS_SCHEMA?.shortcuts?.migrateCommandPaletteDefault?.(fullData || {}),
+      );
+      Object.assign(data, patch);
 
       allKeys.forEach((key) => {
         // initModelPickerCodesCache owns the atomic legacy split. Letting the

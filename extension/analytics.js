@@ -28,7 +28,8 @@
     shortcutKeySearchConversationHistory: ',',
     shortcutKeyShowOverlay: '.',
     shortcutKeyToggleCodeboxWrap: '',
-    shortcutKeyTemporaryChat: 'p',
+    shortcutKeyTemporaryChat: 'i',
+    shortcutKeyCommandPalette: 'p',
     shortcutKeyToggleDictate: 'y',
     shortcutKeyCancelDictation: '',
     shortcutKeyShare: '',
@@ -122,6 +123,7 @@
       'shortcutKeyTemporaryChat',
       'shortcutKeyShare',
       'shortcutKeyShowOverlay',
+      'shortcutKeyCommandPalette',
     ],
     model_picker: ['shortcutKeyToggleModelSelector', ...MODEL_SLOT_ACTION_IDS],
     regenerate: [

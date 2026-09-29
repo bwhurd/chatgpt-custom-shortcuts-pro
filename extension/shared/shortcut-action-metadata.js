@@ -1109,6 +1109,10 @@
       handlerRef: 'standalone shortcut overlay listener',
       notes: 'Internal extension overlay verified by DOM presence.',
     }),
+    notApplicable('shortcutKeyCommandPalette', {
+      notes:
+        'Opens the extension-owned command palette dialog; no ChatGPT DOM target. Listed actions reuse their own metadata rows.',
+    }),
     defineShortcutAction({
       actionId: 'shortcutKeyRegenerateTryAgain',
       targetRefs: ['assistant-web-regenerate-trigger', 'assistant-web-regenerate-item-try-again'],

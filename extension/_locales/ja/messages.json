@@ -620,6 +620,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "チャットでは割り当て済みのショートカットだけを表示します。"
   },
+  "label_commandPalette": {
+    "message": "コマンドパレット"
+  },
+  "tt_commandPalette_plain": {
+    "message": "すべてのショートカット操作を名前で検索して実行します。"
+  },
+  "palette_placeholder": {
+    "message": "コマンドを入力…"
+  },
   "label_cloud_sync": {
     "message": "クラウド同期"
   }

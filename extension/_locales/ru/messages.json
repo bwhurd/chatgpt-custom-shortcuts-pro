@@ -620,6 +620,15 @@
   "tt_showShortcutOverlay_plain": {
     "message": "В чате показываются только назначенные сочетания клавиш."
   },
+  "label_commandPalette": {
+    "message": "Палитра команд"
+  },
+  "tt_commandPalette_plain": {
+    "message": "Поиск всех действий быстрых клавиш по названию и запуск."
+  },
+  "palette_placeholder": {
+    "message": "Введите команду…"
+  },
   "label_cloud_sync": {
     "message": "Облачная синхр."
   }
