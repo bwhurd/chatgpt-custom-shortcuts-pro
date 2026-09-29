@@ -632,6 +632,12 @@
   "palette_placeholder": {
     "message": "Type a command…"
   },
+  "palette_prev_chat": {
+    "message": "Go to Previous Chat"
+  },
+  "palette_next_chat": {
+    "message": "Go to Next Chat"
+  },
   "label_cloud_sync": {
     "message": "Cloud Sync"
   }

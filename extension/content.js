@@ -7779,6 +7779,18 @@ const clickElementLikeUser = (el) => {
       return true;
     };
 
+    // Sidebar history order is newest first: step 1 = older chat below, -1 = newer chat above.
+    // ponytail: needs the sidebar history rendered; collapsed sidebar = no-op.
+    const goToAdjacentChat = (step) => {
+      const links = Array.from(document.querySelectorAll('nav a[href*="/c/"]'));
+      // Match by conversation id: project URLs add a slug (g-p-<id>-name) the sidebar href lacks.
+      const chatId = (path) => path.split('/c/')[1]?.split('/')[0];
+      const currentId = chatId(location.pathname);
+      const idx = currentId ? links.findIndex((a) => chatId(a.pathname) === currentId) : -1;
+      const target = idx < 0 ? (step > 0 ? links[0] : null) : links[idx + step];
+      target?.click();
+    };
+
     // ponytail: substring filter, no fuzzy ranking; model-picker slots and Ctrl send/stop are not listed.
     const openCommandPalette = () => {
       document.getElementById('csp-command-palette')?.remove();
@@ -7803,6 +7815,21 @@ const clickElementLikeUser = (el) => {
           label: i18n(labelI18nByKey[key], key.replace(/^shortcutKey/, '')),
           binding: bindingText(getEffectiveShortcutSetting(key)),
         }))
+        .concat(
+          // Palette-only actions: no shortcut key, own run function.
+          {
+            key: 'paletteNextChat',
+            label: i18n('palette_next_chat', 'Go to Next Chat'),
+            binding: '',
+            run: () => goToAdjacentChat(1),
+          },
+          {
+            key: 'palettePrevChat',
+            label: i18n('palette_prev_chat', 'Go to Previous Chat'),
+            binding: '',
+            run: () => goToAdjacentChat(-1),
+          },
+        )
         .sort((a, b) => a.label.localeCompare(b.label));
 
       const dialog = document.createElement('dialog');
@@ -7846,7 +7873,9 @@ const clickElementLikeUser = (el) => {
       };
       const run = (item, event) => {
         dialog.close();
-        requestAnimationFrame(() => runAltShortcutAction(item.key, event));
+        requestAnimationFrame(() =>
+          item.run ? item.run() : runAltShortcutAction(item.key, event),
+        );
       };
 
       input.addEventListener('input', () => {

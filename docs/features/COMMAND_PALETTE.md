@@ -31,6 +31,7 @@ After that first run, stored values are never touched again. Someone who deliber
 
 - Every entry in `altShortcutActions` (`extension/content.js`) that has a label in `settings-schema.js` `shortcuts.labelI18nByKey`.
 - Inert legacy keys (Study, Canvas, Think Longer, Thinking Standard/Extended) have no label, so they are hidden.
+- Palette-only rows (no shortcut key): **Go to Previous Chat** / **Go to Next Chat** open the sidebar history entry above/below the current chat (`goToAdjacentChat` in `content.js`). They need the sidebar history rendered, and do nothing at the list ends or when the sidebar is collapsed.
 - Not listed: the palette itself, the shortcut overlay (`Alt + .`), model-picker slots, and the Ctrl send/stop keys.
 
 ## Implementation
@@ -39,7 +40,8 @@ After that first run, stored values are never touched again. Someone who deliber
 | --- | --- |
 | Dialog UI and filtering | `extension/content.js`, `openCommandPalette()` (native `<dialog id="csp-command-palette">`) |
 | Hotkey dispatch | `altShortcutActions.shortcutKeyCommandPalette` via the regular Alt handler |
-| Running an action | `runAltShortcutAction(key, event)`, the same path as a key press, so usage analytics still records it |
+| Running an action | `runAltShortcutAction(key, event)`, the same path as a key press, so usage analytics still records it. Palette-only rows carry their own `run` function instead |
+| Previous / Next Chat | `goToAdjacentChat(step)`: collects `nav a[href*="/c/"]` in sidebar order and clicks the entry one step away from the current chat |
 | One-time default move | `settings-schema.js` `shortcuts.migrateCommandPaletteDefault(stored)`, called from the `content.js` shortcut load and the `popup.js` first-run seeder |
 | Defaults | `content.js` `shortcutDefaults`, `popup.js` preset map, `options-storage.js` `OPTIONS_DEFAULTS`, `analytics.js` |
 | Popup row | `popup.html`, below Show Shortcut Overlay |
@@ -47,6 +49,10 @@ After that first run, stored values are never touched again. Someone who deliber
 | Validator metadata | `shared/shortcut-action-metadata.js`, `notApplicable` row (extension-owned UI, no ChatGPT DOM target) |
 
 The palette runs the action one animation frame after the dialog closes, so page focus is restored first. Copy, scroll, and composer actions depend on that.
+
+The current chat is matched to its sidebar entry by conversation ID, the path segment after `/c/`, not by the full path. A project chat's URL carries a project slug (`/g/g-p-<id>-code-nukem/c/<chat>`) that its sidebar link lacks (`/g/g-p-<id>/c/<chat>`), so full-path matching never finds it.
+
+"Next" means the older chat below, because the sidebar lists newest first. On a page without a chat ID (new chat), Next opens the top entry and Previous does nothing.
 
 The migration does not live in `options-storage.js` because the vendored `OptionsSync` is a stub that never runs its `migrations` array.
 
