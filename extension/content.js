@@ -7886,15 +7886,25 @@ const clickElementLikeUser = (el) => {
             binding: '',
             // Header renders hidden copies of the button; pick the visible one by its dots icon.
             // Radix menu opens on pointerdown, so a bare .click() is not enough.
-            run: () =>
-              clickElementLikeUser(
+            // Composer keeps focus after the pointer open; focus the menu so arrow keys work.
+            run: () => {
+              const opened = clickElementLikeUser(
                 Array.from(
                   document.querySelectorAll(
                     'button[data-testid="conversation-options-button"], ' +
                       '[data-app-shell-header-obstacle="true"] button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
                   ),
                 ).find((b) => b.offsetWidth > 0),
-              ),
+              );
+              if (!opened) return;
+              let tries = 20;
+              const focusMenu = () => {
+                const menu = document.querySelector('[role="menu"][data-state="open"]');
+                if (menu) menu.focus();
+                else if (--tries > 0) requestAnimationFrame(focusMenu);
+              };
+              requestAnimationFrame(focusMenu);
+            },
           },
         )
         .sort((a, b) => a.label.localeCompare(b.label));
