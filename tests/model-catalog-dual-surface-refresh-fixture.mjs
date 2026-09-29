@@ -18,7 +18,7 @@ assert.ok(
 const stableSurface = contentSource.slice(stableSurfaceStart, coordinatorStart);
 assert.match(
   stableSurface,
-  /window\.waitForNativeChatWorkSurfaceRadios\?\.\(0\)[\s\S]*?currentRadios\.length === 2[\s\S]*?aria-checked'\) === 'true'[\s\S]*?aria-checked'\) === 'false'[\s\S]*?currentButton instanceof Element[\s\S]*?currentButton !== stableButton[\s\S]*?Date\.now\(\) - stableSince >= stableMs/,
+  /window\.waitForNativeChatWorkSurfaceRadios\?\.\(0\)[\s\S]*?currentRadios\.length === 2[\s\S]*?isChatWorkSurfaceSelected\(currentRadios\[targetIndex\]\)[\s\S]*?!window\.CSPModelPickerSelectors\?\.isChatWorkSurfaceSelected\(currentRadios\[1 - targetIndex\]\)[\s\S]*?currentButton instanceof Element[\s\S]*?currentButton !== stableButton[\s\S]*?Date\.now\(\) - stableSince >= stableMs/,
   'surface readiness should require reciprocal radio state and one stable composer model button',
 );
 const orderedCalls = [

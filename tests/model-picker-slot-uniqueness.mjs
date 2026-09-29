@@ -169,6 +169,35 @@ const currentWorkCodes = ModelLabels.buildDefaultKeyCodesFromPresentationGroups(
 assert.equal(currentWorkCodes[13], 'Digit6', 'Work speed should keep Alt+6 after the model list grows');
 assert.equal(currentWorkCodes[14], 'Digit7', 'Work reset should use Alt+7 after it is observed');
 
+const expandedOptions = Array.from({ length: 24 }, (_, index) => ({
+  id: `configure-dynamic-gpt-6-model-${index + 1}`,
+  slot: 15 + index,
+  label: `GPT-6 Model ${index + 1}`,
+}));
+const expandedCatalog = {
+  configureOptions: expandedOptions,
+  integratedEffort: true,
+  frontendByConfig: {},
+};
+const expandedGroups = ModelLabels.getPopupPresentationGroups(
+  expandedOptions[0].id,
+  [],
+  expandedCatalog,
+);
+const expandedModels = expandedGroups.find((group) => group.id === 'configure')?.actions || [];
+assert.equal(expandedModels.length, 24, 'catalog rows must not be capped at the historical slot count');
+assert.equal(expandedModels.at(-1)?.slot, 38, 'catalog slots should retain values beyond slot 14');
+const expandedDefaults = ModelLabels.buildDefaultKeyCodesFromPresentationGroups(expandedGroups);
+assert.equal(expandedDefaults.length, 39, 'default key arrays should cover every catalog slot');
+const expandedInput = new Array(39).fill('');
+expandedInput[38] = 'KeyZ';
+const expandedNormalized = ModelLabels.normalizeProfileKeyCodes(expandedInput, expandedGroups);
+assert.equal(expandedNormalized.length, 39, 'key normalization must retain the full assigned range');
+assert.equal(expandedNormalized[38], 'KeyZ', 'normalization must preserve a high-slot assignment');
+const expandedNames = ModelLabels.resolveActionableNames(expandedOptions.map((option) => option.label));
+assert.equal(expandedNames.length, 24, 'model-name hydration must preserve a catalog longer than defaults');
+assert.equal(expandedNames[23], 'GPT-6 Model 24', 'high catalog model names must survive hydration');
+
 const dynamicSelfPrimaryCatalog = {
   configureOptions: [
     { id: 'configure-latest', slot: 3, label: 'Latest • 5.5' },

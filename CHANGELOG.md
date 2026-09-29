@@ -6,6 +6,25 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.28.2026
+- Fixed: Bottom bar persists when switching conversations without reloading.
+- Fixed: Search Web shortcut opens from ChatGPT's current composer.
+- Fixed: Create Image shortcut opens from ChatGPT's current composer.
+- Fixed: Deep Research shortcut opens from ChatGPT's current composer.
+- Fixed: Add Photos/Files shortcut opens from ChatGPT's current composer.
+- Fixed: Share shortcut opens ChatGPT's native sharing controls.
+- Fixed: Edit Message opens the selected user message for editing.
+- Fixed: Send Edit submits the edited message.
+- Fixed: Read Aloud repeats on the same response.
+- Fixed: Branch in New Chat opens from the selected response.
+- Fixed: New Conversation starts a blank chat using ChatGPT's current controls.
+- Fixed: Toggle Chat / Work switches modes using ChatGPT's current controls.
+- Fixed: Activate Input focuses the current ChatGPT composer.
+- Fixed: Search Conversations opens ChatGPT's current search control.
+- Fixed: Regenerate uses ChatGPT's current response controls.
+- Fixed: Try Again targets the selected response.
+- Fixed: Share and conversation controls stay aligned with the bottom bar.
+
 #### 09.19.2026
 - Fixed: Response Copy keeps ChatGPT's native Markdown, while Alt+C reliably copies stripped text with normalized dashes, headings, and copy confirmation feedback.
 

@@ -120,6 +120,8 @@ const normalizeModelCatalogProfile = (profile) =>
     : MODEL_CATALOG_PROFILE_LEGACY;
 const getModelCatalogProfileForCatalog = (catalog) => {
   if (!catalog || typeof catalog !== 'object') return '';
+  if (catalog.surfaceMode === 'chat') return MODEL_CATALOG_PROFILE_LEGACY;
+  if (catalog.surfaceMode === 'work') return MODEL_CATALOG_PROFILE_LATEST;
   return catalog.pillMenu === true ||
     catalog.integratedModelMenu === true ||
     catalog.selectorShape === 'pill-three-submenu' ||
@@ -174,7 +176,7 @@ const buildDefaultModelPickerCodes = ({
     );
     const next = window.ModelLabels.buildDefaultKeyCodesFromPresentationGroups(groups);
     if (Array.isArray(next) && next.length) {
-      const out = next.slice(0, MODEL_PICKER_MAX_SLOTS);
+      const out = next.slice();
       while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
       return out;
     }
@@ -183,7 +185,7 @@ const buildDefaultModelPickerCodes = ({
   if (typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function') {
     const out = window.ModelLabels
       .defaultKeyCodesForProfile(normalizedProfile)
-      .slice(0, MODEL_PICKER_MAX_SLOTS);
+      .slice();
     while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
     return out;
   }
@@ -251,7 +253,7 @@ const setActiveModelConfigIdCache = (value, source = 'storage') => {
   return next;
 };
 const normalizeModelPickerCodesForComparison = (codes) => {
-  const out = Array.isArray(codes) ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
+  const out = Array.isArray(codes) ? codes.slice() : [];
   while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
   return out;
 };
@@ -370,17 +372,17 @@ const getDynamicModelNameSlotStart = () => {
   if (Number.isInteger(sharedStart) && sharedStart >= 0) return sharedStart;
   const slots = getModelActionSlots()
     .map((action) => Number(action?.slot))
-    .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS);
-  return Math.min(MODEL_PICKER_MAX_SLOTS, Math.max(-1, ...slots) + 1);
+    .filter((slot) => Number.isInteger(slot) && slot >= 0);
+  return Math.max(-1, ...slots) + 1;
 };
 const toValidModelPickerSlot = (value) => {
   const slot = Number(value);
-  return Number.isInteger(slot) && slot >= 0 && slot < MODEL_PICKER_MAX_SLOTS ? slot : -1;
+  return Number.isInteger(slot) && slot >= 0 ? slot : -1;
 };
 const isCatalogDynamicModelSlot = (value) => {
   const slot = toValidModelPickerSlot(value);
   const dynamicStart = getDynamicModelNameSlotStart();
-  return slot >= dynamicStart || [4, 5, 6].includes(slot);
+  return slot >= dynamicStart || [3, 4, 5, 6].includes(slot);
 };
 const isDynamicModelNameActionId = (value) =>
   /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
@@ -427,6 +429,8 @@ const normalizeModelCatalog = (catalog) => {
           available: row?.available === true,
           label: String(row?.label || base.label || '').trim(),
           selected: row?.selected === true,
+          sliderValue: row?.sliderValue,
+          effortValue: row?.effortValue,
         };
       })
       .filter(Boolean);
@@ -490,6 +494,8 @@ const normalizeModelCatalog = (catalog) => {
 
   return {
     version: Number(catalog.version) || 1,
+    surfaceMode: catalog.surfaceMode,
+    recommendedPairs: catalog.recommendedPairs,
     scrapedAt: Number(catalog.scrapedAt) || 0,
     selectorShape: String(catalog.selectorShape || '').trim(),
     pillMenu: catalog.pillMenu === true,
@@ -552,13 +558,13 @@ const getDefaultModelNamesForProfile = (profile) => {
       : typeof window.ModelLabels?.defaultNames === 'function'
         ? window.ModelLabels.defaultNames()
         : resolveModelActionableNames([]);
-  const out = Array.isArray(source) ? source.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
+  const out = Array.isArray(source) ? source.slice() : [];
   while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
   return out;
 };
 const normalizeModelNamesForProfile = (incoming, profile) => {
   if (!Array.isArray(incoming)) return getDefaultModelNamesForProfile(profile);
-  const out = incoming.slice(0, MODEL_PICKER_MAX_SLOTS).map((value) =>
+  const out = incoming.slice().map((value) =>
     typeof value === 'string' ? value : '',
   );
   while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
@@ -634,7 +640,7 @@ const ensureIntegratedUtilityShortcutDefaults = (catalog, profile) => {
   if (!catalog || profile !== MODEL_CATALOG_PROFILE_LATEST) return;
   const codes = window.__modelPickerKeyCodesProfiles?.[profile];
   if (!Array.isArray(codes)) return;
-  const next = codes.slice(0, MODEL_PICKER_MAX_SLOTS);
+  const next = codes.slice();
   while (next.length < MODEL_PICKER_MAX_SLOTS) next.push('');
   let changed = false;
   if (
@@ -1486,7 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------- Independent Chat/Work model-picker shortcut registry ----------
   const normalizeModelPickerCodes = (codes, profile) => {
     const hasArray = Array.isArray(codes);
-    const out = hasArray ? codes.slice(0, MODEL_PICKER_MAX_SLOTS) : [];
+    const out = hasArray ? codes.slice() : [];
     while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
     return hasArray
       ? out
@@ -1598,13 +1604,13 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             if (
               !Array.isArray(stored[latestKey]) ||
-              stored[latestKey].length !== MODEL_PICKER_MAX_SLOTS
+              stored[latestKey].length < MODEL_PICKER_MAX_SLOTS
             ) {
               patch[latestKey] = latestCodes;
             }
             if (
               !Array.isArray(stored[legacyKey]) ||
-              stored[legacyKey].length !== MODEL_PICKER_MAX_SLOTS
+              stored[legacyKey].length < MODEL_PICKER_MAX_SLOTS
             ) {
               patch[legacyKey] = legacyCodes;
             }
@@ -4125,10 +4131,10 @@ document.addEventListener('DOMContentLoaded', () => {
             : null;
         const defaults = buildDefaultModelPickerCodes({
           profile: normalizedProfile,
-        }).slice(0, MODEL_PICKER_MAX_SLOTS);
+        }).slice();
         const source = storageRaw || cacheRaw || defaults;
         const out = [];
-        for (let i = 0; i < MODEL_PICKER_MAX_SLOTS; i++) out.push(normalizeMpVal(source[i] || ''));
+        for (let i = 0; i < Math.max(MODEL_PICKER_MAX_SLOTS, source.length); i++) out.push(normalizeMpVal(source[i] || ''));
         return out;
       }
 
@@ -4266,7 +4272,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const normalizeImportedProfileCodes = (codes, profile) => {
         const normalizedProfile = normalizeModelCatalogProfile(profile);
         const padded = Array.isArray(codes)
-          ? codes.slice(0, MODEL_PICKER_MAX_SLOTS).map((value) => {
+          ? codes.slice().map((value) => {
               const normalized = normalizeShortcutVal(value);
               return normalized === '\u00A0' ? '' : normalized;
             })
@@ -4669,14 +4675,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Persist both profile arrays in one atomic storage update.
     function applyModelPickerCodeProfiles(codesByProfile, toastMsg) {
-      const latest = (codesByProfile?.[MODEL_CATALOG_PROFILE_LATEST] || []).slice(
-        0,
-        MODEL_PICKER_MAX_SLOTS,
-      );
-      const legacy = (codesByProfile?.[MODEL_CATALOG_PROFILE_LEGACY] || []).slice(
-        0,
-        MODEL_PICKER_MAX_SLOTS,
-      );
+      const latest = (codesByProfile?.[MODEL_CATALOG_PROFILE_LATEST] || []).slice();
+      const legacy = (codesByProfile?.[MODEL_CATALOG_PROFILE_LEGACY] || []).slice();
       while (latest.length < MODEL_PICKER_MAX_SLOTS) latest.push('');
       while (legacy.length < MODEL_PICKER_MAX_SLOTS) legacy.push('');
 
@@ -5274,9 +5274,12 @@ enableEditableOpacity(
     if (outcome === 'failed') {
       setModelCatalogRefreshPromptVisible(true, `${source}:retry-prompt`);
       renderAll({ allowPendingRebuild: true });
-      const msg =
-        chrome.i18n?.getMessage?.('toast_modelPickerOpenChatGptTab') ||
-        'Open a ChatGPT tab to pick models.';
+      const msg = result?.error === 'NO_CHATGPT_TAB'
+        ? chrome.i18n?.getMessage?.('toast_modelPickerOpenChatGptTab') || 'Open a ChatGPT tab to pick models.'
+        : Object.entries(result?.profiles || {})
+            .filter(([, response]) => !response?.ok)
+            .map(([surface, response]) => `${surface}: ${response?.error || 'MODEL_REFRESH_FAILED'}`)
+            .join('; ') || result?.error || 'MODEL_REFRESH_FAILED';
       window.toast?.show?.(msg);
       return null;
     }
@@ -5413,7 +5416,7 @@ enableEditableOpacity(
       typeof window.ShortcutUtils?.getModelPickerCodesCache === 'function'
         ? window.ShortcutUtils.getModelPickerCodesCache(normalizedProfile)
         : buildDefaultModelPickerCodes({ profile: normalizedProfile });
-    const raw = (Array.isArray(src) ? src : []).slice(0, MAX_SLOTS);
+    const raw = (Array.isArray(src) ? src : []).slice();
     while (raw.length < MAX_SLOTS) raw.push('');
     return raw;
   };
@@ -5423,7 +5426,7 @@ enableEditableOpacity(
     profile = getSelectedModelCatalogProfile(),
   ) => {
     const normalizedProfile = normalizeModelCatalogProfile(profile);
-    const out = (codes || []).slice(0, MAX_SLOTS);
+    const out = (codes || []).slice();
     while (out.length < MAX_SLOTS) out.push('');
     window.saveModelPickerKeyCodes(out, () => {
       renderInputs();
@@ -5926,7 +5929,7 @@ enableEditableOpacity(
         const yes = confirm('Reset all model keys to defaults?');
         if (!yes) return;
         const profile = getSelectedModelCatalogProfile();
-        const defaults = buildDefaultModelPickerCodes({ profile }).slice(0, MAX_SLOTS);
+        const defaults = buildDefaultModelPickerCodes({ profile }).slice();
         window.saveModelPickerKeyCodes(defaults, () => {
           // Toast on reset
           window.toast.show('Model keys reset to defaults.');
@@ -6541,7 +6544,7 @@ enableEditableOpacity(
                   : null;
               const normalizeProfile = (profile, codes) => {
                 const padded = Array.isArray(codes)
-                  ? codes.slice(0, MODEL_PICKER_MAX_SLOTS)
+                  ? codes.slice()
                   : buildDefaultModelPickerCodes({ profile });
                 while (padded.length < MODEL_PICKER_MAX_SLOTS) padded.push('');
                 return typeof window.ModelLabels?.normalizeProfileKeyCodes === 'function'
@@ -6574,10 +6577,7 @@ enableEditableOpacity(
             setActiveModelConfigIdCache(settings.activeModelConfigId, 'cloud-restore');
           }
           if (Array.isArray(settings?.modelNames) && settings.modelNames.length >= 5) {
-            window.MODEL_NAMES = resolveModelActionableNames(settings.modelNames).slice(
-              0,
-              MODEL_PICKER_MAX_SLOTS,
-            );
+            window.MODEL_NAMES = resolveModelActionableNames(settings.modelNames);
             if (typeof window.modelPickerRender === 'function') {
               try {
                 window.modelPickerRender();

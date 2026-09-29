@@ -1,17 +1,25 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const SHORTCUT_AUDIT_SCHEMA_VERSION = 1;
+export const SHORTCUT_AUDIT_SCHEMA_VERSION = 2;
 export const STORAGE_RECOVERY_SCHEMA_VERSION = 1;
 export const AUDIT_ARTIFACT_FILENAMES = Object.freeze({
   json: 'shortcut-audit.json',
   csv: 'shortcut-audit.csv',
   backlog: 'shortcut-repair-backlog.md',
   recovery: 'storage-recovery.json',
+  checkpoint: 'shortcut-audit-checkpoint.json',
   failuresIndex: 'failures/index.json',
 });
 
-const FAILURE_STATUSES = new Set(['product-fail', 'environment-fail', 'manual-pending']);
+const FAILURE_STATUSES = new Set([
+  'product-fail',
+  'selector-drift',
+  'coverage-gap',
+  'environment-fail',
+  'account-unavailable',
+  'manual-pending',
+]);
 const MODEL_PHASE_ACTION_IDS = new Set([
   'shortcutKeyToggleModelSelector',
   'shortcutKeyToggleChatWork',
@@ -65,6 +73,7 @@ export function createStorageMutationLedger(originalStorage = {}, auditValues = 
       originalValue: cloneValue(valueOrNull(originalPresent, originalStorage[key])),
       auditPresent: true,
       auditValue: cloneValue(auditValues[key]),
+      auditValues: [cloneValue(auditValues[key])],
       observedBeforeRestorePresent: null,
       observedBeforeRestoreValue: null,
       compareBeforeRestore: 'not-observed',
@@ -80,21 +89,35 @@ export function buildStorageRecoveryPlan(ledger = [], observedStorage = {}) {
   const entries = ledger.map((entry) => {
     const observedPresent = hasOwn(observedStorage, entry.key);
     const observedValue = valueOrNull(observedPresent, observedStorage[entry.key]);
-    const unchanged =
+    const auditValues = entry.auditValues?.length ? entry.auditValues : [entry.auditValue];
+    const auditValueMatches =
       observedPresent === entry.auditPresent &&
-      valuesEqual(observedValue, entry.auditValue);
-    const restoreAction = unchanged
+      auditValues.some((auditValue) => valuesEqual(observedValue, auditValue));
+    const originalValueMatches =
+      observedPresent === entry.originalPresent &&
+      valuesEqual(observedValue, entry.originalValue);
+    const restoreAction = auditValueMatches
       ? entry.originalPresent
         ? 'set-original'
         : 'remove-originally-absent'
-      : 'preserve-concurrent-edit';
+      : originalValueMatches
+        ? 'leave-unchanged'
+        : 'preserve-concurrent-edit';
     return {
       ...entry,
       observedBeforeRestorePresent: observedPresent,
       observedBeforeRestoreValue: cloneValue(observedValue),
-      compareBeforeRestore: unchanged ? 'audit-value-match' : 'conflict',
+      compareBeforeRestore: auditValueMatches
+        ? 'audit-value-match'
+        : originalValueMatches
+          ? 'original-value-match'
+          : 'conflict',
       restoreAction,
-      status: unchanged ? 'restore-planned' : 'conflict',
+      status: auditValueMatches
+        ? 'restore-planned'
+        : originalValueMatches
+          ? 'unchanged'
+          : 'conflict',
     };
   });
   return {
@@ -110,6 +133,9 @@ export function buildStorageRecoveryPlan(ledger = [], observedStorage = {}) {
     conflictKeys: entries
       .filter((entry) => entry.restoreAction === 'preserve-concurrent-edit')
       .map((entry) => entry.key),
+    unchangedKeys: entries
+      .filter((entry) => entry.restoreAction === 'leave-unchanged')
+      .map((entry) => entry.key),
   };
 }
 
@@ -122,13 +148,17 @@ export function finalizeStorageRecoveryPlan(plan, finalStorage = {}) {
         ? entry.originalPresent
         : entry.restoreAction === 'remove-originally-absent'
           ? false
-          : entry.observedBeforeRestorePresent;
+          : entry.restoreAction === 'leave-unchanged'
+            ? entry.originalPresent
+            : entry.observedBeforeRestorePresent;
     const expectedValue =
       entry.restoreAction === 'set-original'
         ? entry.originalValue
         : entry.restoreAction === 'remove-originally-absent'
           ? null
-          : entry.observedBeforeRestoreValue;
+          : entry.restoreAction === 'leave-unchanged'
+            ? entry.originalValue
+            : entry.observedBeforeRestoreValue;
     const finalMatchesExpected =
       finalPresent === expectedPresent && valuesEqual(finalValue, expectedValue);
     return {
@@ -138,7 +168,9 @@ export function finalizeStorageRecoveryPlan(plan, finalStorage = {}) {
       status:
         entry.compareBeforeRestore === 'conflict'
           ? 'conflict-preserved'
-          : finalMatchesExpected
+          : finalMatchesExpected && entry.restoreAction === 'leave-unchanged'
+            ? 'unchanged'
+            : finalMatchesExpected
             ? 'restored'
             : 'restore-failed',
     };
@@ -191,12 +223,29 @@ export function buildShortcutRerunCommand(row, script = 'npm run playwright:chat
   return [script, ...args.map(shellArg)].join(' ');
 }
 
-function mapLiveStatus(status) {
-  if (status === 'pass') return 'pass';
-  if (status === 'fail') return 'product-fail';
-  if (status === 'environment-fail') return 'environment-fail';
-  if (status === 'manual') return 'manual-pending';
-  if (status === 'not-applicable') return 'not-applicable';
+function mapLiveStatus(liveRow) {
+  const semanticStatus = liveRow?.semantic?.status || liveRow?.semanticStatus || '';
+  if (semanticStatus === 'pass') return 'pass';
+  if (semanticStatus === 'fail') {
+    return liveRow?.confirmation?.status === 'fail' ? 'product-fail' : 'coverage-gap';
+  }
+  if (semanticStatus === 'selector-drift') return 'selector-drift';
+  if (semanticStatus === 'environment-fail') return 'environment-fail';
+  if (semanticStatus === 'account-unavailable') return 'account-unavailable';
+  if (semanticStatus === 'not-present') return 'not-present';
+  if (semanticStatus === 'retired') return 'retired';
+  if (semanticStatus === 'not-applicable') return 'not-applicable';
+  if (liveRow?.status === 'coverage-gap') return 'coverage-gap';
+  if (liveRow?.status === 'selector-drift') return 'selector-drift';
+  if (liveRow?.status === 'account-unavailable') return 'account-unavailable';
+  if (liveRow?.status === 'not-present') return 'not-present';
+  if (liveRow?.status === 'retired') return 'retired';
+  if (liveRow?.status === 'environment-fail') return 'environment-fail';
+  if (liveRow?.status === 'manual') return 'manual-pending';
+  if (liveRow?.status === 'not-applicable') return 'not-applicable';
+  // Older reports used a target click or source excerpt as a behavioral pass.
+  // Preserve that evidence, but require a separate semantic postcondition.
+  if (liveRow?.status === 'pass' || liveRow?.status === 'fail') return 'coverage-gap';
   return 'not-run';
 }
 
@@ -210,7 +259,7 @@ function summarizeStatuses(rows) {
 
 function buildGlobalAuditRow(shortcut, liveRow, options) {
   const status = liveRow
-    ? mapLiveStatus(liveRow.status)
+    ? mapLiveStatus(liveRow)
     : options.runMode === 'environment-fail'
       ? 'environment-fail'
       : 'not-run';
@@ -221,6 +270,29 @@ function buildGlobalAuditRow(shortcut, liveRow, options) {
   const observedBehavior = liveRow
     ? liveRow.observedSelector || liveRow.observedTextSnippet || liveRow.reason || ''
     : 'No live observation was collected in this phase.';
+  const sourceProof = {
+    status: 'present',
+    proofMethod: 'source-inventory',
+    owner: shortcut.handlerRef || 'extension/content.js shortcut runtime',
+  };
+  const targetProof = liveRow?.targetProof || {
+    status: expectedTarget ? 'not-run' : 'not-applicable',
+    expectedTargetRef: expectedTarget,
+    observedTargetRef: '',
+    proofMethod: expectedTarget ? 'not-observed' : 'not-applicable',
+  };
+  const routingProof = liveRow?.routingProof || {
+    status: 'not-run',
+    proofMethod: 'not-observed',
+    observedTargetRef: '',
+  };
+  const semanticProof = liveRow?.semantic || {
+    status: 'not-run',
+    proofMethod: 'none',
+    expected: expectedBehavior,
+    observed: '',
+    reason: liveRow?.reason || 'No semantic postcondition was collected.',
+  };
   const row = {
     rowId: `global:${shortcut.actionId}`,
     kind: 'global',
@@ -234,11 +306,11 @@ function buildGlobalAuditRow(shortcut, liveRow, options) {
     expected: expectedBehavior,
     observed: observedBehavior,
     status,
-    proofMethod: liveRow
-      ? 'playwright-live'
+    proofMethod: liveRow?.semantic?.proofMethod || (liveRow
+      ? 'playwright-routing-only'
       : options.runMode === 'environment-fail'
         ? 'environment-failure'
-        : 'inventory-only',
+        : 'inventory-only'),
     reason:
       liveRow?.reason ||
       (options.runMode === 'environment-fail'
@@ -252,12 +324,47 @@ function buildGlobalAuditRow(shortcut, liveRow, options) {
     validationMode: shortcut.validationMode,
     probeMode: shortcut.activationProbeMode,
     expectedTargetRef: expectedTarget,
+    sourceProof,
+    targetProof,
+    routingProof,
+    semanticProof,
+    sourceStatus: sourceProof.status,
+    targetStatus: targetProof.status,
+    routingStatus: routingProof.status,
+    semanticStatus: semanticProof.status,
+    semanticProofMethod: semanticProof.proofMethod,
+    confirmationCount: liveRow?.confirmation?.attempts?.length || 0,
   };
   row.rerunCommand = buildShortcutRerunCommand(row);
   return row;
 }
 
 function buildFixedAuditRow(contract, options) {
+  const liveRow = options.liveRow || null;
+  const sourcePresent = contract.status === 'present';
+  const status = liveRow
+    ? mapLiveStatus(liveRow)
+    : options.runMode === 'environment-fail'
+      ? 'environment-fail'
+      : 'not-run';
+  const sourceProof = {
+    status: sourcePresent ? 'present' : 'missing',
+    proofMethod: 'source-inventory',
+    observed: contract.sourceExcerpt || contract.observed?.sourceExcerpt || '',
+    reason: contract.message || '',
+  };
+  const routingProof = liveRow?.routingProof || {
+    status: 'not-run',
+    proofMethod: 'not-observed',
+    observedTargetRef: '',
+  };
+  const semanticProof = liveRow?.semantic || {
+    status: 'not-run',
+    proofMethod: 'none',
+    expected: `Exercise fixed keyboard contract ${contract.classification} and verify its postcondition.`,
+    observed: '',
+    reason: liveRow?.reason || 'Static source presence is not live keyboard behavior proof.',
+  };
   const row = {
     rowId: `fixed:${contract.contractId}`,
     kind: 'fixed-contract',
@@ -268,24 +375,35 @@ function buildFixedAuditRow(contract, options) {
     profile: '',
     slot: null,
     code: '',
-    modifiers: 'source contract',
-    expected: `Source contract ${contract.classification} is present and classified.`,
-    observed:
-      contract.sourceExcerpt ||
-      contract.observed?.sourceExcerpt ||
-      'No source excerpt was available.',
-    status: contract.status === 'present' ? 'pass' : 'product-fail',
-    proofMethod: 'source-inventory',
-    reason:
-      contract.status === 'present'
-        ? 'Current source contains the expected fixed/gated contract.'
-        : contract.message || 'Expected fixed/gated contract is missing.',
+    modifiers: liveRow?.modifiers || 'fixed keyboard contract',
+    expected: `Exercise fixed keyboard contract ${contract.classification} and verify its postcondition.`,
+    observed: semanticProof.observed || liveRow?.observedSelector || liveRow?.reason || '',
+    status,
+    proofMethod: semanticProof.proofMethod || (liveRow ? 'playwright-routing-only' : 'source-inventory'),
+    reason: liveRow?.reason || (sourcePresent
+      ? 'Source contract is present; live keyboard behavior has not been proved.'
+      : contract.message || 'Expected fixed/gated contract is missing.'),
     evidencePath: 'shortcut-audit.json',
     rerunCommand: '',
     owner: 'extension/content.js',
     validationMode: 'fixed-contract',
     probeMode: '',
     expectedTargetRef: '',
+    sourceProof,
+    targetProof: liveRow?.targetProof || {
+      status: 'not-applicable',
+      expectedTargetRef: '',
+      observedTargetRef: '',
+      proofMethod: 'not-applicable',
+    },
+    routingProof,
+    semanticProof,
+    sourceStatus: sourceProof.status,
+    targetStatus: liveRow?.targetProof?.status || 'not-applicable',
+    routingStatus: routingProof.status,
+    semanticStatus: semanticProof.status,
+    semanticProofMethod: semanticProof.proofMethod,
+    confirmationCount: liveRow?.confirmation?.attempts?.length || 0,
   };
   row.rerunCommand = buildShortcutRerunCommand(row);
   return row;
@@ -347,10 +465,15 @@ export function buildShortcutAuditReport({
   const liveRowsByActionId = Object.fromEntries(
     (liveProbeReport?.rows || []).map((row) => [row.actionId, row]),
   );
+  const liveFixedRowsByContractId = Object.fromEntries(
+    (liveProbeReport?.fixedRows || []).map((row) => [row.contractId, row]),
+  );
   const actionFilter = new Set(onlyActionIds || []);
   const fixedFilter = new Set(fixedContractIds || []);
+  const fixedOnlyFilter = fixedFilter.size > 0 && actionFilter.size === 0;
   const rows = [];
   for (const shortcut of inventory?.shortcuts || []) {
+    if (fixedOnlyFilter) continue;
     if (actionFilter.size && !actionFilter.has(shortcut.actionId)) continue;
     const modelAction = isModelPhaseAction(shortcut);
     if (normalizedPhase === 'global' && modelAction) continue;
@@ -362,10 +485,16 @@ export function buildShortcutAuditReport({
       }),
     );
   }
-  if (normalizedPhase !== 'model') {
+  if (normalizedPhase !== 'model' && (!actionFilter.size || fixedFilter.size > 0)) {
     for (const contract of inventory?.fixedKeyboardContracts || []) {
       if (fixedFilter.size && !fixedFilter.has(contract.contractId)) continue;
-      rows.push(buildFixedAuditRow(contract, { phase: normalizedPhase }));
+      rows.push(
+        buildFixedAuditRow(contract, {
+          phase: normalizedPhase,
+          runMode,
+          liveRow: liveFixedRowsByContractId[contract.contractId],
+        }),
+      );
     }
   }
   if (normalizedPhase !== 'global') {
@@ -384,6 +513,7 @@ export function buildShortcutAuditReport({
     phase: normalizedPhase,
     runFolderName,
     runFolderPath,
+    checkpoint: liveProbeReport?.checkpoint || null,
     inventoryIssues: inventory?.inventoryIssues || [],
     inventorySummary: {
       runtimeActions: inventory?.allRuntimeActionIds?.length || 0,
@@ -444,6 +574,12 @@ export function renderShortcutAuditCsv(report) {
     'observed',
     'status',
     'proofMethod',
+    'sourceStatus',
+    'targetStatus',
+    'routingStatus',
+    'semanticStatus',
+    'semanticProofMethod',
+    'confirmationCount',
     'reason',
     'evidencePath',
     'rerunCommand',
@@ -463,7 +599,9 @@ function markdownCell(value) {
 export function renderShortcutRepairBacklog(report) {
   const rows = report?.rows || [];
   const productFailures = rows.filter((row) => row.status === 'product-fail');
+  const coverageRows = rows.filter((row) => ['coverage-gap', 'selector-drift'].includes(row.status));
   const environmentRows = rows.filter((row) => row.status === 'environment-fail');
+  const accountRows = rows.filter((row) => row.status === 'account-unavailable');
   const manualRows = rows.filter((row) => row.status === 'manual-pending');
   const lines = [
     '# Shortcut repair backlog',
@@ -497,11 +635,21 @@ export function renderShortcutRepairBacklog(report) {
     }
   }
   lines.push('## Environment or account gaps', '');
-  if (!environmentRows.length) {
+  if (!environmentRows.length && !accountRows.length) {
     lines.push('None recorded.');
   } else {
-    for (const row of environmentRows) {
+    for (const row of [...environmentRows, ...accountRows]) {
       lines.push(`- \`${row.rowId}\`: ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`);
+    }
+  }
+  lines.push('', '## Coverage gaps and selector drift', '');
+  if (!coverageRows.length) {
+    lines.push('None recorded.');
+  } else {
+    for (const row of coverageRows) {
+      lines.push(
+        `- \`${row.rowId}\` (${row.status}): ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`,
+      );
     }
   }
   lines.push('', '## Supervised or manual-pending rows', '');
@@ -528,7 +676,34 @@ function safeEvidenceName(rowId) {
 
 export async function writeShortcutAuditArtifacts(folderPath, report, recoveryReport) {
   const failuresPath = path.join(folderPath, 'failures');
+  const checkpointPath = path.join(folderPath, AUDIT_ARTIFACT_FILENAMES.checkpoint);
   await mkdir(failuresPath, { recursive: true });
+  try {
+    await access(checkpointPath);
+  } catch {
+    const inventoryOnly = report?.runMode === 'inventory-only';
+    await writeFile(
+      checkpointPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          status: inventoryOnly ? 'inventory-only' : 'missing-live-checkpoint',
+          createdAt: report?.generatedAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          mutationOccurred: false,
+          currentCase: null,
+          completedCases: [],
+          storageRecoveryStatus: recoveryReport?.status || 'not-run',
+          reason: inventoryOnly
+            ? 'Inventory-only run performed no browser or storage mutation.'
+            : 'A live run must write its durable checkpoint before mutation.',
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  }
   const rows = (report?.rows || []).map((row) => ({ ...row }));
   const failureRows = rows.filter((row) => FAILURE_STATUSES.has(row.status));
   const evidenceEntries = [];
@@ -599,6 +774,7 @@ export async function writeShortcutAuditArtifacts(folderPath, report, recoveryRe
       csvPath: path.join(folderPath, AUDIT_ARTIFACT_FILENAMES.csv),
       backlogPath: path.join(folderPath, AUDIT_ARTIFACT_FILENAMES.backlog),
       recoveryPath: path.join(folderPath, AUDIT_ARTIFACT_FILENAMES.recovery),
+      checkpointPath,
       failuresIndexPath: path.join(folderPath, AUDIT_ARTIFACT_FILENAMES.failuresIndex),
       failuresPath,
     },
@@ -614,8 +790,24 @@ export function evaluateShortcutAuditExit(report, recoveryReport, { inventoryOnl
     reasons.push(`storage recovery ${recoveryReport.status}`);
   }
   if (!inventoryOnly) {
+    if (report?.checkpoint && report.checkpoint.status !== 'completed') {
+      reasons.push(`audit checkpoint ${report.checkpoint.status || 'missing'}`);
+    }
+    if (report?.checkpoint?.fixtureRestored === false) {
+      reasons.push('browser fixture recovery failed');
+    }
+    if (
+      report?.checkpoint &&
+      !['clean', 'not-needed'].includes(report.checkpoint.clipboardRecoveryStatus)
+    ) {
+      reasons.push(`clipboard recovery ${report.checkpoint.clipboardRecoveryStatus || 'unverified'}`);
+    }
     const environmentRows = (report?.rows || []).filter((row) => row.status === 'environment-fail');
     if (environmentRows.length) reasons.push(`${environmentRows.length} environment failure(s)`);
+    const coverageRows = (report?.rows || []).filter((row) =>
+      ['coverage-gap', 'selector-drift'].includes(row.status),
+    );
+    if (coverageRows.length) reasons.push(`${coverageRows.length} coverage/selector gap(s)`);
     const manualRows = (report?.rows || []).filter((row) => row.status === 'manual-pending');
     if (manualRows.length) reasons.push(`${manualRows.length} manual-pending row(s)`);
     const notRunRows = (report?.rows || []).filter((row) => row.status === 'not-run');

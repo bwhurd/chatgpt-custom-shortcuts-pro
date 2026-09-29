@@ -21,7 +21,7 @@ const DEV_SCRAPE_WIDE_ALLOWED_FIXTURE_URLS = Object.freeze([
   DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL,
 ]);
 const TURN_SELECTOR =
-  'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn]';
+  'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn], [data-turn-key], [data-chatgpt-search-unit-key]';
 const OPEN_MENU_SELECTOR = '[data-radix-menu-content][data-state="open"][role="menu"]';
 const MODEL_PICKER_SELECTORS =
   typeof globalThis !== 'undefined' ? globalThis.CSPModelPickerSelectors || {} : {};
@@ -402,16 +402,24 @@ function hasWebCitation(turn) {
 }
 
 function isAssistantTurn(turn) {
+  const unitKey = turn?.getAttribute?.('data-chatgpt-search-unit-key') || '';
   return (
     turn?.getAttribute?.('data-turn') === 'assistant' ||
-    !!turn?.querySelector?.('[data-message-author-role="assistant"]')
+    unitKey.endsWith(':assistant') ||
+    !!turn?.querySelector?.(
+      '[data-message-author-role="assistant"], [data-chatgpt-search-unit-key$=":assistant"]',
+    )
   );
 }
 
 function isUserTurn(turn) {
+  const unitKey = turn?.getAttribute?.('data-chatgpt-search-unit-key') || '';
   return (
     turn?.getAttribute?.('data-turn') === 'user' ||
-    !!turn?.querySelector?.('[data-message-author-role="user"]')
+    unitKey.endsWith(':user') ||
+    !!turn?.querySelector?.(
+      '[data-message-author-role="user"], [data-chatgpt-search-unit-key$=":user"]',
+    )
   );
 }
 
@@ -498,14 +506,19 @@ function findThreadBottomElement(documentObj) {
   return (
     documentObj.getElementById('thread-bottom') ||
     documentObj.getElementById('thread-bottom-container') ||
+    documentObj.querySelector('form[data-chatgpt-composer]') ||
     null
   );
 }
 
 function findHeaderAreaElement(documentObj) {
   const header = documentObj.getElementById('page-header');
-  if (!header) return null;
-  return header.closest('[data-scroll-root]') || header.parentElement || header;
+  if (header) return header.closest('[data-scroll-root]') || header.parentElement || header;
+  return (
+    documentObj
+      .querySelector('main header [data-testid="app-shell-header-context-menu-surface"]')
+      ?.closest('header') || documentObj.querySelector('main header')
+  );
 }
 
 function getTurnActionGroup(turn) {
@@ -518,7 +531,11 @@ function getTurnActionGroup(turn) {
     (element) =>
       element instanceof Element && isVisible(element) && element.querySelector('button'),
   );
-  return candidates[0] || null;
+  if (candidates[0]) return candidates[0];
+  const moreActionsButton = Array.from(turn.querySelectorAll('button')).find(
+    (button) => isVisible(button) && isMoreActionsButton(button),
+  );
+  return moreActionsButton?.parentElement || null;
 }
 
 function getTurnHoverTarget(turn) {
@@ -546,7 +563,7 @@ function getTurnMenuTriggerCandidates(turn) {
     isVisible(button),
   );
   const prioritized = [
-    ...buttons.filter((button) => button.getAttribute('aria-label') === 'More actions'),
+    ...buttons.filter(isMoreActionsButton),
     ...buttons.filter(
       (button) =>
         button.getAttribute('aria-haspopup') === 'menu' &&
@@ -565,6 +582,14 @@ function getTurnMenuTriggerCandidates(turn) {
   return prioritized.filter(
     (button, index, list) => button instanceof Element && list.indexOf(button) === index,
   );
+}
+
+function isMoreActionsButton(button) {
+  if (button.getAttribute('aria-label') === 'More actions') return true;
+  return Array.from(button.querySelectorAll('svg use')).some((iconUse) => {
+    const href = iconUse.getAttribute('href') || iconUse.getAttribute('xlink:href') || '';
+    return href.includes('#623957') || href.includes('#f6d0e2');
+  });
 }
 
 function describeTurnActionButtons(turn) {
@@ -610,6 +635,24 @@ async function revealTurnActions(turn, windowObj) {
 }
 
 async function ensureSidebarState(documentObj, windowObj, state) {
+  const appShellToggleSelector =
+    'button[data-app-shell-sidebar-trigger="true"][aria-controls="app-shell-sidebar"][aria-expanded]';
+  const getVisibleAppShellToggle = () =>
+    Array.from(documentObj.querySelectorAll(appShellToggleSelector)).find(isVisible) || null;
+  const appShellToggle = getVisibleAppShellToggle();
+  if (appShellToggle && (state === 'collapsed' || state === 'expanded')) {
+    const expectedExpanded = state === 'expanded';
+    if ((appShellToggle.getAttribute('aria-expanded') === 'true') !== expectedExpanded) {
+      smartClick(appShellToggle, windowObj);
+      await sleep(300);
+    }
+    const currentToggle = getVisibleAppShellToggle();
+    if ((currentToggle?.getAttribute('aria-expanded') === 'true') !== expectedExpanded) {
+      throw new Error(`Could not set app-shell sidebar to ${state}`);
+    }
+    return;
+  }
+
   const closeButton = documentObj.querySelector('button[data-testid="close-sidebar-button"]');
   const openButton =
     documentObj.querySelector('button[data-testid="open-sidebar-button"]') ||

@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  buildShortcutAuditReport,
   buildShortcutRerunCommand,
   evaluateShortcutAuditExit,
   writeShortcutAuditArtifacts,
 } from './playwright/lib/shortcut-audit-artifacts.mjs';
+import { resolveAuditOwnedFixtureFromCheckpoint } from './playwright/lib/devscrape-wide-core.mjs';
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'csp-shortcut-audit-fixture-'));
 try {
@@ -97,6 +99,150 @@ try {
     },
     'live audit exit policy should expose environment, manual, and not-run gaps',
   );
+  assert.deepEqual(
+    evaluateShortcutAuditExit(
+      {
+        inventoryIssues: [],
+        rows: [],
+        checkpoint: {
+          status: 'completed',
+          fixtureRestored: true,
+          clipboardRecoveryStatus: 'partial',
+        },
+      },
+      { status: 'clean' },
+    ),
+    {
+      ok: false,
+      exitCode: 1,
+      reasons: ['clipboard recovery partial'],
+    },
+    'live audit exit policy must block when the original clipboard state was not fully restored',
+  );
+  const semanticAudit = buildShortcutAuditReport({
+    inventory: {
+      shortcuts: ['source-only', 'click-only', 'intercepted-only', 'native-success', 'single-failure', 'confirmed-failure'].map(
+        (actionId) => ({
+          actionId,
+          label: actionId,
+          defaultCode: 'KeyA',
+          handlerRef: 'content.js:handler',
+          validationMode: 'scrape-targets',
+          activationProbeMode: 'click-target',
+          activationProbeExpectedTargetRef: 'button-target',
+        }),
+      ),
+      fixedKeyboardContracts: [
+        { contractId: 'source-only-contract', classification: 'fixed-gate', status: 'present' },
+        { contractId: 'live-contract', classification: 'fixed-listener', status: 'present' },
+      ],
+      modelPickerSlotRows: [],
+      inventoryIssues: [],
+    },
+    liveProbeReport: {
+      rows: [
+        {
+          actionId: 'click-only',
+          status: 'pass',
+          routingProof: { status: 'observed', proofMethod: 'captured-click' },
+        },
+        {
+          actionId: 'intercepted-only',
+          status: 'fail',
+          routingProof: {
+            status: 'intercepted',
+            proofMethod: 'trusted-keydown-default-prevention',
+            keydownDefaultPrevented: true,
+          },
+          semantic: { status: 'fail', proofMethod: 'native-ui-observer' },
+        },
+        {
+          actionId: 'native-success',
+          status: 'pass',
+          routingProof: { status: 'observed', proofMethod: 'captured-click' },
+          semantic: { status: 'pass', proofMethod: 'native-ui-observer' },
+        },
+        {
+          actionId: 'single-failure',
+          status: 'fail',
+          semantic: { status: 'fail', proofMethod: 'native-ui-observer' },
+        },
+        {
+          actionId: 'confirmed-failure',
+          status: 'fail',
+          semantic: { status: 'fail', proofMethod: 'native-ui-observer' },
+          confirmation: { status: 'fail', attempts: [{ status: 'fail' }, { status: 'fail' }] },
+        },
+      ],
+      fixedRows: [
+        {
+          contractId: 'live-contract',
+          status: 'pass',
+          semantic: { status: 'pass', proofMethod: 'native-ui-observer' },
+        },
+      ],
+    },
+    phase: 'global',
+    runMode: 'live',
+  });
+  const semanticRows = Object.fromEntries(semanticAudit.rows.map((row) => [row.rowId, row]));
+  assert.equal(semanticRows['global:source-only'].status, 'not-run');
+  assert.equal(semanticRows['global:source-only'].sourceStatus, 'present');
+  assert.equal(semanticRows['fixed:source-only-contract'].status, 'not-run');
+  assert.equal(semanticRows['global:click-only'].status, 'coverage-gap');
+  assert.equal(semanticRows['global:click-only'].routingStatus, 'observed');
+  assert.equal(semanticRows['global:click-only'].semanticStatus, 'not-run');
+  assert.equal(semanticRows['global:intercepted-only'].status, 'coverage-gap');
+  assert.equal(semanticRows['global:intercepted-only'].routingStatus, 'intercepted');
+  assert.equal(semanticRows['global:intercepted-only'].semanticStatus, 'fail');
+  assert.equal(semanticRows['global:native-success'].status, 'pass');
+  assert.equal(semanticRows['fixed:live-contract'].status, 'pass');
+  assert.equal(semanticRows['global:single-failure'].status, 'coverage-gap');
+  assert.equal(semanticRows['global:confirmed-failure'].status, 'product-fail');
+  assert.equal(semanticRows['global:confirmed-failure'].confirmationCount, 2);
+  const fixedOnlyAudit = buildShortcutAuditReport({
+    inventory: {
+      shortcuts: [{ actionId: 'unrelated-global-action', label: 'Unrelated global action' }],
+      fixedKeyboardContracts: [
+        { contractId: 'live-contract', classification: 'fixed-listener', status: 'present' },
+      ],
+      modelPickerSlotRows: [],
+      inventoryIssues: [],
+    },
+    liveProbeReport: {
+      fixedRows: [
+        {
+          contractId: 'live-contract',
+          status: 'pass',
+          semantic: { status: 'pass', proofMethod: 'native-ui-observer' },
+        },
+      ],
+    },
+    fixedContractIds: ['live-contract'],
+    phase: 'global',
+    runMode: 'live',
+  });
+  assert.deepEqual(
+    fixedOnlyAudit.rows.map((row) => row.rowId),
+    ['fixed:live-contract'],
+    'a fixed-contract-only rerun must not carry unrelated global not-run rows',
+  );
+  assert.equal(fixedOnlyAudit.rows[0].status, 'pass');
+  assert.ok(
+    evaluateShortcutAuditExit(semanticAudit, { status: 'clean' }).reasons.includes(
+      '3 coverage/selector gap(s)',
+    ),
+    'live audit exit policy must fail while semantic proof is missing',
+  );
+  assert.deepEqual(
+    evaluateShortcutAuditExit(
+      { inventoryIssues: [], rows: [{ status: 'coverage-gap' }] },
+      { status: 'not-run' },
+      { inventoryOnly: true },
+    ),
+    { ok: true, exitCode: 0, reasons: [] },
+    'inventory-only runs describe missing live proof without failing the schema check',
+  );
   assert.equal(
     buildShortcutRerunCommand({
       kind: 'model-slot',
@@ -106,6 +252,37 @@ try {
       actionId: 'model-action',
     }),
     'npm run playwright:chatgpt:audit-shortcuts -- --phase model --model-profile latest --model-slot 14 --model-action-id model-action',
+  );
+  const auditFixtureUrl = 'https://chatgpt.com/c/audit-owned-123';
+  const auditFixtureCheckpoint = {
+    status: 'completed',
+    fixtureUrl: auditFixtureUrl,
+    auditFixtureUrl,
+    auditFixtureOwned: true,
+    auditOwnedConversationIds: ['audit-owned-123'],
+    finalBrowserState: { fixtureRestored: true },
+  };
+  assert.deepEqual(
+    resolveAuditOwnedFixtureFromCheckpoint(auditFixtureCheckpoint, {
+      protectedFixtureUrls: ['https://chatgpt.com/c/fixed-fixture'],
+    }),
+    { kind: 'audit-owned', fixtureUrl: auditFixtureUrl, conversationId: 'audit-owned-123' },
+  );
+  assert.throws(
+    () =>
+      resolveAuditOwnedFixtureFromCheckpoint(
+        { ...auditFixtureCheckpoint, fixtureUrl: 'https://chatgpt.com/c/fixed-fixture', auditFixtureUrl: 'https://chatgpt.com/c/fixed-fixture' },
+        { protectedFixtureUrls: ['https://chatgpt.com/c/fixed-fixture'] },
+      ),
+    /not a verified audit-owned conversation/,
+  );
+  assert.throws(
+    () =>
+      resolveAuditOwnedFixtureFromCheckpoint({
+        ...auditFixtureCheckpoint,
+        finalBrowserState: { fixtureRestored: false },
+      }),
+    /completed, recovered audit-owned fixture/,
   );
   console.log('shortcut audit CSV, Markdown, evidence, and rerun rendering are stable');
 } finally {

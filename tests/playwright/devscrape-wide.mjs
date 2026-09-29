@@ -6,6 +6,11 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 
 import { chromium } from 'playwright';
+import {
+  buildSourceSelectorInventory,
+  runSourceSelectorAudit,
+  writeSourceSelectorReport,
+} from './lib/source-selector-audit.mjs';
 
 import {
   buildCheckReport,
@@ -15,6 +20,7 @@ import {
   getInspectorCapturesRoot,
   getRepoRoot,
   injectDevScrapeWideIntoPage,
+  loadAuditOwnedFixtureFromRun,
   loadDevScrapeWideContract,
   normalizeArtifactsInPage,
   refreshModelCatalogForValidation,
@@ -22,6 +28,7 @@ import {
   runWideScrapeWithPlaywright,
   verifyExtensionRuntimeReachable,
   waitForEndpointReady,
+  waitForAuditOwnedFixtureContent,
   waitForFixtureConversationReady,
   writeCheckReportFiles,
   writeInventoryOnlyShortcutAuditRun,
@@ -137,6 +144,7 @@ function printUsage() {
   node tests/playwright/devscrape-wide.mjs --action validate-wide
   node tests/playwright/devscrape-wide.mjs --action probe-shortcuts [--shortcut-action-id ACTION_ID]
   node tests/playwright/devscrape-wide.mjs --action audit-shortcuts [--inventory-only]
+  node tests/playwright/devscrape-wide.mjs --action audit-selectors
 
 Options:
   --cdp-endpoint URL       Force one CDP endpoint instead of probing the usual candidates
@@ -149,6 +157,8 @@ Options:
   --probe-shortcuts        Run no-token-safe live shortcut activation probes after scrape
   --shortcut-action-id ID  Limit probe-shortcuts to one shortcut. May be repeated.
   --phase PHASE            audit-shortcuts phase: global, model, or all (default: all)
+  --audit-owned-fixture-from-run NAME
+                           Reuse a recovered audit-owned conversation from a prior run for captures
   --fixed-contract-id ID   Limit a fixed-contract rerun to one contract.
   --model-profile NAME     Limit a model rerun to legacy or latest.
   --model-slot N           Limit a model rerun to one zero-based slot.
@@ -447,6 +457,8 @@ async function scrapeWide({
   probeShortcuts = shouldProbeShortcuts(),
   phase = 'all',
   onlyActionIds = [],
+  fixedContractIds = [],
+  fixtureOwnership = null,
 } = {}) {
   const { exports } = await loadDevScrapeWideContract();
   await ensureInspectorCapturesRoot();
@@ -458,20 +470,30 @@ async function scrapeWide({
     loadExtension: !shouldPauseForExtensionSetup(),
     pauseForExtensionSetup: shouldPauseForExtensionSetup(),
   });
-  const page = await context.newPage();
+  const page =
+    (fixtureOwnership
+      ? context.pages().find((candidate) => candidate.url() === fixtureOwnership.fixtureUrl)
+      : null) || (await context.newPage());
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    const fixtureUrl = await chooseAvailableFixtureUrl(page, exports);
+    const fixtureUrl = fixtureOwnership?.fixtureUrl || (await chooseAvailableFixtureUrl(page, exports));
+    if (fixtureOwnership) {
+      if (page.url() !== fixtureUrl) {
+        await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      }
+      await waitForFixtureConversationReady(page, 30000, { fixtureUrl });
+      await waitForAuditOwnedFixtureContent(page, fixtureUrl);
+    }
     await refreshModelCatalogBeforeValidation(page, context, {
-      required: requireExtensionCapture,
+      required: requireExtensionCapture && phase !== 'global',
     });
     await injectDevScrapeWideIntoPage(page);
 
     const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
     console.log(`CDP endpoint: ${cdpEndpoint}`);
     console.log(
-      `Fixture URL: ${fixtureUrl}${fixtureUrl === exports.DEV_SCRAPE_WIDE_FIXTURE_URL ? '' : ' (fallback)'}`,
+      `Fixture URL: ${fixtureUrl}${fixtureOwnership ? ` (audit-owned from ${fixtureOwnership.sourceRunFolder})` : fixtureUrl === exports.DEV_SCRAPE_WIDE_FIXTURE_URL ? '' : ' (fallback)'}`,
     );
     console.log(`Require extension capture: ${requireExtensionCapture ? 'yes' : 'no'}`);
     console.log(`Probe shortcuts: ${probeShortcuts ? 'yes' : 'no'}`);
@@ -481,6 +503,7 @@ async function scrapeWide({
 
     const scrapeResult = await runWideScrapeWithPlaywright(page, context, {
       fixtureUrl,
+      fixtureOwnership,
       requireExtensionCapture,
       extensionProfileDir: getProfileDir(),
     });
@@ -499,9 +522,13 @@ async function scrapeWide({
       try {
         liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
           fixtureUrl,
+          fixtureOwnership,
           extensionProfileDir: getProfileDir(),
+          extensionDir: getExtensionDir(),
+          runFolderPath: writeResult.folderPath,
           phase,
           onlyActionIds,
+          fixedContractIds,
         });
       } catch (error) {
         liveProbeReport = {
@@ -690,6 +717,11 @@ async function auditShortcuts() {
     return result;
   }
 
+  const fixtureSourceRun = getArgValue('--audit-owned-fixture-from-run', '');
+  const fixtureOwnership = fixtureSourceRun
+    ? await loadAuditOwnedFixtureFromRun(fixtureSourceRun)
+    : null;
+
   let scrapeResult = null;
   try {
     scrapeResult = await scrapeWide({
@@ -698,6 +730,8 @@ async function auditShortcuts() {
       probeShortcuts: true,
       phase,
       onlyActionIds: filters.onlyActionIds,
+      fixedContractIds: filters.fixedContractIds,
+      fixtureOwnership,
     });
     const result = await writeAuditArtifactsForRun({
       folderName: scrapeResult.folderName,
@@ -793,6 +827,7 @@ async function probeShortcutsOnly() {
     const liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
       fixtureUrl,
       extensionProfileDir: getProfileDir(),
+      includeFixedContracts: false,
       onlyActionIds,
     });
     console.log(
@@ -834,6 +869,35 @@ async function checkWideForFolder(folderName) {
   return { report, reportFiles };
 }
 
+async function auditSelectors() {
+  const inventory = await buildSourceSelectorInventory(getRepoRoot());
+  const { browser, context, launched } = await connectToAttachedBrowser({
+    autoLaunch: shouldAutoLaunchChrome(), initialUrl: 'https://chatgpt.com/',
+  });
+  let page;
+  try {
+    const conversation = context.pages().find((candidate) => /^https:\/\/chatgpt\.com\/c\/[^/?]+/.test(candidate.url()));
+    const fixtureUrl = conversation?.url() || (await loadDevScrapeWideContract()).exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
+    page = await context.newPage();
+    await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.locator('form[data-chatgpt-composer], form[data-type="unified-composer"]')
+      .first().waitFor({ state: 'visible', timeout: 15000 });
+    const report = await runSourceSelectorAudit(page, inventory);
+    const files = await writeSourceSelectorReport(report, getInspectorCapturesRoot());
+    console.log(`Source selectors: ${JSON.stringify(report.summary)}`);
+    console.log(`JSON report: ${files.jsonPath}`);
+    console.log(`HTML report: ${files.htmlPath}`);
+    if (!hasFlag('--no-open-report')) openLocalFile(files.htmlPath);
+    if (report.sourceErrors.length || report.summary.invalid) process.exitCode = 1;
+  } finally {
+    if (page) await page.close().catch(() => {});
+    await browser.close().catch(() => {});
+    if (launched?.child?.pid) {
+      try { launched.child.kill(); } catch {}
+    }
+  }
+}
+
 async function main() {
   const action = getAction();
   if (hasFlag('--help') || hasFlag('-h')) {
@@ -863,6 +927,11 @@ async function main() {
 
   if (action === 'audit-shortcuts') {
     await auditShortcuts();
+    return;
+  }
+
+  if (action === 'audit-selectors') {
+    await auditSelectors();
     return;
   }
 

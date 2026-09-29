@@ -93,6 +93,8 @@ const includeItems = [
   'background.js',
   'content.js',
   'content-gated-ui-features.js',
+  'composer-layout.css',
+  'composer-layout-bootstrap.js',
   'popup.js',
   'popup.html',
   'popup.css',

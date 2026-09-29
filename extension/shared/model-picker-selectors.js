@@ -9,7 +9,7 @@
   const LEGACY_MODEL_MENU_BUTTON_CASE_SELECTOR =
     'button[data-testid="Model-switCher-dropdown-button"]';
   const COMPOSER_MODEL_MENU_BUTTON_SELECTOR =
-    '[data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]';
+    'button[data-codex-intelligence-trigger="true"][aria-haspopup="menu"], [data-composer-surface="true"] button.__composer-pill[aria-haspopup="menu"][id^="radix-"]';
   const MODEL_MENU_BUTTON_SELECTORS = Object.freeze([
     LEGACY_MODEL_MENU_BUTTON_SELECTOR,
     LEGACY_MODEL_MENU_BUTTON_CASE_SELECTOR,
@@ -33,13 +33,22 @@
   const MODEL_THINKING_EFFORT_OPTION_SELECTOR = '[role="group"] > [role="menuitemradio"]';
   const PILL_ADVANCED_TOGGLE_SELECTOR =
     '[role="menuitem"][aria-expanded]:not([aria-haspopup="menu"])';
-  const PILL_RESET_MENU_ITEM_SELECTOR = '[role="menuitem"][class*="_ResetToDefault"]';
+  const PILL_RESET_MENU_ITEM_SELECTOR =
+    '[role="menuitem"][class*="_ResetToDefault"], [role="menuitem"][class*="ResetToDefault-"]';
   const CHAT_WORK_SURFACE_GROUP_SELECTORS = Object.freeze([
     'header [role="radiogroup"]',
     'header [role="group"]',
+    'main [role="group"]:has(> button[aria-pressed])',
   ]);
   const CHAT_WORK_SURFACE_GROUP_SELECTOR = CHAT_WORK_SURFACE_GROUP_SELECTORS.join(', ');
-  const CHAT_WORK_SURFACE_RADIO_SELECTOR = 'button[role="radio"][aria-checked]';
+  const CHAT_WORK_SURFACE_RADIO_SELECTOR =
+    'button[role="radio"][aria-checked], button[aria-pressed]';
+
+  function isChatWorkSurfaceSelected(element) {
+    if (!element) return false;
+    const attribute = element.hasAttribute('aria-pressed') ? 'aria-pressed' : 'aria-checked';
+    return element.getAttribute(attribute) === 'true';
+  }
 
   function normalizePillMenuLabel(value) {
     return String(value || '')
@@ -80,6 +89,9 @@
   // aria-haspopup submenu trigger. Keep this attribute-based so it survives
   // hashed class/name changes and localized visible text.
   function isModelSelectionViewTrigger(element) {
+    if (element?.matches?.('[role="menuitem"][data-model-picker-view-toggle="true"]')) {
+      return !!element.closest('[data-model-picker-view]') && !element.closest('[inert]');
+    }
     if (
       !element ||
       element.getAttribute?.('role') !== 'menuitem' ||
@@ -103,6 +115,19 @@
     if (interactiveState === 'false' && element.hasAttribute?.('aria-label')) return false;
     if (interactiveState === 'true' && !element.hasAttribute?.('aria-expanded')) return false;
     return true;
+  }
+
+  function getActiveModelPickerRows(view) {
+    if (!view?.querySelectorAll) return [];
+    return Array.from(view.querySelectorAll('[role="menuitemradio"]')).filter(
+      (row) => !row.closest('[inert], [data-active="false"]'),
+    );
+  }
+
+  function getModelPickerRowTitleElement(row) {
+    const content = row?.querySelector?.('[data-menu-row-content="true"]');
+    const primary = content?.firstElementChild;
+    return primary?.tagName === 'SPAN' ? primary : primary?.firstElementChild || null;
   }
 
   function unique(values) {
@@ -203,11 +228,22 @@
       const radios = Array.from(group.querySelectorAll(CHAT_WORK_SURFACE_RADIO_SELECTOR)).filter(
         (radio) => isUsablyVisibleElement(radio, windowObj),
       );
+      if (
+        radios.some((radio) => radio.hasAttribute('aria-pressed') && radio.parentElement !== group)
+      )
+        continue;
       if (radios.length !== 2) continue;
-      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'true').length !== 1) {
+      if (radios.filter(isChatWorkSurfaceSelected).length !== 1) {
         continue;
       }
-      if (radios.filter((radio) => radio.getAttribute('aria-checked') === 'false').length !== 1) {
+      if (
+        radios.filter(
+          (radio) =>
+            radio.getAttribute(
+              radio.hasAttribute('aria-pressed') ? 'aria-pressed' : 'aria-checked',
+            ) === 'false',
+        ).length !== 1
+      ) {
         continue;
       }
       return radios;
@@ -276,6 +312,8 @@
     isPillAdvancedToggle,
     isPillAdvancedToggleExpanded,
     isModelSelectionViewTrigger,
+    getActiveModelPickerRows,
+    getModelPickerRowTitleElement,
     unique,
     getChatWorkSurfaceToggleSelectors,
     getChatWorkSurfaceToggleMatchGroups,
@@ -292,6 +330,7 @@
     getModelThinkingEffortExtendedMatchGroups,
     isUsablyVisibleElement,
     getNativeChatWorkSurfaceRadios,
+    isChatWorkSurfaceSelected,
     getModelMenuButton,
     getOpenModelMenuCandidates,
   });

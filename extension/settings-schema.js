@@ -250,6 +250,7 @@
       doNotIncludeLabelsCheckbox: false,
       clickToCopyInlineCodeEnabled: false,
       hidePastedLibraryFilesEnabled: false,
+      codeboxWrapEnabled: false,
     },
 
     // Extra keys fetched with visibility settings (non-boolean or legacy).

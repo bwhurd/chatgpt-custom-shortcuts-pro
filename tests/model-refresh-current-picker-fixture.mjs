@@ -4,13 +4,27 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const selectors = require('../extension/shared/model-picker-selectors.js');
-const popupSource = await readFile(new URL('../extension/popup.js', import.meta.url), 'utf8');
 const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
+const popupSource = await readFile(new URL('../extension/popup.js', import.meta.url), 'utf8');
 
 class FakeElement {
-  constructor(attributes = {}, parent = null) {
+  constructor(attributes = {}, { tagName = 'DIV', textContent = '' } = {}) {
     this.attributes = new Map(Object.entries(attributes));
-    this.parentElement = parent;
+    this.tagName = tagName;
+    this.textContent = textContent;
+    this.children = [];
+    this.parentElement = null;
+  }
+
+  append(...children) {
+    for (const child of children) {
+      child.parentElement = this;
+      this.children.push(child);
+    }
+  }
+
+  get firstElementChild() {
+    return this.children[0] || null;
   }
 
   getAttribute(name) {
@@ -21,245 +35,211 @@ class FakeElement {
     return this.attributes.has(name);
   }
 
+  matches(selector) {
+    return selector === '[role="menuitem"][data-model-picker-view-toggle="true"]' &&
+      this.getAttribute('role') === 'menuitem' &&
+      this.getAttribute('data-model-picker-view-toggle') === 'true';
+  }
+
   closest(selector) {
-    if (selector !== '[data-model-selection-view="true"]') return null;
-    return this.parentElement?.getAttribute('data-model-selection-view') === 'true'
-      ? this.parentElement
-      : null;
+    if (selector === '[inert], [data-active="false"]') {
+      for (let node = this; node; node = node.parentElement) {
+        if (node.hasAttribute('inert') || node.getAttribute('data-active') === 'false') return node;
+      }
+      return null;
+    }
+    if (selector === '[data-model-selection-view="true"]') {
+      for (let node = this; node; node = node.parentElement) {
+        if (node.getAttribute('data-model-selection-view') === 'true') return node;
+      }
+      return null;
+    }
+    if (selector === '[data-model-selection-view="true"] [role="menuitem"][data-interactive]') {
+      for (let candidate = this; candidate; candidate = candidate.parentElement) {
+        if (candidate.getAttribute('role') !== 'menuitem' || !candidate.hasAttribute('data-interactive')) {
+          continue;
+        }
+        for (let view = candidate.parentElement; view; view = view.parentElement) {
+          if (view.getAttribute('data-model-selection-view') === 'true') return candidate;
+        }
+      }
+      return null;
+    }
+    if (selector === '[data-model-picker-view]') {
+      for (let node = this; node; node = node.parentElement) {
+        if (node.hasAttribute('data-model-picker-view')) return node;
+      }
+    }
+    return null;
+  }
+
+  querySelectorAll(selector) {
+    const matches = (node) =>
+      (selector === '[role="menuitemradio"]' && node.getAttribute('role') === 'menuitemradio') ||
+      (selector === '[data-menu-row-content="true"]' &&
+        node.getAttribute('data-menu-row-content') === 'true');
+    const found = [];
+    const visit = (node) => {
+      for (const child of node.children) {
+        if (matches(child)) found.push(child);
+        visit(child);
+      }
+    };
+    visit(this);
+    return found;
+  }
+
+  querySelector(selector) {
+    return this.querySelectorAll(selector)[0] || null;
   }
 }
 
-const modelView = new FakeElement({ 'data-model-selection-view': 'true' });
-const selectModel = new FakeElement(
-  {
-    role: 'menuitem',
-    'data-interactive': 'true',
-    'aria-expanded': 'false',
-  },
-  modelView,
+const modelView = new FakeElement({ 'data-model-picker-view': 'advanced' });
+const activePanel = new FakeElement({ 'data-active': 'true' });
+const inactivePanel = new FakeElement({ 'data-active': 'false', inert: '' });
+const firstModelRow = new FakeElement({ role: 'menuitemradio', 'aria-checked': 'true' });
+const secondModelRow = new FakeElement({ role: 'menuitemradio', 'aria-checked': 'false' });
+const hiddenModelRow = new FakeElement({ role: 'menuitemradio', 'aria-checked': 'false' });
+
+const firstContent = new FakeElement({ 'data-menu-row-content': 'true' });
+firstContent.append(new FakeElement({}, { tagName: 'SPAN', textContent: 'GPT-6 Astra' }));
+firstModelRow.append(firstContent);
+
+const secondContent = new FakeElement({ 'data-menu-row-content': 'true' });
+const titleAndDescription = new FakeElement();
+titleAndDescription.append(
+  new FakeElement({}, { tagName: 'SPAN', textContent: 'GPT-5.5' }),
+  new FakeElement({}, { tagName: 'SPAN', textContent: 'Leaving on October 14' }),
+);
+secondContent.append(titleAndDescription);
+secondModelRow.append(secondContent);
+
+inactivePanel.append(hiddenModelRow);
+activePanel.append(firstModelRow, secondModelRow);
+modelView.append(activePanel, inactivePanel);
+
+const rows = selectors.getActiveModelPickerRows(modelView);
+assert.deepEqual(rows, [firstModelRow, secondModelRow], 'inactive/inert mounted rows must not enter the catalog');
+assert.equal(
+  selectors.getModelPickerRowTitleElement(firstModelRow)?.textContent,
+  'GPT-6 Astra',
+  'a direct primary span should be used as the model title',
 );
 assert.equal(
-  selectors.isModelSelectionViewTrigger(selectModel),
-  true,
-  'current integrated Select model trigger should be structurally recognized',
-);
-const workSelectModel = new FakeElement(
-  {
-    role: 'menuitem',
-    'data-interactive': 'false',
-  },
-  modelView,
-);
-assert.equal(
-  selectors.isModelSelectionViewTrigger(workSelectModel),
-  true,
-  'Work view toggle should be recognized even when ChatGPT marks it non-interactive',
+  selectors.getModelPickerRowTitleElement(secondModelRow)?.textContent,
+  'GPT-5.5',
+  'a title/description wrapper should exclude the secondary description',
 );
 
+const trigger = new FakeElement({ role: 'menuitem', 'data-model-picker-view-toggle': 'true' });
+trigger.parentElement = modelView;
+assert.equal(
+  selectors.isModelSelectionViewTrigger(trigger),
+  true,
+  'the current Advanced/effort view toggle must not depend on the retired wrapper or aria-expanded',
+);
+
+const interactionStart = contentSource.indexOf('function scheduleAfterMenuInteraction(event)');
+const interactionEnd = contentSource.indexOf('\n        function getOpenSelectListboxCount()', interactionStart);
+assert.ok(interactionStart >= 0 && interactionEnd > interactionStart, 'the menu interaction handler should exist');
+const interactionHandler = contentSource.slice(interactionStart, interactionEnd);
 assert.match(
-  popupSource,
-  /pickFirstTabWithId = \(tabs\) =>/,
-  'popup tab selection must retain an active tab ID when URL visibility is restricted',
+  interactionHandler,
+  /target\?\.closest\?\.\(\s*'\[data-model-selection-view="true"\] \[role="menuitem"\]\[data-interactive\]'/,
+  'nested clicks should resolve the closest integrated view-toggle candidate without requiring aria-expanded',
 );
 assert.match(
-  popupSource,
-  /pickBestChatGptTab\(activeCurrentWindowTabs\) \|\| pickFirstTabWithId\(activeCurrentWindowTabs\)/,
-  'popup tab selection must prefer a visible ChatGPT URL but fall back to the active tab ID',
+  interactionHandler,
+  /ModelPickerSelectors\.isModelSelectionViewTrigger\(integratedViewToggleCandidate\)[\s\S]*?schedule\(\{ retries: 4, interval: 25 \}\)/,
+  'the shared structural helper should validate the trigger before bounded hint scheduling',
 );
-assert.match(
-  popupSource,
-  /Search all open ChatGPT tabs before giving up[\s\S]*?queryTabsAsync\(\{ url: \['\*:\/\/chatgpt\.com\/\*'/,
-  'popup tab selection must fall back across open ChatGPT tabs',
+
+const resolveIntegratedViewTriggerFromClick = (target) => {
+  const candidate = target?.closest?.(
+    '[data-model-selection-view="true"] [role="menuitem"][data-interactive]',
+  );
+  return candidate && selectors.isModelSelectionViewTrigger(candidate) ? candidate : null;
+};
+
+const workPickerView = new FakeElement({ 'data-model-selection-view': 'true' });
+const workPickerTrigger = new FakeElement({ role: 'menuitem', 'data-interactive': 'false' });
+const workPickerText = new FakeElement({}, { tagName: 'SPAN', textContent: 'GPT-6 Astra Medium' });
+workPickerTrigger.append(workPickerText);
+workPickerView.append(workPickerTrigger);
+assert.equal(workPickerTrigger.hasAttribute('aria-expanded'), false, 'Work omits aria-expanded on this trigger');
+assert.equal(
+  resolveIntegratedViewTriggerFromClick(workPickerText),
+  workPickerTrigger,
+  'a click on Work trigger text should resolve the non-interactive view trigger without aria-expanded',
 );
-assert.match(
-  contentSource,
-  /ModelPickerSelectors\.isModelSelectionViewTrigger\(item\)/,
-  'content should recognize the current same-menu model view trigger',
+
+const chatPickerView = new FakeElement({ 'data-model-selection-view': 'true' });
+const chatPickerTrigger = new FakeElement({
+  role: 'menuitem',
+  'data-interactive': 'true',
+  'aria-expanded': 'false',
+});
+const chatPickerIcon = new FakeElement({}, { tagName: 'SVG' });
+chatPickerTrigger.append(chatPickerIcon);
+chatPickerView.append(chatPickerTrigger);
+assert.equal(
+  resolveIntegratedViewTriggerFromClick(chatPickerIcon),
+  chatPickerTrigger,
+  'a nested Chat click should continue to resolve its expanded-state view trigger',
 );
-assert.match(
-  contentSource,
-  /data-testid="composer-model-picker-slider-advanced-view"\]\[data-active="true"\][\s\S]*?getModelVersionMenuItems\(integratedAdvancedView\)\.length[\s\S]*?return integratedAdvancedView/,
-  'integrated model scraping should use only the active Advanced panel rows',
-);
-assert.match(
-  contentSource,
-  /data-testid="composer-model-picker-slider-simple-view"\] \[role="slider"\]\[aria-valuemin\]\[aria-valuemax\][\s\S]*?effortIds = \['instant', 'thinking', 'pro', 'effort-extra-high', 'effort-max'\]/,
-  'integrated effort scraping should derive structural slider rows without localized labels',
-);
-assert.match(
-  contentSource,
-  /data-maximum[\s\S]*?data-max-effort|querySelectorAll\('\[data-maximum\], \[data-max-effort\]'\)/,
-  'integrated model labels must strip the effort badge from the composer trigger',
-);
-assert.match(
-  contentSource,
-  /isLikelyModelVersionLabel[\s\S]*?\^default\\b|nativeOnly: true/,
-  'the current Work model list should recognize its native Default row without turning it into an extension slot',
-);
-assert.match(
-  contentSource,
-  /availableModelNames\.find\(\(modelName\) => modelName\.label === activeLabel\)/,
-  'active Work model selection should remain correct when the native Default row is omitted from extension slots',
-);
-assert.match(
-  contentSource,
-  /canUseDirectSlot[\s\S]*?reservedCatalogSlots\.has\(slot\)[\s\S]*?reservedStaticSlots\.has\(slot\)/,
-  'newly observed model rows should not steal slots reserved by existing catalog models',
-);
-assert.match(
-  contentSource,
-  /activeModelAction[\s\S]*?availableModelNames\.find\(\(modelName\) => modelName\.id === activeModelAction\?\.id\)/,
-  'active Work model selection should resolve by action id instead of the DOM index after Default is omitted',
-);
-assert.match(
-  contentSource,
-  /INTEGRATED_SPEED_TOGGLE_SELECTOR =\s*'\[role="menuitemcheckbox"\]\[data-fast-mode-enabled\]'/,
-  'integrated scraping should identify the current fast-mode control structurally',
-);
-assert.match(
-  contentSource,
-  /collectIntegratedSpeedRows[\s\S]*?speed-fast[\s\S]*?label: '1\.5x'/,
-  'integrated scraping should persist the current 1.5x speed state',
-);
-assert.match(
-  contentSource,
-  /integratedSpeedMenu: hasIntegratedSpeedMenu[\s\S]*?integratedResetAvailable: hasIntegratedReset/,
-  'integrated catalogs should persist observed speed and reset capability flags',
-);
-assert.match(
-  popupSource,
-  /pickFirstTabWithId\(activeLastFocusedWindowTabs\)/,
-  'popup routing should retain the active-tab fallback for both window queries',
-);
-assert.match(
-  contentSource,
-  /csp-alt-hint-utility[\s\S]*?flex-direction: column[\s\S]*?margin-top: 2px/,
-  'integrated speed and reset helper labels should be centered below their controls',
-);
-assert.match(
-  contentSource,
-  /composer-model-picker-slider-simple-view[\s\S]*?querySelectorAll\(`\.\$\{HINT_CLASS\}`\)/,
-  'the native integrated Alt+F4 slider hint must be removed from the simple view',
-);
-assert.match(
-  contentSource,
-  /data-model-selection-view="true"[\s\S]*?composer-model-picker-slider-simple-view[\s\S]*?display: none !important/,
-  'the integrated simple-view effort bar must stay free of native or extension shortcut labels',
-);
-assert.match(
-  contentSource,
-  /getIntegratedModelSelectionViewTrigger[\s\S]*?data-interactive\]/,
-  'Advanced-first scraping should locate the dynamic central model trigger structurally',
-);
-assert.match(
-  contentSource,
-  /effectiveTrigger[\s\S]*?getIntegratedModelSelectionViewTrigger[\s\S]*?getOpenModelVersionSubmenu/,
-  'model scraping should resolve the in-place Advanced panel from the structural central trigger',
-);
-assert.match(
-  contentSource,
-  /integratedViewTrigger[\s\S]*?schedule\(\{ retries: 4, interval: 25 \}\)/,
-  'opening the structural Advanced view trigger should reschedule model-row hints',
-);
-assert.match(
-  contentSource,
-  /availableModelNames\.sort\([\s\S]*?observedOrderById/,
-  'scraped Work models should be persisted in the native Advanced-list order',
-);
-assert.match(
-  contentSource,
-  /reset-default', 'Digit7'/,
-  'integrated Reset to default should use the Alt+7 utility shortcut',
-);
-assert.match(
-  popupSource,
-  /out\[14\] = 'Digit7'/,
-  'popup fallback defaults should expose Reset to default as Alt+7',
-);
-assert.match(
-  popupSource,
-  /storedId[\s\S]*?getCatalogActionById\(storedId, catalog, \[\]\)/,
-  'popup catalog normalization should preserve scraped model action identities and order',
-);
-assert.match(
-  popupSource,
-  /integratedModelCatalog && id === 'configure-latest'/,
-  'popup normalization should discard stale native Default aliases from integrated Work catalogs',
-);
-assert.match(
-  contentSource,
-  /storedId[\s\S]*?getCatalogActionById\(storedId, catalog, \[\]\)/,
-  'persisted model names should use the scraped action id rather than positional latest inference',
-);
-assert.match(
-  contentSource,
-  /isModelNameHintAction[\s\S]*?\[3, 4, 5, 6, 8, 9, 10\]/,
-  'integrated model hints must exclude effort and utility shortcut slots',
-);
-assert.match(
-  contentSource,
-  /catalogAction\?\.fromCatalog === true[\s\S]*?catalogAction\.actionKind === 'configure-option'[\s\S]*?return \{ \.\.\.listAction, \.\.\.catalogAction, label \}/,
-  'live model-row labels should preserve catalog-assigned slots over positional fallbacks',
-);
-assert.match(
-  contentSource,
-  /const INTEGRATED_EFFORT_ACTION_IDS = Object\.freeze\(\[[\s\S]*?'effort-max'[\s\S]*?\]\)/,
-  'integrated effort actions should use the structural Power slider rather than model rows',
-);
-assert.match(
-  contentSource,
-  /const isIntegratedComposerMenu = \(mainMenu\)[\s\S]*?data-model-selection-view="true"/,
-  'current same-menu model pickers should use the structural integrated-menu marker during scraping and dispatch',
-);
-assert.match(
-  contentSource,
-  /runIntegratedEffortAction = async \(action[\s\S]*?getOrOpenModelPickerState\(\)[\s\S]*?data-testid="composer-model-picker-slider-simple-view"[\s\S]*?pressElementKey\(control, direction, direction\)/,
-  'integrated effort shortcuts should move the live slider with structural arrow controls',
-);
+
+const chatButton = new FakeElement({ 'aria-pressed': 'true' });
+const workButton = new FakeElement({ 'aria-pressed': 'false' });
+assert.equal(selectors.isChatWorkSurfaceSelected(chatButton), true);
+assert.equal(selectors.isChatWorkSurfaceSelected(workButton), false);
+
+const scanStart = contentSource.indexOf('const scrapeCurrentModelPickerCatalogOnce');
+const scanEnd = contentSource.indexOf('const scrapeModelCatalogOnce', scanStart);
+assert.ok(scanStart >= 0 && scanEnd > scanStart, 'the current-picker scanner should be the single catalog scan');
+const scanner = contentSource.slice(scanStart, scanEnd);
+assert.match(scanner, /aria-labelledby.*triggerId|triggerId.*aria-labelledby/s);
+assert.match(scanner, /data-model-picker-view-toggle="true"/);
+assert.match(scanner, /getActiveModelPickerRows\?\.\(view\)/);
+assert.match(scanner, /getModelPickerRowTitleElement\?\.\(row\)/);
+assert.match(scanner, /data-reasoning-slider="true"/);
+assert.match(scanner, /aria-valuemin.*aria-valuemax.*aria-valuenow/s);
+assert.match(scanner, /data-selected-reasoning-effort/);
+assert.match(scanner, /waitForStorage: true/);
+assert.doesNotMatch(scanner, /MAX_SLOTS|slice\(0,/);
 assert.doesNotMatch(
   contentSource,
-  /shouldFallbackToLatestForMissingLiveEffort|runIntegratedEffortFallbackAction|skipIntegratedEffortFallback/,
-  'an unavailable Work effort must not switch to another model and replay the shortcut',
+  /scrapePillModelCatalogOnce|scrapeIntegratedModelCatalogOnce|ModelPickerNameCache/,
+  'retired picker scrapers and the opportunistic shared-name scraper must not remain active',
+);
+assert.doesNotMatch(
+  popupSource,
+  /resolveModelActionableNames\(settings\.modelNames\)\.slice\([\s\S]{0,90}MODEL_PICKER_MAX_SLOTS/,
+  'cloud restoration must not truncate catalog names to the compatibility padding size',
 );
 assert.match(
-  contentSource,
-  /activateIntegratedEffortTick = \(el\)[\s\S]*?clientX:/,
-  'integrated effort shortcuts should click the destination tick before using the bounded keyboard fallback',
-);
-assert.match(
-  contentSource,
-  /querySelectorAll\('\[data-selected\]\[data-locked\]'\)/,
-  'integrated effort shortcuts should resolve destination ticks structurally',
-);
-assert.match(
-  contentSource,
-  /isModelPickerAssignedShortcutEvent[\s\S]*?runDynamicThinkingEffortShortcut[\s\S]*?isModelPickerAssignedShortcutEvent\(event\)/,
-  'legacy effort handlers should stand down when the active model-picker profile owns the key',
-);
-assert.match(
-  contentSource,
-  /closePickerAfterCommit[\s\S]*?button\.click\(\);[\s\S]*?aria-expanded'\) === 'false'[\s\S]*?timeout: 180/,
-  'integrated effort shortcuts should close the picker through its native composer-pill toggle',
-);
-assert.match(
-  contentSource,
-  /INTEGRATED_EFFORT_WORK_OFFSETS[\s\S]*?instant:\s*0[\s\S]*?thinking:\s*1[\s\S]*?pro:\s*2/,
-  'Work effort shortcuts should map Light, Medium, and High to their live slider positions',
-);
-assert.match(
-  contentSource,
-  /advancedView instanceof Element[\s\S]*?pressElementKey\(advancedView, 'Escape', 'Escape'\)[\s\S]*?ensureMainMenuOpen\(\)/,
-  'effort actions should close Advanced and reopen the composer pill before targeting Power',
-);
-assert.match(
-  contentSource,
-  /dispatchIntegratedEffortAction\(action, options, complete\)[\s\S]*?dispatchDirectPillModelAction/,
-  'effort actions should take the integrated slider route before generic model dispatch',
-);
-assert.match(
-  contentSource,
-  /e\.stopImmediatePropagation\?\.\(\)[\s\S]*?runModelPickerShortcutSlot\(idx/,
-  'claimed picker shortcuts should not be enqueued twice by a stale reloaded listener',
+  popupSource,
+  /type:\s*'CSP_REFRESH_CHAT_WORK_MODEL_CATALOGS'/,
+  'popup refresh must use the Chat/Work coordinator rather than the retired single-surface path',
 );
 
-console.log('model refresh routing and current integrated picker fixture passed');
+const hintStart = contentSource.indexOf('function addLabel(el, labelText)');
+const hintEnd = contentSource.indexOf('function getUniqueVisibleMenuItemForSlot', hintStart);
+assert.ok(hintStart >= 0 && hintEnd > hintStart, 'the current hint renderer should exist');
+const hintRenderer = contentSource.slice(hintStart, hintEnd);
+assert.match(
+  hintRenderer,
+  /compactIconUtilityTarget[\s\S]*?span\.classList\.add\('csp-utility-icon-hint'\)[\s\S]*?el\.appendChild\(span\)/,
+  'compact speed/reset hints should sit outside the native icon row',
+);
+assert.match(
+  contentSource,
+  /\.csp-alt-hint-utility > \.csp-utility-icon-hint[\s\S]*?position: absolute[\s\S]*?top: calc\(100% - 5px\)[\s\S]*?left: 50%/,
+  'compact utility hints should be centered just below the icons without changing their flex layout',
+);
+assert.match(
+  contentSource,
+  /data-testid="composer-model-picker-slider-simple-view"\]\s*\.\$\{HINT_CLASS\}[\s\S]*?display: none !important/,
+  'the current effort slider should not display shortcut labels',
+);
+
+console.log('current model-picker inventory and title fixture passed');

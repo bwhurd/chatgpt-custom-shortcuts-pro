@@ -423,7 +423,7 @@ labelsContext.overlayCfg = {
     '',
   ],
 };
-const overlayHelperStart = contentSource.indexOf('const getOverlayModelSlotLimit');
+const overlayHelperStart = contentSource.indexOf('const getOverlayModelSlotCount');
 const overlayHelperEnd = contentSource.indexOf(
   '// ---- 3) Build overlay HTML',
   overlayHelperStart,
@@ -484,276 +484,6 @@ assert.deepEqual(
   ),
   ['5.5'],
   'the existing integrated scraper catalog should remain a utility-free fallback',
-);
-
-const pillIndex = contentSource.indexOf(
-  'const pillResult = await scrapePillModelCatalogOnce({ profile })',
-);
-const integratedIndex = contentSource.indexOf(
-  'const integratedResult = await scrapeIntegratedModelCatalogOnce({ profile })',
-);
-const legacyIndex = contentSource.indexOf("error: 'CONFIGURE_ITEM_NOT_FOUND'");
-assert.ok(pillIndex >= 0, 'content should define the new primary pill scrape call');
-assert.ok(
-  pillIndex < integratedIndex && integratedIndex < legacyIndex,
-  'scrape order should be pill first, integrated second, Configure dialog last',
-);
-assert.match(
-  contentSource,
-  /window\.__cspOpenModelPickerMainMenu = openModelPickerMainMenu/,
-  'pill refresh and Show model picker should share one main-menu opener',
-);
-assert.match(
-  contentSource,
-  /const waitForPillMainMenuFromShortcut = async \(\) =>[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(opened\)/,
-  'pill refresh should use the shared main-menu opener and expand Advanced before returning',
-);
-const pillAdvancedSource = contentSource.slice(
-  contentSource.indexOf('const getPillAdvancedToggle ='),
-  contentSource.indexOf('const getOpenPillSubmenuForTrigger ='),
-);
-assert.match(
-  pillAdvancedSource,
-  /getPillAdvancedToggle\(mainMenu\)[\s\S]*?!isPillAdvancedToggleExpanded\(initialToggle\)[\s\S]*?smartClickSafe\(initialToggle\)/,
-  'a collapsed Advanced control should be clicked before submenu work begins',
-);
-assert.match(
-  pillAdvancedSource,
-  /getPillSubmenuTriggers\(current\)\.length >= 2 \? current : null/,
-  'Advanced expansion should wait until the required Model and Effort triggers are ready',
-);
-assert.doesNotMatch(
-  pillAdvancedSource,
-  /['"](?:Advanced|Show advanced options|Show compact options)['"]/,
-  'Advanced expansion must not depend on localized control text',
-);
-assert.match(
-  contentSource,
-  /const controlledId = trigger\.getAttribute\('aria-controls'\)/,
-  'each pill submenu should be resolved from its trigger aria-controls relationship',
-);
-assert.match(
-  contentSource,
-  /const MODEL_MENU_ITEM_SELECTOR =\s*\n\s*':scope :is\(\[role="menuitem"\]/,
-  'menu row discovery must not impose a fixed wrapper-depth limit',
-);
-assert.doesNotMatch(
-  contentSource.slice(
-    contentSource.indexOf('const MODEL_MENU_ITEM_SELECTOR'),
-    contentSource.indexOf('const THINKING_EFFORT_OPTION_IDS'),
-  ),
-  /:scope > \* > \*/,
-  'the new six-level pill hierarchy must not use the historical two-wrapper selector',
-);
-assert.match(
-  contentSource,
-  /const PILL_EFFORT_ACTION_IDS_BY_ROW = Object\.freeze\(\[[\s\S]*?'effort-max'/,
-  'pill effort states should be mapped by structural row order, not localized labels',
-);
-assert.match(
-  contentSource,
-  /const PILL_SPEED_IDS_BY_ROW = Object\.freeze\(\['speed-standard', 'speed-fast'\]\)/,
-  'pill speed states should be mapped by structural row order, not localized labels',
-);
-assert.match(
-  contentSource,
-  /const getPillSpeedTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length === 3 \? triggers\[2\] : null/,
-  'the current three-submenu pill should expose Speed through its verified third structural trigger',
-);
-assert.match(
-  contentSource,
-  /const getPillModelTriggerFromCurrentOrder = \(mainMenu\) =>[\s\S]*?triggers\.length >= 2 \? triggers\[0\] : null/,
-  'both current compact pills should expose Model through their verified first structural trigger',
-);
-assert.doesNotMatch(
-  contentSource.slice(
-    contentSource.indexOf('const PILL_EFFORT_ACTION_IDS_BY_ROW'),
-    contentSource.indexOf('const getPillMenuInventory'),
-  ),
-  /mapFrontendLabelToActionId|mapSpeedLabelToId|label\.toLowerCase\(\)/,
-  'pill scrape state detection must not depend on English labels',
-);
-assert.match(
-  contentSource,
-  /const scrapePillModelCatalogOnce = async \(\{ profile = '' \} = \{\}\) =>[\s\S]*?await waitForPillMainMenuFromShortcut\(\)/,
-  'the primary pill scrape must await the shortcut opener before inventorying menus',
-);
-assert.match(
-  contentSource,
-  /const getPillMenuInventory = async \(\) => \{[\s\S]*?ensurePillAdvancedOptionsExpanded\(getOpenPillMainMenu\(\)\)/,
-  'every full pill inventory should independently enforce Advanced expansion',
-);
-assert.match(
-  contentSource,
-  /const getPillMenuInventory = async \(\) =>[\s\S]*?triggers\.model && triggers\.effort \? \{ main, triggers \} : null/,
-  'compact pill inventory should require Model and Effort while allowing Speed to be absent on Chat',
-);
-assert.match(
-  contentSource,
-  /const expectedTypes = \['model', 'effort', 'speed'\][\s\S]*?expectedType === 'effort' && type/,
-  'submenu discovery should use structural order so a two-row Effort menu is not mistaken for Speed',
-);
-assert.match(
-  contentSource,
-  /selectorShape: hasSpeedMenu \? 'pill-three-submenu' : 'pill-two-submenu'[\s\S]*?pillSpeedMenu: hasSpeedMenu[\s\S]*?pillResetAvailable: hasResetItem/,
-  'scraped catalogs should persist the observed two-versus-three submenu and reset capabilities',
-);
-assert.match(
-  contentSource,
-  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?selectPillModelNameDuringScrape\(action\)[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
-  'a Chat scrape should switch models through either menu shape when o3 changes the selector shell',
-);
-assert.match(
-  contentSource,
-  /const selectHybridModelNameDuringScrape = async \(action\) => \{[\s\S]*?const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?const currentState = getVisibleModelMenuState\(\)[\s\S]*?isIntegratedComposerMenu\(currentState\.main\)[\s\S]*?selectIntegratedModelNameDuringScrape\(action\)/,
-  'hybrid scrape model switching should choose the currently open compact or Intelligence shell before using fallbacks',
-);
-assert.match(
-  contentSource,
-  /const selectPillModelNameDuringScrape = async \(action\) => \{[\s\S]*?waitForPillMainMenuFromShortcut\(\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)/,
-  'every compact-menu scrape model switch should re-assert Advanced expansion before opening Model',
-);
-assert.match(
-  contentSource,
-  /if \(inventory\) \{[\s\S]*?collectPillEffortRows[\s\S]*?else if \(!hasSpeedMenu\) \{[\s\S]*?isIntegratedComposerMenu\(integratedState\.main\)[\s\S]*?getIntegratedFrontendRowsFromState/,
-  'a two-submenu Chat scrape should preserve GPT effort rows and collect integrated o3 effort rows in one catalog',
-);
-const integratedScrapeSource = contentSource.slice(
-  contentSource.indexOf('const scrapeIntegratedModelCatalogOnce'),
-  contentSource.indexOf('const scrapeModelCatalogOnce'),
-);
-assert.match(
-  integratedScrapeSource,
-  /const incompleteModelNames = availableModelNames\.filter[\s\S]*?frontendByConfig\[modelName\.id\][\s\S]*?INTEGRATED_MODEL_OPTIONS_INCOMPLETE/,
-  'the integrated scrape must fail loudly instead of persisting a catalog that missed a model effort surface',
-);
-const modelActionRoutingSource = contentSource.slice(
-  contentSource.indexOf('const runIntegratedModelNameAction = async'),
-  contentSource.indexOf('const findPillEffortItemForAction', contentSource.indexOf('const runIntegratedModelNameAction = async')),
-);
-assert.match(
-  modelActionRoutingSource,
-  /catalog\?\.integratedEffort === true \|\| catalog\?\.pillMenu === true/,
-  'hybrid model actions should remain available when either scraped menu capability is present',
-);
-assert.match(
-  modelActionRoutingSource,
-  /const openPillMain = getOpenPillMainMenu\(\)[\s\S]*?if \(openPillMain\)[\s\S]*?selectPillModelNameDuringScrape/,
-  'model actions should use the pill route only when the currently open menu is actually a pill menu',
-);
-assert.match(
-  modelActionRoutingSource,
-  /const currentState = getVisibleModelMenuState\(\)[\s\S]*?const pillMain = getOpenPillMainMenu\(\)[\s\S]*?openModelVersionSubmenu\(initialState \|\| currentState\)/,
-  'model actions should fall back to the integrated model submenu after opening an integrated menu',
-);
-assert.match(
-  contentSource,
-  /const getProfileForCatalog = \(catalog\) => \{[\s\S]*?selectorShape === 'pill-two-submenu'[\s\S]*?MODEL_PICKER_PROFILE_LEGACY/,
-  'a generic two-submenu compact catalog should fall back to the Chat profile',
-);
-assert.match(contentSource, /runPillSpeedToggleAction/);
-assert.match(contentSource, /runPillResetAction/);
-assert.match(contentSource, /speedByConfig/);
-assert.match(
-  contentSource,
-  /const ensureIntegratedSimplePicker = async[\s\S]*?composer-model-picker-slider-advanced-view[\s\S]*?pressElementKey\(advancedView, 'Escape', 'Escape'\)[\s\S]*?composer-model-picker-slider-simple-view/,
-  'integrated Speed and Reset actions should reopen the live simple picker after Advanced is active',
-);
-const pillSpeedSelectionUpdateSource = contentSource.slice(
-  contentSource.indexOf('const updatePillSpeedSelectionInMemory ='),
-  contentSource.indexOf('const runPillSpeedToggleAction = async'),
-);
-assert.match(
-  pillSpeedSelectionUpdateSource,
-  /window\.__modelCatalog = nextCatalog/,
-  'Speed toggles should keep the active content-script catalog coherent in memory',
-);
-assert.doesNotMatch(
-  pillSpeedSelectionUpdateSource,
-  /chrome\.storage/,
-  'Speed toggles should not rewrite the full sync catalog for an unused selected flag',
-);
-const pillSpeedToggleSource = contentSource.slice(
-  contentSource.indexOf('const runPillSpeedToggleAction = async'),
-  contentSource.indexOf('const runPillResetAction = async'),
-);
-assert.match(
-  pillSpeedToggleSource,
-  /const currentState = await getOrOpenModelPickerState\(\);[\s\S]*?isIntegratedComposerMenu\(currentState\.main\)[\s\S]*?runIntegratedSpeedToggleAction/,
-  'closed Speed shortcuts should wait for the live picker, then route to its integrated control when present',
-);
-assert.match(
-  pillSpeedToggleSource,
-  /const committed = await commitPillRadioItem\(target, 120, \{[\s\S]*?preferUserClick: true[\s\S]*?\}\);[\s\S]*?if \(!committed\) return false;/,
-  'Work Speed should use a user-like click and require the native radio state to commit',
-);
-assert.doesNotMatch(
-  pillSpeedToggleSource,
-  /window\.__modelCatalog\?\.pillMenu/,
-  'Speed toggle support should be determined from the live structural pill inventory, not stale stored catalog shape',
-);
-assert.match(
-  pillSpeedToggleSource,
-  /ensurePillAdvancedOptionsExpanded\(getOpenPillMainMenu\(\)\)[\s\S]*?getPillSpeedTriggerFromCurrentOrder\(mainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'speed'[\s\S]*?getPillMenuInventory\(\)/,
-  'Speed should expand Advanced before its verified third-trigger fast path and inventory fallback',
-);
-const pillResetSource = contentSource.slice(
-  contentSource.indexOf('const runPillResetAction = async'),
-  contentSource.indexOf('const clearOpenModelMenuBeforeSequentialReplay'),
-);
-assert.match(
-  pillResetSource,
-  /ensurePillAdvancedOptionsExpanded\(state\.main\)[\s\S]*?getPillResetMenuItem\(mainMenu\)/,
-  'Reset should expand Advanced before resolving its menu item',
-);
-const pillHintSource = contentSource.slice(
-  contentSource.indexOf('function getOpenPillSubmenuByKind'),
-  contentSource.indexOf('function applyConfigureFrontendRowHints'),
-);
-assert.match(
-  pillHintSource,
-  /getPillSubmenuTriggers\(mainMenu\)[\s\S]*?getOpenPillSubmenuForTrigger\(trigger\)[\s\S]*?classifyPillSubmenu\(menu\)/,
-  'pill hints should resolve the open submenu through structural trigger/menu relationships',
-);
-assert.match(
-  pillHintSource,
-  /getPopupPresentationGroups[\s\S]*?group\?\.id === 'primary'/,
-  'pill Effort hints should reuse the shared popup action order and slots',
-);
-assert.match(
-  pillHintSource,
-  /getModelActionById\('toggle-speed'\)[\s\S]*?getPillRadioItems\(menu\)/,
-  'both structural Speed rows should show the existing toggle-speed shortcut',
-);
-assert.doesNotMatch(
-  pillHintSource,
-  /textContent\s*[!=]==?\s*['"](?:Effort|Speed)|querySelector\([^)]*text/i,
-  'pill hint selectors must not target localized Effort or Speed text',
-);
-assert.match(
-  contentSource,
-  /applyModelSelectorThinkingEffortMenuHints\(\)[\s\S]*?applyModelVersionSubmenuHints\(\)[\s\S]*?applyPillEffortSubmenuHints\(\)[\s\S]*?applyPillSpeedSubmenuHints\(\)/,
-  'legacy and pill menu hint paths should remain active together',
-);
-assert.match(
-  contentSource,
-  /applyModelVersionSubmenuHints[\s\S]*?const slot = Number\(action\?\.slot\)/,
-  'model submenu hints should use the active profile action slot directly',
-);
-assert.match(
-  contentSource,
-  /activateCurrentRuntimeModelPickerProfile\('shortcut:key'\)[\s\S]*?for \(const slot of currentVisibleSlots\)/,
-  'keyboard matching should scan only the currently active profile slots',
-);
-assert.match(
-  contentSource,
-  /const openSurfaceIds = new WeakMap\(\)[\s\S]*?function getOpenSurfaceSignature\(\)[\s\S]*?new MutationObserver\(scheduleWhenOpenSurfaceChanges\)/,
-  'hint scheduling should detect submenu identity changes even when the number of open menus is unchanged',
-);
-assert.match(
-  contentSource,
-  /function getNativeChatWorkSurfaceMode[\s\S]*?data-animated-slider-trigger="true"[\s\S]*?composer:read/,
-  'existing conversations should select Chat or Work from the live composer trigger after the blank-page radios disappear',
 );
 
 const overlayProfileSource = contentSource.slice(
@@ -840,99 +570,53 @@ assert.match(
   /function getUniqueVisibleMenuItemForSlot\(slot, root = document\)[\s\S]*?const expectedHint = `\$\{MOD_KEY_TEXT\}\+\$\{keyLabel\}`;[\s\S]*?scope\.querySelectorAll\(`\.\$\{HINT_CLASS\}`\)[\s\S]*?openMenus\.has\(menu\)[\s\S]*?return matches\.size === 1 \? matches\.values\(\)\.next\(\)\.value : null;/,
   'an exposed menu should resolve an exact language-agnostic shortcut hint only when it labels one visible item',
 );
+const currentScrapeStart = contentSource.indexOf('const scrapeCurrentModelPickerCatalogOnce');
+const currentScrapeEnd = contentSource.indexOf('const scrapeModelCatalogOnce', currentScrapeStart);
+assert.ok(currentScrapeStart >= 0 && currentScrapeEnd > currentScrapeStart);
+const currentScrapeSource = contentSource.slice(currentScrapeStart, currentScrapeEnd);
+assert.match(currentScrapeSource, /data-model-picker-view/);
+assert.match(currentScrapeSource, /getActiveModelPickerRows/);
+assert.match(currentScrapeSource, /data-model-picker-view-toggle="true"/);
+assert.match(currentScrapeSource, /persistScrapedModelCatalog\(catalog, \{ profile/);
+
+const currentActionStart = contentSource.indexOf('const runCurrentModelPickerAction = async (action) => {');
+const currentActionEnd = contentSource.indexOf('const ensureIntegratedSimplePicker = async', currentActionStart);
+assert.ok(currentActionStart >= 0 && currentActionEnd > currentActionStart);
+const currentActionSource = contentSource.slice(currentActionStart, currentActionEnd);
+assert.match(currentActionSource, /getActiveModelPickerRows/);
+assert.match(currentActionSource, /action\?\.actionKind === 'configure-option'/);
+assert.match(currentActionSource, /catalog\?\.configureOptions\?\.find/);
+assert.match(currentActionSource, /smartClickSafe\(matches\[0\]\)/);
+assert.match(currentActionSource, /getSelection\(\)\?\.model\?\.id === action\.id/);
+assert.match(currentActionSource, /data-reasoning-slider="true"/);
+assert.match(currentActionSource, /entry\?\.sliderValue/);
+assert.match(currentActionSource, /effort\.min \+ effortIndex/);
+
 const modelPickerRunnerSource = contentSource.slice(
   contentSource.indexOf('const ModelPickerActionRunner = (() => {'),
   contentSource.indexOf('const executeModelAction = (action, options = {}) =>'),
 );
+const currentDispatchIndex = modelPickerRunnerSource.indexOf('runCurrentModelPickerAction(action)');
+const legacyDispatchIndex = modelPickerRunnerSource.indexOf(
+  'if (dispatchIntegratedEffortAction(action, options, complete))',
+  currentDispatchIndex,
+);
+assert.ok(currentDispatchIndex >= 0 && legacyDispatchIndex > currentDispatchIndex);
 assert.match(
-  modelPickerRunnerSource,
-  /async function findHintedTargetAfterOpeningMenus\(sourceSlot\)[\s\S]*?typeof window\.toggleModelSelector === 'function'[\s\S]*?window\.toggleModelSelector\(\);[\s\S]*?window\.__cspOpenModelPickerMainMenu\(\);[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)[\s\S]*?getUniqueVisibleMenuItemForSlot\([\s\S]*?sourceSlot,[\s\S]*?readyMainMenu,[\s\S]*?getPillSubmenuTriggers\(readyMainMenu\)[\s\S]*?openPillSubmenu\(trigger\)[\s\S]*?getUniqueVisibleMenuItemForSlot\(sourceSlot, submenu\)/,
-  'fallback hint discovery should expand Advanced before scanning exposed submenus',
-);
-assert.doesNotMatch(
-  modelPickerRunnerSource,
-  /shouldScanSubmenus|\['pill-effort', 'configure-option'\]\.includes/,
-  'fallback submenu discovery should not depend on cross-profile slot mirroring',
-);
-assert.match(
-  modelPickerRunnerSource,
-  /function dispatchVisibleHintedMenuAction\(action, options, complete\)\s*{\s*[\s\S]*?if \(action\.actionKind === 'pill-speed-toggle' \|\| action\.actionKind === 'pill-reset'\)\s*\{\s*return false;/,
-  'Speed and Reset shortcuts should bypass generic hint routing and use their structural utility targets',
-);
-const modelPickerExecuteSource = modelPickerRunnerSource.slice(
-  modelPickerRunnerSource.indexOf('function execute(action, options = {})'),
-);
-assert.ok(
-  modelPickerExecuteSource.indexOf(
-    'if (dispatchDirectPillModelAction(action, options, complete))',
-  ) <
-    modelPickerExecuteSource.indexOf(
-      'if (dispatchVisibleHintedMenuAction(action, options, complete))',
-    ),
-  'a known Work model action should route directly before generic hint discovery',
-);
-assert.ok(
-  modelPickerExecuteSource.indexOf(
-    'if (dispatchVisibleHintedMenuAction(action, options, complete))',
-  ) <
-    modelPickerExecuteSource.indexOf(
-      'dispatchActionWithoutVisibleHint(action, options, complete);',
-    ),
-  'the visible hinted item must win before Work-mode pill submenu routing',
-);
-assert.match(
-  modelPickerRunnerSource,
-  /let modelPickerActionQueue = Promise\.resolve\(\)[\s\S]*?options\.hideUi === true[\s\S]*?\.then\(run\)/,
-  'visible shortcut actions should serialize rapid model and effort transitions while hidden scrape actions stay independent',
-);
-assert.match(
-  modelPickerRunnerSource,
-  /const settleVisibleModelPickerAction = async[\s\S]*?isModelMenuLikelyActive\(\)[\s\S]*?clearOpenModelMenuBeforeSequentialReplay\(\)/,
-  'visible shortcut queue entries should wait for the picker to close and clean up unavailable actions',
-);
-assert.match(
-  modelPickerRunnerSource,
-  /function dispatchDirectPillModelAction\(action, options, complete\)[\s\S]*?action\.actionKind !== 'configure-option'[\s\S]*?runIntegratedModelNameAction\(action/,
-  'direct Work model routing should be limited to known configure-option actions',
-);
-assert.match(
-  contentSource,
-  /const selectPillModelNameDuringScrape = async \(action\)[\s\S]*?ensurePillAdvancedOptionsExpanded\(mainMenu\)[\s\S]*?getPillModelTriggerFromCurrentOrder\(expandedMainMenu\)[\s\S]*?openPillSubmenu\(directTrigger\)[\s\S]*?classifyPillSubmenu\(menu\) !== 'model'[\s\S]*?getPillMenuInventory\(\)/,
-  'Work model activation should verify the first-trigger fast path before full inventory fallback',
-);
-assert.match(
-  popupHtmlSource,
-  /id="mp-model-switcher-modifier-selector" class="p-segmented-controls p-segmented-radius"/,
-  'the modifier segmented control should have a stable explicit owner ID',
-);
-const modifierInitializerSource = popupJsSource.slice(
-  popupJsSource.indexOf('function initModelSwitcherToggle()'),
-  popupJsSource.indexOf('// Initialize when DOM is ready'),
-);
-assert.match(
-  modifierInitializerSource,
-  /document\.getElementById\('mp-model-switcher-modifier-selector'\)/,
-  'Alt/Control wiring should target its explicit control',
-);
-assert.doesNotMatch(
-  modifierInitializerSource,
-  /document\.querySelector\('\.p-segmented-controls'\)/,
-  'Alt/Control wiring must not depend on being the first segmented control',
-);
-assert.match(
-  contentSource,
-  /function createCompletion\(action, options\)[\s\S]*?shouldRefocusComposerAfterModelAction\(action\)[\s\S]*?scheduleComposerRefocusAfterModelPicker\(\)/,
-  'successful model-picker actions should refocus the composer through shared completion',
-);
-assert.match(
-  contentSource,
-  /const scrapeModelCatalogOnce = async[\s\S]*?finally\s*{\s*scheduleComposerRefocusAfterModelPicker\(\);\s*}/,
-  'catalog refresh should refocus the composer in cleanup on every exit path',
-);
-assert.match(
-  optionsSource,
-  /arr\.every\(\(value, index\) => value === legacyIntegratedDefaults\[index\]\)/,
-  'storage migration should reseed only the exact untouched legacy default layout',
+  modelPickerRunnerSource.slice(currentDispatchIndex, legacyDispatchIndex),
+  /if \(result !== null\)\s*\{\s*complete\(result\);\s*return;/,
+  'a recognized current picker should not fall through to legacy menu handling',
 );
 
-console.log('model picker three-submenu pill matrix is fully wired');
+assert.match(
+  contentSource,
+  /const getRuntimeModelPickerProfile = \(\) =>[\s\S]*?getNativeChatWorkSurfaceMode\(\)[\s\S]*?getProfileForChatWorkMode\(liveMode\)/,
+  'shortcut routing should select the catalog profile from the live Chat or Work surface',
+);
+assert.match(
+  contentSource,
+  /function indexFromEvent\(e\)[\s\S]*?activateCurrentRuntimeModelPickerProfile\('shortcut:key'\)[\s\S]*?for \(const slot of currentVisibleSlots\)/,
+  'keyboard matching should scan only the active profile slots',
+);
+
+console.log('Current Chat/Work model-picker profile and overlay fixture passed.');

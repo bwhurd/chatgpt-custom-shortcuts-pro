@@ -24,7 +24,13 @@ const ScrollState = {
   finalScrollPosition: 0,
   userInterrupted: false,
 };
-const CONVERSATION_TURN_SELECTOR = '[data-testid^="conversation-turn-"]';
+const CONVERSATION_TURN_SELECTOR = '[data-turn-key], [data-testid^="conversation-turn-"]';
+
+function getConversationTurns() {
+  return Array.from(document.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
+    (turn) => turn instanceof HTMLElement && turn.isConnected,
+  );
+}
 
 function stabilizeConversationScrollContainer(container) {
   if (container instanceof HTMLElement) {
@@ -46,17 +52,22 @@ function resetScrollState() {
 }
 
 function getScrollableContainer() {
-  const firstMessage = document.querySelector(CONVERSATION_TURN_SELECTOR);
-  if (!firstMessage) return null;
+  const conversationTurns = getConversationTurns();
+  if (!conversationTurns.length) return null;
 
-  let container = firstMessage.parentElement;
-  while (container && container !== document.body) {
-    const style = getComputedStyle(container);
-    if (
-      container.scrollHeight > container.clientHeight &&
-      style.overflowY !== 'visible' &&
-      style.overflowY !== 'hidden'
-    ) {
+  let commonAncestor = conversationTurns[0];
+  for (let i = 1; i < conversationTurns.length; i++) {
+    const turn = conversationTurns[i];
+    while (commonAncestor && !commonAncestor.contains(turn)) {
+      commonAncestor = commonAncestor.parentElement;
+    }
+  }
+
+  let container = commonAncestor;
+  while (container && container !== document.documentElement) {
+    const overflowY = getComputedStyle(container).overflowY;
+    const hasScrollableOverflow = ['auto', 'overlay', 'scroll'].includes(overflowY);
+    if (hasScrollableOverflow && container.scrollHeight > container.clientHeight) {
       return stabilizeConversationScrollContainer(container);
     }
     container = container.parentElement;
@@ -126,7 +137,7 @@ function observeConversationContainer(callback) {
     return;
   }
 
-  // Find the smallest stable ancestor of all [data-testid^="conversation-turn-"] nodes.
+  // Find the nearest shared scrollable ancestor of the current conversation turns.
   const target = getScrollableContainer();
   if (!target) {
     // Retry briefly while the chat UI mounts, then give up cleanly
@@ -202,6 +213,7 @@ const VISIBILITY_DEFAULTS = (() => {
     doNotIncludeLabelsCheckbox: false,
     clickToCopyInlineCodeEnabled: false,
     hidePastedLibraryFilesEnabled: false,
+    codeboxWrapEnabled: false,
   };
 })();
 
@@ -1105,7 +1117,7 @@ const VISIBILITY_DEFAULTS = (() => {
   handleRouteChange();
 })();
 
-function applyVisibilitySettings(data) {
+function applyVisibilitySettings(data, { source = 'storage-change' } = {}) {
   for (const key in VISIBILITY_DEFAULTS) {
     if (Object.hasOwn(data, key)) {
       window[key] = data[key] === undefined ? VISIBILITY_DEFAULTS[key] : Boolean(data[key]);
@@ -1116,6 +1128,10 @@ function applyVisibilitySettings(data) {
     if (typeof window[key] === 'undefined') {
       window[key] = VISIBILITY_DEFAULTS[key];
     }
+  }
+
+  if (source === 'storage-load' || Object.hasOwn(data, 'codeboxWrapEnabled')) {
+    window.setCodeboxWrapEnabled?.(Boolean(window.codeboxWrapEnabled), { source });
   }
 }
 
@@ -1423,7 +1439,7 @@ const delays = DELAYS;
       });
       chrome.storage.sync.remove('hideArrowButtonsCheckbox');
     }
-    applyVisibilitySettings(data);
+    applyVisibilitySettings(data, { source: 'storage-load' });
   });
 
   // Listen for changes in Chrome storage and dynamically apply settings
@@ -1442,7 +1458,7 @@ const delays = DELAYS;
       for (const key in changes) {
         updatedData[key] = changes[key].newValue;
       }
-      applyVisibilitySettings(updatedData);
+      applyVisibilitySettings(updatedData, { source: 'storage-change' });
     }
   });
 })();
@@ -1453,6 +1469,8 @@ const delays = DELAYS;
 (() => {
   const ROOT_CLASS = 'csp-codebox-wrap-enabled';
   const STYLE_ID = 'csp-codebox-wrap-style';
+  const CHATGPT_CODEBOX_SELECTOR = '[data-markdown-copy="code-block"]';
+  const CHATGPT_CODEBOX_SCROLLPORT_SELECTOR = `${CHATGPT_CODEBOX_SELECTOR} > div:has(> pre > code, > code)`;
   const CODEMIRROR_CODE_SELECTOR = 'div[id="code-block-viewer"].cm-editor .cm-content code';
   const CODEMIRROR_LINE_SELECTOR =
     'div[id="code-block-viewer"].cm-editor .cm-content code > span';
@@ -1464,14 +1482,18 @@ const delays = DELAYS;
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-scroller,
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content,
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code,
-      html.${ROOT_CLASS} pre:not(.cm-content) {
+      html.${ROOT_CLASS} pre:not(.cm-content),
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} pre,
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR},
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SCROLLPORT_SELECTOR},
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} code {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
       }
 
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-scroller,
-      html.${ROOT_CLASS} pre:not(.cm-content) {
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SCROLLPORT_SELECTOR} {
         overflow-x: hidden !important;
       }
 
@@ -1480,10 +1502,18 @@ const delays = DELAYS;
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content code,
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content span,
       html.${ROOT_CLASS} pre:not(.cm-content),
-      html.${ROOT_CLASS} pre:not(.cm-content) > code {
+      html.${ROOT_CLASS} pre:not(.cm-content) > code,
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} pre,
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} code,
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} code * {
         white-space: pre-wrap !important;
         overflow-wrap: anywhere !important;
         word-break: break-word !important;
+      }
+
+      html.${ROOT_CLASS} ${CHATGPT_CODEBOX_SELECTOR} code {
+        display: block !important;
+        box-sizing: border-box !important;
       }
 
       html.${ROOT_CLASS} div[id="code-block-viewer"].cm-editor .cm-content {
@@ -1667,11 +1697,35 @@ const delays = DELAYS;
     snapshot.scrollRoot.scrollTop = snapshot.scrollTop;
   };
 
-  const toggleCodeboxWrap = () => {
+  let userToggledWrap = false;
+  let storageLoadComplete = false;
+  let storageChangedBeforeLoad = false;
+
+  const setCodeboxWrapEnabled = (
+    enabled,
+    { persist = false, source = 'programmatic' } = {},
+  ) => {
+    const normalizedEnabled = Boolean(enabled);
+    const isEnabled = document.documentElement.classList.contains(ROOT_CLASS);
+    if (source === 'storage-change' && !storageLoadComplete) {
+      storageChangedBeforeLoad = true;
+    }
+    if (source === 'storage-load') {
+      storageLoadComplete = true;
+      if (userToggledWrap || storageChangedBeforeLoad) {
+        window.codeboxWrapEnabled = isEnabled;
+        return isEnabled;
+      }
+    }
+
+    window.codeboxWrapEnabled = normalizedEnabled;
+    if (source === 'user-toggle') userToggledWrap = true;
+    if (isEnabled === normalizedEnabled) return normalizedEnabled;
+
     ensureStyle();
     const snapshot = captureScrollSnapshot();
-    const enabled = document.documentElement.classList.toggle(ROOT_CLASS);
-    if (enabled) {
+    document.documentElement.classList.toggle(ROOT_CLASS, normalizedEnabled);
+    if (normalizedEnabled) {
       applyCodeboxWrapIndents();
     } else {
       clearCodeboxWrapIndents();
@@ -1679,18 +1733,35 @@ const delays = DELAYS;
 
     restoreScrollSnapshot(snapshot);
     requestAnimationFrame(() => {
-      if (enabled) applyCodeboxWrapIndents();
+      if (normalizedEnabled) applyCodeboxWrapIndents();
       restoreScrollSnapshot(snapshot);
     });
     window.setTimeout(() => {
-      if (enabled) applyCodeboxWrapIndents();
+      if (normalizedEnabled) applyCodeboxWrapIndents();
       restoreScrollSnapshot(snapshot);
     }, 50);
 
-    return enabled;
+    if (persist) {
+      chrome.storage.sync.set({ codeboxWrapEnabled: normalizedEnabled }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            '[CSP] Could not persist the codebox wrap preference:',
+            chrome.runtime.lastError.message,
+          );
+        }
+      });
+    }
+
+    return normalizedEnabled;
   };
 
-  window.toggleCodeboxWrap = toggleCodeboxWrap;
+  window.setCodeboxWrapEnabled = setCodeboxWrapEnabled;
+  window.toggleCodeboxWrap = () =>
+    setCodeboxWrapEnabled(!document.documentElement.classList.contains(ROOT_CLASS), {
+      persist: true,
+      source: 'user-toggle',
+    });
+  setCodeboxWrapEnabled(Boolean(window.codeboxWrapEnabled), { source: 'bootstrap' });
 })();
 
 // Shared menu DOM helpers. Keep these near the menu utility IIFEs so call sites below are traceable.
@@ -2112,6 +2183,34 @@ const clickElementLikeUser = (el) => {
     return blocks;
   }
 
+  const DEFAULT_COPY_CODE_SEPARATOR = '\n\n--- --- ---\n\n';
+  let cachedCopyCodeUserSeparator = DEFAULT_COPY_CODE_SEPARATOR;
+
+  const updateCachedCopyCodeUserSeparator = (value) => {
+    if (typeof value === 'string') {
+      cachedCopyCodeUserSeparator = parseSeparator(value);
+    }
+  };
+
+  try {
+    chrome.storage.sync.get('copyCodeUserSeparator', (data) => {
+      if (!chrome.runtime.lastError) {
+        updateCachedCopyCodeUserSeparator(data?.copyCodeUserSeparator);
+      }
+    });
+    chrome.storage.onChanged?.addListener((changes, areaName) => {
+      if (areaName === 'sync' && changes.copyCodeUserSeparator) {
+        const newValue = changes.copyCodeUserSeparator.newValue;
+        cachedCopyCodeUserSeparator =
+          typeof newValue === 'string'
+            ? parseSeparator(newValue)
+            : DEFAULT_COPY_CODE_SEPARATOR;
+      }
+    });
+  } catch {
+    // Keep the default separator if extension storage is unavailable.
+  }
+
   function copyCode() {
     const formattedBlocks = getAllCodeBlocks();
     if (!formattedBlocks.length) {
@@ -2119,21 +2218,24 @@ const clickElementLikeUser = (el) => {
       return;
     }
 
-    chrome.storage.sync.get('copyCodeUserSeparator', (data) => {
-      const copyCodeSeparator = data.copyCodeUserSeparator
-        ? parseSeparator(data.copyCodeUserSeparator)
-        : '\n\n--- --- ---\n\n';
-      const output = formattedBlocks.join(copyCodeSeparator);
+    const output = formattedBlocks.join(cachedCopyCodeUserSeparator);
+    if (!output.trim()) {
+      showToast('No content found in the code boxes');
+      return;
+    }
 
-      if (output.trim()) {
-        navigator.clipboard
-          .writeText(output)
-          .then(() => showToast('All code boxes copied to clipboard!'))
-          .catch(() => showToast('Error copying code content to clipboard!'));
-      } else {
-        showToast('No content found in the code boxes');
+    try {
+      const writePromise = navigator.clipboard?.writeText?.(output);
+      if (!writePromise) {
+        showToast('Error copying code content to clipboard!');
+        return;
       }
-    });
+      writePromise
+        .then(() => showToast('All code boxes copied to clipboard!'))
+        .catch(() => showToast('Error copying code content to clipboard!'));
+    } catch {
+      showToast('Error copying code content to clipboard!');
+    }
   }
 
   function parseSeparator(separator) {
@@ -2143,9 +2245,11 @@ const clickElementLikeUser = (el) => {
   }
 
   function getConversationTurnMessages() {
-    const candidates = Array.from(document.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
-      (message) => message instanceof HTMLElement && message.isConnected,
+    const turns = getConversationTurns();
+    const individualMessages = turns.flatMap((turn) =>
+      Array.from(turn.querySelectorAll?.('[data-chatgpt-search-unit-key]') || []),
     );
+    const candidates = individualMessages.length ? individualMessages : turns;
     const renderedMessages = candidates.filter((message) => {
       if (!message.firstElementChild) return false;
 
@@ -2172,6 +2276,42 @@ const clickElementLikeUser = (el) => {
   function getMessageTopScrollPosition(message, scrollContainer) {
     if (!(message instanceof HTMLElement) || !message.isConnected) return NaN;
 
+    // ChatGPT's reversed flex scroller has negative scrollTop values. OffsetTop
+    // is measured from its layout origin and cannot be used as a scroll target.
+    if (isReversedScrollContainer(scrollContainer)) {
+      const rect = message.getBoundingClientRect();
+      return scrollContainer.scrollTop + rect.top - getScrollContainerTopEdge(scrollContainer);
+    }
+
+    const getOffsetPath = (element) => {
+      const positions = new Map();
+      let current = element;
+      let top = 0;
+
+      while (current instanceof HTMLElement && !positions.has(current)) {
+        positions.set(current, top);
+        const offsetParent = current.offsetParent;
+        if (!(offsetParent instanceof HTMLElement)) break;
+
+        top += Number(current.offsetTop) || 0;
+        current = offsetParent;
+      }
+
+      return positions;
+    };
+
+    const messageOffsetPath = getOffsetPath(message);
+    const containerOffsetPath = getOffsetPath(scrollContainer);
+    for (const [ancestor, messageTop] of messageOffsetPath) {
+      const containerTop = containerOffsetPath.get(ancestor);
+      if (Number.isFinite(containerTop)) {
+        const contentTop = messageTop - containerTop;
+        if (Number.isFinite(contentTop)) return contentTop;
+      }
+    }
+
+    // Preserve the existing fallback for layouts whose offset-parent chains do
+    // not share an ancestor (for example, fixed-positioned message nodes).
     const currentScrollTop = Number(scrollContainer.scrollTop) || 0;
     const rect = message.getBoundingClientRect();
     const topScroll = currentScrollTop + rect.top - getScrollContainerTopEdge(scrollContainer);
@@ -2188,8 +2328,21 @@ const clickElementLikeUser = (el) => {
   }
 
   function clampScrollTop(scrollContainer, scrollTop) {
-    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
-    return Math.max(0, Math.min(maxScrollTop, scrollTop));
+    const scrollRange = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+    const minScrollTop = isReversedScrollContainer(scrollContainer) ? -scrollRange : 0;
+    const maxScrollTop = isReversedScrollContainer(scrollContainer) ? 0 : scrollRange;
+    return Math.max(minScrollTop, Math.min(maxScrollTop, scrollTop));
+  }
+
+  function isReversedScrollContainer(scrollContainer) {
+    return getComputedStyle(scrollContainer).flexDirection === 'column-reverse';
+  }
+
+  function getMessageScrollTarget(scrollContainer, message, scrollOffset) {
+    const messageTop = getMessageTopScrollPosition(message, scrollContainer);
+    if (!Number.isFinite(messageTop)) return NaN;
+
+    return clampScrollTop(scrollContainer, messageTop - scrollOffset);
   }
 
   function getColorAlpha(color) {
@@ -2288,11 +2441,22 @@ const clickElementLikeUser = (el) => {
 
   function getMaxBoundaryScrollTop(scrollContainer) {
     if (!(scrollContainer instanceof Element)) return 0;
-    return Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+    return isReversedScrollContainer(scrollContainer)
+      ? 0
+      : Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+  }
+
+  function getMinBoundaryScrollTop(scrollContainer) {
+    if (!(scrollContainer instanceof Element)) return 0;
+    return isReversedScrollContainer(scrollContainer)
+      ? Math.min(0, scrollContainer.clientHeight - scrollContainer.scrollHeight)
+      : 0;
   }
 
   function getBoundaryScrollTop(scrollContainer, boundary) {
-    return boundary === 'bottom' ? getMaxBoundaryScrollTop(scrollContainer) : 0;
+    return boundary === 'bottom'
+      ? getMaxBoundaryScrollTop(scrollContainer)
+      : getMinBoundaryScrollTop(scrollContainer);
   }
 
   function setBoundaryScrollPosition(scrollContainer, boundary) {
@@ -2340,7 +2504,9 @@ const clickElementLikeUser = (el) => {
     gsap.to(scrollContainer, {
       duration: 0.3,
       overwrite: 'auto',
-      scrollTo: { y: getBoundaryScrollTop(scrollContainer, boundary), autoKill: false },
+      ...(isReversedScrollContainer(scrollContainer)
+        ? { scrollTop: getBoundaryScrollTop(scrollContainer, boundary) }
+        : { scrollTo: { y: getBoundaryScrollTop(scrollContainer, boundary), autoKill: false } }),
       ease: 'power4.out',
       onComplete: () => {
         settleBoundaryScrollTarget(scrollContainer, boundary);
@@ -2435,7 +2601,9 @@ const clickElementLikeUser = (el) => {
     activeMessageScrollTween = gsap.to(scrollContainer, {
       duration: 0.3,
       overwrite: 'auto',
-      scrollTo: { y: targetY, autoKill: false },
+      ...(isReversedScrollContainer(scrollContainer)
+        ? { scrollTop: targetY }
+        : { scrollTo: { y: targetY, autoKill: false } }),
       ease: 'power4.out',
       onComplete: () => {
         activeMessageScrollTween = null;
@@ -2452,15 +2620,10 @@ const clickElementLikeUser = (el) => {
   function scrollToMessageTop(scrollContainer, message, scrollOffset) {
     if (!(message instanceof HTMLElement) || !message.isConnected) return;
 
-    const targetScrollTop = getMessageTopScrollPosition(message, scrollContainer);
+    const targetScrollTop = getMessageScrollTarget(scrollContainer, message, scrollOffset);
     if (!Number.isFinite(targetScrollTop)) return;
 
-    animateMessageScrollTo(
-      scrollContainer,
-      clampScrollTop(scrollContainer, targetScrollTop - scrollOffset),
-      message,
-      scrollOffset,
-    );
+    animateMessageScrollTo(scrollContainer, targetScrollTop);
   }
 
   function scrollToMessagePosition(scrollContainer, messagePosition, scrollOffset) {
@@ -2485,7 +2648,8 @@ const clickElementLikeUser = (el) => {
     let targetMessage = null;
 
     for (let i = messages.length - 1; i >= 0; i--) {
-      const messageTop = messages[i].getBoundingClientRect().top;
+      const messageTop =
+        messages[i].getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
       if (messageTop < upThreshold) {
         foundCount++;
         if (foundCount === stepCount) {
@@ -2498,7 +2662,7 @@ const clickElementLikeUser = (el) => {
     if (targetMessage) {
       scrollToMessageTop(scrollContainer, targetMessage, scrollOffset);
     } else {
-      animateMessageScrollTo(scrollContainer, 0);
+      animateBoundaryScrollTo(scrollContainer, 'top');
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
@@ -2617,12 +2781,19 @@ const clickElementLikeUser = (el) => {
     const { downThreshold, scrollOffset } = getMessageScrollOptions();
     const messagePositions = getMessageTopScrollPositions(messages, scrollContainer);
 
-    const targetPosition = getNextMessagePosition(messagePositions, currentScrollTop, downThreshold);
+    const firstTarget = messagePositions[0]
+      ? clampScrollTop(scrollContainer, messagePositions[0].topScroll - scrollOffset)
+      : currentScrollTop;
+    const targetPosition = getNextMessagePosition(
+      messagePositions,
+      Math.max(currentScrollTop, firstTarget),
+      downThreshold,
+    );
 
     if (targetPosition) {
       scrollToMessagePosition(scrollContainer, targetPosition, scrollOffset);
     } else {
-      animateMessageScrollTo(scrollContainer, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+      animateBoundaryScrollTo(scrollContainer, 'bottom');
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget);
@@ -2644,7 +2815,10 @@ const clickElementLikeUser = (el) => {
     // Use a local variable instead of reassigning the parameter
     const stepCount = Math.max(1, Math.floor(steps));
 
-    let virtualTop = scrollContainer.scrollTop;
+    const firstTarget = messagePositions[0]
+      ? clampScrollTop(scrollContainer, messagePositions[0].topScroll - scrollOffset)
+      : scrollContainer.scrollTop;
+    let virtualTop = Math.max(scrollContainer.scrollTop, firstTarget);
     let targetPosition = null;
 
     for (let i = 0; i < stepCount; i++) {
@@ -2660,7 +2834,7 @@ const clickElementLikeUser = (el) => {
     if (targetPosition) {
       scrollToMessagePosition(scrollContainer, targetPosition, scrollOffset);
     } else {
-      animateMessageScrollTo(scrollContainer, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+      animateBoundaryScrollTo(scrollContainer, 'bottom');
     }
 
     if (feedbackTarget) feedbackAnimation(feedbackTarget); // trigger immediately
@@ -2816,24 +2990,22 @@ const clickElementLikeUser = (el) => {
     );
   }
 
-  const PLUS_BTN_SEL = '[data-testid="composer-plus-btn"]';
+  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = [
+    'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"]',
+    'form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
+  ];
   const COMPOSER_TOOL_ITEM_SELECTOR = [
+    'button[data-list-navigation-item="true"]',
     'div.__menu-item[tabindex]',
     'div[role="menuitem"]',
     'div[role="menuitemradio"]',
     'div[role="menuitemcheckbox"]',
   ].join(', ');
   const COMPOSER_TOOL_MENU_CUE_TOKENS = [
-    '#paperclip',
-    '#create-image-plugin',
-    '#skill-globe-dark',
-    '#skill-deep-research-dark',
-    '#712359',
-    '#ccfd18',
-    '#6d72eb',
-    '#46f45a',
-    '#266724',
-    '#6b0d8c',
+    'M6.1416 10.1663',
+    'M7 21.005',
+    'M12 2c5.522',
+    'img:deep_research_app/icon.png',
   ];
 
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -2857,7 +3029,17 @@ const clickElementLikeUser = (el) => {
   const buildIconSelector = buildSvgSelectorForIconTokens;
 
   const findComposerToolItemByIcon = (iconTokens) => {
-    const iconSelector = buildIconSelector(iconTokens);
+    const tokens = Array.isArray(iconTokens) ? iconTokens : [iconTokens];
+    const iconSelector = tokens
+      .map((token) => {
+        const value = String(token || '');
+        return value.startsWith('img:')
+          ? `img[src*="${escapeAttributeSelectorFragment(value.slice(4))}"]`
+          : buildIconSelector(value);
+      })
+      .filter(Boolean)
+      .join(', ');
+    if (!iconSelector) return null;
     const items = Array.from(document.querySelectorAll(iconSelector))
       .map((icon) => icon.closest(COMPOSER_TOOL_ITEM_SELECTOR))
       .filter((item, index, all) => item && all.indexOf(item) === index)
@@ -2876,16 +3058,34 @@ const clickElementLikeUser = (el) => {
     return items[items.length - 1] || null;
   };
 
+  const findComposerToolMenuOpener = () => {
+    const selector = COMPOSER_TOOL_MENU_OPENER_SELECTORS.join(', ');
+    return (
+      Array.from(document.querySelectorAll(selector)).find((button) => {
+        const style = getComputedStyle(button);
+        const rect = button.getBoundingClientRect();
+        return (
+          button.isConnected &&
+          !button.disabled &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.pointerEvents !== 'none' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      }) || null
+    );
+  };
+
   const runActionByIcon = async (iconPathPrefix, delays = DELAYS) => {
     let item = findComposerToolItemByIcon(iconPathPrefix);
     if (!item) {
-      const composer = document.querySelector('form[data-type="unified-composer"]');
-      const plusBtn = composer?.querySelector(PLUS_BTN_SEL) || document.querySelector(PLUS_BTN_SEL);
-      if (!plusBtn) return;
+      const menuOpener = findComposerToolMenuOpener();
+      if (!menuOpener) return;
 
       if (!findComposerToolItemByIcon(COMPOSER_TOOL_MENU_CUE_TOKENS)) {
-        flashBorder(plusBtn);
-        smartClick(plusBtn);
+        flashBorder(menuOpener);
+        smartClick(menuOpener);
       }
 
       item = await waitFor(() => findComposerToolItemByIcon(iconPathPrefix), {
@@ -2904,19 +3104,18 @@ const clickElementLikeUser = (el) => {
   // ======================================================
   // ==== Exposed Button Click Shared helpers ============
 
-  // Clicks a button by its data-testid attribute, ensuring it's visible and interactable.
-  const clickButtonByTestId = async (
-    testId,
+  // Clicks a button matching a selector, ensuring it's visible and interactable.
+  const clickButtonBySelector = async (
+    buttonSelector,
     {
       timeout = 2000,
       interval = 50,
       delays = DELAYS,
       root = document,
+      immediate = false,
       pick = (btns) => btns[0], // if multiple, pick the first
     } = {},
   ) => {
-    const buttonSelector = `[data-testid="${testId}"]`;
-
     const getClickableAncestor = (node) => {
       const isClickable = (el) =>
         el &&
@@ -2933,28 +3132,36 @@ const clickElementLikeUser = (el) => {
       return null;
     };
 
+    const resolveTarget = () => {
+      const btns = Array.from(root.querySelectorAll(buttonSelector));
+      if (!btns.length) return null;
+      const chosenBtn = pick(btns) || btns[0];
+      return getClickableAncestor(chosenBtn);
+    };
+
     const ensureVisible = (el) => {
       try {
         el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
       } catch { }
     };
 
-    const target = await waitFor(
-      () => {
-        const btns = Array.from(root.querySelectorAll(buttonSelector));
-        if (!btns.length) return null;
-        const chosenBtn = pick(btns) || btns[0];
-        return getClickableAncestor(chosenBtn);
-      },
-      { timeout, interval },
-    );
+    const target = immediate ? resolveTarget() : await waitFor(resolveTarget, { timeout, interval });
 
     if (!target) return;
 
     ensureVisible(target);
+    if (immediate) {
+      const currentTarget = resolveTarget();
+      if (currentTarget) smartClick(currentTarget);
+      return;
+    }
+
     flashBorder(target);
     await sleep(delays.beforeFinalClick);
-    smartClick(target);
+    const currentTarget = resolveTarget();
+    if (!currentTarget) return;
+    ensureVisible(currentTarget);
+    smartClick(currentTarget);
   };
 
   // ==== End Exposed Button Click Shared helpers =========
@@ -2976,6 +3183,7 @@ const clickElementLikeUser = (el) => {
   const toTokenArray = getIconTokenList;
   const safeEsc = escapeCssSelectorValue;
   const svgSelectorForTokens = buildSvgSelectorForIconTokens;
+  const COPY_MESSAGE_ACTION_ICON_PATH_PREFIX = 'M13.468 11.1216';
 
   const withPrefix = (selectorList, prefix) =>
     selectorList
@@ -3060,11 +3268,32 @@ const clickElementLikeUser = (el) => {
     return unique[unique.length - 1] || null;
   }
 
+  function findOpenMenuForTrigger(trigger) {
+    if (!trigger?.getAttribute) return null;
+
+    const controlledMenuIds = (trigger.getAttribute('aria-controls') || '')
+      .split(/\s+/)
+      .filter(Boolean);
+    const triggerId = trigger.getAttribute('id');
+    const openMenus = Array.from(document.querySelectorAll('[role="menu"][data-state="open"]'));
+
+    return (
+      openMenus.find((menu) => controlledMenuIds.includes(menu.getAttribute('id'))) ||
+      openMenus.find((menu) => {
+        const labelledByIds = (menu.getAttribute('aria-labelledby') || '').split(/\s+/);
+        return triggerId && labelledByIds.includes(triggerId);
+      }) ||
+      null
+    );
+  }
+
   function clickLowestVisibleMenuItemByPath(pathPrefix, options = {}, attempt = 0) {
-    const { delays = DEFAULT_MENU_DELAYS, menuRootSelector } = options;
+    const { delays = DEFAULT_MENU_DELAYS, menuRootSelector, menuRootResolver } = options;
     const menuEl = menuRootSelector ? document.querySelector(menuRootSelector) : null;
     let item = null;
-    if (menuRootSelector) {
+    if (menuRootResolver) {
+      item = findLowestMenuItemByPathInMenu(menuRootResolver(), pathPrefix);
+    } else if (menuRootSelector) {
       const menus = menuEl ? [menuEl] : getOpenMenus().slice().reverse();
       for (const menu of menus) {
         item = findLowestMenuItemByPathInMenu(menu, pathPrefix);
@@ -3119,9 +3348,17 @@ const clickElementLikeUser = (el) => {
     const menuRootSelector =
       options.menuRootSelector ||
       (btn.id ? `[role="menu"][aria-labelledby="${safeEsc(btn.id)}"][data-state="open"]` : null);
+    const menuRootResolver =
+      typeof options.menuRootResolver === 'function'
+        ? () => options.menuRootResolver(btn)
+        : null;
 
     setTimeout(() => {
-      clickLowestVisibleMenuItemByPath(subItemPathPrefix, { delays, menuRootSelector });
+      clickLowestVisibleMenuItemByPath(subItemPathPrefix, {
+        delays,
+        menuRootSelector,
+        menuRootResolver,
+      });
     }, waitMs);
 
     return true;
@@ -3288,6 +3525,21 @@ const clickElementLikeUser = (el) => {
     return matches.filter(Boolean);
   };
 
+  const NATIVE_CODEBOX_WRAPPER_SELECTOR = '[data-markdown-copy="code-block"]';
+  const NATIVE_CODEBOX_COPY_ICON_PATH_PREFIX = 'M15.1006 1.78516C16.793 1.78556';
+
+  function findNativeCodeBoxCopyButtons() {
+    const buttons = [];
+    for (const codeBox of document.querySelectorAll(NATIVE_CODEBOX_WRAPPER_SELECTOR)) {
+      buttons.push(
+        ...Array.from(codeBox.querySelectorAll('button')).filter((btn) =>
+          btn.querySelector?.(`svg path[d^="${NATIVE_CODEBOX_COPY_ICON_PATH_PREFIX}"]`),
+        ),
+      );
+    }
+    return buttons;
+  }
+
   const getVisibleCopyButtonsSorted = (tokenOrTokens) => {
     const set = new Set();
     const push = (list = []) => {
@@ -3298,10 +3550,28 @@ const clickElementLikeUser = (el) => {
 
     // Primary: test-id buttons
     push(Array.from(document.querySelectorAll('button[data-testid="copy-turn-action-button"]')));
-    // Secondary: icon-based matches
-    push(findButtonsBySvgPathPrefix(tokenOrTokens));
+    // Native code-block Copy actions use their own test id; require code-block
+    // ancestry so these cannot be confused with message-level Copy actions.
+    push(
+      Array.from(document.querySelectorAll('button[data-testid="copy-code-button"]')).filter(
+        (btn) => isCodeBoxCopyControl(btn),
+      ),
+    );
+    // Current native code-block Copy actions have no test id; resolve their
+    // icon structurally inside ChatGPT's explicit code-block wrapper.
+    push(findNativeCodeBoxCopyButtons());
+    // Current native message Copy actions are grouped separately from code-block controls.
+    push(
+      findButtonsBySvgPathPrefix(tokenOrTokens).filter((btn) =>
+        btn.closest?.('.turn-action-controls'),
+      ),
+    );
 
-    const arr = Array.from(set).filter((btn) => isFullyInViewport(btn));
+    const visibleButtons = Array.from(set).filter((btn) => isFullyInViewport(btn));
+    // A visible native code-block Copy action owns its exact code payload, so
+    // prefer those controls over the separate message-level Copy action.
+    const codeBoxButtons = visibleButtons.filter((btn) => isCodeBoxCopyControl(btn));
+    const arr = codeBoxButtons.length ? codeBoxButtons : visibleButtons;
     arr.sort((a, b) => {
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
@@ -3321,6 +3591,15 @@ const clickElementLikeUser = (el) => {
   const MESSAGE_COPY_BOUNDARY_SELECTOR =
     '[data-message-author-role], section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
 
+  function isMessageCopyActionButton(btn) {
+    if (!btn || !(btn instanceof Element)) return false;
+    if (btn.getAttribute?.('data-testid') === 'copy-turn-action-button') return true;
+    return !!(
+      btn.closest?.('.turn-action-controls') &&
+      btn.querySelector?.(`svg path[d^="${COPY_MESSAGE_ACTION_ICON_PATH_PREFIX}"]`)
+    );
+  }
+
   function normalizeCodeTextForCopyGuard(text) {
     return String(text || '')
       .replace(/\u00A0/g, ' ')
@@ -3330,7 +3609,7 @@ const clickElementLikeUser = (el) => {
   }
 
   function getMessageCopyCodeBlockTexts(btn) {
-    if (btn?.getAttribute?.('data-testid') !== 'copy-turn-action-button') return [];
+    if (!isMessageCopyActionButton(btn)) return [];
 
     const scope = btn.closest?.(MESSAGE_COPY_BOUNDARY_SELECTOR);
     if (!scope) return [];
@@ -3350,8 +3629,9 @@ const clickElementLikeUser = (el) => {
   function isCodeBoxCopyControl(control) {
     const btn = control?.closest?.('button, [role="button"]') || control;
     if (!btn || !(btn instanceof Element)) return false;
-    if (btn.getAttribute?.('data-testid') === 'copy-turn-action-button') return false;
+    if (isMessageCopyActionButton(btn)) return false;
 
+    if (btn.closest(NATIVE_CODEBOX_WRAPPER_SELECTOR)) return true;
     if (btn.closest('pre, #code-block-viewer, .cm-editor, .cm-content')) return true;
 
     let node = btn.parentElement;
@@ -3431,8 +3711,7 @@ const clickElementLikeUser = (el) => {
     const btn = target;
 
     const isCodeBoxCopy = isCodeBoxCopyControl(btn);
-    const isMsgCopy =
-      !isCodeBoxCopy && btn.getAttribute('data-testid') === 'copy-turn-action-button';
+    const isMsgCopy = !isCodeBoxCopy && isMessageCopyActionButton(btn);
     const protectedCodeTexts = isMsgCopy ? getMessageCopyCodeBlockTexts(btn) : [];
 
     if (window.gsap && typeof window.flashBorder === 'function') {
@@ -3566,6 +3845,8 @@ const clickElementLikeUser = (el) => {
   }
 
   const SIDEBAR_TOGGLE_SELECTORS = [
+    'button[data-app-shell-sidebar-trigger="true"]',
+    '[data-app-shell-titlebar] button[aria-controls="browser-sidebar-popover"]',
     'button[data-testid="close-sidebar-button"]',
     '#stage-sidebar-tiny-bar button[aria-controls="stage-slideover-sidebar"]',
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
@@ -3575,19 +3856,19 @@ const clickElementLikeUser = (el) => {
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
   const SEARCH_CONVERSATION_SELECTORS = [
+    'button:has(svg path[d^="M7.32849 1.91016"])',
     'button[data-testid="search-conversation-button"]',
-    '#sidebar-header button[aria-label="Search"]',
   ];
   const NEW_CHAT_SELECTORS = [
+    'button:has(svg path[d^="M8.16675 2.50127"])',
+    '[data-app-shell-titlebar] button:has(svg path[d^="M6.33325 1.80763"])',
     'a[data-testid="create-new-chat-button"]',
     'button[data-testid="create-new-chat-button"]',
     'button[data-testid="new-chat-button"]',
   ];
   const COMPOSER_INPUT_SELECTORS = [
-    'form[data-type="unified-composer"] #prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"]',
-    'form[data-type="unified-composer"] textarea[name="prompt-textarea"]',
-    '#thread-bottom-container #prompt-textarea.ProseMirror[contenteditable="true"][role="textbox"]',
-    '#thread-bottom-container textarea[name="prompt-textarea"]',
+    'form[data-thread-find-composer="true"] div.ProseMirror[contenteditable="true"][role="textbox"]',
+    'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
   ];
   const SEARCH_SPRITE_FRAGMENT = '#sidebar-search';
   const SEARCH_SPRITE_FALLBACK_FRAGMENT = '#ac6d36';
@@ -3788,7 +4069,7 @@ const clickElementLikeUser = (el) => {
 
   function getNativeChatWorkSurfaceMode(radios = getNativeChatWorkSurfaceRadios()) {
     const selectedIndex = radios.findIndex(
-      (radio) => radio.getAttribute('aria-checked') === 'true',
+      (radio) => window.CSPModelPickerSelectors?.isChatWorkSurfaceSelected(radio),
     );
     if (selectedIndex === 0) return rememberNativeChatWorkSurfaceMode('chat', 'native:read');
     if (selectedIndex === 1) return rememberNativeChatWorkSurfaceMode('work', 'native:read');
@@ -3818,7 +4099,7 @@ const clickElementLikeUser = (el) => {
     let radios = await waitForNativeChatWorkSurfaceRadios(timeoutMs);
     const target = radios[targetIndex];
     if (!(target instanceof Element)) return false;
-    if (target.getAttribute('aria-checked') === 'true') {
+    if (window.CSPModelPickerSelectors?.isChatWorkSurfaceSelected(target)) {
       rememberNativeChatWorkSurfaceMode(mode, 'native:already-selected');
       return true;
     }
@@ -3828,7 +4109,7 @@ const clickElementLikeUser = (el) => {
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
       radios = getNativeChatWorkSurfaceRadios();
-      if (radios[targetIndex]?.getAttribute('aria-checked') === 'true') {
+      if (window.CSPModelPickerSelectors?.isChatWorkSurfaceSelected(radios[targetIndex])) {
         rememberNativeChatWorkSurfaceMode(mode, 'native:selected');
         return true;
       }
@@ -3856,7 +4137,7 @@ const clickElementLikeUser = (el) => {
     (event) => {
       const radio =
         event.target instanceof Element
-          ? event.target.closest('header button[role="radio"][aria-checked]')
+          ? event.target.closest('button[role="radio"][aria-checked], button[aria-pressed]')
           : null;
       if (!(radio instanceof Element)) return;
       const radios = getNativeChatWorkSurfaceRadios();
@@ -4625,10 +4906,29 @@ const clickElementLikeUser = (el) => {
     }
 
     function getCopyButtonContentElements(btn) {
+      const actionControls = btn?.closest?.('.turn-action-controls');
+      const messageUnit = actionControls?.closest?.('[data-chatgpt-search-unit-key]');
+      const currentAssistantSelector = '[data-markdown-text-style="assistant-message"]';
+      if (messageUnit) {
+        return dedupeCopyContentElements([
+          messageUnit.querySelector(currentAssistantSelector) ||
+            messageUnit.querySelector(COPY_CONTENT_SELECTOR),
+        ]);
+      }
+      // Current assistant actions sit outside the message unit, in a group
+      // containing BOTH the prompt and reply. Prefer the explicit reply body.
+      const assistantBodies = Array.from(
+        actionControls?.parentElement?.querySelectorAll(currentAssistantSelector) || [],
+      );
+      if (assistantBodies.length) return dedupeCopyContentElements(assistantBodies);
       const directContentEls = getDirectCopyContentElementsForButton(btn);
       if (directContentEls.length) return directContentEls;
-      const turn = btn?.closest?.(COPY_CONVERSATION_TURN_SELECTOR);
-      return getPrimaryCopyContentElementsForTurn(turn);
+      const turn = btn?.closest?.(`${COPY_CONVERSATION_TURN_SELECTOR}, [data-turn-key]`);
+      const contentEls = getPrimaryCopyContentElementsForTurn(turn);
+      if (contentEls.length) return contentEls;
+      // Current turns can omit the old role wrapper. Resolve only their message
+      // body, never the whole turn (which also contains action controls).
+      return dedupeCopyContentElements([turn?.querySelector?.(COPY_CONTENT_SELECTOR)]);
     }
 
     function getVisibleCopyTurnsAboveComposer() {
@@ -5683,40 +5983,38 @@ const clickElementLikeUser = (el) => {
     };
 
     function runSelectThenCopyShortcut() {
-      setTimeout(() => {
-        try {
-          window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
-          const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
-          const onlySelectUser = window.onlySelectUserCheckbox || false;
-          const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
-          const shouldCopy = !disableCopyAfterSelect;
+      try {
+        window.selectThenCopyState = window.selectThenCopyState || { lastSelectedIndex: -1 };
+        const onlySelectAssistant = window.onlySelectAssistantCheckbox || false;
+        const onlySelectUser = window.onlySelectUserCheckbox || false;
+        const disableCopyAfterSelect = window.disableCopyAfterSelectCheckbox || false;
+        const shouldCopy = !disableCopyAfterSelect;
 
-          const filteredVisibleTurns = getVisibleCopyTurnsAboveComposer().filter((turn) => {
-            if (onlySelectAssistant && !copyTurnHasRole(turn, 'assistant')) return false;
-            if (onlySelectUser && !copyTurnHasRole(turn, 'user')) return false;
-            return true;
-          });
+        const filteredVisibleTurns = getVisibleCopyTurnsAboveComposer().filter((turn) => {
+          if (onlySelectAssistant && !copyTurnHasRole(turn, 'assistant')) return false;
+          if (onlySelectUser && !copyTurnHasRole(turn, 'user')) return false;
+          return true;
+        });
 
-          if (!filteredVisibleTurns.length) return;
+        if (!filteredVisibleTurns.length) return;
 
-          filteredVisibleTurns.sort(
-            (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
-          );
+        filteredVisibleTurns.sort(
+          (a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top,
+        );
 
-          const { lastSelectedIndex } = window.selectThenCopyState;
-          const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
-          const selectedTurn = filteredVisibleTurns[nextIndex];
-          if (!selectedTurn) return;
-          window.selectThenCopyState.lastSelectedIndex = nextIndex;
+        const { lastSelectedIndex } = window.selectThenCopyState;
+        const nextIndex = (lastSelectedIndex + 1) % filteredVisibleTurns.length;
+        const selectedTurn = filteredVisibleTurns[nextIndex];
+        if (!selectedTurn) return;
+        window.selectThenCopyState.lastSelectedIndex = nextIndex;
 
-          const contentEls = getPrimaryCopyContentElementsForTurn(selectedTurn);
-          if (!contentEls.length) return;
+        const contentEls = getPrimaryCopyContentElementsForTurn(selectedTurn);
+        if (!contentEls.length) return;
 
-          selectAndMaybeCopySingleMessage(contentEls, shouldCopy);
-        } catch (err) {
-          if (COPY_SHORTCUT_DEBUG) console.debug('outer selectThenCopy failure:', err);
-        }
-      }, 50);
+        selectAndMaybeCopySingleMessage(contentEls, shouldCopy);
+      } catch (err) {
+        if (COPY_SHORTCUT_DEBUG) console.debug('outer selectThenCopy failure:', err);
+      }
     }
 
     function getConversationCopyLabelText(turn, role, includeLabels) {
@@ -6045,12 +6343,97 @@ const clickElementLikeUser = (el) => {
       const GSAP_SCROLL_DURATION = 0.3; // smooth scroll duration with GSAP
       const DELAY_FALLBACK_FINISH = 125; // fallback delay if GSAP unavailable
       const DELAY_INITIAL_SCAN = 25; // initial wait before scanning buttons
-      const EDIT_ICON_TOKENS = ['M11.3312 3.56837C12.7488', '#6d87e1'];
-      const EDIT_BUTTON_SELECTOR = 'button[aria-label="Edit message"]';
-      const editSelectors = [
-        EDIT_BUTTON_SELECTOR,
-        withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button'),
-      ];
+      const EDIT_ICON_TOKENS = ['M11.7313'];
+      const USER_EDIT_TURN_MARKER_SELECTOR =
+        '[data-turn="user"], [data-chatgpt-search-unit-key$=":user"], [data-message-author-role="user"], [data-user-message-bubble="true"]';
+      const editSelectors = [withPrefix(svgSelectorForTokens(EDIT_ICON_TOKENS), 'button')];
+
+      const isUserEditTurn = (turn) => {
+        if (!turn?.getAttribute) return false;
+
+        const dataTurn = turn.getAttribute('data-turn');
+        if (dataTurn) return dataTurn === 'user';
+
+        const unitKey = turn.getAttribute('data-chatgpt-search-unit-key') || '';
+        if (unitKey.endsWith(':user')) return true;
+        if (unitKey.endsWith(':assistant')) return false;
+
+        const directRole = turn.getAttribute('data-message-author-role');
+        if (directRole) return directRole === 'user';
+
+        if (
+          turn.matches?.(
+            '[data-chatgpt-search-unit-key$=":user"], [data-message-author-role="user"], [data-user-message-bubble="true"]',
+          )
+        ) {
+          return true;
+        }
+
+        return Boolean(
+          turn.querySelector?.(
+            '[data-message-author-role="user"], [data-chatgpt-search-unit-key$=":user"], [data-user-message-bubble="true"]',
+          ),
+        );
+      };
+
+      const getEditTurn = (target) => {
+        if (!target?.closest) return null;
+
+        const conversationTurn = target.closest(CONVERSATION_TURN_SELECTOR);
+        if (conversationTurn && isUserEditTurn(conversationTurn)) return conversationTurn;
+
+        return target.closest(USER_EDIT_TURN_MARKER_SELECTOR);
+      };
+
+      const getEditTargetAnchor = (button) => {
+        const turn = getEditTurn(button);
+        const messageContainer = button?.closest?.('[data-message-id]');
+        return {
+          turn,
+          messageId: messageContainer?.getAttribute('data-message-id') || null,
+          turnTestId: turn?.getAttribute?.('data-testid') || null,
+          turnKey: turn?.getAttribute?.('data-turn-key') || null,
+          userEditTurnValidated: Boolean(turn && isUserEditTurn(turn)),
+        };
+      };
+
+      const resolveEditTargetTurn = (anchor) => {
+        if (
+          anchor?.turn?.isConnected &&
+          (anchor.userEditTurnValidated || isUserEditTurn(anchor.turn))
+        ) {
+          return anchor.turn;
+        }
+
+        if (anchor?.messageId) {
+          const escapedMessageId = escapeAttributeSelectorFragment(anchor.messageId);
+          const matchingMessages = document.querySelectorAll(
+            `[data-message-id="${escapedMessageId}"]`,
+          );
+          for (const message of matchingMessages) {
+            const turn = getEditTurn(message);
+            if (turn?.isConnected) return turn;
+          }
+        }
+
+        if (anchor?.turnKey) {
+          const escapedTurnKey = escapeAttributeSelectorFragment(anchor.turnKey);
+          const matchingTurns = document.querySelectorAll(`[data-turn-key="${escapedTurnKey}"]`);
+          for (const turn of matchingTurns) {
+            if (anchor.userEditTurnValidated || isUserEditTurn(turn)) return turn;
+          }
+        }
+
+        if (anchor?.turnTestId) {
+          const escapedTestId = escapeAttributeSelectorFragment(anchor.turnTestId);
+          const matchingTurns = document.querySelectorAll(`[data-testid="${escapedTestId}"]`);
+          for (const turn of matchingTurns) {
+            if (anchor.userEditTurnValidated || isUserEditTurn(turn)) return turn;
+          }
+        }
+
+        return null;
+      };
 
       const getEditButtonData = (root = document) => {
         const queryRoot = root && typeof root.querySelectorAll === 'function' ? root : document;
@@ -6066,6 +6449,7 @@ const clickElementLikeUser = (el) => {
           ),
         )
           .filter((btn) => btn !== null)
+          .filter((btn) => Boolean(getEditTurn(btn)))
           .map((btn) => {
             const rect = btn.getBoundingClientRect();
             return { btn, rect };
@@ -6102,84 +6486,33 @@ const clickElementLikeUser = (el) => {
       };
 
       const resolveFinalEditButton = (initialButton) => {
-        const initialTurn = initialButton?.closest?.(CONVERSATION_TURN_SELECTOR);
-        if (initialTurn?.isConnected) {
-          const sameTurnButton = pickEditTarget(getEditButtonData(initialTurn));
+        const targetAnchor = getEditTargetAnchor(initialButton);
+        const targetTurn = resolveEditTargetTurn(targetAnchor);
+        if (targetTurn) {
+          const sameTurnButtons = getEditButtonData(targetTurn);
+          const sameTurnButton = pickEditTarget(sameTurnButtons);
           if (sameTurnButton) return sameTurnButton;
-
-          const sameTurnButtons = getEditButtonData(initialTurn);
           if (sameTurnButtons.length > 0) return sameTurnButtons[sameTurnButtons.length - 1].btn;
         }
 
-        return pickEditTarget(getEditButtonData()) || (initialButton?.isConnected ? initialButton : null);
+        return (
+          pickEditTarget(getEditButtonData()) ||
+          (initialButton?.isConnected && getEditTurn(initialButton) ? initialButton : null)
+        );
       };
 
       const clickEditButton = (button) => {
         if (!button || !button.isConnected || typeof button.click !== 'function') return false;
         if (button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
 
-        const rect = button.getBoundingClientRect();
-        const center =
-          rect && rect.width > 0 && rect.height > 0
-            ? {
-              clientX: Math.round(rect.left + rect.width / 2),
-              clientY: Math.round(rect.top + rect.height / 2),
-            }
-            : {};
-        const pointTarget =
-          Number.isFinite(center.clientX) && Number.isFinite(center.clientY)
-            ? document.elementFromPoint(center.clientX, center.clientY)
-            : null;
-        const eventTarget = pointTarget && button.contains(pointTarget) ? pointTarget : button;
-        const mouseBase = {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          view: window,
-          button: 0,
-          ...center,
-        };
-        const pointerBase = {
-          ...mouseBase,
-          pointerId: 1,
-          pointerType: 'mouse',
-          isPrimary: true,
-        };
-
         try {
           button.focus?.({ preventScroll: true });
         } catch { }
 
         try {
-          if (typeof PointerEvent === 'function') {
-            eventTarget.dispatchEvent(
-              new PointerEvent('pointerover', { ...pointerBase, buttons: 0 }),
-            );
-            eventTarget.dispatchEvent(
-              new PointerEvent('pointerenter', { ...pointerBase, bubbles: false, buttons: 0 }),
-            );
-            eventTarget.dispatchEvent(
-              new PointerEvent('pointerdown', { ...pointerBase, buttons: 1 }),
-            );
-          }
-          eventTarget.dispatchEvent(new MouseEvent('mouseover', { ...mouseBase, buttons: 0 }));
-          eventTarget.dispatchEvent(new MouseEvent('mousedown', { ...mouseBase, buttons: 1 }));
-          if (typeof PointerEvent === 'function') {
-            eventTarget.dispatchEvent(
-              new PointerEvent('pointerup', { ...pointerBase, buttons: 0 }),
-            );
-          }
-          eventTarget.dispatchEvent(new MouseEvent('mouseup', { ...mouseBase, buttons: 0 }));
-          eventTarget.dispatchEvent(new MouseEvent('click', { ...mouseBase, buttons: 0 }));
-          if (button.isConnected) button.click();
-          return true;
+          return smartClick(button);
         } catch {
-          try {
-            button.click();
-            return true;
-          } catch {
-            return false;
-          }
+          return false;
         }
       };
 
@@ -6222,8 +6555,6 @@ const clickElementLikeUser = (el) => {
 
         return window;
       };
-
-      const getEditTurn = (target) => target?.closest?.(CONVERSATION_TURN_SELECTOR) || null;
 
       const findOpenedEditField = (turn) => {
         if (!turn?.isConnected) return null;
@@ -6388,8 +6719,9 @@ const clickElementLikeUser = (el) => {
         stabilizeOpenedEditCard(turn);
       };
 
-      const waitForOpenedEditField = (turn, onOpen, timeout = 1500) => {
-        if (!turn?.isConnected || typeof onOpen !== 'function') return false;
+      const waitForOpenedEditField = (targetAnchor, onOpen, timeout = 1500) => {
+        const observerRoot = document.body || document.documentElement;
+        if (!observerRoot || typeof onOpen !== 'function') return false;
         let done = false;
         let observer = null;
         let timeoutId = null;
@@ -6406,13 +6738,11 @@ const clickElementLikeUser = (el) => {
 
         const check = () => {
           if (done) return true;
-          if (!turn?.isConnected) {
-            cleanup();
-            return true;
-          }
+          const turn = resolveEditTargetTurn(targetAnchor);
+          if (!turn) return false;
           if (findOpenedEditField(turn)) {
             cleanup();
-            onOpen();
+            onOpen(turn);
             return true;
           }
           return false;
@@ -6434,7 +6764,12 @@ const clickElementLikeUser = (el) => {
         if (check()) return true;
 
         observer = new MutationObserver(scheduleCheck);
-        observer.observe(turn, { childList: true, subtree: true });
+        observer.observe(observerRoot, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['contenteditable', 'role'],
+        });
         timeoutId = setTimeout(() => {
           check();
           cleanup();
@@ -6443,35 +6778,27 @@ const clickElementLikeUser = (el) => {
         return true;
       };
 
-      const openEditButtonWithRetry = (button) => {
-        const turn = getEditTurn(button);
-        if (!turn?.isConnected || !clickEditButton(button)) return;
-        let handled = false;
-        const handleOnce = () => {
-          if (handled) return;
-          handled = true;
+      const openEditButton = (button) => {
+        const targetAnchor = getEditTargetAnchor(button);
+        let turn = resolveEditTargetTurn(targetAnchor);
+        if (!turn?.isConnected) {
+          const validatedTurn = getEditTurn(button);
+          if (!validatedTurn?.isConnected || !isUserEditTurn(validatedTurn)) return;
+          targetAnchor.turn = validatedTurn;
+          targetAnchor.turnTestId = validatedTurn.getAttribute?.('data-testid') || null;
+          targetAnchor.turnKey = validatedTurn.getAttribute?.('data-turn-key') || null;
+          targetAnchor.userEditTurnValidated = true;
+          turn = validatedTurn;
+        }
+        if (!turn?.isConnected) return;
+        const existingEditField = findOpenedEditField(turn);
+        if (existingEditField) {
           handleOpenedEditField(turn);
-        };
-        waitForOpenedEditField(turn, handleOnce);
+          return;
+        }
 
-        setTimeout(() => {
-          if (findOpenedEditField(turn)) {
-            handleOnce();
-            return;
-          }
-
-          if (!button?.isConnected) {
-            return;
-          }
-          clickEditButton(button);
-          waitForOpenedEditField(turn, handleOnce);
-
-          setTimeout(() => {
-            if (findOpenedEditField(turn)) {
-              handleOnce();
-            }
-          }, 100);
-        }, 100);
+        if (!clickEditButton(button)) return;
+        waitForOpenedEditField(targetAnchor, handleOpenedEditField);
       };
 
       // always scroll to center if possible, clamp if not
@@ -6513,7 +6840,7 @@ const clickElementLikeUser = (el) => {
             try {
               if (typeof flashBorder === 'function') flashBorder(finalButton);
             } catch { }
-            openEditButtonWithRetry(finalButton);
+            openEditButton(finalButton);
           };
 
           if (typeof window.requestAnimationFrame === 'function') {
@@ -6618,7 +6945,9 @@ const clickElementLikeUser = (el) => {
       const COMPOSER_SCOPE_SELECTOR =
         '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background';
       const USER_TURN_SELECTOR =
-        'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], [data-turn="user"]';
+        'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn], [data-turn-key], [data-chatgpt-search-unit-key], [data-turn="user"], [data-message-author-role="user"], [data-user-message-bubble="true"]';
+      const USER_TURN_CONTAINER_SELECTOR =
+        'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn], [data-turn-key], [data-chatgpt-search-unit-key]';
 
       let viewportHeight = 0;
       let viewportWidth = 0;
@@ -6628,9 +6957,37 @@ const clickElementLikeUser = (el) => {
         viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       };
 
+      const isUserTurn = (turn) => {
+        if (!turn?.getAttribute) return false;
+
+        const dataTurn = turn.getAttribute('data-turn');
+        if (dataTurn) return dataTurn === 'user';
+
+        const unitKey = turn.getAttribute('data-chatgpt-search-unit-key') || '';
+        if (unitKey.endsWith(':user')) return true;
+        if (unitKey.endsWith(':assistant')) return false;
+
+        const authorRole = turn.getAttribute('data-message-author-role');
+        if (authorRole) return authorRole === 'user';
+
+        return Boolean(
+          turn.querySelector?.(
+            '[data-message-author-role="user"], [data-chatgpt-search-unit-key$=":user"], [data-user-message-bubble="true"]',
+          ),
+        );
+      };
+
       const getUserTurn = (el) => {
-        const turn = el?.closest?.(USER_TURN_SELECTOR);
-        return turn?.getAttribute?.('data-turn') === 'user' ? turn : null;
+        let candidate = el?.closest?.(USER_TURN_SELECTOR) || null;
+        let fallback = null;
+        while (candidate) {
+          if (isUserTurn(candidate)) {
+            fallback = candidate;
+            if (candidate.matches?.(USER_TURN_CONTAINER_SELECTOR)) return candidate;
+          }
+          candidate = candidate.parentElement?.closest?.(USER_TURN_SELECTOR) || null;
+        }
+        return fallback;
       };
 
       const isEligibleEditSendButton = (btn) => {
@@ -6652,9 +7009,6 @@ const clickElementLikeUser = (el) => {
           isAboveComposer(rect, btn)
         );
       };
-
-      const getButtonLabel = (btn) =>
-        (btn?.textContent || btn?.innerText || btn?.getAttribute?.('aria-label') || '').trim();
 
       const getFocusedEditField = () => {
         const roots = [];
@@ -6694,11 +7048,17 @@ const clickElementLikeUser = (el) => {
         if (!editField) return null;
 
         const editCard =
+          editField.closest('form') ||
           editField.closest('.bg-token-main-surface-tertiary') ||
           editField.closest('.rounded-3xl') ||
           editField.closest('[data-message-id]') ||
           getUserTurn(editField);
         if (!editCard) return null;
+
+        const submitButtons = Array.from(editCard.querySelectorAll('button[type="submit"]')).filter(
+          isEligibleEditSendButton,
+        );
+        if (submitButtons.length) return submitButtons[submitButtons.length - 1];
 
         const rows = Array.from(
           new Set([
@@ -6706,34 +7066,24 @@ const clickElementLikeUser = (el) => {
             ...Array.from(editCard.querySelectorAll('div.flex.justify-end')),
           ]),
         );
-        const buttons = rows
-          .flatMap((row) => Array.from(row.querySelectorAll('button')))
-          .filter(isEligibleEditSendButton);
-        if (!buttons.length) return null;
-
-        return (
-          buttons.find((btn) => btn.classList.contains('btn-primary')) ||
-          buttons.reduce((rightMost, current) => {
-            const rightRect = rightMost.getBoundingClientRect();
-            const currentRect = current.getBoundingClientRect();
-            if (currentRect.top > rightRect.top + 4) return current;
-            return currentRect.right >= rightRect.right ? current : rightMost;
-          })
-        );
+        const buttons = rows.map(findEditSendButton).filter(isEligibleEditSendButton);
+        return buttons.reduce((bottomMost, current) => {
+          const bottomRect = bottomMost.getBoundingClientRect();
+          const currentRect = current.getBoundingClientRect();
+          return currentRect.top >= bottomRect.top ? current : bottomMost;
+        }, buttons[0] || null);
       };
 
       const findEditSendButton = (row) => {
         if (!row) return null;
-        const buttons = Array.from(row.querySelectorAll('button'));
-        if (!buttons.length) return null;
+        const buttons = Array.from(row.querySelectorAll('button')).filter(isEligibleEditSendButton);
+        const submitButton = buttons.find(
+          (btn) => btn.getAttribute('type')?.toLowerCase() === 'submit',
+        );
+        if (submitButton) return submitButton;
 
-        const hasCancel = buttons.some((btn) => /cancel/i.test(getButtonLabel(btn)));
-        if (!hasCancel) return null;
-
-        const sendBtn =
-          buttons.find((btn) => /send/i.test(getButtonLabel(btn))) || buttons[1] || buttons[0];
-
-        return sendBtn || null;
+        // The inline edit action row places its commit control after Cancel.
+        return buttons.length > 1 ? buttons[buttons.length - 1] : null;
       };
 
       const findTextareaEditSendButtons = () =>
@@ -6742,11 +7092,17 @@ const clickElementLikeUser = (el) => {
             if (!getUserTurn(ta) || ta.closest(COMPOSER_SCOPE_SELECTOR)) return null;
 
             const editCard =
+              ta.closest('form') ||
               ta.closest('.bg-token-main-surface-tertiary') ||
               ta.closest('.rounded-3xl') ||
               ta.closest('[data-message-id]') ||
               ta.parentElement;
             if (!editCard) return null;
+
+            const submitButtons = Array.from(editCard.querySelectorAll('button[type="submit"]')).filter(
+              isEligibleEditSendButton,
+            );
+            if (submitButtons.length) return submitButtons[submitButtons.length - 1];
 
             const buttonRow =
               editCard.querySelector('div.flex.justify-end.gap-2') ||
@@ -6762,11 +7118,16 @@ const clickElementLikeUser = (el) => {
           .map((row) => {
             if (row.closest(COMPOSER_SCOPE_SELECTOR)) return null;
             const scope = row.closest(
-              '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]',
+              '.bg-token-main-surface-tertiary, .rounded-3xl, [data-message-id], section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"], article[data-turn], [data-turn-key], [data-chatgpt-search-unit-key], [data-message-author-role="user"], [data-user-message-bubble="true"]',
             );
             if (!scope) return null;
             if (!getUserTurn(scope)) return null;
             if (!scope.querySelector('textarea, [contenteditable="true"]')) return null;
+
+            const submitButtons = Array.from(scope.querySelectorAll('button[type="submit"]')).filter(
+              isEligibleEditSendButton,
+            );
+            if (submitButtons.length) return submitButtons[submitButtons.length - 1];
             return findEditSendButton(row);
           })
           .filter(Boolean);
@@ -6779,9 +7140,14 @@ const clickElementLikeUser = (el) => {
         });
 
       const flashAndClickSendEditButton = (btn) => {
-        if (window.gsap) flashBorder(btn);
+        if (!btn?.isConnected) return;
+        if (window.gsap && typeof flashBorder === 'function') {
+          try {
+            flashBorder(btn);
+          } catch { }
+        }
         setTimeout(() => {
-          safeClick(btn);
+          if (btn.isConnected) safeClick(btn);
         }, DELAY_BEFORE_CLICK);
       };
 
@@ -6816,19 +7182,20 @@ const clickElementLikeUser = (el) => {
     }
 
     const SHORTCUT_ICON_TOKENS = {
-      addPhotosFiles: ['#paperclip', '#712359', 'M4.33496 12.5V7.5C4.33496'],
-      askToChangeResponseInputMenu: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
-      branchInNewChatMenuItem: ['M3.32996 10H8.01173C8.7455', '#03583c'],
-      createImage: ['#create-image-plugin', '#ccfd18', '#266724', 'M9.38759 8.53403C10.0712'],
-      deepResearch: ['#skill-deep-research-dark', '#46f45a'],
-      dontSearchTheWebMenuItem: ['#ffd536', '#9254a2'],
-      moreDotsMenuButton: ['#623957', 'M15.498 8.50159C16.3254', '#f6d0e2'],
+      addPhotosFiles: ['M6.1416 10.1663'],
+      branchInNewChatMenuItem: ['M11.6672 1.97461'],
+      createImage: ['M7 21.005'],
+      deepResearch: ['img:deep_research_app/icon.png'],
+      moreDotsMenuButton: ['M3.33362 6.80811'],
       newGptConversationMenuItem: ['#compose', 'M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
-      regenerateMenuButton: ['M3.502 16.6663V13.3333C3.502', '#ec66f0'],
-      searchWeb: ['#skill-globe-dark', '#6d72eb', '#6b0d8c', 'M10 2.125C14.3492'],
+      regenerateMenuButton: ['M14.0219 8.22363'],
+      searchWeb: ['M12 2c5.522'],
       thinkingMenuButton: ['#127a53', '#c9d737'],
     };
+
+    const REGENERATE_MENU_TRIGGER_SELECTOR =
+      '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])';
 
     const LEGACY_THINKING_MENU_ITEM_BY_OPTION_ID = {
       'thinking-extended': '#143e56',
@@ -6838,56 +7205,125 @@ const clickElementLikeUser = (el) => {
     };
 
     const BOTTOM_BAR_CONTAINER_SELECTOR = '#bottomBarContainer';
-    const OPEN_RADIX_MENU_SELECTOR = 'div[role="menu"][data-state="open"]';
-
     function flashShortcutTarget(el) {
       if (window.gsap && typeof flashBorder === 'function') flashBorder(el);
     }
 
-    function activateMenuItemWithKeyboardThenClick(el) {
-      try {
-        el.focus();
-      } catch {}
-      try {
-        el.dispatchEvent(
-          new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
-        );
-        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
-      } catch {}
-      try {
-        el.click();
-      } catch {}
+    const READ_ALOUD_TARGET_BUTTON_ATTRIBUTE = 'data-csp-read-aloud-shortcut-target';
+    const READ_ALOUD_TARGET_TURN_ATTRIBUTE = 'data-csp-read-aloud-target-turn-attribute';
+    const READ_ALOUD_TARGET_TURN_VALUE = 'data-csp-read-aloud-target-turn-value';
+    const READ_ALOUD_TARGET_BUTTON_INDEX = 'data-csp-read-aloud-target-button-index';
+
+    function findLatestVisibleReadAloudActionButton() {
+      const buttons = document.querySelectorAll('.turn-action-controls button[aria-pressed]');
+      for (let index = buttons.length - 1; index >= 0; index -= 1) {
+        const button = buttons[index];
+        if (
+          button.getClientRects().length > 0 &&
+          button.querySelector('svg path[d^="M9.75122 4.09203"]')
+        ) {
+          return button;
+        }
+      }
+      return null;
     }
 
-    function activateOpenMenuItem(el) {
-      if (!(el instanceof Element)) return false;
-      flashShortcutTarget(el);
-      activateMenuItemWithKeyboardThenClick(el);
-      return true;
+    function getReadAloudTurnLocator(turn) {
+      if (!(turn instanceof HTMLElement)) return null;
+      const turnKey = turn.getAttribute('data-turn-key');
+      if (turnKey) return { attribute: 'data-turn-key', value: turnKey };
+      const testId = turn.getAttribute('data-testid');
+      if (testId?.startsWith('conversation-turn-')) {
+        return { attribute: 'data-testid', value: testId };
+      }
+      return null;
     }
 
-    function findOpenReadAloudMenuItem() {
-      const readAloudSelector = withPrefix(
-        svgSelectorForTokens(SHORTCUT_ICON_TOKENS.readAloudMenuItem),
-        `${OPEN_RADIX_MENU_SELECTOR} div[role="menuitem"]`,
+    function clearReadAloudShortcutTarget() {
+      const root = document.documentElement;
+      root?.removeAttribute(READ_ALOUD_TARGET_TURN_ATTRIBUTE);
+      root?.removeAttribute(READ_ALOUD_TARGET_TURN_VALUE);
+      root?.removeAttribute(READ_ALOUD_TARGET_BUTTON_INDEX);
+      document
+        .querySelectorAll(`[${READ_ALOUD_TARGET_BUTTON_ATTRIBUTE}="true"]`)
+        .forEach((button) => {
+          button.removeAttribute(READ_ALOUD_TARGET_BUTTON_ATTRIBUTE);
+        });
+    }
+
+    function findReadAloudShortcutTarget() {
+      const markedButton = document.querySelector(
+        `[${READ_ALOUD_TARGET_BUTTON_ATTRIBUTE}="true"]`,
       );
-      return document.querySelector(readAloudSelector)?.closest('div[role="menuitem"]') || null;
+      if (markedButton instanceof HTMLElement) return { found: true, button: markedButton };
+
+      const root = document.documentElement;
+      const turnAttribute = root?.getAttribute(READ_ALOUD_TARGET_TURN_ATTRIBUTE);
+      const turnValue = root?.getAttribute(READ_ALOUD_TARGET_TURN_VALUE);
+      const buttonIndex = Number.parseInt(
+        root?.getAttribute(READ_ALOUD_TARGET_BUTTON_INDEX) ?? '',
+        10,
+      );
+      if (!turnAttribute || !turnValue) return { found: false, button: null };
+
+      const turns = document.querySelectorAll(
+        '[data-turn-key], [data-testid^="conversation-turn-"]',
+      );
+      let targetTurn = null;
+      for (let index = 0; index < turns.length; index += 1) {
+        if (turns[index].getAttribute(turnAttribute) === turnValue) {
+          targetTurn = turns[index];
+          break;
+        }
+      }
+      const actionControls = targetTurn?.querySelector('.turn-action-controls');
+      const buttons = actionControls?.querySelectorAll('button') ?? [];
+      return {
+        found: true,
+        button: buttonIndex >= 0 ? buttons[buttonIndex] ?? null : null,
+      };
+    }
+
+    function rememberReadAloudTarget(button) {
+      const actionControls = button.closest('.turn-action-controls');
+      const buttons = actionControls?.querySelectorAll('button') ?? [];
+      const turn = button.closest('[data-turn-key], [data-testid^="conversation-turn-"]');
+      const turnLocator = getReadAloudTurnLocator(turn);
+      const buttonIndex = Array.from(buttons).indexOf(button);
+      const root = document.documentElement;
+
+      clearReadAloudShortcutTarget();
+      if (root instanceof HTMLElement && turnLocator && buttonIndex >= 0) {
+        root.setAttribute(READ_ALOUD_TARGET_TURN_ATTRIBUTE, turnLocator.attribute);
+        root.setAttribute(READ_ALOUD_TARGET_TURN_VALUE, turnLocator.value);
+        root.setAttribute(READ_ALOUD_TARGET_BUTTON_INDEX, String(buttonIndex));
+        return;
+      }
+
+      button.setAttribute(READ_ALOUD_TARGET_BUTTON_ATTRIBUTE, 'true');
     }
 
     function runReadAloudShortcut() {
-      const stopInOpenMenu = document.querySelector(
-        `${OPEN_RADIX_MENU_SELECTOR} div[role="menuitem"][data-testid="voice-play-turn-action-button"]`,
-      );
-      if (activateOpenMenuItem(stopInOpenMenu)) return;
-
-      if (activateOpenMenuItem(findOpenReadAloudMenuItem())) return;
-
-      clickLowestSvgThenSubItemSvg(
-        SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
-        SHORTCUT_ICON_TOKENS.readAloudMenuItem,
-        BOTTOM_BAR_CONTAINER_SELECTOR,
-        { triggerSelector: 'button[aria-label="More actions"]' },
-      );
+      const retainedTarget = findReadAloudShortcutTarget();
+      let button = retainedTarget.button;
+      if (retainedTarget.found) {
+        if (!(button instanceof HTMLElement)) {
+          clearReadAloudShortcutTarget();
+          return;
+        }
+        clearReadAloudShortcutTarget();
+      } else {
+        button = findLatestVisibleReadAloudActionButton();
+        if (!(button instanceof HTMLElement)) return;
+        // Persist the response/action identity in the DOM: the Play glyph changes
+        // while active, and the shortcut callback may be recreated before toggling it.
+        rememberReadAloudTarget(button);
+      }
+      if (!(button instanceof HTMLElement)) return;
+      flashShortcutTarget(button);
+      try {
+        button.click();
+      } catch {}
     }
 
     function runBranchInNewChatShortcut() {
@@ -6895,7 +7331,11 @@ const clickElementLikeUser = (el) => {
         SHORTCUT_ICON_TOKENS.moreDotsMenuButton,
         SHORTCUT_ICON_TOKENS.branchInNewChatMenuItem,
         BOTTOM_BAR_CONTAINER_SELECTOR,
-        { triggerSelector: 'button[aria-label="More actions"]' },
+        {
+          triggerSelector:
+            '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+          menuRootResolver: findOpenMenuForTrigger,
+        },
       );
     }
 
@@ -6904,27 +7344,23 @@ const clickElementLikeUser = (el) => {
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
         undefined,
-        { triggerSelector: 'button[aria-label="Switch model"]' },
+        { triggerSelector: REGENERATE_MENU_TRIGGER_SELECTOR },
       );
     }
 
     function runRegenerateWithDifferentModelShortcut() {
-      clickLowestSvgThenSubItemSvg(
-        SHORTCUT_ICON_TOKENS.regenerateMenuButton,
-        SHORTCUT_ICON_TOKENS.dontSearchTheWebMenuItem,
-        undefined,
-        { triggerSelector: 'button[aria-label="Switch model"]' },
-      );
+      // The current regenerate menu has no different-model action; keep this shortcut inert.
+      return false;
     }
 
     function runRegenerateAskToChangeResponseShortcut() {
       runRadixMenuActionFocusInputByName(
-        SHORTCUT_ICON_TOKENS.askToChangeResponseInputMenu,
-        'contextual-retry-dropdown-input',
+        SHORTCUT_ICON_TOKENS.regenerateMenuButton,
+        'contextual-retry-feedback',
         {
           caret: 'end',
           selectAll: false,
-          triggerSelector: 'button[aria-label="Switch model"]',
+          triggerSelector: REGENERATE_MENU_TRIGGER_SELECTOR,
         },
       );
     }
@@ -6970,17 +7406,15 @@ const clickElementLikeUser = (el) => {
 
       const SPRITE_IDS = {
         cancel: ['#2dc143', '#85f94b'],
-        dictate: ['#microphone-regular-24', '#33d595', '#29f921'],
         send: ['#send-prompt-style-thin', '#01bab7'],
         submitDictation: ['#75ee4d', '#fa1dbd'],
       };
+      const DICTATE_START_BUTTON_SELECTOR = 'button:has(svg path[d^="M12.4584 8.96973"])';
 
       function getComposerRoot() {
         return (
-          document.getElementById('thread-bottom-container') ||
-          document.querySelector('form[data-type="unified-composer"]') ||
-          document.getElementById('composer-background') ||
-          document.body
+          document.querySelector('form[data-thread-find-composer="true"]') ||
+          document.querySelector('form[data-chatgpt-composer]')
         );
       }
 
@@ -7030,6 +7464,7 @@ const clickElementLikeUser = (el) => {
         }, 300);
 
         const composerRoot = getComposerRoot();
+        if (!composerRoot) return;
 
         // While dictation is active, ChatGPT renders both cancel (X) and submit (checkmark).
         // The toggle shortcut should confirm/send first; explicit cancel stays on its own key.
@@ -7039,9 +7474,7 @@ const clickElementLikeUser = (el) => {
         if (clickComposerControl(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn =
-          findFirstClickable(composerRoot, 'button[aria-label="Start dictation"]') ||
-          findClickableBySpriteId(composerRoot, SPRITE_IDS.dictate);
+        const dictateBtn = findFirstClickable(composerRoot, DICTATE_START_BUTTON_SELECTOR);
         if (clickComposerControl(dictateBtn)) return;
 
         // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
@@ -7058,6 +7491,7 @@ const clickElementLikeUser = (el) => {
 
       async function runCancel() {
         const composerRoot = getComposerRoot();
+        if (!composerRoot) return;
         const btn =
           findFirstClickable(composerRoot, 'button[aria-label="Cancel dictation"]') ||
           findClickableBySpriteId(composerRoot, SPRITE_IDS.cancel);
@@ -7108,7 +7542,7 @@ const clickElementLikeUser = (el) => {
         window.toggleCodeboxWrap?.();
       },
       shortcutKeyCopyLowest: () => {
-        const copyPath = ['M12.668 10.667C12.668', '#ce3544'];
+        const copyPath = [COPY_MESSAGE_ACTION_ICON_PATH_PREFIX];
         copyFromLowestButton(copyPath, { delayBeforeClick: 0 });
       },
       shortcutKeyEdit: runEditMessageShortcut,
@@ -7207,8 +7641,13 @@ const clickElementLikeUser = (el) => {
       shortcutKeyAddPhotosFiles: () => runIconToolbarShortcut('addPhotosFiles'),
       shortcutKeyToggleDictate: DictationShortcut.runToggle,
       shortcutKeyCancelDictation: DictationShortcut.runCancel,
-      shortcutKeyShare: async () => {
-        await clickButtonByTestId('share-chat-button');
+      shortcutKeyShare: () => {
+        // Keep native Share activation inside the trusted Alt-key task; the
+        // helper's default mode yields and delays before clicking.
+        void clickButtonBySelector(
+          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
+          { immediate: true },
+        );
       },
       shortcutKeyThinkLonger: async () => {
         // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
@@ -7804,16 +8243,20 @@ const clickElementLikeUser = (el) => {
 })();
 
 // ==================================================
-// @note always hide the disclaimer footer
+// @note always hide the disclaimer and Cookie Preferences footers
 // ==================================================
 (() => {
   const STYLE_ID = 'csp-hide-disclaimer-style';
   const STYLE_TEXT = `
 div[data-id="hide-this-warning"],
-div[class*="view-transition-name:var(--vt-disclaimer)"] {
+div[class*="view-transition-name:var(--vt-disclaimer)"],
+div[data-markdown-copy="exclude"].text-codex-description {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
+}
+.flex.w-full.shrink-0.justify-center.p-4 {
+    display: none;
 }
 `;
 
@@ -7830,7 +8273,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 (() => {
   const IMPORTANT_ROOTS = ['important', 'importante', 'ज़रूरी', '重要', 'важн', 'важлив'];
   const DISCLAIMER_CONTAINER_SELECTOR =
-    'div[data-id="hide-this-warning"], div[class*="view-transition-name:var(--vt-disclaimer)"]';
+    'div[data-id="hide-this-warning"], ' +
+    'div[class*="view-transition-name:var(--vt-disclaimer)"], ' +
+    'div[data-markdown-copy="exclude"].text-codex-description';
   const DISCLAIMER_TEXT_ROW_SELECTOR =
     'div.text-token-text-secondary.relative.mt-auto.flex.min-h-8.w-full.items-center.justify-center.p-2.text-center.text-xs, ' +
     'div.text-token-text-secondary.text-center.text-xs';
@@ -7859,11 +8304,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
   const getDisclaimerContainer = (node) => {
     if (!(node instanceof Element)) return null;
-    if (node.matches('div[data-id="hide-this-warning"]')) return node;
+    if (node.matches(DISCLAIMER_CONTAINER_SELECTOR)) return node;
 
-    const explicitContainer = node.matches('div[class*="view-transition-name:var(--vt-disclaimer)"]')
-      ? node
-      : node.closest?.('div[class*="view-transition-name:var(--vt-disclaimer)"]');
+    const explicitContainer = node.closest?.(DISCLAIMER_CONTAINER_SELECTOR);
     if (explicitContainer instanceof Element) return explicitContainer;
 
     if (isScopedDisclaimerTextRow(node)) return node;
@@ -8031,15 +8474,17 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   const modelPickerSelectors = window.CSPModelPickerSelectors || {};
 
   const SELECTORS = {
-    PAGE_HEADER: '#page-header',
-    CONVERSATION_HEADER_ACTIONS: '#conversation-header-actions',
+    PAGE_HEADER: '#page-header, [data-app-shell-main-titlebar="true"]',
+    CONVERSATION_HEADER_ACTIONS:
+      '#conversation-header-actions, ' +
+      '[data-app-shell-main-titlebar="true"] > [data-app-shell-header-obstacle="true"]',
     CONVERSATION_HEADER_RELOCATION_CONTROLS:
       'button[data-testid="share-chat-button"], ' +
       'button[data-testid="conversation-options-button"]',
-    THREAD_BOTTOM_CONTAINER: '#thread-bottom-container',
-    THREAD_BOTTOM: '#thread-bottom',
-    COMPOSER_FORM: "form[data-type='unified-composer']",
-    COMPOSER_SURFACE: '[data-composer-surface="true"]',
+    THREAD_BOTTOM_CONTAINER: '#thread-bottom-container, [data-thread-scroll-footer]',
+    THREAD_BOTTOM: '#thread-bottom, [data-pip-obstacle="thread-footer"]',
+    COMPOSER_FORM: "form[data-type='unified-composer'], form[data-chatgpt-composer]",
+    COMPOSER_SURFACE: '[data-composer-surface="true"], [data-composer-body]',
     MODEL_SWITCHER_BUTTON:
       modelPickerSelectors.MODEL_MENU_BUTTON_SELECTOR ||
       'button[data-testid="model-switcher-dropdown-button"], ' +
@@ -8157,6 +8602,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
   function clearReadyState() {
     setReadyState(false);
+    document.documentElement?.style.removeProperty('--csp-bottom-native-actions-top');
+    document.documentElement?.style.removeProperty('--csp-bottom-native-actions-right');
   }
 
   function hasLoginButtonPresent() {
@@ -8220,6 +8667,10 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         padding: 0 !important;
       }
 
+      #bottomBarRow {
+        anchor-name: --csp-bottom-bar-row;
+      }
+
       #bottomBarContainer[data-pending="true"] {
         visibility: hidden !important;
       }
@@ -8263,6 +8714,50 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       div#bottomBarRight {
         scale: 0.85;
         padding-right: 0em;
+      }
+
+      html.csp-bottom-bar-enabled
+        [data-app-shell-main-content-layout="thread-edge-scroll"] {
+        --app-shell-main-content-frame-top-offset: 0px !important;
+      }
+
+      html.csp-bottom-bar-ready main:has(
+          [data-app-shell-main-titlebar="true"] > [data-csp-bottom-native-actions]
+        ) {
+        background-color: transparent !important;
+      }
+
+      html.csp-bottom-bar-ready
+        [data-app-shell-main-titlebar="true"]:has(> [data-csp-bottom-native-actions]) {
+        contain: none !important;
+      }
+
+      html.csp-bottom-bar-ready [data-csp-bottom-native-actions] {
+        position: fixed !important;
+        position-anchor: none !important;
+        position-area: none !important;
+        inset: auto !important;
+        top: var(--csp-bottom-native-actions-top, 0px) !important;
+        right: var(--csp-bottom-native-actions-right, 0px) !important;
+        bottom: auto !important;
+        left: auto !important;
+        justify-self: end !important;
+        align-self: end !important;
+        z-index: 50;
+        scale: 0.85;
+        transform-origin: bottom right;
+      }
+
+      @supports (anchor-name: --csp-bottom-bar-row) and
+        (position-anchor: --csp-bottom-bar-row) and
+        (top: anchor(--csp-bottom-bar-row center)) {
+        html.csp-bottom-bar-ready [data-csp-bottom-native-actions] {
+          position-anchor: --csp-bottom-bar-row !important;
+          top: anchor(--csp-bottom-bar-row center) !important;
+          right: anchor(--csp-bottom-bar-row right) !important;
+          transform: translateY(-50%) !important;
+          transform-origin: center right !important;
+        }
       }
 
       #bottomBarContainer button:has(svg > path[d^="M8.85719 3H15.1428C16.2266 2.99999"]),
@@ -8324,6 +8819,17 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
   }
 
   function hasRelocatableConversationHeaderControls(actions) {
+    if (
+      actions instanceof Element &&
+      actions.matches('[data-app-shell-header-obstacle="true"]')
+    ) {
+      // The new shell has no action test IDs. Its conversation-only menu lives
+      // in this observed main-titlebar slot; leave blank-chat controls at home.
+      return (
+        /^\/c\/[^/]+/.test(location.pathname) &&
+        !!actions.querySelector('button[aria-haspopup="menu"]')
+      );
+    }
     return (
       actions instanceof Element &&
       !!actions.querySelector(SELECTORS.CONVERSATION_HEADER_RELOCATION_CONTROLS)
@@ -8375,10 +8881,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
   function findAnchorSnapshot() {
     const threadBottomContainer = document.querySelector(SELECTORS.THREAD_BOTTOM_CONTAINER);
-    if (!(threadBottomContainer instanceof Element)) return null;
 
     const composerForm =
-      threadBottomContainer.querySelector(SELECTORS.COMPOSER_FORM) ||
+      threadBottomContainer?.querySelector(SELECTORS.COMPOSER_FORM) ||
       document.querySelector(SELECTORS.COMPOSER_FORM);
 
     if (!(composerForm instanceof Element)) return null;
@@ -8430,6 +8935,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
   function shouldHoldStandaloneWorkBottomBar(usesNativeUtilityRow) {
     if (usesNativeUtilityRow) return false;
+    // The app-shell composer does not have the old post-form Chat/Work row.
+    if (document.querySelector('form[data-chatgpt-composer]')) return false;
     if (location.pathname !== '/' && location.pathname !== '/chat') return false;
     const mode =
       typeof getNativeChatWorkSurfaceMode === 'function'
@@ -8446,6 +8953,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       reconcileRunning: false,
       suppressObserverUntil: 0,
       suppressedReconcileTimer: 0,
+      routeReconcileTimer: 0,
+      routeHooksInstalled: false,
 
       root: null,
       lane: null,
@@ -8474,6 +8983,8 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       textScaleObservedRoot: null,
       textScaleResizeHandler: null,
       textScaleWindowBound: false,
+      nativeActionsPositionFrame: 0,
+      nativeActionsPositionHandler: null,
 
       nonCriticalHelpersStarted: false,
       profileButtonObserverStarted: false,
@@ -8485,11 +8996,79 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       setReadyState(Boolean(ready));
     }
 
+    function clearNativeHeaderActionsPosition() {
+      document.documentElement?.style.removeProperty('--csp-bottom-native-actions-top');
+      document.documentElement?.style.removeProperty('--csp-bottom-native-actions-right');
+    }
+
+    function updateNativeHeaderActionsPosition() {
+      const actions = state.headerActions;
+      const row = state.row;
+      if (
+        !(actions instanceof Element) ||
+        !actions.isConnected ||
+        !actions.hasAttribute('data-csp-bottom-native-actions') ||
+        !(row instanceof Element) ||
+        !row.isConnected
+      ) {
+        clearNativeHeaderActionsPosition();
+        return false;
+      }
+
+      const rect = row.getBoundingClientRect();
+      if (!(rect.width > 0) || !(rect.height > 0)) {
+        clearNativeHeaderActionsPosition();
+        return false;
+      }
+
+      const roundToHundredth = (value) => Math.round(value * 100) / 100;
+      document.documentElement.style.setProperty(
+        '--csp-bottom-native-actions-top',
+        `${roundToHundredth(rect.top)}px`,
+      );
+      document.documentElement.style.setProperty(
+        '--csp-bottom-native-actions-right',
+        `${roundToHundredth(window.innerWidth - rect.right)}px`,
+      );
+      return true;
+    }
+
+    function scheduleNativeHeaderActionsPositionUpdate() {
+      if (state.nativeActionsPositionFrame) return;
+      state.nativeActionsPositionFrame = window.requestAnimationFrame(() => {
+        state.nativeActionsPositionFrame = 0;
+        updateNativeHeaderActionsPosition();
+      });
+    }
+
+    function ensureNativeHeaderActionsPositionWatchers() {
+      if (state.nativeActionsPositionHandler) return;
+
+      state.nativeActionsPositionHandler = scheduleNativeHeaderActionsPositionUpdate;
+      window.addEventListener('resize', state.nativeActionsPositionHandler, { passive: true });
+      window.addEventListener('scroll', state.nativeActionsPositionHandler, {
+        capture: true,
+        passive: true,
+      });
+      window.visualViewport?.addEventListener(
+        'resize',
+        state.nativeActionsPositionHandler,
+        { passive: true },
+      );
+      window.visualViewport?.addEventListener(
+        'scroll',
+        state.nativeActionsPositionHandler,
+        { passive: true },
+      );
+    }
+
     function start() {
       if (state.started) return;
       state.started = true;
 
       void loadOpacityValue(); // async, but not blocking first mount
+      ensureNativeHeaderActionsPositionWatchers();
+      installRouteReconcileHooks();
       installMainObserver();
       scheduleReconcile('start');
     }
@@ -8630,6 +9209,60 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       });
     }
 
+    function isConversationPath(pathname) {
+      return pathname === '/' || pathname === '/chat' || /^\/c\/[^/]+(?:\/|$)/.test(pathname);
+    }
+
+    function kickRouteReconcile() {
+      scheduleReconcile();
+      requestAnimationFrame(() => requestAnimationFrame(scheduleReconcile));
+
+      clearTimeout(state.routeReconcileTimer);
+      state.routeReconcileTimer = window.setTimeout(() => {
+        state.routeReconcileTimer = 0;
+        scheduleReconcile();
+      }, 180);
+    }
+
+    function installRouteReconcileHooks() {
+      if (state.routeHooksInstalled) return;
+      state.routeHooksInstalled = true;
+
+      document.addEventListener(
+        'click',
+        (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          const anchor = target?.closest('a[href]');
+          if (!(anchor instanceof HTMLAnchorElement)) return;
+          if (anchor.target && anchor.target.toLowerCase() !== '_self') return;
+
+          let destination;
+          try {
+            destination = new URL(anchor.href, location.href);
+          } catch {
+            return;
+          }
+
+          if (
+            destination.origin !== location.origin ||
+            !isConversationPath(destination.pathname) ||
+            destination.pathname === location.pathname
+          ) {
+            return;
+          }
+
+          kickRouteReconcile();
+        },
+        true,
+      );
+
+      const onHistoryNavigation = () => {
+        if (isConversationPath(location.pathname)) kickRouteReconcile();
+      };
+      window.addEventListener('popstate', onHistoryNavigation);
+      window.addEventListener('hashchange', onHistoryNavigation);
+    }
+
     function ensureStableAnchor(snapshot) {
       if (
         !(snapshot?.mountParent instanceof Element) ||
@@ -8720,6 +9353,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
           if (state.root instanceof Element) {
             adjustBottomBarTextScaling(state.root);
           }
+          updateNativeHeaderActionsPosition();
         }, 100);
       }
 
@@ -8736,6 +9370,9 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       state.textScaleResizeObserver = new ResizeObserver(state.textScaleResizeHandler);
       state.textScaleResizeObserver.observe(root);
+      if (state.row instanceof Element && state.row !== root) {
+        state.textScaleResizeObserver.observe(state.row);
+      }
       state.textScaleObservedRoot = root;
     }
 
@@ -8871,6 +9508,13 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
         return;
       }
 
+      if (state.headerActions.matches('[data-app-shell-header-obstacle="true"]')) {
+        state.headerActions.removeAttribute('data-csp-bottom-native-actions');
+        state.headerActions = null;
+        clearNativeHeaderActionsPosition();
+        return;
+      }
+
       suppressOwnMutations(300);
       if (
         restoreInactiveConversationHeaderActions(
@@ -8885,6 +9529,16 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
     function syncSlotContent(slot, node) {
       if (!(slot instanceof Element)) return null;
+
+      // React must retain ownership of the app-shell slot's parent/child tree.
+      // Viewport coordinates relocate its presentation without moving native nodes.
+      if (
+        node instanceof Element &&
+        node.matches('[data-app-shell-header-obstacle="true"]')
+      ) {
+        node.setAttribute('data-csp-bottom-native-actions', '');
+        return node;
+      }
 
       let changed = false;
 
@@ -8989,6 +9643,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       );
 
       adjustBottomBarTextScaling(shell.bottomBar);
+      updateNativeHeaderActionsPosition();
       window.__cspEnsureDisclaimerHider?.();
 
       if (shell.bottomBar instanceof HTMLElement) {
@@ -9017,6 +9672,7 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
       );
 
       adjustBottomBarTextScaling(shell.bottomBar);
+      updateNativeHeaderActionsPosition();
       window.__cspEnsureDisclaimerHider?.();
       applyReadyState(shouldMarkBottomBarReady());
     }
@@ -9064,7 +9720,10 @@ div[class*="view-transition-name:var(--vt-disclaimer)"] {
 
       if (state.headerActions instanceof Element) {
         if (!state.headerActions.isConnected) return 'header_actions_disconnected';
-        if (!state.right.contains(state.headerActions)) return 'header_actions_unmounted';
+        if (
+          !state.headerActions.hasAttribute('data-csp-bottom-native-actions') &&
+          !state.right.contains(state.headerActions)
+        ) return 'header_actions_unmounted';
       }
 
       return null;
@@ -10030,13 +10689,16 @@ form.w-full[data-type="unified-composer"] {
       })();
   const normalizeProfileModelPickerCodes = (codes, profile) => {
     const hasArray = Array.isArray(codes);
-    const out = hasArray ? codes.slice(0, MAX_SLOTS) : [];
+    const out = hasArray ? codes.slice() : [];
     while (out.length < MAX_SLOTS) out.push('');
-    return hasArray ? out : getDefaultModelPickerCodes(profile).slice(0, MAX_SLOTS);
+    return hasArray ? out : getDefaultModelPickerCodes(profile).slice();
   };
   const getProfileForChatWorkMode = (mode) =>
     mode === 'work' ? MODEL_PICKER_PROFILE_LATEST : MODEL_PICKER_PROFILE_LEGACY;
   const getProfileForCatalog = (catalog) => {
+    if (catalog?.surfaceMode === 'chat' || catalog?.surfaceMode === 'work') {
+      return getProfileForChatWorkMode(catalog.surfaceMode);
+    }
     if (catalog?.selectorShape === 'pill-two-submenu') return MODEL_PICKER_PROFILE_LEGACY;
     return catalog?.pillMenu === true ||
       catalog?.integratedModelMenu === true ||
@@ -10072,7 +10734,7 @@ form.w-full[data-type="unified-composer"] {
     const catalog = MODEL_CATALOG_BY_PROFILE[normalizedProfile];
     const names = MODEL_NAMES_BY_PROFILE[normalizedProfile];
     window.__modelCatalog = catalog && typeof catalog === 'object' ? catalog : null;
-    window.MODEL_NAMES = Array.isArray(names) ? names.slice(0, MAX_SLOTS) : [];
+    window.MODEL_NAMES = Array.isArray(names) ? names.slice() : [];
     window.__modelPickerKeyCodesProfiles = MODEL_PICKER_CODES_BY_PROFILE;
     window.__modelPickerKeyCodes = codes;
     window.__activeModelPickerShortcutProfile = normalizedProfile;
@@ -10158,13 +10820,6 @@ form.w-full[data-type="unified-composer"] {
     return next;
   };
   const MODEL_CATALOG_STORAGE_KEY = 'modelCatalog';
-  const MODEL_SWITCHER_PILL_NOT_FOUND_ERROR = 'MODEL_SWITCHER_PILL_NOT_FOUND';
-  const createNoModelSwitcherResult = (reason = 'model-switcher-unavailable') => ({
-    ok: false,
-    error: MODEL_SWITCHER_PILL_NOT_FOUND_ERROR,
-    noModelSwitcher: true,
-    reason,
-  });
   let SCRAPE_HIDE_UI_ACTIVE = false;
   const SCRAPE_HIDDEN_ELEMENTS = new Set();
   const PREPARED_SESSION_HIDDEN_ELEMENTS = new Set();
@@ -10335,7 +10990,6 @@ form.w-full[data-type="unified-composer"] {
   const withTemporarilyHiddenModelUi = ModelPickerScrapeSession.withHiddenUi;
   const getPreparedModelConfigSession = ModelPickerScrapeSession.getPrepared;
   const setPreparedModelConfigSession = ModelPickerScrapeSession.setPrepared;
-  const clearPreparedModelConfigSession = ModelPickerScrapeSession.clearPrepared;
   const releasePreparedModelConfigSession = ModelPickerScrapeSession.releasePrepared;
 
   const normModelTid = (tid) =>
@@ -10496,7 +11150,7 @@ form.w-full[data-type="unified-composer"] {
     return (
       Array.from(
         menuEl.querySelectorAll(
-          '[data-model-selection-view="true"] [role="menuitem"][data-interactive]',
+          '[data-model-picker-view-toggle="true"], [data-model-selection-view="true"] [role="menuitem"][data-interactive]',
         ),
       ).find(matchesStructuralTrigger) || null
     );
@@ -10533,16 +11187,14 @@ form.w-full[data-type="unified-composer"] {
     const orderedMenus = main ? [main, ...menus.filter((menu) => menu !== main)] : menus.slice();
     const items = [];
 
-    for (let m = 0; m < orderedMenus.length && items.length < MAX_SLOTS; m++) {
+    for (let m = 0; m < orderedMenus.length; m++) {
       const directItems = getDirectModelMenuItems(orderedMenus[m]);
       const filtered =
         m === 0
           ? directItems.filter((item) => !isLegacyModelSubmenuTriggerItem(item))
           : directItems;
       filtered.forEach((el, idx) => {
-        if (items.length < MAX_SLOTS) {
-          items.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
-        }
+        items.push({ el, menu: m === 0 ? 'main' : 'submenu', idx });
       });
     }
 
@@ -10625,14 +11277,14 @@ form.w-full[data-type="unified-composer"] {
               ? ModelLabels.getDefaultLegacyCatalog()
               : null;
       MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] = Array.isArray(modelNamesLatest)
-        ? modelNamesLatest.slice(0, MAX_SLOTS)
+        ? modelNamesLatest.slice()
         : typeof ModelLabels.defaultNames === 'function'
-          ? ModelLabels.defaultNames().slice(0, MAX_SLOTS)
+          ? ModelLabels.defaultNames().slice()
           : [];
       MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] = Array.isArray(modelNamesLegacy)
-        ? modelNamesLegacy.slice(0, MAX_SLOTS)
+        ? modelNamesLegacy.slice()
         : typeof ModelLabels.defaultLegacyNames === 'function'
-          ? ModelLabels.defaultLegacyNames().slice(0, MAX_SLOTS)
+          ? ModelLabels.defaultLegacyNames().slice()
           : [];
 
       const latestKey =
@@ -10795,7 +11447,7 @@ form.w-full[data-type="unified-composer"] {
       const ModelPickerHints = (() => {
         const STYLE_ID = '__altHintStyle';
         const HINT_CLASS = 'alt-hint';
-        const INTEGRATED_HINT_GUARD_MARKER = 'csp-integrated-hint-guard';
+        const INTEGRATED_HINT_GUARD_MARKER = 'csp-integrated-hint-guard-v2';
         let scheduleToken = 0;
         let nextOpenSurfaceId = 1;
         let observedOpenSurfaceSignature = '';
@@ -10812,6 +11464,19 @@ form.w-full[data-type="unified-composer"] {
                    configured utility hint without relying on localized text. */
                 [data-model-selection-view="true"] [role="menuitem"][class*="_ResetToDefault"] .${HINT_CLASS}:not([data-csp-alt-hint="true"]) {
                     display: none !important;
+                }
+                /* Keep compact utility hints outside the icon's flex row so the
+                   native SVG remains visible and the label sits just below it. */
+                .csp-alt-hint-utility > .csp-utility-icon-hint {
+                    position: absolute;
+                    top: calc(100% - 5px);
+                    left: 50%;
+                    transform: translateX(-50%);
+                    margin: 0;
+                    white-space: nowrap;
+                    line-height: 1;
+                    animation: none;
+                    z-index: 1;
                 }`;
           let style = document.getElementById(STYLE_ID);
           if (style instanceof HTMLStyleElement) {
@@ -10879,6 +11544,10 @@ form.w-full[data-type="unified-composer"] {
             el instanceof Element &&
             (el.matches(INTEGRATED_SPEED_TOGGLE_SELECTOR) ||
               el.matches(PILL_RESET_MENU_ITEM_SELECTOR));
+          const compactIconUtilityTarget =
+            el instanceof Element &&
+            (el.matches(INTEGRATED_SPEED_TOGGLE_SELECTOR) ||
+              el.matches('[role="menuitem"][class*="ResetToDefault-"]'));
           if (utilityHintTarget) el.classList.add('csp-alt-hint-utility');
           if (!el) return;
           if (utilityHintTarget) {
@@ -10905,7 +11574,12 @@ form.w-full[data-type="unified-composer"] {
           span.className = HINT_CLASS;
           span.setAttribute('data-csp-alt-hint', 'true');
           span.textContent = `${MOD_KEY_TEXT}+${labelText}`;
-          (target || el).appendChild(span);
+          if (compactIconUtilityTarget) {
+            span.classList.add('csp-utility-icon-hint');
+            el.appendChild(span);
+          } else {
+            (target || el).appendChild(span);
+          }
         }
 
         function getUniqueVisibleMenuItemForSlot(slot, root = document) {
@@ -11017,6 +11691,42 @@ form.w-full[data-type="unified-composer"] {
           return applied;
         }
 
+        function getOpenComposerModelRadioMenu() {
+          const openMenus = Array.from(
+            document.querySelectorAll('[role="menu"][data-state="open"]'),
+          );
+          for (const menu of openMenus) {
+            if (
+              !(menu instanceof Element) ||
+              menu.matches('[data-model-selection-view="true"]') ||
+              menu.querySelector('[data-model-selection-view="true"]')
+            ) {
+              continue;
+            }
+            const labelledByIds = (menu.getAttribute('aria-labelledby') || '')
+              .split(/\s+/)
+              .filter(Boolean);
+            const opener = labelledByIds
+              .map((id) => document.getElementById(id))
+              .find(
+                (candidate) =>
+                  candidate instanceof Element &&
+                  candidate.matches('button[data-codex-intelligence-trigger="true"]') &&
+                  isUsablyVisibleModelElement(candidate),
+              );
+            if (!opener || !isUsablyVisibleModelElement(menu)) continue;
+            const items = Array.from(menu.querySelectorAll('[role="menuitemradio"]')).filter(
+              (item) => isLikelyModelVersionLabel(getModelTextWithoutHints(item)),
+            );
+            const powerSlider = menu.querySelector(
+              '[role="slider"][aria-valuemin][aria-valuemax]',
+            );
+            if (items.length < 2 || !isUsablyVisibleModelElement(powerSlider)) continue;
+            return { menu, items };
+          }
+          return null;
+        }
+
         function applyModelVersionSubmenuHints() {
           // ChatGPT keeps both slider panels mounted and changes the panel's
           // own data-active state; the outer data-model-selection-view may be
@@ -11031,13 +11741,17 @@ form.w-full[data-type="unified-composer"] {
                   (item) => isLikelyModelVersionLabel(getModelTextWithoutHints(item)),
                 )
               : [];
+          const directComposerMenu =
+            integratedItems.length > 0 ? null : getOpenComposerModelRadioMenu();
+          const directComposerItems = directComposerMenu?.items || [];
+          const integratedModelItems = integratedItems.length > 0 ? integratedItems : directComposerItems;
           const menu =
-            integratedItems.length > 0
-              ? integratedAdvancedView
+            integratedModelItems.length > 0
+              ? integratedAdvancedView || directComposerMenu?.menu
               : getOpenModelVersionSubmenu(getVisibleModelMenuState().submenuTrigger);
           if (!(menu instanceof Element)) return false;
           let applied = false;
-          const items = integratedItems.length > 0 ? integratedItems : getModelVersionMenuItems(menu);
+          const items = integratedModelItems.length > 0 ? integratedModelItems : getModelVersionMenuItems(menu);
           // The integrated picker is shared by Chat and Work, but their
           // shortcut assignments remain independent profiles. Resolve the
           // live native surface first so Chat rows never receive Work effort
@@ -11046,7 +11760,7 @@ form.w-full[data-type="unified-composer"] {
             typeof getRuntimeModelPickerProfile === 'function'
               ? getRuntimeModelPickerProfile()
               : ACTIVE_MODEL_PICKER_PROFILE;
-          const hintCodes = integratedItems.length > 0
+          const hintCodes = integratedModelItems.length > 0
             ? normalizeProfileModelPickerCodes(
                 MODEL_PICKER_CODES_BY_PROFILE[integratedProfile],
                 integratedProfile,
@@ -11055,15 +11769,20 @@ form.w-full[data-type="unified-composer"] {
           const listLabels = items.map(getModelVersionMenuItemLabel);
           const hasDefaultRow = listLabels.some((candidate) => /^default\b/i.test(candidate));
           const effectiveListLabels =
-            integratedItems.length > 0 && !hasDefaultRow
+            integratedModelItems.length > 0 && !hasDefaultRow
               ? ['Default', ...listLabels]
               : listLabels;
           const getHintAction = (item, index) => {
+            // The direct composer menu has no view marker for the shared
+            // model-name helper to detect, so supply its synthetic Default
+            // anchor explicitly when Chat starts with a model row.
+            const isUnanchoredDirectComposerItem =
+              directComposerItems.includes(item) && !hasDefaultRow;
             const action = getModelNameActionForMenuItem(
               item,
-              index,
+              isUnanchoredDirectComposerItem ? index + 1 : index,
               window.__modelCatalog,
-              listLabels,
+              isUnanchoredDirectComposerItem ? effectiveListLabels : listLabels,
             );
             if (action?.nativeOnly) return action;
             if (isModelNameHintAction(action)) return action;
@@ -11074,7 +11793,7 @@ form.w-full[data-type="unified-composer"] {
             if (typeof window.ModelLabels?.getModelNameActionForLabelInList === 'function') {
               const label = getModelVersionMenuItemLabel(item);
               const effectiveIndex =
-                integratedItems.length > 0 && !hasDefaultRow ? index + 1 : index;
+                integratedModelItems.length > 0 && !hasDefaultRow ? index + 1 : index;
               const listAction = window.ModelLabels.getModelNameActionForLabelInList(
                 label,
                 effectiveIndex,
@@ -11258,17 +11977,20 @@ form.w-full[data-type="unified-composer"] {
           // utility hints are applied by their structural controls. Keep the
           // routing pairs intact for action execution, but do not let the
           // generic primary fallback paint an effort code onto that shell.
+          const directComposerModelRows = new Set(
+            getOpenComposerModelRadioMenu()?.items || [],
+          );
           const primaryPairs = getPrimaryMenuActionPairs(currentState).filter(
             ({ item }) =>
               !(item?.el instanceof Element &&
-                item.el.closest('[data-model-selection-view="true"]')),
+                (item.el.closest('[data-model-selection-view="true"]') ||
+                  directComposerModelRows.has(item.el))),
           );
           const selectHintsApplied = applyOpenSelectListboxHints();
           if (!primaryPairs.length) return selectHintsApplied;
           const expectedHintTexts = getExpectedPrimaryHintTexts(primaryPairs);
           if (primaryHintsAlreadyApplied(primaryPairs, expectedHintTexts)) {
             syncActiveConfigFromMenuState(currentState, { persist: true });
-            ModelPickerNameCache.maybePersistFromOpenMenus();
             return true;
           }
           removeAllLabels();
@@ -11279,8 +12001,6 @@ form.w-full[data-type="unified-composer"] {
           }
           applyOpenSelectListboxHints();
           syncActiveConfigFromMenuState(currentState, { persist: true });
-          // Persist labels -> names once menus are present; submenu must be open for full set.
-          ModelPickerNameCache.maybePersistFromOpenMenus();
           return true;
         }
 
@@ -11376,15 +12096,16 @@ form.w-full[data-type="unified-composer"] {
             setTimeout(() => schedule({ retries: 10, interval: DELAY_APPLY_HINTS_AFTER_SUBMENU_MS }), 0);
           }
 
-          // The integrated Work picker opens its advanced panel by toggling
-          // aria-expanded/data-active on a structural view trigger; it is not
-          // a Radix submenu trigger and therefore misses the branch above.
-          const integratedViewTrigger =
+          // The integrated Work picker opens its advanced panel through a
+          // structural view trigger, not a Radix submenu trigger.
+          const integratedViewToggleCandidate = target?.closest?.(
+            '[data-model-selection-view="true"] [role="menuitem"][data-interactive]',
+          );
+          if (
             typeof ModelPickerSelectors.isModelSelectionViewTrigger === 'function' &&
-            target && ModelPickerSelectors.isModelSelectionViewTrigger(target)
-              ? target
-              : target?.closest?.('[data-model-selection-view="true"] [role="menuitem"][data-interactive][aria-expanded]');
-          if (integratedViewTrigger) {
+            integratedViewToggleCandidate &&
+            ModelPickerSelectors.isModelSelectionViewTrigger(integratedViewToggleCandidate)
+          ) {
             setTimeout(() => schedule({ retries: 4, interval: 25 }), 0);
           }
         }
@@ -11525,191 +12246,7 @@ form.w-full[data-type="unified-composer"] {
         return setCachedActiveModelConfigId(inferred);
       };
 
-      const ModelPickerNameCache = (() => {
-        let lastPersistedSignature = '';
-        let lastPersistedAt = 0;
-
-        const TESTID_CANON = window.ModelLabels.TESTID_CANON;
-        const MAIN_CANON_BY_INDEX = window.ModelLabels.MAIN_CANON_BY_INDEX;
-        const mapSubmenuLabel = window.ModelLabels.mapSubmenuLabel;
-        const canonFromTid =
-          typeof window.ModelLabels.canonFromTid === 'function'
-            ? window.ModelLabels.canonFromTid
-            : (tid) => (tid && TESTID_CANON[tid]) || '';
-
-        function collectOpenMenuNames() {
-          const menus = getVisibleModelMenuState().menus.filter(Boolean);
-
-          if (!menus.length) return null;
-
-          const names = [];
-          for (const menu of menus) {
-            const items = Array.from(menu.querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
-            for (const item of items) {
-              if (names.length >= MAX_SLOTS) break;
-              names.push(getModelTextWithoutHints(item));
-            }
-            if (names.length >= MAX_SLOTS) break;
-          }
-          return names.map((name) => (name || '').trim());
-        }
-
-        function pickPrimaryMenuLabel(item, index) {
-          const tid = normModelTid(item.getAttribute('data-testid'));
-          const domLabel = getModelTextWithoutHints(item);
-          const canonLabel = canonFromTid(tid) || '';
-
-          // Main-menu rows now change their visible labels without keeping tid parity.
-          // Prefer the primary DOM label, then fall back to stable tid-based canon labels.
-          if (domLabel) return domLabel;
-          if (canonLabel) return canonLabel;
-          if (index < MAIN_CANON_BY_INDEX.length) return MAIN_CANON_BY_INDEX[index];
-          return '';
-        }
-
-        function buildCanonicalLabelsFromOpenMenus() {
-          const names = Array(MAX_SLOTS).fill('');
-          const menus = getVisibleModelMenuState().menus.filter(Boolean);
-
-          if (!menus.length) return { names, observedCount: 0, complete: false };
-
-          let idx = 0;
-          let hasSubmenuTrigger = false;
-
-          // Main menu first
-          const main = menus[0];
-          if (main) {
-            const mainItems = Array.from(main.querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
-            for (let i = 0; i < mainItems.length && idx < MAX_SLOTS; i++) {
-              const item = mainItems[i];
-              let label = '';
-
-              if (isModelSubmenuTriggerItem(item)) {
-                label = '→'; // canonical for submenu trigger (not a model)
-                hasSubmenuTrigger = true;
-              } else {
-                label = pickPrimaryMenuLabel(item, i);
-              }
-
-              names[idx++] = (label || '').trim();
-            }
-          }
-
-          // Any additional open menus (submenus) in order
-          for (let m = 1; m < menus.length && idx < MAX_SLOTS; m++) {
-            const subItems = Array.from(menus[m].querySelectorAll(MODEL_MENU_ITEM_SELECTOR));
-            for (const item of subItems) {
-              if (idx >= MAX_SLOTS) break;
-              const tid = normModelTid(item.getAttribute('data-testid'));
-              let label = canonFromTid(tid) || '';
-              if (!label) {
-                const primary = item.querySelector('.flex.items-center.gap-1') || item;
-                const txt = getModelTextWithoutHints(primary);
-                label = mapSubmenuLabel(txt) || txt;
-              }
-              names[idx++] = (label || '').trim();
-            }
-          }
-
-          // A scrape is "complete" iff:
-          // - there is no submenu trigger (single-level menu), OR
-          // - a submenu trigger exists and we currently have submenu content open
-          const complete = !hasSubmenuTrigger || menus.length > 1;
-
-          while (names.length < MAX_SLOTS) names.push('');
-          for (let k = 0; k < names.length; k++) names[k] = (names[k] || '').trim();
-          return { names, observedCount: idx, complete };
-        }
-
-        function mergeAndPersistNames(candidates, meta) {
-          const now = Date.now();
-          try {
-            const observedCount = Math.max(
-              0,
-              Math.min(
-                MAX_SLOTS,
-                Number(meta && meta.observedCount != null ? meta.observedCount : 0) || 0,
-              ),
-            );
-            const complete = !!meta?.complete;
-            chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-              const prevArr = Array.isArray(prev) ? prev.slice(0, MAX_SLOTS) : Array(MAX_SLOTS).fill('');
-              while (prevArr.length < MAX_SLOTS) prevArr.push('');
-              const merged = Array.from({ length: MAX_SLOTS }, (_, i) => {
-                if (complete && i >= observedCount) return '';
-                const nv = (candidates[i] || '').trim();
-                const pv = (prevArr[i] || '').trim();
-                return nv || pv || '';
-              });
-              const sig = merged.join('|');
-              if (sig === lastPersistedSignature && now - lastPersistedAt < 1000) return;
-              lastPersistedSignature = sig;
-              lastPersistedAt = now;
-              chrome.storage.sync.set({ modelNames: merged, modelNamesAt: now }, () => { });
-            });
-          } catch (_) { }
-        }
-
-        function persistFromOpenMenus(fallbackNames) {
-          const dom = buildCanonicalLabelsFromOpenMenus();
-          const domNames = dom && Array.isArray(dom.names) ? dom.names : Array(MAX_SLOTS).fill('');
-          const fallback = Array.isArray(fallbackNames)
-            ? fallbackNames.slice(0, MAX_SLOTS)
-            : Array(MAX_SLOTS).fill('');
-          while (fallback.length < MAX_SLOTS) fallback.push('');
-
-          const candidates = Array.from({ length: MAX_SLOTS }, (_, i) => {
-            const d = (domNames[i] || '').trim();
-            const f = (fallback[i] || '').trim();
-            return d || f || '';
-          });
-
-          if (!candidates.some(Boolean)) return;
-          mergeAndPersistNames(candidates, dom);
-        }
-
-        function maybePersistFromOpenMenus() {
-          const names = collectOpenMenuNames();
-          if (names) persistFromOpenMenus(names);
-        }
-
-        function persistRange(startIdx, values, rangeCount) {
-          const start = Math.max(0, Math.min(MAX_SLOTS - 1, Number(startIdx) || 0));
-          const count = Math.max(0, Math.min(MAX_SLOTS - start, Number(rangeCount) || 0));
-          if (!count) return;
-
-          const incoming = Array.isArray(values) ? values.slice(0, count) : [];
-          const normalizeName =
-            typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-              ? window.ModelLabels.normalizeStoredActionName
-              : (_slot, value) => (value ?? '').toString().trim();
-
-          chrome.storage.sync.get('modelNames', ({ modelNames: prev }) => {
-            const next = Array.isArray(prev) ? prev.slice(0, MAX_SLOTS) : Array(MAX_SLOTS).fill('');
-            while (next.length < MAX_SLOTS) next.push('');
-            for (let i = 0; i < count; i++) next[start + i] = '';
-            for (let i = 0; i < incoming.length; i++) {
-              next[start + i] = normalizeName(start + i, incoming[i]) || '';
-            }
-            chrome.storage.sync.set({ modelNames: next, modelNamesAt: Date.now() }, () => { });
-          });
-        }
-
-        return {
-          collectOpenMenuNames,
-          maybePersistFromOpenMenus,
-          persistFromOpenMenus,
-          persistRange,
-        };
-      })();
-
       function handleModelPickerRuntimeMessage(msg, _sender, sendResponse) {
-        if (msg && msg.type === 'CSP_GET_MODEL_NAMES') {
-          const names = ModelPickerNameCache.collectOpenMenuNames();
-          if (names) ModelPickerNameCache.persistFromOpenMenus(names);
-          sendResponse({ modelNames: Array.isArray(names) ? names : null });
-          return;
-        }
         if (msg && msg.type === 'CSP_REFRESH_CHAT_WORK_MODEL_CATALOGS') {
           logModelRefreshDebug('message:dual-surface-catalog-refresh:start', {
             hideUi: msg.hideUi !== false,
@@ -11812,16 +12349,6 @@ form.w-full[data-type="unified-composer"] {
         }
         return '';
       }
-      const getModelVersionFromText = (value) => {
-        const match = String(value || '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .match(/\b(?:gpt[-\s]*)?(\d+(?:\.\d+)?)\b/i);
-        return match?.[1] || '';
-      };
-      const isDynamicConfigureAction = (action) =>
-        /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(action?.id || '').trim());
-
       let latestFrontendActionSignatures = {};
 
       function getPrimaryActionIdForMenuItem(item, rawItems = []) {
@@ -12444,7 +12971,7 @@ form.w-full[data-type="unified-composer"] {
         mainMenu instanceof Element &&
         (mainMenu.matches('[data-model-selection-view="true"]') ||
           !!mainMenu.querySelector(
-            `${COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR}, [data-model-selection-view="true"]`,
+            `${COMPOSER_INTELLIGENCE_MENU_CONTENT_SELECTOR}, [data-model-selection-view="true"], [data-model-picker-view]`,
           ));
       const collectIntegratedSpeedRows = (mainMenu) => {
         const toggle = getIntegratedSpeedToggle(mainMenu);
@@ -12695,71 +13222,6 @@ form.w-full[data-type="unified-composer"] {
           }) || null
         );
       };
-      const getDynamicSelfActionIdForRow = (row, activeConfigAction) => {
-        if (!(row instanceof Element) || !isDynamicConfigureAction(activeConfigAction)) return '';
-        if (getFrontendActionIdFromRowLabel(row)) return '';
-        const expectedVersion = getModelVersionFromText(
-          activeConfigAction.optionValue || activeConfigAction.label,
-        );
-        if (!expectedVersion) return '';
-        const rowVersion =
-          getModelVersionFromFrontendRow(row) ||
-          getModelVersionFromText(getConfigureFrontendRowLabel(row));
-        return rowVersion === expectedVersion ? activeConfigAction.id : '';
-      };
-      const getConfigureFrontendActionIdForRow = (row, dialog, activeConfigAction = null) => {
-        if (!(row instanceof Element) || !(dialog instanceof Element)) return '';
-        if (isUnavailableConfigureFrontendRow(row)) return '';
-        const labelActionId = getFrontendActionIdFromRowLabel(row);
-        if (labelActionId) return labelActionId;
-        const dynamicSelfActionId = getDynamicSelfActionIdForRow(row, activeConfigAction);
-        if (dynamicSelfActionId) return dynamicSelfActionId;
-        const modelVersion = getModelVersionFromFrontendRow(row);
-        if (modelVersion) {
-          const match = Object.entries(latestFrontendActionSignatures).find(
-            ([, signature]) => signature?.modelVersion === modelVersion,
-          );
-          if (match) return match[0];
-        }
-        if (row === findConfigureProRow(dialog)) return 'pro';
-        return '';
-      };
-      const collectConfigureFrontendRows = (dialog, activeConfigAction = null) => {
-        if (!(dialog instanceof Element)) return [];
-        const rows = Array.from(
-          new Set([...getConfigureFrontendRadioRows(dialog), findConfigureProRow(dialog)].filter(Boolean)),
-        );
-        return rows
-          .map((row) => {
-            const actionId = getConfigureFrontendActionIdForRow(row, dialog, activeConfigAction);
-            const action =
-              typeof window.ModelLabels?.getActionById === 'function'
-                ? window.ModelLabels.getActionById(actionId)
-                : null;
-            const catalogAction =
-              !action &&
-              activeConfigAction &&
-              actionId === activeConfigAction.id
-                ? activeConfigAction
-                : null;
-            const resolvedAction = action || catalogAction;
-            if (!actionId || !resolvedAction) return null;
-            const rowLabel = getConfigureFrontendRowLabel(row);
-            const label =
-              catalogAction && rowLabel
-                ? rowLabel
-                : typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                  ? window.ModelLabels.getCanonicalActionLabel(actionId, resolvedAction.label)
-                  : resolvedAction.label;
-            return {
-              id: actionId,
-              slot: resolvedAction.slot,
-              available: true,
-              label,
-            };
-          })
-          .filter(Boolean);
-      };
       const getComboboxDisplayText = (combobox) =>
         (combobox?.querySelector('span')?.textContent || combobox?.textContent || '')
           .replace(/\s+/g, ' ')
@@ -12945,27 +13407,6 @@ form.w-full[data-type="unified-composer"] {
           ) || null
         );
       };
-      const collectThinkingEffortIdsFromModelSelectorMenu = async (
-        state = getVisibleModelMenuState(),
-      ) => {
-        const opened = await openModelSelectorThinkingEffortMenu(state);
-        const menu = opened?.menu || null;
-        if (!(menu instanceof Element)) return [];
-        const ids = Array.from(menu.querySelectorAll(`:scope ${MODEL_THINKING_EFFORT_OPTION_SELECTOR}`))
-          .map(getThinkingEffortIdForMenuItem)
-          .filter(Boolean);
-        return typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
-          ? window.ModelLabels.sortThinkingEffortIds(ids)
-          : Array.from(new Set(ids));
-      };
-      const inferActiveFrontendActionIdFromDialog = (dialog) => {
-        if (!(dialog instanceof Element)) return '';
-        const activeRow =
-          getConfigureFrontendRadioRows(dialog).find(
-            (button) => button.getAttribute('aria-checked') === 'true',
-          ) || null;
-        return activeRow ? getConfigureFrontendActionIdForRow(activeRow, dialog) : '';
-      };
       const ensureConfigureFrontendRowSelection = async (actionOrId) => {
         const action =
           typeof actionOrId === 'string' ? getModelActionById(actionOrId) : actionOrId;
@@ -12999,34 +13440,6 @@ form.w-full[data-type="unified-composer"] {
         await sleepAsync(100);
         return true;
       };
-      const collectThinkingEffortIdsDuringScrape = async (combobox) => {
-        if (!(combobox instanceof Element)) return [];
-
-        await ensureConfigureComboboxSelection(combobox, DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-        await sleepAsync(80);
-        await ensureConfigureFrontendRowSelection('thinking');
-
-        const effortCombobox = await waitForAsync(findThinkingEffortCombobox, {
-          timeout: 1600,
-          interval: 30,
-        });
-        if (!(effortCombobox instanceof Element)) return [];
-
-        const opened = await openComboboxListbox(effortCombobox, { timeout: 1600 });
-        const listbox = opened?.listbox || null;
-        if (!(listbox instanceof Element)) return [];
-
-        hideConfigureListboxUiForScrape(listbox);
-        const ids = Array.from(listbox.querySelectorAll(':scope [role="option"]'))
-          .map(getThinkingEffortIdForOption)
-          .filter(Boolean);
-
-        if (opened.opened) await closeComboboxListbox(effortCombobox);
-
-        return typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
-          ? window.ModelLabels.sortThinkingEffortIds(ids)
-          : Array.from(new Set(ids));
-      };
       const DYNAMIC_SCRAPE_SLOT_START = Number.isInteger(
         Number(window.ModelLabels?.MODEL_NAME_DYNAMIC_SLOT_START),
       )
@@ -13039,7 +13452,7 @@ form.w-full[data-type="unified-composer"] {
         : MAX_SLOTS - 1;
       const isCatalogDynamicScrapeSlot = (slot) =>
         Number.isInteger(Number(slot)) &&
-        (Number(slot) >= DYNAMIC_SCRAPE_SLOT_START || [4, 5, 6].includes(Number(slot)));
+        (Number(slot) >= DYNAMIC_SCRAPE_SLOT_START || [3, 4, 5, 6].includes(Number(slot)));
       const isDynamicScrapeAction = (action) =>
         action?.optionKind === 'value' && String(action.id || '').startsWith('configure-dynamic-');
       const createScrapeSlotAllocator = (actions, startSlot = DYNAMIC_SCRAPE_SLOT_START) => {
@@ -13047,27 +13460,28 @@ form.w-full[data-type="unified-composer"] {
           { length: Math.max(0, DYNAMIC_SCRAPE_SLOT_END - startSlot + 1) },
           (_, index) => startSlot + index,
         ).concat([4, 5, 6]).filter((slot, index, slots) =>
-          slot >= 0 && slot < MAX_SLOTS && slots.indexOf(slot) === index,
+          slot >= 0 && slots.indexOf(slot) === index,
         );
         let nextDynamicSlotIndex = 0;
         const usedSlots = new Set();
+        let nextOverflowSlot = Math.max(MAX_SLOTS, ...actions.map((action) => Number(action?.slot) + 1).filter(Number.isSafeInteger));
         const reservedCatalogSlots = new Set(
           actions
             .filter((action) => action?.fromCatalog)
             .map((action) => Number(action.slot))
-            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+            .filter((slot) => Number.isInteger(slot) && slot >= 0),
         );
         const reservedStaticSlots = new Set(
           getModelActionSlots()
             .filter((action) => action?.group !== 'configure')
             .map((action) => Number(action?.slot))
-            .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS),
+            .filter((slot) => Number.isInteger(slot) && slot >= 0),
         );
 
         return (action) => {
           const isDynamic = isDynamicScrapeAction(action);
           let slot = Number(action?.slot);
-          if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) slot = -1;
+          if (!Number.isInteger(slot) || slot < 0) slot = -1;
           if (isDynamic && !action?.fromCatalog && !isCatalogDynamicScrapeSlot(slot)) slot = -1;
           const canUseDirectSlot =
             slot >= 0 &&
@@ -13088,28 +13502,16 @@ form.w-full[data-type="unified-composer"] {
           ) {
             nextDynamicSlotIndex += 1;
           }
-          if (nextDynamicSlotIndex >= dynamicFallbackSlots.length) return -1;
-          slot = dynamicFallbackSlots[nextDynamicSlotIndex];
+          if (nextDynamicSlotIndex >= dynamicFallbackSlots.length) {
+            while (usedSlots.has(nextOverflowSlot) || reservedCatalogSlots.has(nextOverflowSlot) || reservedStaticSlots.has(nextOverflowSlot)) nextOverflowSlot += 1;
+            slot = nextOverflowSlot++;
+          } else {
+            slot = dynamicFallbackSlots[nextDynamicSlotIndex];
+          }
           usedSlots.add(slot);
           nextDynamicSlotIndex += 1;
           return slot;
         };
-      };
-      const buildAvailableScrapeActions = (elements, actions, getLabel) => {
-        const takeSlot = createScrapeSlotAllocator(actions);
-        return elements
-          .map((element, index) => {
-            const action = actions[index];
-            if (!action?.id || action.nativeOnly === true) return null;
-            const slot = takeSlot(action);
-            if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-            return {
-              ...action,
-              slot,
-              label: getLabel(element, index, action),
-            };
-          })
-          .filter(Boolean);
       };
       const deriveFlatModelNamesFromCatalog = (catalog) => {
         const names = Array(MAX_SLOTS).fill('');
@@ -13134,7 +13536,7 @@ form.w-full[data-type="unified-composer"] {
           const slot = Number.isInteger(Number(option?.slot))
             ? Number(option.slot)
             : Number(action?.slot);
-          if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return;
+          if (!action || !Number.isInteger(slot) || slot < 0) return;
           names[slot] =
             typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
               ? window.ModelLabels.getCanonicalActionLabel(action.id, option.label)
@@ -13159,11 +13561,11 @@ form.w-full[data-type="unified-composer"] {
                   : String(row?.label || '').trim();
           });
         });
-        return names.slice(0, MAX_SLOTS);
+        return names.slice();
       };
       const persistScrapedModelCatalog = (
         catalog,
-        { activeModelConfigId = '', profile = '' } = {},
+        { activeModelConfigId = '', profile = '', waitForStorage = false } = {},
       ) => {
         const modelNames = deriveFlatModelNamesFromCatalog(catalog);
         const isLatestProfile =
@@ -13183,31 +13585,31 @@ form.w-full[data-type="unified-composer"] {
           [`modelNames${profileSuffix}At`]: catalog.scrapedAt,
         };
         if (activeModelConfigId) values.activeModelConfigId = activeModelConfigId;
+        const publish = () => {
         MODEL_CATALOG_BY_PROFILE[shortcutProfile] = catalog;
-        MODEL_NAMES_BY_PROFILE[shortcutProfile] = modelNames.slice(0, MAX_SLOTS);
+        MODEL_NAMES_BY_PROFILE[shortcutProfile] = modelNames.slice();
         window[`__modelCatalog${profileSuffix}`] = catalog;
-        window[`__modelNames${profileSuffix}`] = modelNames.slice(0, MAX_SLOTS);
+        window[`__modelNames${profileSuffix}`] = modelNames.slice();
         if (ACTIVE_MODEL_PICKER_PROFILE === shortcutProfile) {
           window.__modelCatalog = catalog;
-          window.MODEL_NAMES = modelNames.slice(0, MAX_SLOTS);
+          window.MODEL_NAMES = modelNames.slice();
         }
+        };
+        if (waitForStorage) {
+          return new Promise((resolve, reject) => {
+            chrome.storage.sync.set(values, () => {
+              if (chrome.runtime.lastError) {
+                reject(new Error('MODEL_CATALOG_STORAGE_FAILED'));
+                return;
+              }
+              publish();
+              resolve(modelNames);
+            });
+          });
+        }
+        publish();
         chrome.storage.sync.set(values, () => {});
         return modelNames;
-      };
-      const selectConfigureOptionDuringScrape = async (combobox, targetAction) => {
-        if (!(combobox instanceof Element) || !targetAction) return null;
-        let listbox = await waitForConfigureListboxQuick(combobox);
-        if (!listbox) {
-          smartClickSafe(combobox);
-          listbox = await waitForConfigureListbox(combobox);
-        }
-        if (!listbox) return null;
-        hideConfigureListboxUiForScrape(listbox);
-        const option = findConfigureOptionForAction(targetAction, listbox);
-        if (!option) return null;
-        activateMenuItem(option);
-        await sleepAsync(80);
-        return option;
       };
       const getModelVersionMenuItems = (menu) =>
         menu instanceof Element
@@ -13431,68 +13833,6 @@ form.w-full[data-type="unified-composer"] {
         );
         return menu instanceof Element ? { menu, opened: true } : null;
       };
-      const getIntegratedFrontendRowsFromState = (
-        state = getVisibleModelMenuState(),
-        activeConfigId = DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-      ) => {
-        const main = state.main;
-        if (!(main instanceof Element)) return [];
-        const seen = new Set();
-        const directRows = getDirectModelMenuItems(main)
-          .filter((item) => !isModelSubmenuTriggerItem(item))
-          .map((item) => {
-            const label = getModelTextWithoutHints(item).replace(/\s+/g, ' ').trim();
-            if (!label || typeof window.ModelLabels?.mapFrontendLabelToActionId !== 'function') {
-              return null;
-            }
-            const actionId =
-              window.ModelLabels.mapFrontendLabelToActionId(label, activeConfigId) ||
-              window.ModelLabels.mapFrontendLabelToActionId(label, DEFAULT_ACTIVE_MODEL_CONFIG_ID);
-            if (!actionId || seen.has(actionId)) return null;
-            const action = getModelActionById(actionId);
-            const slot = Number(action?.slot);
-            if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-            seen.add(actionId);
-            return {
-              id: actionId,
-              slot,
-              available: true,
-              label,
-            };
-          })
-          .filter(Boolean);
-        if (directRows.length) return directRows;
-
-        // The current integrated picker represents effort as a Power slider in
-        // the simple view, while model rows live in the Advanced view. Preserve
-        // the structural row order used by the shortcut catalog without relying
-        // on localized slider labels or hashed classes.
-        const slider = main.querySelector(
-          '[data-testid="composer-model-picker-slider-simple-view"] [role="slider"][aria-valuemin][aria-valuemax]',
-        );
-        if (!(slider instanceof Element)) return [];
-        const min = Number(slider.getAttribute('aria-valuemin'));
-        const max = Number(slider.getAttribute('aria-valuemax'));
-        const effortIds = ['instant', 'thinking', 'pro', 'effort-extra-high', 'effort-max'];
-        const count =
-          Number.isInteger(min) && Number.isInteger(max) && max >= min
-            ? Math.min(effortIds.length, max - min + 1)
-            : 0;
-        return effortIds.slice(0, count).map((actionId) => {
-          const action = getModelActionById(actionId);
-          const slot = Number(action?.slot);
-          if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-          return {
-            id: actionId,
-            slot,
-            available: true,
-            label:
-              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                ? window.ModelLabels.getCanonicalActionLabel(actionId, action.label)
-                : action.label,
-          };
-        }).filter(Boolean);
-      };
       const findModelVersionMenuItemForAction = (menu, action) => {
         const items = getModelVersionMenuItems(menu);
         const listLabels = items.map(getModelVersionMenuItemLabel);
@@ -13508,60 +13848,6 @@ form.w-full[data-type="unified-composer"] {
           }) || null
         );
       };
-      const selectIntegratedModelNameDuringScrape = async (action) => {
-        if (!action?.id) return false;
-        const alreadyOpen = ensureMainMenuOpen();
-        await sleepAsync(alreadyOpen ? 100 : 160);
-        const opened = await openModelVersionSubmenu(getVisibleModelMenuState());
-        const menu = opened?.menu || null;
-        if (!(menu instanceof Element)) return false;
-        const item = findModelVersionMenuItemForAction(menu, action);
-        if (!(item instanceof Element)) return false;
-        activateMenuItem(item);
-        persistActiveModelConfigId(action.id);
-        // Selecting a Work row closes the list before the composer surface
-        // finishes updating. Confirm the structural central trigger now
-        // reflects the selected row before collecting effort/speed controls;
-        // otherwise a slower row (currently Sol) can be scraped as the prior
-        // model and make the whole refresh look partial.
-        const expectedLabel = String(action.label || '').replace(/\s+/g, ' ').trim();
-        const settled = await waitForAsync(
-          () => {
-            const reopened = ensureMainMenuOpen();
-            if (!reopened) return null;
-            const currentState = getVisibleModelMenuState();
-            const trigger = getIntegratedModelSelectionViewTrigger(currentState.main);
-            if (!(trigger instanceof Element)) return null;
-            const currentLabel = getModelTextWithoutHints(trigger).replace(/\s+/g, ' ').trim();
-            if (expectedLabel && currentLabel === expectedLabel) return trigger;
-
-            // Chat mode's central button displays only the effort label (for
-            // example, "High"). The model selection itself remains mounted
-            // in the structural Advanced view and exposes its settled value
-            // through aria-checked/data-state, so use that marker when the
-            // button intentionally omits the model name.
-            const selectedAdvancedRow = Array.from(
-              document.querySelectorAll(
-                '[data-model-selection-view="true"] [data-testid="composer-model-picker-slider-advanced-view"] [role="menuitemradio"]',
-              ),
-            ).find(
-              (row) =>
-                row.getAttribute('aria-checked') === 'true' ||
-                row.getAttribute('data-state') === 'checked',
-            );
-            const selectedAdvancedLabel = selectedAdvancedRow
-              ? getModelTextWithoutHints(selectedAdvancedRow).replace(/\s+/g, ' ').trim()
-              : '';
-            return expectedLabel && selectedAdvancedLabel === expectedLabel
-              ? selectedAdvancedRow
-              : null;
-          },
-          { timeout: 2200, interval: 60 },
-        );
-        if (!(settled instanceof Element)) return false;
-        await sleepAsync(220);
-        return true;
-      };
       const PILL_EFFORT_ACTION_IDS_BY_ROW = Object.freeze([
         'instant',
         'thinking',
@@ -13570,44 +13856,6 @@ form.w-full[data-type="unified-composer"] {
         'effort-max',
       ]);
       const PILL_SPEED_IDS_BY_ROW = Object.freeze(['speed-standard', 'speed-fast']);
-      const collectPillEffortRows = (menu) => {
-        return getPillRadioItems(menu)
-          .map((item, index) => {
-            const label = getPillRadioLabel(item);
-            const actionId = PILL_EFFORT_ACTION_IDS_BY_ROW[index] || '';
-            if (!actionId) return null;
-            const action = getModelActionById(actionId);
-            const slot = Number(action?.slot);
-            if (!action || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return null;
-            return {
-              id: actionId,
-              slot,
-              available: true,
-              selected:
-                item.getAttribute('aria-checked') === 'true' ||
-                item.getAttribute('data-state') === 'checked',
-              label,
-            };
-          })
-          .filter(Boolean);
-      };
-      const collectPillSpeedRows = (menu) => {
-        return getPillRadioItems(menu)
-          .map((item, index) => {
-            const label = getPillRadioLabel(item);
-            const id = PILL_SPEED_IDS_BY_ROW[index] || '';
-            if (!id) return null;
-            return {
-              id,
-              available: true,
-              selected:
-                item.getAttribute('aria-checked') === 'true' ||
-                item.getAttribute('data-state') === 'checked',
-              label,
-            };
-          })
-          .filter(Boolean);
-      };
       const getPillMenuInventory = async () => {
         const main = await ensurePillAdvancedOptionsExpanded(getOpenPillMainMenu());
         if (!main) return null;
@@ -13636,515 +13884,178 @@ form.w-full[data-type="unified-composer"] {
         persistActiveModelConfigId(action.id);
         return true;
       };
-      const selectHybridModelNameDuringScrape = async (action) => {
-        // A single Chat catalog can cross shells: GPT models use the compact
-        // Power/Advanced menu while o3 uses the integrated Intelligence menu.
-        // Decide from the live open surface first; cached catalog flags are
-        // intentionally not authoritative during a refresh transition.
-        const openPillMain = getOpenPillMainMenu();
-        if (openPillMain) {
-          logModelRefreshDebug('scrape:model-route', {
-            route: 'pill',
-            actionId: action?.id || '',
-          });
-          return selectPillModelNameDuringScrape(action);
-        }
-
-        const currentState = getVisibleModelMenuState();
-        const openIntegratedMain = isIntegratedComposerMenu(currentState.main);
-        if (openIntegratedMain) {
-          logModelRefreshDebug('scrape:model-route', {
-            route: 'integrated',
-            actionId: action?.id || '',
-          });
-          return selectIntegratedModelNameDuringScrape(action);
-        }
-
-        if (await selectPillModelNameDuringScrape(action)) {
-          logModelRefreshDebug('scrape:model-route', {
-            route: 'pill-fallback',
-            actionId: action?.id || '',
-          });
-          return true;
-        }
-        logModelRefreshDebug('scrape:model-route', {
-          route: 'integrated-fallback',
-          actionId: action?.id || '',
+      // Current picker: one inventory read, then one finite effort scan per model.
+      // Catalog adaptation happens only after every row has been collected.
+      const scrapeCurrentModelPickerCatalogOnce = async ({ profile = '' } = {}) => {
+        const fail = (stage) => { throw new Error(`MODEL_REFRESH_${stage}`); };
+        const readMenu = () => {
+          const triggerId = getModelMenuButton()?.id;
+          return Array.from(document.querySelectorAll(MODEL_MENU_SELECTOR)).find(
+            (menu) => triggerId && menu.getAttribute('aria-labelledby') === triggerId,
+          ) || null;
+        };
+        ensureMainMenuOpen();
+        const menu = await waitForAsync(readMenu, { timeout: 1200, interval: 25 });
+        const view = menu?.querySelector('[data-model-picker-view]');
+        if (!(view instanceof Element)) return { fallback: true };
+        hideLiveScrapeElement(menu.closest('[data-radix-popper-content-wrapper]') || menu);
+        const rows = () =>
+          window.CSPModelPickerSelectors?.getActiveModelPickerRows?.(view) || [];
+        const title = (row) => {
+          const label = window.CSPModelPickerSelectors?.getModelPickerRowTitleElement?.(row);
+          return label ? getModelTextWithoutHints(label).replace(/\s+/g, ' ').trim() : '';
+        };
+        const openAdvanced = async () => {
+          if (view.getAttribute('data-model-picker-view') === 'advanced') return;
+          const toggle = view.querySelector('[data-model-picker-view-toggle="true"]');
+          if (!toggle || !smartClickSafe(toggle)) fail('VIEW_TOGGLE_NOT_FOUND');
+          if (!await waitForAsync(
+            () => view.getAttribute('data-model-picker-view') === 'advanced' && rows().length,
+            { timeout: 1000, interval: 25 },
+          )) fail('ADVANCED_NOT_READY');
+        };
+        const readEffort = () => {
+          if (view.getAttribute('data-model-picker-view') !== 'simple') return null;
+          const control = view.querySelector('[data-reasoning-slider="true"]');
+          const slider = control?.querySelector('[role="slider"][aria-valuemin][aria-valuemax][aria-valuenow]');
+          if (!slider || control.closest('[inert], [data-active="false"]')) return null;
+          const min = Number(slider.getAttribute('aria-valuemin'));
+          const max = Number(slider.getAttribute('aria-valuemax'));
+          const value = Number(slider.getAttribute('aria-valuenow'));
+          const label = view.querySelector('[data-model-picker-view-toggle] span[data-effort-only]')?.textContent?.trim();
+          if (![min, max, value].every(Number.isSafeInteger) || min < 0 || max < min || value < min || value > max || !label) return null;
+          return { control, min, max, value, label, effortValue: getModelMenuButton()?.getAttribute('data-selected-reasoning-effort') || '' };
+        };
+        const selectRow = async (index, expectedTitle) => {
+          await openAdvanced();
+          const row = rows()[index];
+          if (!row || title(row) !== expectedTitle || isUnavailableModelMenuItem(row)) fail('MODEL_ROW_UNAVAILABLE');
+          if (!smartClickSafe(row)) fail('MODEL_SELECTION_FAILED');
+          const state = await waitForAsync(() => {
+            // Selecting a row returns the picker to Simple; its checked row is
+            // still mounted in the inactive Advanced panel during the scan.
+            const checked = Array.from(view.querySelectorAll('[role="menuitemradio"]')).find(
+              (candidate) => candidate.getAttribute('aria-checked') === 'true',
+            );
+            return checked && title(checked) === expectedTitle ? readEffort() : null;
+          }, { timeout: 1200, interval: 25 });
+          if (!state) fail('MODEL_EFFORT_NOT_READY');
+          return state;
+        };
+        const moveEffort = async (targetValue) => {
+          let state = readEffort();
+          if (!state || targetValue < state.min || targetValue > state.max) fail('EFFORT_RANGE_INVALID');
+          const steps = Math.abs(targetValue - state.value);
+          for (let step = 0; step < steps; step += 1) {
+            const direction = targetValue > state.value ? 1 : -1;
+            const expected = state.value + direction;
+            pressElementKey(state.control, direction > 0 ? 'ArrowRight' : 'ArrowLeft');
+            state = await waitForAsync(() => {
+              const next = readEffort();
+              return next?.value === expected ? next : null;
+            }, { timeout: 700, interval: 25 });
+            if (!state) fail('EFFORT_STEP_FAILED');
+          }
+          return state;
+        };
+        const initialSlider = view.querySelector('[role="slider"][aria-valuenow]');
+        const initialValue = Number(initialSlider?.getAttribute('aria-valuenow'));
+        await openAdvanced();
+        const inventory = rows().map((row, index) => ({
+          index,
+          label: title(row),
+          selected: row.getAttribute('aria-checked') === 'true',
+          // The recommendation description has its own structural wrapper.
+          recommended: profile === 'work' && index === 0 && !!row.querySelector('[class*="DefaultDescription-"]'),
+        }));
+        if (!inventory.length || inventory.some((row) => !row.label)) fail('MODEL_ROWS_EMPTY');
+        if (new Set(inventory.map((row) => row.label)).size !== inventory.length) fail('MODEL_ROWS_DUPLICATED');
+        const initial = inventory.find((row) => row.selected);
+        if (!initial) fail('SELECTED_MODEL_NOT_FOUND');
+        const models = inventory.filter((row) => !row.recommended);
+        if (!models.length) fail('MODEL_ROWS_EMPTY');
+        const previousCatalog = MODEL_CATALOG_BY_PROFILE[getProfileForChatWorkMode(profile)];
+        const labels = ['Default', ...models.map((row) => row.label)];
+        const actions = models.map((row, index) => {
+          const action = window.ModelLabels.getModelNameActionForLabelInList(row.label, index + 1, labels);
+          const previous = window.ModelLabels.getCatalogModelNameActionForLabel(row.label, index + 1, previousCatalog);
+          return previous?.fromCatalog ? { ...action, slot: previous.slot, fromCatalog: true } : action;
         });
-        return selectIntegratedModelNameDuringScrape(action);
-      };
-      const scrapePillModelCatalogOnce = async ({ profile = '' } = {}) => {
-        await releasePreparedModelConfigSession();
-        const readyState = await waitForPillMainMenuFromShortcut();
-        logModelRefreshDebug('pill:main-menu', { found: !!readyState });
-        if (!readyState) return { fallback: true };
-        const initialInventory = await getPillMenuInventory();
-        logModelRefreshDebug('pill:submenu-inventory', {
-          model: !!initialInventory?.triggers?.model,
-          effort: !!initialInventory?.triggers?.effort,
-          speed: !!initialInventory?.triggers?.speed,
-        });
-        if (!initialInventory) return { fallback: true };
-        const hasSpeedMenu = initialInventory.triggers.speed instanceof Element;
-        const hasResetItem = getPillResetMenuItem(initialInventory.main) instanceof Element;
-
-        const modelMenu = await openPillSubmenu(initialInventory.triggers.model);
-        const modelNameItems = getPillRadioItems(modelMenu).filter((item) =>
-          isLikelyModelVersionLabel(getPillRadioLabel(item)),
-        );
-        if (!modelNameItems.length) return { fallback: true };
-
-        const modelNameLabels = modelNameItems.map(getPillRadioLabel);
-        const modelNameActions = modelNameItems.map((item, index) =>
-          getModelNameActionForMenuItem(item, index, window.__modelCatalog, modelNameLabels),
-        );
-        const availableModelNames = buildAvailableScrapeActions(
-          modelNameItems,
-          modelNameActions,
-          getPillRadioLabel,
-        );
-        if (!availableModelNames.length) return { fallback: true };
-
-        const activeIndex = modelNameItems.findIndex(
-          (item) =>
-            item.getAttribute('aria-checked') === 'true' ||
-            item.getAttribute('data-state') === 'checked',
-        );
-        const activeLabel =
-          activeIndex >= 0 ? getModelVersionMenuItemLabel(modelNameItems[activeIndex]) : '';
-        const initialActiveModelName =
-          availableModelNames.find((modelName) => modelName.label === activeLabel) ||
-          availableModelNames[0] ||
-          null;
-        const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
+        const takeSlot = createScrapeSlotAllocator(actions);
+        const configureOptions = actions.map((action, index) => ({ id: action.id, label: models[index].label, slot: takeSlot(action) }));
+        if (configureOptions.some((option) => option.slot < 0)) fail('MODEL_SLOTS_INVALID');
         const frontendByConfig = {};
         const speedByConfig = {};
-        let selectedConfigId = initialActiveConfigId;
-
-        for (const modelName of availableModelNames) {
-          if (modelName.id !== selectedConfigId) {
-            const selected = await selectHybridModelNameDuringScrape(modelName);
-            if (!selected) continue;
-            selectedConfigId = modelName.id;
+        const recommendedPairs = [];
+        let hasReset = false;
+        let hasSpeed = false;
+        try {
+          for (const row of inventory) {
+            let state = await selectRow(row.index, row.label);
+            if (!row.recommended && state.max - state.min + 1 > INTEGRATED_EFFORT_ACTION_IDS.length) fail('EFFORT_MAPPING_UNSUPPORTED');
+            const option = configureOptions[models.indexOf(row)];
+            const effortRows = [];
+            for (let value = state.min; value <= state.max; value += 1) {
+              state = await moveEffort(value);
+              if (row.recommended) {
+                recommendedPairs.push({
+                  sliderValue: value,
+                  modelLabel: view.querySelector('[data-model-picker-view-toggle] [data-menu-row-content] .truncate .truncate')?.textContent?.trim() || '',
+                  label: state.label,
+                  effortValue: state.effortValue,
+                });
+              } else {
+                const id = INTEGRATED_EFFORT_ACTION_IDS[value - state.min];
+                const action = getModelActionById(id);
+                effortRows.push({ id, slot: action.slot, available: true, label: state.label, sliderValue: value, effortValue: state.effortValue });
+              }
+            }
+            if (!row.recommended) {
+              frontendByConfig[option.id] = effortRows;
+              speedByConfig[option.id] = collectIntegratedSpeedRows(menu);
+              hasSpeed ||= speedByConfig[option.id].length > 0;
+              hasReset ||= !!getIntegratedResetMenuItem(menu);
+            }
           }
-
-          const reopened = await waitForPillMainMenuFromShortcut();
-          const inventory = reopened ? await getPillMenuInventory() : null;
-          if (inventory) {
-            const effortMenu = await openPillSubmenu(inventory.triggers.effort);
-            frontendByConfig[modelName.id] = collectPillEffortRows(effortMenu);
-            const speedMenu = inventory.triggers.speed
-              ? await openPillSubmenu(inventory.triggers.speed)
-              : null;
-            speedByConfig[modelName.id] = speedMenu ? collectPillSpeedRows(speedMenu) : [];
-          } else if (!hasSpeedMenu) {
-            const alreadyOpen = ensureMainMenuOpen();
-            await sleepAsync(alreadyOpen ? 100 : 160);
-            const integratedState = getVisibleModelMenuState();
-            const isIntegratedMenu = isIntegratedComposerMenu(integratedState.main);
-            if (!isIntegratedMenu) continue;
-            frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(
-              integratedState,
-              modelName.id,
-            );
-            speedByConfig[modelName.id] = [];
-          } else {
-            continue;
-          }
-          logModelRefreshDebug('pill:model-collected', {
-            modelId: modelName.id,
-            effortCount: frontendByConfig[modelName.id].length,
-            speedCount: speedByConfig[modelName.id].length,
-          });
+          if (recommendedPairs.some((pair) => !pair.modelLabel)) fail('RECOMMENDATIONS_INCOMPLETE');
+        } finally {
+          await selectRow(initial.index, initial.label);
+          if (Number.isSafeInteger(initialValue)) await moveEffort(initialValue);
         }
-
-        if (initialActiveModelName?.id && selectedConfigId !== initialActiveConfigId) {
-          await selectHybridModelNameDuringScrape(initialActiveModelName);
-        }
-
-        const complete = availableModelNames.every(
-          (modelName) =>
-            Array.isArray(frontendByConfig[modelName.id]) &&
-            frontendByConfig[modelName.id].length > 0 &&
-            (!hasSpeedMenu ||
-              (Array.isArray(speedByConfig[modelName.id]) &&
-                speedByConfig[modelName.id].length === 2)),
-        );
-        if (!complete) return { fallback: true };
-
+        const activeModel = initial.recommended
+          ? recommendedPairs.find((pair) => pair.sliderValue === initialValue)?.modelLabel
+          : initial.label;
+        const activeModelConfigId = configureOptions.find((option) => option.label === activeModel)?.id || configureOptions[0].id;
         const catalog = {
-          version: 4,
-          selectorShape: hasSpeedMenu ? 'pill-three-submenu' : 'pill-two-submenu',
-          pillMenu: true,
-          pillSpeedMenu: hasSpeedMenu,
-          pillResetAvailable: hasResetItem,
-          scrapedAt: Date.now(),
-          integratedEffort: true,
-          configureOptions: availableModelNames.map((modelName) => ({
-            id: modelName.id,
-            slot: modelName.slot,
-            label:
-              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                ? window.ModelLabels.getCanonicalActionLabel(modelName.id, modelName.label)
-                : modelName.label,
-          })),
-          thinkingEffortIds: [],
-          frontendByConfig,
-          speedByConfig,
-        };
-        const modelNames = persistScrapedModelCatalog(catalog, {
-          activeModelConfigId: initialActiveConfigId,
-          profile,
-        });
-        setCachedActiveModelConfigId(initialActiveConfigId);
-        logModelRefreshDebug('pill-three-submenu:success', {
-          models: availableModelNames.map((model) => model.label),
-          effortCounts: Object.fromEntries(
-            Object.entries(frontendByConfig).map(([id, rows]) => [id, rows.length]),
-          ),
-          speedCounts: Object.fromEntries(
-            Object.entries(speedByConfig).map(([id, rows]) => [id, rows.length]),
-          ),
-        });
-
-        return {
-          ok: true,
-          modelCatalog: catalog,
-          modelNames,
-          activeModelConfigId: initialActiveConfigId,
-        };
-      };
-      const scrapeIntegratedModelCatalogOnce = async ({ profile = '' } = {}) => {
-        await releasePreparedModelConfigSession();
-        const alreadyOpen = ensureMainMenuOpen();
-        await sleepAsync(alreadyOpen ? 120 : 180);
-        let state = getVisibleModelMenuState();
-        const isIntegratedMenu = isIntegratedComposerMenu(state.main);
-        logModelRefreshDebug('integrated:menu-state', {
-          isIntegratedMenu,
-          menu: getModelRefreshDebugMenuSummary(state),
-        });
-        if (!isIntegratedMenu) return { fallback: true };
-
-        const opened = await openModelVersionSubmenu(state);
-        const submenu = opened?.menu || null;
-        if (!(submenu instanceof Element)) {
-          const noSwitcher = isModelMenuWithoutSwitchingSurface(state, {
-            ignoreModelSubmenuTrigger: true,
-          });
-          logModelRefreshDebug('integrated:missing-submenu', {
-            noSwitcher,
-            menu: getModelRefreshDebugMenuSummary(state),
-          });
-          return noSwitcher
-            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
-            : { ok: false, error: 'MODEL_SUBMENU_NOT_FOUND' };
-        }
-
-        const modelNameItems = getModelVersionMenuItems(submenu);
-        if (!modelNameItems.length) {
-          const currentState = getVisibleModelMenuState();
-          const noSwitcher = isModelMenuWithoutSwitchingSurface(currentState, {
-            ignoreModelSubmenuTrigger: true,
-          });
-          logModelRefreshDebug('integrated:missing-submenu-options', {
-            noSwitcher,
-            menu: getModelRefreshDebugMenuSummary(currentState),
-          });
-          return noSwitcher
-            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
-            : { ok: false, error: 'MODEL_SUBMENU_OPTIONS_NOT_FOUND' };
-        }
-
-        const modelNameLabels = modelNameItems.map(getModelVersionMenuItemLabel);
-        const modelNameActions = modelNameItems.map((item, index) =>
-          getModelNameActionForMenuItem(item, index, window.__modelCatalog, modelNameLabels),
-        );
-        const availableModelNames = buildAvailableScrapeActions(
-          modelNameItems,
-          modelNameActions,
-          getModelVersionMenuItemLabel,
-        );
-        // The selected model can move during a scrape, but the native menu
-        // order is stable. Re-apply that observed structural order before any
-        // selection loop or persistence so the popup never starts with Luna
-        // (or another selected row) ahead of Astra/Sol/Terra.
-        const observedOrderById = new Map(
-          modelNameActions
-            .map((action, index) => [String(action?.id || '').trim(), index])
-            .filter(([id]) => id),
-        );
-        availableModelNames.sort(
-          (left, right) =>
-            (observedOrderById.get(String(left?.id || '').trim()) ?? Number.MAX_SAFE_INTEGER) -
-            (observedOrderById.get(String(right?.id || '').trim()) ?? Number.MAX_SAFE_INTEGER),
-        );
-        logModelRefreshDebug('integrated:model-rows', {
-          labels: modelNameLabels,
-          actions: modelNameActions.map((action) => ({
-            id: action?.id || '',
-            slot: action?.slot,
-            optionKind: action?.optionKind || '',
-            fromCatalog: action?.fromCatalog === true,
-          })),
-          available: availableModelNames.map((action) => ({ id: action.id, slot: action.slot })),
-        });
-        if (!availableModelNames.length) {
-          const currentState = getVisibleModelMenuState();
-          const noSwitcher = isModelMenuWithoutSwitchingSurface(currentState, {
-            ignoreModelSubmenuTrigger: true,
-          });
-          logModelRefreshDebug('integrated:unresolved-options', {
-            noSwitcher,
-            menu: getModelRefreshDebugMenuSummary(currentState),
-          });
-          return noSwitcher
-            ? createNoModelSwitcherResult('model-menu-without-switching-surface')
-            : { ok: false, error: 'MODEL_OPTIONS_UNRESOLVED' };
-        }
-
-        const activeIndex = modelNameItems.findIndex(
-          (item) =>
-            item.getAttribute('aria-checked') === 'true' ||
-            item.getAttribute('data-state') === 'checked',
-        );
-        // `availableModelNames` deliberately omits the native-only Default row,
-        // so its array index no longer matches the DOM index. Resolve the
-        // active model by action identity first; otherwise a selected Terra or
-        // Luna row is shifted to the next model and the popup's primary card
-        // is rendered out of order/duplicated.
-        const activeModelAction =
-          activeIndex >= 0 ? modelNameActions[activeIndex] : null;
-        const initialActiveModelName =
-          availableModelNames.find((modelName) => modelName.id === activeModelAction?.id) ||
-          availableModelNames[0] ||
-          null;
-        const initialActiveConfigId = normalizeActiveModelConfigId(initialActiveModelName?.id);
-        const frontendByConfig = {};
-        const speedByConfig = {};
-        const initialIntegratedSpeedRows = collectIntegratedSpeedRows(state.main);
-        const hasIntegratedSpeedMenu = initialIntegratedSpeedRows.length === 2;
-        const hasIntegratedReset = getIntegratedResetMenuItem(state.main) instanceof Element;
-        frontendByConfig[initialActiveConfigId] = getIntegratedFrontendRowsFromState(
-          state,
-          initialActiveConfigId,
-        );
-        speedByConfig[initialActiveConfigId] = initialIntegratedSpeedRows;
-
-        for (const modelName of availableModelNames) {
-          if (modelName.id === initialActiveConfigId) continue;
-          const selected = await selectIntegratedModelNameDuringScrape(modelName);
-          if (!selected) continue;
-          const reopened = ensureMainMenuOpen();
-          await sleepAsync(reopened ? 100 : 160);
-          state = getVisibleModelMenuState();
-          frontendByConfig[modelName.id] = getIntegratedFrontendRowsFromState(state, modelName.id);
-          speedByConfig[modelName.id] = collectIntegratedSpeedRows(state.main);
-        }
-
-        if (initialActiveModelName?.id) {
-          await selectIntegratedModelNameDuringScrape(initialActiveModelName);
-        }
-
-        const incompleteModelNames = availableModelNames.filter(
-          (modelName) => {
-            const rows = frontendByConfig[modelName.id];
-            return (
-              !Array.isArray(rows) ||
-              !rows.some((row) => PILL_EFFORT_ACTION_IDS_BY_ROW.includes(row?.id)) ||
-              (hasIntegratedSpeedMenu &&
-                (!Array.isArray(speedByConfig[modelName.id]) ||
-                  speedByConfig[modelName.id].length !== 2))
-            );
-          },
-        );
-        if (incompleteModelNames.length) {
-          logModelRefreshDebug('integrated:incomplete', {
-            expectedModelIds: availableModelNames.map((modelName) => modelName.id),
-            missingModelIds: incompleteModelNames.map((modelName) => modelName.id),
-          });
-          return { ok: false, error: 'INTEGRATED_MODEL_OPTIONS_INCOMPLETE' };
-        }
-
-        const catalog = {
-          version: 4,
+          version: 5,
+          surfaceMode: profile,
           selectorShape: 'integrated-model-selection',
           integratedModelMenu: true,
-          integratedSpeedMenu: hasIntegratedSpeedMenu,
-          integratedResetAvailable: hasIntegratedReset,
-          scrapedAt: Date.now(),
           integratedEffort: true,
-          configureOptions: availableModelNames.map((modelName) => ({
-            id: modelName.id,
-            slot: modelName.slot,
-            label:
-              typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                ? window.ModelLabels.getCanonicalActionLabel(modelName.id, modelName.label)
-                : modelName.label,
-          })),
-          thinkingEffortIds: [],
+          integratedSpeedMenu: hasSpeed,
+          integratedResetAvailable: hasReset,
+          scrapedAt: Date.now(),
+          configureOptions,
           frontendByConfig,
           speedByConfig,
+          recommendedPairs,
+          thinkingEffortIds: [],
         };
-        const modelNames = persistScrapedModelCatalog(catalog, {
-          activeModelConfigId: initialActiveConfigId,
-          profile,
-        });
-        setCachedActiveModelConfigId(initialActiveConfigId);
-
-        return {
-          ok: true,
-          modelCatalog: catalog,
-          modelNames,
-          activeModelConfigId: initialActiveConfigId,
-        };
+        const modelNames = await persistScrapedModelCatalog(catalog, { profile, activeModelConfigId, waitForStorage: true });
+        setCachedActiveModelConfigId(activeModelConfigId);
+        return { ok: true, modelCatalog: catalog, modelNames, activeModelConfigId };
       };
-      const scrapeModelCatalogOnce = async ({
-        hideUi = true,
-        keepPreparedSession = true,
-        profile = '',
-      } = {}) => {
+      const scrapeModelCatalogOnce = async ({ hideUi = true, profile = "" } = {}) => {
         try {
           return await ModelPickerScrapeSession.withCatalogUi(hideUi, async () => {
-          try {
-          await releasePreparedModelConfigSession();
-          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
-
-          const pillResult = await scrapePillModelCatalogOnce({ profile });
-          if (!pillResult?.fallback) return pillResult;
-
-          await releasePreparedModelConfigSession();
-          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
-
-          const integratedResult = await scrapeIntegratedModelCatalogOnce({ profile });
-          if (!integratedResult?.fallback) return integratedResult;
-
-          await releasePreparedModelConfigSession();
-          if (!getVisibleModelMenuButton()) return createNoModelSwitcherResult('model-switcher-pill-missing');
-
-          const alreadyOpen = ensureMainMenuOpen();
-          await sleepAsync(alreadyOpen ? 120 : 180);
-          const menuReady = await waitForMainMenuActionTarget(getModelActionById('configure'));
-          const state = menuReady?.state || getVisibleModelMenuState();
-          const modelSelectorThinkingEffortIds =
-            await collectThinkingEffortIdsFromModelSelectorMenu(state);
-          hideOpenModelUiForScrape(getVisibleModelMenuState());
-          const configureItem = findConfigureMenuItem(state);
-          if (!state.main || !configureItem) {
-            const noSwitcher = isModelMenuWithoutSwitchingSurface(state, {
-              ignoreModelSubmenuTrigger: true,
-            });
-            logModelRefreshDebug('legacy:missing-configure', {
-              noSwitcher,
-              menu: getModelRefreshDebugMenuSummary(state),
-            });
-            return noSwitcher
-              ? createNoModelSwitcherResult('model-menu-without-switching-surface')
-              : { ok: false, error: 'CONFIGURE_ITEM_NOT_FOUND' };
-          }
-
-          const combobox = await openConfigureDialogFromMenuItem(configureItem);
-          if (!combobox) return { ok: false, error: 'CONFIGURE_DIALOG_NOT_FOUND' };
-
-          hideConfigureDialogUiForScrape();
-          const frontendByConfig = {};
-          const initialActiveConfigId = inferActiveConfigFromCombobox(combobox);
-          const initialFrontendActionId = inferActiveFrontendActionIdFromDialog(findConfigureDialog());
-
-          let listbox = await waitForConfigureListboxQuick(combobox);
-          if (!listbox) {
-            smartClickSafe(combobox);
-            listbox = await waitForConfigureListbox(combobox);
-          }
-          if (!listbox) return { ok: false, error: 'CONFIGURE_LISTBOX_NOT_FOUND' };
-          hideConfigureListboxUiForScrape(listbox);
-
-          const optionElements = Array.from(listbox.querySelectorAll(':scope [role="option"]'));
-          const optionActions = optionElements.map((option) =>
-            getConfigureActionForOption(option, listbox),
-          );
-          const availableOptions = buildAvailableScrapeActions(
-            optionElements,
-            optionActions,
-            getConfigureOptionLabel,
-          );
-
-          const scrapeOrder = availableOptions
-            .slice()
-            .sort((a, b) =>
-              a.id === 'configure-latest' ? -1 : b.id === 'configure-latest' ? 1 : 0,
-            );
-
-          for (const option of scrapeOrder) {
-            await selectConfigureOptionDuringScrape(combobox, option);
-            hideConfigureDialogUiForScrape();
-            frontendByConfig[option.id] = collectConfigureFrontendRows(findConfigureDialog(), option);
-          }
-          if (availableOptions.every((option) => option.id !== initialActiveConfigId)) {
-            const initialOption =
-              availableOptions.find((option) => option.id === initialActiveConfigId) ||
-              getModelActionById(initialActiveConfigId);
-            frontendByConfig[initialActiveConfigId] = collectConfigureFrontendRows(
-              findConfigureDialog(),
-              initialOption,
-            );
-          }
-          const configureThinkingEffortIds = await collectThinkingEffortIdsDuringScrape(combobox);
-          const thinkingEffortIds =
-            typeof window.ModelLabels?.sortThinkingEffortIds === 'function'
-              ? window.ModelLabels.sortThinkingEffortIds([
-                  ...modelSelectorThinkingEffortIds,
-                  ...configureThinkingEffortIds,
-                ])
-              : Array.from(
-                  new Set([...modelSelectorThinkingEffortIds, ...configureThinkingEffortIds]),
-                );
-          await ensureConfigureComboboxSelection(combobox, initialActiveConfigId);
-          if (initialFrontendActionId) {
-            await ensureConfigureFrontendRowSelection(initialFrontendActionId);
-          }
-
-          const catalog = {
-            version: 2,
-            scrapedAt: Date.now(),
-            configureOptions: availableOptions.map((option) => ({
-              id: option.id,
-              slot: option.slot,
-              label:
-                typeof window.ModelLabels?.getCanonicalActionLabel === 'function'
-                  ? window.ModelLabels.getCanonicalActionLabel(option.id, option.label)
-                  : typeof window.ModelLabels?.normalizeStoredActionName === 'function'
-                  ? window.ModelLabels.normalizeStoredActionName(option.slot, option.label)
-                : option.label,
-            })),
-            thinkingEffortIds,
-            frontendByConfig,
-          };
-          const modelNames = persistScrapedModelCatalog(catalog, { profile });
-
-          if (keepPreparedSession) {
-            clearHiddenLiveScrapeElements();
-            setPreparedModelConfigSession(combobox, initialActiveConfigId);
-          } else {
-            const closeButton = await waitForButtonByTestIdSafe('close-button', {
-              timeout: 800,
-              interval: 25,
-            });
             try {
-              smartClickSafe(closeButton);
-            } catch { }
-            clearPreparedModelConfigSession();
-          }
-
-          return {
-            ok: true,
-            modelCatalog: catalog,
-            modelNames,
-            activeModelConfigId: initialActiveConfigId,
-          };
-          } catch (error) {
-            return { ok: false, error: error?.message || 'SCRAPE_FAILED' };
-          }
+              await releasePreparedModelConfigSession();
+              if (!getVisibleModelMenuButton()) return { ok: false, error: "MODEL_REFRESH_PICKER_NOT_FOUND" };
+              const result = await scrapeCurrentModelPickerCatalogOnce({ profile });
+              return result?.fallback ? { ok: false, error: "MODEL_REFRESH_PICKER_FORMAT_UNSUPPORTED" } : result;
+            } catch (error) {
+              return { ok: false, error: error?.message || "MODEL_REFRESH_FAILED" };
+            }
           });
         } finally {
           scheduleComposerRefocusAfterModelPicker();
@@ -14193,8 +14104,8 @@ form.w-full[data-type="unified-composer"] {
           const currentButton = getVisibleModelMenuButton();
           const selected =
             currentRadios.length === 2 &&
-            currentRadios[targetIndex]?.getAttribute('aria-checked') === 'true' &&
-            currentRadios[1 - targetIndex]?.getAttribute('aria-checked') === 'false';
+            window.CSPModelPickerSelectors?.isChatWorkSurfaceSelected(currentRadios[targetIndex]) &&
+            !window.CSPModelPickerSelectors?.isChatWorkSurfaceSelected(currentRadios[1 - targetIndex]);
           if (selected && currentButton instanceof Element) {
             if (currentButton !== stableButton) {
               stableButton = currentButton;
@@ -14301,9 +14212,10 @@ form.w-full[data-type="unified-composer"] {
 
           const initialResult = profiles[initialMode];
           if (initialResult?.ok && initialResult.modelCatalog) {
-            persistScrapedModelCatalog(initialResult.modelCatalog, {
+            await persistScrapedModelCatalog(initialResult.modelCatalog, {
               activeModelConfigId: initialResult.activeModelConfigId || '',
               profile: initialMode,
+              waitForStorage: true,
             });
             setCachedActiveModelConfigId(initialResult.activeModelConfigId || '');
           }
@@ -14652,6 +14564,113 @@ form.w-full[data-type="unified-composer"] {
           },
           { timeout: 900, interval: 25 },
         );
+      };
+      // Current Chat and Work share an in-place Simple/Advanced picker. Its
+      // markers differ from the older integrated and pill submenu layouts.
+      // null means an older shell; false means a current-shell action failed
+      // and must not fall through to a different model or legacy command.
+      const runCurrentModelPickerAction = async (action) => {
+        const isModel = action?.actionKind === 'configure-option';
+        const effortIndex = INTEGRATED_EFFORT_ACTION_IDS.indexOf(action?.id);
+        if (!isModel && effortIndex < 0) return null;
+
+        const state = await getOrOpenModelPickerState();
+        if (!(state?.main instanceof Element)) return false;
+        const readView = () =>
+          getVisibleModelMenuState().main?.querySelector('[data-model-picker-view]');
+        let view = readView();
+        if (!(view instanceof Element)) return null;
+        const catalog = window.__modelCatalog;
+        const title = (row) => {
+          const label = ModelPickerSelectors.getModelPickerRowTitleElement?.(row);
+          return label ? getModelTextWithoutHints(label).replace(/\s+/g, ' ').trim() : '';
+        };
+        const getSelection = () => {
+          // Advanced rows remain mounted but inert after selection. Read the
+          // checked identity there, but activate only the shared active rows.
+          const checked = Array.from(readView()?.querySelectorAll('[role="menuitemradio"]') || [])
+            .find((row) => row.getAttribute('aria-checked') === 'true');
+          const label = title(checked);
+          const model = catalog?.configureOptions?.find((option) => option.label === label) || null;
+          return model ? { model } : /^default\b/i.test(label) ? { isDefault: true } : null;
+        };
+
+        if (isModel) {
+          const option = catalog?.configureOptions?.find((entry) => entry.id === action.id);
+          if (!option?.label) return false;
+          if (view.getAttribute('data-model-picker-view') !== 'advanced') {
+            const toggle = view.querySelector('[data-model-picker-view-toggle="true"]');
+            if (!(toggle instanceof Element) || !smartClickSafe(toggle)) return false;
+          }
+          const rows = await waitForAsync(() => {
+            view = readView();
+            if (view?.getAttribute('data-model-picker-view') !== 'advanced') return null;
+            const activeRows = ModelPickerSelectors.getActiveModelPickerRows?.(view) || [];
+            return activeRows.length ? activeRows : null;
+          }, { timeout: 1000, interval: 25 });
+          const matches = (rows || []).filter((row) => title(row) === option.label);
+          if (matches.length !== 1 || isUnavailableModelMenuItem(matches[0])) return false;
+          // One click commits the radio and returns to Simple. Sending Enter
+          // as well can activate the new panel after React replaces this row.
+          if (!smartClickSafe(matches[0])) return false;
+          const committed = await waitForAsync(() =>
+            readView()?.getAttribute('data-model-picker-view') === 'simple' &&
+            getSelection()?.model?.id === action.id,
+          { timeout: 1200, interval: 25 });
+          if (!committed) return false;
+          persistActiveModelConfigId(action.id);
+        } else {
+          if (view.getAttribute('data-model-picker-view') === 'advanced') {
+            // Closing and reopening restores the operable Simple panel. Do
+            // not click an inert slider or reselect a model to change effort.
+            const button = getModelMenuButton();
+            if (!(button instanceof Element) || !smartClickSafe(button)) return false;
+            const closed = await waitForAsync(
+              () => button.getAttribute('aria-expanded') === 'false',
+              { timeout: 450, interval: 25 },
+            );
+            if (!closed) return false;
+            await getOrOpenModelPickerState();
+          }
+          const readEffort = () => {
+            view = readView();
+            if (view?.getAttribute('data-model-picker-view') !== 'simple') return null;
+            const control = view.querySelector('[data-reasoning-slider="true"]');
+            if (!(control instanceof Element) || control.closest('[inert], [data-active="false"]')) return null;
+            const slider = control.querySelector('[role="slider"][aria-valuemin][aria-valuemax][aria-valuenow]');
+            if (!(slider instanceof Element)) return null;
+            const min = Number(slider.getAttribute('aria-valuemin'));
+            const max = Number(slider.getAttribute('aria-valuemax'));
+            const value = Number(slider.getAttribute('aria-valuenow'));
+            return [min, max, value].every(Number.isSafeInteger) &&
+              min >= 0 && max >= min && value >= min && value <= max
+              ? { control, min, max, value } : null;
+          };
+          let effort = await waitForAsync(readEffort, { timeout: 700, interval: 25 });
+          if (!effort) return false;
+          const selection = getSelection();
+          if (!selection) return false;
+          const entry = selection.model
+            ? catalog?.frontendByConfig?.[selection.model.id]?.find((row) => row.id === action.id)
+            : null;
+          if (selection.model && (!entry || entry.available !== true)) return false;
+          const target = Number.isSafeInteger(entry?.sliderValue)
+            ? entry.sliderValue : effort.min + effortIndex;
+          if (target < effort.min || target > effort.max) return false;
+          const steps = Math.abs(target - effort.value);
+          for (let step = 0; step < steps; step += 1) {
+            const expected = effort.value + (target > effort.value ? 1 : -1);
+            pressElementKey(effort.control, target > effort.value ? 'ArrowRight' : 'ArrowLeft');
+            effort = await waitForAsync(() => {
+              const next = readEffort();
+              return next?.value === expected ? next : null;
+            }, { timeout: 500, interval: 25 });
+            if (!effort) return false;
+          }
+          if (selection.model?.id) persistActiveModelConfigId(selection.model.id);
+        }
+        flashBottomBar();
+        return true;
       };
       const ensureIntegratedSimplePicker = async (state) => {
         let currentState = state || getVisibleModelMenuState();
@@ -15380,13 +15399,27 @@ form.w-full[data-type="unified-composer"] {
           const mainMenu = await waitForAsync(
             () => {
               const main = getVisibleModelMenuState().main;
-              if (!(main instanceof Element)) return null;
-              ModelPickerHints.apply();
-              return main;
+              return main instanceof Element ? main : null;
             },
             { timeout: 900, interval: 25 },
           );
           if (!(mainMenu instanceof Element)) return null;
+
+          // The current Intelligence menu exposes model rows directly at the
+          // root. Resolve its profile-specific hinted row before treating the
+          // menu as a legacy pill that needs Advanced expanded.
+          ModelPickerHints.apply();
+          const directComposerMenu = getOpenComposerModelRadioMenu();
+          if (directComposerMenu?.menu === mainMenu) {
+            const directComposerTarget = ModelPickerHints.getUniqueVisibleMenuItemForSlot(
+              sourceSlot,
+              directComposerMenu.menu,
+            );
+            if (directComposerTarget && !isHintedSubmenuTrigger(directComposerTarget)) {
+              return directComposerTarget;
+            }
+          }
+
           const readyMainMenu = await ensurePillAdvancedOptionsExpanded(mainMenu);
           if (!(readyMainMenu instanceof Element)) return null;
 
@@ -15535,15 +15568,19 @@ form.w-full[data-type="unified-composer"] {
                   });
                 }, MODEL_PICKER_ACTION_QUEUE_TIMEOUT_MS);
               }
-              // A scraped Work model already identifies its structural destination.
-              // Open the verified first Model submenu directly; hint discovery remains fallback-only.
-              if (dispatchIntegratedEffortAction(action, options, complete)) return;
-              if (dispatchDirectPillModelAction(action, options, complete)) return;
-              // When the open menu already labels one exact item with this shortcut, activate that
-              // item directly. Chat-mode menus expose effort rows in the first level, while Work-mode
-              // catalogs route the same actions through submenus; the visible hint is authoritative.
-              if (dispatchVisibleHintedMenuAction(action, options, complete)) return;
-              dispatchActionWithoutVisibleHint(action, options, complete);
+              void runCurrentModelPickerAction(action).then((result) => {
+                if (result !== null) {
+                  complete(result);
+                  return;
+                }
+                // A scraped Work model already identifies its structural destination.
+                // Open the verified first Model submenu directly; hint discovery remains fallback-only.
+                if (dispatchIntegratedEffortAction(action, options, complete)) return;
+                if (dispatchDirectPillModelAction(action, options, complete)) return;
+                // When an older shell labels one exact item with this shortcut, use that target.
+                if (dispatchVisibleHintedMenuAction(action, options, complete)) return;
+                dispatchActionWithoutVisibleHint(action, options, complete);
+              }).catch(() => complete(false));
             });
 
           // Scrape/runtime actions that hide the UI already have their own bounded flow. Visible
@@ -15776,7 +15813,7 @@ form.w-full[data-type="unified-composer"] {
       MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST] = Array.isArray(
         changes.modelNamesLatest.newValue,
       )
-        ? changes.modelNamesLatest.newValue.slice(0, MAX_SLOTS)
+        ? changes.modelNamesLatest.newValue.slice()
         : [];
       window.__modelNamesLatest = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LATEST];
       if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LATEST) {
@@ -15787,7 +15824,7 @@ form.w-full[data-type="unified-composer"] {
       MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY] = Array.isArray(
         changes.modelNamesLegacy.newValue,
       )
-        ? changes.modelNamesLegacy.newValue.slice(0, MAX_SLOTS)
+        ? changes.modelNamesLegacy.newValue.slice()
         : [];
       window.__modelNamesLegacy = MODEL_NAMES_BY_PROFILE[MODEL_PICKER_PROFILE_LEGACY];
       if (ACTIVE_MODEL_PICKER_PROFILE === MODEL_PICKER_PROFILE_LEGACY) {
@@ -15841,7 +15878,10 @@ setTimeout(() => {
 // ==================================================
 function getSlimSidebarHost(root = document) {
   return (
-    root.getElementById('stage-slideover-sidebar') || root.getElementById('stage-sidebar') || null
+    root.getElementById('app-shell-sidebar') ||
+    root.getElementById('stage-slideover-sidebar') ||
+    root.getElementById('stage-sidebar') ||
+    null
   );
 }
 
@@ -16050,7 +16090,7 @@ function resetCollapsedSlimSidebarScroll(host) {
       function relevantNodeForSlimSidebarRefresh(node) {
         if (!(node instanceof Element) && !(node instanceof DocumentFragment)) return false;
         const selector =
-          '#stage-sidebar-tiny-bar, #stage-slideover-sidebar, #stage-sidebar, [role="menu"][data-radix-menu-content], [role="dialog"], [aria-modal="true"], [role="listbox"], [data-overlay="true"]';
+          '#stage-sidebar-tiny-bar, #app-shell-sidebar, #stage-slideover-sidebar, #stage-sidebar, [role="menu"][data-radix-menu-content], [role="dialog"], [aria-modal="true"], [role="listbox"], [data-overlay="true"]';
         if (node instanceof Element && node.matches(selector)) return true;
         return typeof node.querySelector === 'function' && !!node.querySelector(selector);
       }
@@ -16347,7 +16387,7 @@ function resetCollapsedSlimSidebarScroll(host) {
   background: transparent;
 }
 .model-picker-shortcut-grid > .shortcut-item:nth-child(n+16) {
-  display: none;
+  display: flex;
 }
 .model-picker-shortcut-grid .shortcut-item,
 .model-picker-effort-shortcut-grid > .shortcut-item {
@@ -16649,7 +16689,7 @@ function resetCollapsedSlimSidebarScroll(host) {
       : false;
   };
 
-  const getOverlayModelSlotLimit = () => window.ModelLabels?.MAX_SLOTS || 15;
+  const getOverlayModelSlotCount = () => window.ModelLabels?.MAX_SLOTS || 15;
 
   const OVERLAY_MODEL_PROFILE_LATEST = 'latest';
   const OVERLAY_MODEL_PROFILE_LEGACY = 'legacy';
@@ -16657,6 +16697,8 @@ function resetCollapsedSlimSidebarScroll(host) {
 
   const getOverlayModelCatalogProfile = (catalog) => {
     if (!catalog || typeof catalog !== 'object') return '';
+    if (catalog.surfaceMode === 'chat') return OVERLAY_MODEL_PROFILE_LEGACY;
+    if (catalog.surfaceMode === 'work') return OVERLAY_MODEL_PROFILE_LATEST;
     return catalog.pillMenu === true ||
       catalog.integratedModelMenu === true ||
       catalog.selectorShape === 'pill-three-submenu' ||
@@ -16680,17 +16722,17 @@ function resetCollapsedSlimSidebarScroll(host) {
         : typeof window.ModelLabels?.defaultNames === 'function'
           ? window.ModelLabels.defaultNames()
           : [];
-    const names = Array.isArray(source) ? source.slice(0, getOverlayModelSlotLimit()) : [];
-    while (names.length < getOverlayModelSlotLimit()) names.push('');
+    const names = Array.isArray(source) ? source.slice() : [];
+    while (names.length < getOverlayModelSlotCount()) names.push('');
     return names;
   };
 
   const normalizeOverlayModelNames = (names, profile) => {
     if (!Array.isArray(names)) return getOverlayDefaultModelNames(profile);
     const out = names
-      .slice(0, getOverlayModelSlotLimit())
+      .slice()
       .map((name) => (typeof name === 'string' ? name : ''));
-    while (out.length < getOverlayModelSlotLimit()) out.push('');
+    while (out.length < getOverlayModelSlotCount()) out.push('');
     return out;
   };
 
@@ -16738,18 +16780,18 @@ function resetCollapsedSlimSidebarScroll(host) {
   };
 
   const getOverlayModelKeyCodes = (cfg, profile) => {
-    const maxSlots = getOverlayModelSlotLimit();
+    const maxSlots = getOverlayModelSlotCount();
     const storageKey =
       profile === OVERLAY_MODEL_PROFILE_LATEST
         ? 'modelPickerKeyCodesLatest'
         : 'modelPickerKeyCodesLegacy';
     const codes =
       Array.isArray(cfg?.[storageKey])
-        ? cfg[storageKey].slice(0, maxSlots)
+        ? cfg[storageKey].slice()
         : Array.isArray(window.__modelPickerKeyCodesProfiles?.[profile])
-          ? window.__modelPickerKeyCodesProfiles[profile].slice(0, maxSlots)
+          ? window.__modelPickerKeyCodesProfiles[profile].slice()
           : typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function'
-            ? window.ModelLabels.defaultKeyCodesForProfile(profile).slice(0, maxSlots)
+            ? window.ModelLabels.defaultKeyCodesForProfile(profile).slice()
           : [];
     while (codes.length < maxSlots) codes.push('');
     return codes;
@@ -17495,14 +17537,14 @@ ${groupMarkup.join('')}
             return resolve();
           }
           try {
-            const rawNames = Array.isArray(res.modelNames) ? res.modelNames.slice(0, MAX) : [];
-            const names = defaultNames(rawNames).slice(0, MAX);
+            const rawNames = Array.isArray(res.modelNames) ? res.modelNames.slice() : [];
+            const names = defaultNames(rawNames).slice();
             const latestCodes = Array.isArray(res.modelPickerKeyCodesLatest)
-              ? res.modelPickerKeyCodesLatest.slice(0, MAX)
-              : buildDefaultCodes('latest').slice(0, MAX);
+              ? res.modelPickerKeyCodesLatest.slice()
+              : buildDefaultCodes('latest').slice();
             const legacyCodes = Array.isArray(res.modelPickerKeyCodesLegacy)
-              ? res.modelPickerKeyCodesLegacy.slice(0, MAX)
-              : buildDefaultCodes('legacy').slice(0, MAX);
+              ? res.modelPickerKeyCodesLegacy.slice()
+              : buildDefaultCodes('legacy').slice();
             while (latestCodes.length < MAX) latestCodes.push('');
             while (legacyCodes.length < MAX) legacyCodes.push('');
             window.__modelCatalog =
@@ -17516,10 +17558,10 @@ ${groupMarkup.join('')}
                 ? res.modelCatalogLegacy
                 : null;
             window.__modelNamesLatest = Array.isArray(res.modelNamesLatest)
-              ? res.modelNamesLatest.slice(0, MAX)
+              ? res.modelNamesLatest.slice()
               : [];
             window.__modelNamesLegacy = Array.isArray(res.modelNamesLegacy)
-              ? res.modelNamesLegacy.slice(0, MAX)
+              ? res.modelNamesLegacy.slice()
               : [];
             window.MODEL_NAMES = names;
             window.__modelPickerKeyCodesProfiles = {
@@ -17590,4 +17632,220 @@ ${groupMarkup.join('')}
   };
 
   document.addEventListener('keydown', onKeyDown, { capture: true });
+})();
+
+// Expose the native Cookie Preferences action in the account menu when it opens.
+(() => {
+  const FOOTER_WRAPPER_SELECTOR = 'div.flex.w-full.shrink-0.justify-center.p-4';
+  const COOKIE_BUTTON_LABEL = 'cookie preferences';
+  const PROFILE_TRIGGER_SELECTOR =
+    'button[aria-haspopup="menu"][aria-label="Open profile menu"]';
+  const OPEN_MENU_SELECTOR = '[role="menu"][data-state="open"]';
+  const MENU_ITEM_SELECTOR = '[role="menuitem"]';
+  const COOKIE_ITEM_ATTRIBUTE = 'data-csp-cookie-preferences-item';
+  const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+  let pendingMenuWait = null;
+
+  const normalizedText = (element) =>
+    (element?.innerText || element?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+  function findCookieControl() {
+    const matches = [];
+    for (const wrapper of document.querySelectorAll(FOOTER_WRAPPER_SELECTOR)) {
+      for (const child of wrapper.children) {
+        if (
+          child instanceof HTMLButtonElement &&
+          normalizedText(child) === COOKIE_BUTTON_LABEL
+        ) {
+          matches.push({ button: child, wrapper });
+        }
+      }
+    }
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function getOpenProfileMenu(trigger) {
+    if (!trigger.id) return null;
+    return (
+      Array.from(document.querySelectorAll(OPEN_MENU_SELECTOR)).find(
+        (menu) => menu.getAttribute('aria-labelledby') === trigger.id,
+      ) || null
+    );
+  }
+
+  function getMenuItems(menu) {
+    return Array.from(menu.querySelectorAll(MENU_ITEM_SELECTOR)).filter(
+      (item) => item.closest('[role="menu"]') === menu,
+    );
+  }
+
+  function replaceSettingsIconWithCookieIcon(svg) {
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.fill = 'none';
+    svg.style.stroke = 'currentColor';
+    svg.style.strokeWidth = '1.6';
+    svg.style.strokeLinecap = 'round';
+    svg.style.strokeLinejoin = 'round';
+
+    const cookieShape = document.createElementNS(SVG_NAMESPACE, 'path');
+    cookieShape.setAttribute(
+      'd',
+      'M12 2a10 10 0 1 0 10 10c0-1.1-.9-2-2-2h-1a2 2 0 0 1-2-2 2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V3.5A1.5 1.5 0 0 0 12 2Z',
+    );
+    cookieShape.setAttribute('fill', 'none');
+
+    const crumbs = [
+      [7.5, 11.5],
+      [10.5, 7.5],
+      [7.5, 16],
+      [15, 15],
+    ].map(([cx, cy]) => {
+      const crumb = document.createElementNS(SVG_NAMESPACE, 'circle');
+      crumb.setAttribute('cx', String(cx));
+      crumb.setAttribute('cy', String(cy));
+      crumb.setAttribute('r', '0.65');
+      crumb.style.fill = 'currentColor';
+      crumb.style.stroke = 'none';
+      return crumb;
+    });
+
+    svg.replaceChildren(cookieShape, ...crumbs);
+  }
+
+  function addCookieMenuItem(menu, trigger) {
+    if (menu.querySelector(`[${COOKIE_ITEM_ATTRIBUTE}]`)) return true;
+
+    const items = getMenuItems(menu);
+    const profileItem = items.find((item) => normalizedText(item) === 'profile');
+    const settingsItem = items.find((item) => normalizedText(item) === 'settings');
+    const profileIndex = items.indexOf(profileItem);
+    if (profileIndex < 0 || items.indexOf(settingsItem) !== profileIndex + 1) return false;
+
+    const nativeControl = findCookieControl();
+    if (!nativeControl) return false;
+
+    const cookieItem = settingsItem.cloneNode(true);
+    const label = Array.from(cookieItem.querySelectorAll('span')).find(
+      (span) => normalizedText(span) === 'settings',
+    );
+    if (!label) return false;
+
+    label.textContent = 'Cookies';
+    cookieItem.setAttribute(COOKIE_ITEM_ATTRIBUTE, 'true');
+    cookieItem.setAttribute('aria-label', 'Cookies');
+    cookieItem.setAttribute('tabindex', '-1');
+    const icon = cookieItem.querySelector('svg');
+    if (icon) replaceSettingsIconWithCookieIcon(icon);
+
+    cookieItem.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const currentControl = findCookieControl();
+      if (!currentControl) return;
+      trigger.click();
+      currentControl.button.click();
+    });
+
+    profileItem.after(cookieItem);
+
+    // Radix does not register an injected DOM row in its internal keyboard
+    // collection. Handle only the arrow transitions touching our row so all
+    // other native menu navigation remains owned by ChatGPT.
+    menu.addEventListener(
+      'keydown',
+      (event) => {
+        const activeItem =
+          event.target instanceof Element ? event.target.closest(MENU_ITEM_SELECTOR) : null;
+        if (!activeItem || activeItem.closest('[role="menu"]') !== menu) return;
+
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          const currentItems = getMenuItems(menu);
+          const activeIndex = currentItems.indexOf(activeItem);
+          if (activeIndex < 0) return;
+          const direction = event.key === 'ArrowDown' ? 1 : -1;
+          const nextItem =
+            currentItems[(activeIndex + direction + currentItems.length) % currentItems.length];
+          if (activeItem === cookieItem || nextItem === cookieItem) {
+            event.preventDefault();
+            event.stopPropagation();
+            nextItem.focus();
+            nextItem.scrollIntoView({ block: 'nearest' });
+          }
+          return;
+        }
+
+        if (activeItem === cookieItem && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          event.stopPropagation();
+          cookieItem.click();
+        }
+      },
+      true,
+    );
+
+    return true;
+  }
+
+  function waitForMenuItems(menu, trigger) {
+    if (addCookieMenuItem(menu, trigger)) return;
+    if (pendingMenuWait?.menu === menu) return;
+    pendingMenuWait?.stop();
+
+    // Only watch this user-opened menu while its native rows load. Disconnect
+    // after insertion, closure, or 1.5 seconds; nothing watches the page at idle.
+    let timeoutId;
+    const observer = new MutationObserver(() => {
+      if (!menu.isConnected || menu.getAttribute('data-state') !== 'open') {
+        wait.stop();
+      } else if (addCookieMenuItem(menu, trigger)) {
+        wait.stop();
+      }
+    });
+    const wait = {
+      menu,
+      stop() {
+        observer.disconnect();
+        window.clearTimeout(timeoutId);
+        if (pendingMenuWait === wait) pendingMenuWait = null;
+      },
+    };
+    pendingMenuWait = wait;
+    observer.observe(menu, {
+      attributes: true,
+      attributeFilter: ['data-state'],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    timeoutId = window.setTimeout(() => wait.stop(), 1500);
+  }
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const trigger = target?.closest(PROFILE_TRIGGER_SELECTOR);
+      if (!trigger || trigger.getClientRects().length === 0) return;
+
+      window.requestAnimationFrame(() => {
+        if (!trigger.isConnected) return;
+        let menu = getOpenProfileMenu(trigger);
+        if (menu) {
+          waitForMenuItems(menu, trigger);
+          return;
+        }
+
+        if (trigger.getAttribute('aria-expanded') === 'true') {
+          window.requestAnimationFrame(() => {
+            menu = getOpenProfileMenu(trigger);
+            if (menu) waitForMenuItems(menu, trigger);
+            else pendingMenuWait?.stop();
+          });
+        }
+      });
+    },
+    true,
+  );
 })();

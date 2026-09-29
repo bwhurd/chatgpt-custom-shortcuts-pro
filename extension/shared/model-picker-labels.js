@@ -3,6 +3,7 @@
    Safe in both popup (extension page) and content script isolated world.
 */
 (() => {
+  // Compatibility padding length only; catalogs and key arrays may grow further.
   const MAX_SLOTS = 15;
   const DEFAULT_ACTIVE_CONFIG_ID = 'configure-latest';
   const MODEL_PICKER_PROFILE_LATEST = 'latest';
@@ -517,11 +518,18 @@
   });
 
   const buildDefaultKeyCodesFromPresentationGroups = (groups) => {
-    const out = new Array(MAX_SLOTS).fill('');
+    const groupList = Array.isArray(groups) ? groups : [];
+    const lastActionSlot = groupList
+      .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+      .reduce((maximum, action) => {
+        const slot = Number(action?.slot);
+        return Number.isInteger(slot) && slot >= 0 ? Math.max(maximum, slot) : maximum;
+      }, -1);
+    const out = new Array(Math.max(MAX_SLOTS, lastActionSlot + 1)).fill('');
     const seenSlots = new Set();
     let nextSequentialIndex = 0;
 
-    (Array.isArray(groups) ? groups : []).forEach((group) => {
+    groupList.forEach((group) => {
       const groupCodes = DEFAULT_GROUP_MODEL_CODES[group?.id] || [];
       (Array.isArray(group?.actions) ? group.actions : []).forEach((action, actionIndex) => {
         if (action?.actionKind === 'shortcut-setting' && action?.storageKey) {
@@ -536,7 +544,7 @@
           (Number.isInteger(Number(action?.slot)) ? getActionBySlot(Number(action.slot)) : null) ||
           action;
         const slot = Number(base?.slot);
-        if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS || seenSlots.has(slot)) return;
+        if (!Number.isInteger(slot) || slot < 0 || seenSlots.has(slot)) return;
 
         seenSlots.add(slot);
 
@@ -604,24 +612,32 @@
   };
 
   const normalizeProfileKeyCodes = (codes, groups) => {
-    const source = Array.isArray(codes) ? codes.slice(0, MAX_SLOTS) : [];
-    while (source.length < MAX_SLOTS) source.push('');
-    const normalized = new Array(MAX_SLOTS).fill('');
+    const source = Array.isArray(codes) ? codes.slice() : [];
+    const groupList = Array.isArray(groups) ? groups : [];
+    const lastActionSlot = groupList
+      .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+      .reduce((maximum, action) => {
+        const slot = Number(action?.slot);
+        return Number.isInteger(slot) && slot >= 0 ? Math.max(maximum, slot) : maximum;
+      }, -1);
+    const requiredLength = Math.max(MAX_SLOTS, source.length, lastActionSlot + 1);
+    while (source.length < requiredLength) source.push('');
+    const normalized = new Array(requiredLength).fill('');
     const claimedCodes = new Set();
     const orderedSlots = [];
     const seenSlots = new Set();
 
-    (Array.isArray(groups) ? groups : []).forEach((group) => {
+    groupList.forEach((group) => {
       (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
         if (action?.actionKind === 'shortcut-setting' && action?.storageKey) return;
         const slot = Number(action?.slot);
-        if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return;
+        if (!Number.isInteger(slot) || slot < 0) return;
         if (seenSlots.has(slot)) return;
         seenSlots.add(slot);
         orderedSlots.push(slot);
       });
     });
-    for (let slot = 0; slot < MAX_SLOTS; slot++) {
+    for (let slot = 0; slot < source.length; slot++) {
       if (!seenSlots.has(slot)) orderedSlots.push(slot);
     }
 
@@ -703,14 +719,14 @@
   };
   const toValidSlot = (value) => {
     const slot = Number(value);
-    return Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS ? slot : -1;
+    return Number.isInteger(slot) && slot >= 0 ? slot : -1;
   };
   const toValidDynamicModelNameSlot = (value) => {
     const slot = toValidSlot(value);
     // Slots 4-6 are reserved by legacy configure actions, but are available
     // to catalog-backed Work model rows because Chat and Work assignments are
     // independent. Keep the historical 8+ range first for stable mappings.
-    return slot >= MODEL_NAME_DYNAMIC_SLOT_START || [4, 5, 6].includes(slot) ? slot : -1;
+    return slot >= MODEL_NAME_DYNAMIC_SLOT_START || [3, 4, 5, 6].includes(slot) ? slot : -1;
   };
   const MODEL_NAME_FALLBACK_SLOTS = Object.freeze([8, 9, 10, 4, 5, 6]);
   const getDynamicModelNameFallbackSlot = (optionIndex) => {
@@ -798,14 +814,12 @@
     let nextDynamicSlot = MODEL_NAME_DYNAMIC_SLOT_START;
     const takeNextDynamicSlot = () => {
       while (
-        nextDynamicSlot < MAX_SLOTS &&
-        (usedSlots.has(nextDynamicSlot) ||
-          reservedDynamicSlots.has(nextDynamicSlot) ||
-          reservedStaticSlots.has(nextDynamicSlot))
+        usedSlots.has(nextDynamicSlot) ||
+        reservedDynamicSlots.has(nextDynamicSlot) ||
+        reservedStaticSlots.has(nextDynamicSlot)
       ) {
         nextDynamicSlot += 1;
       }
-      if (nextDynamicSlot >= MAX_SLOTS) return -1;
       const slot = nextDynamicSlot;
       nextDynamicSlot += 1;
       return slot;
@@ -1333,26 +1347,26 @@
 
   const resolveActionableNames = (incoming) => {
     const out = defaultNames();
-    const inArr = Array.isArray(incoming) ? incoming.slice(0, MAX_SLOTS) : [];
-    for (let i = 0; i < MAX_SLOTS; i++) {
+    const inArr = Array.isArray(incoming) ? incoming.slice() : [];
+    for (let i = 0; i < Math.max(MAX_SLOTS, inArr.length); i++) {
       const value = normalizeStoredActionName(i, inArr[i]);
       if (value && !isLegacyArrow(value)) out[i] = value;
     }
-    return out.slice(0, MAX_SLOTS);
+    return out.slice();
   };
 
   // Current scraped defaults for initial UI before a live refresh completes.
   const defaultNames = () => {
-    const arr = DEFAULT_INTEGRATED_MODEL_NAMES.slice(0, MAX_SLOTS);
+    const arr = DEFAULT_INTEGRATED_MODEL_NAMES.slice();
     while (arr.length < MAX_SLOTS) arr.push('');
     return arr;
   };
-  const defaultLegacyNames = () => DEFAULT_LEGACY_MODEL_NAMES.slice(0, MAX_SLOTS);
+  const defaultLegacyNames = () => DEFAULT_LEGACY_MODEL_NAMES.slice();
   const getDefaultLegacyCatalog = () => DEFAULT_LEGACY_MODEL_CATALOG;
 
   // Only for popup display aesthetics: replace bare “→” with “Legacy Models →”
   const prettifyForPopup = (names) => {
-    const cap = Math.min(MAX_SLOTS, Array.isArray(names) ? names.length : 0);
+    const cap = Array.isArray(names) ? names.length : 0;
     const out = (Array.isArray(names) ? names.slice(0, cap) : []).concat();
     const idx = out.indexOf('→');
     if (idx !== -1) out[idx] = 'Legacy Models →';
@@ -1364,7 +1378,7 @@
     ACTION_GROUPS.map((group) => ({ ...group, actions: group.actions.slice() }));
   const getActionSlots = () => ACTION_SLOTS.slice();
   const getActionBySlot = (slot) =>
-    Number.isInteger(slot) && slot >= 0 && slot < MAX_SLOTS ? ACTION_BY_SLOT[slot] || null : null;
+    Number.isInteger(slot) && slot >= 0 ? ACTION_BY_SLOT[slot] || null : null;
 
   window.ModelLabels = Object.freeze({
     MAX_SLOTS,

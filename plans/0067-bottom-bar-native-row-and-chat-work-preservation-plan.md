@@ -27,7 +27,22 @@
 - [ ] Keep the bottom bar in composer document flow and preserve the event-driven, bounded reconciliation design.
 - [ ] Do not add polling, a permanent timer, a second broad observer, or localized selectors.
 
+## Current app-shell repair (2026-09-27)
+
+- [x] Inspect the live DOM: the app-shell titlebar, `form[data-chatgpt-composer]`, and `[data-thread-scroll-footer]` replace the previous IDs; the hidden disclaimer still reserves 32px and native bottom padding is 24px.
+- [x] Apply spacing in a manifest stylesheet before first paint: remove the disclaimer's reserved row and leave 20px below the composer when disabled or below the bar when enabled, following the user's clarified spacing request.
+- [x] Adapt the existing relocation controller to the observed semantic attributes and keep native composer controls in their own form. Preserve legacy selectors and reuse the existing observer.
+- [x] Update native sidebar/New Chat forwarding and reserve the enabled bar's flow footprint with one early settings read; add no polling or layout observer.
+- [x] Update the owning layout contract. The user explicitly requested no validation or testing, so no checks or extension reload were performed for this repair. Earlier plan work remains separately outstanding.
+
 ## Done when
+
+### App-shell crash repair (2026-09-27)
+
+- [x] Replace app-shell header-slot reparenting with CSS anchor positioning at the bottom row; native controls retain their React parent and event handlers.
+- [x] Exempt these native-parent actions from the moved-slot repair check and clear positioning when conversation controls disappear. Reuse the existing controller; no extra observer or polling.
+- [x] Lower the enabled bar by another 20px through native footer padding; keep the disabled composer's 20px gap.
+- [x] Update the current layout contract. No tests, validation, or extension reload performed, following the user's instruction.
 
 - [ ] Blank Work never flashes the static controls in a separate row.
 - [ ] Work and Chat both retain native-looking bottom-bar alignment across the blank-to-active transition.

@@ -1,0 +1,28 @@
+/* Keep 20px below the composer; the enabled bar sits 20px lower. */
+[data-thread-scroll-footer] {
+  padding-bottom: 20px !important;
+}
+
+html.csp-bottom-bar-enabled [data-thread-scroll-footer] {
+  padding-bottom: 0 !important;
+}
+
+/* The hidden disclaimer's wrapper otherwise continues to reserve 32px. */
+[data-thread-scroll-footer] > div:has(> [data-id="hide-this-warning"]) {
+  display: none !important;
+}
+
+/* Reserve the 36px bar plus its 2px gap before the idle content script mounts it. */
+html.csp-bottom-bar-enabled
+  [data-pip-obstacle="thread-footer"]:has(form[data-chatgpt-composer]):not(
+    :has(#bottomBarContainer)
+  )::after {
+  content: '';
+  height: 38px;
+  flex: 0 0 38px;
+}
+
+[data-thread-scroll-footer] #bottomBarContainer {
+  margin-top: 2px !important;
+  margin-bottom: 0 !important;
+}

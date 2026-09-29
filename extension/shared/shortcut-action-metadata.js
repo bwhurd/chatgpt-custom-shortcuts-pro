@@ -249,6 +249,8 @@
     }),
     byMenuChain('native-sidebar-toggle-control', 'native-sidebar-toggle-control', {
       matchGroups: [
+        ['data-app-shell-sidebar-trigger="true"'],
+        ['aria-controls="app-shell-sidebar"'],
         ['data-testid="close-sidebar-button"'],
         ['aria-controls="stage-slideover-sidebar"'],
         ['aria-controls="stage-popover-sidebar"'],
@@ -260,7 +262,7 @@
         'narrow-header-sidebar-popover-control',
       ],
       notes:
-        'Responsive native sidebar toggle may be rendered as close, desktop open, or narrow popover open control.',
+        'Responsive native sidebar toggle may use the current app-shell aria-controls marker, legacy close, desktop open, or narrow popover open control.',
     }),
     byId('page-header', 'page-header', {
       uiStateRefs: ['topbar-bottom-disabled-header-area'],
@@ -292,28 +294,58 @@
       matchGroups: [['id="csp-shortcut-overlay"']],
       notes: 'Internal extension shortcut overlay, opened by the standalone overlay listener.',
     }),
-    byTestId('composer-plus-button', 'composer-plus-btn', {
-      uiStateRefs: [
-        'topbar-bottom-disabled-thread-bottom',
-        'topbar-bottom-disabled-header-area',
-        'sidebar-collapsed-body',
-        'sidebar-expanded-body',
-        'composer-add-files-and-more-menu',
+    bySelectorList(
+      'composer-plus-button',
+      [
+        'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"]',
+        'form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
       ],
-    }),
-    byTestId('copy-turn-action-button', 'copy-turn-action-button', {
+      {
+        matchGroups: [
+          [
+            'data-thread-find-composer="true"',
+            'data-composer-navigation-target="add-context"',
+          ],
+          [
+            'data-chatgpt-composer',
+            'data-composer-navigation-target="add-context"',
+          ],
+        ],
+        notes:
+          'Current Add context menu opener, scoped to the observed ChatGPT composer forms and identified by structural attributes instead of a stale test id or localized label.',
+        uiStateRefs: [
+          'topbar-bottom-disabled-thread-bottom',
+          'topbar-bottom-disabled-header-area',
+          'sidebar-collapsed-body',
+          'sidebar-expanded-body',
+          'composer-add-files-and-more-menu',
+        ],
+      },
+    ),
+    byIconToken('copy-turn-action-button', 'M13.468 11.1216', {
+      notes:
+        'Native message Copy action inside .turn-action-controls; identified by its SVG path, independent of theme color.',
       uiStateRefs: [
         'user-turn-buttons-exposed',
         'assistant-turn-non-web-buttons-exposed',
         'assistant-turn-web-buttons-exposed',
       ],
     }),
-    bySelectorList('edit-message-button', ['button[aria-label="Edit message"]'], {
-      identifier: 'button[aria-label="Edit message"]',
-      searchNeedles: ['aria-label="Edit message"'],
-      matchGroups: [['aria-label="Edit message"']],
-      uiStateRefs: ['user-turn-buttons-exposed'],
-    }),
+    bySelectorList(
+      'edit-message-button',
+      [
+        'button[aria-label="Edit message"]',
+        'button:has(svg path[d^="M11.7313"])',
+      ],
+      {
+        identifier: 'button:has(svg path[d^="M11.7313"])',
+        searchNeedles: ['M11.7313'],
+        matchGroups: [['M11.7313']],
+        uiStateRefs: ['user-turn-buttons-exposed'],
+        notes:
+          'Native Edit button on user-message turns, identified by its language-independent SVG path prefix; the localized aria-label is a fallback.',
+      },
+    ),
     manualTarget('edit-send-button', 'active-edit-send-button', {
       searchNeedles: ['textarea', 'Cancel', 'Send'],
       matchGroups: [
@@ -332,9 +364,21 @@
       notes:
         'Only rendered while ChatGPT is actively generating; side-effectful live probe setup creates that state.',
     }),
-    byTestId('create-new-chat-button', 'create-new-chat-button', {
-      uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
-    }),
+    bySelectorList(
+      'create-new-chat-button',
+      [
+        'button:has(svg path[d^="M8.16675 2.50127"])',
+        '[data-app-shell-titlebar] button:has(svg path[d^="M6.33325 1.80763"])',
+        'a[data-testid="create-new-chat-button"]',
+        'button[data-testid="create-new-chat-button"]',
+        'button[data-testid="new-chat-button"]',
+      ],
+      {
+        uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
+        notes:
+          'Generic new-chat action: prefer the current SVG path, then scoped titlebar and data-testid fallbacks; excludes project-row action buttons.',
+      },
+    ),
     bySelectorList('chat-work-surface-toggle', chatWorkSurfaceToggleSelectors, {
       identifier: 'header-two-radio-chat-surface-toggle',
       matchGroups: chatWorkSurfaceToggleMatchGroups,
@@ -372,15 +416,46 @@
       matchGroups: [['role="dialog"', 'placeholder="Search chats..."']],
       notes: 'Resulting dialog opened by Search Chats.',
     }),
-    byInputName('prompt-textarea', 'prompt-textarea', {
-      identifier: 'name=prompt-textarea|id=prompt-textarea',
-      searchNeedles: ['name="prompt-textarea"', 'id="prompt-textarea"'],
-      uiStateRefs: [
-        'topbar-bottom-disabled-thread-bottom',
-        'sidebar-collapsed-body',
-        'sidebar-expanded-body',
+    bySelectorList(
+      'prompt-textarea',
+      [
+        'form[data-thread-find-composer="true"] div.ProseMirror[contenteditable="true"][role="textbox"]',
+        'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
       ],
-    }),
+      {
+        identifier:
+          'form[data-thread-find-composer="true"] div.ProseMirror[contenteditable=true][role=textbox] | form[data-chatgpt-composer] [data-composer-markdown][contenteditable=true][role=textbox]',
+        searchNeedles: [
+          'data-thread-find-composer="true"',
+          'ProseMirror',
+          'contenteditable="true"',
+          'role="textbox"',
+          'data-chatgpt-composer',
+          'data-composer-markdown',
+        ],
+        matchGroups: [
+          [
+            'data-thread-find-composer="true"',
+            'ProseMirror',
+            'contenteditable="true"',
+            'role="textbox"',
+          ],
+          [
+            'data-chatgpt-composer',
+            'data-composer-markdown',
+            'contenteditable="true"',
+            'role="textbox"',
+          ],
+        ],
+        uiStateRefs: [
+          'topbar-bottom-disabled-thread-bottom',
+          'sidebar-collapsed-body',
+          'sidebar-expanded-body',
+        ],
+        notes:
+          'Observed composers are contenteditable textboxes scoped to form[data-thread-find-composer="true"] or form[data-chatgpt-composer]; legacy unified-composer and thread-bottom-container targets are excluded.',
+      },
+    ),
     byIconToken('previous-response-button', ['#8ee2e9', 'aria-label="Previous response"'], {
       identifier: 'svg-token=#8ee2e9|aria-label=Previous response',
       uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
@@ -464,33 +539,57 @@
       matchGroups: modelProThinkingEffortExtendedMatchGroups,
       uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
     }),
-    byIconToken('assistant-web-regenerate-trigger', '#ec66f0', {
-      identifier: 'svg-token=#ec66f0 (assistant regenerate trigger)',
-      uiStateRefs: ['assistant-turn-web-buttons-exposed'],
-    }),
-    byIconToken('assistant-web-regenerate-item-try-again', '#ec66f0', {
-      identifier: 'svg-token=#ec66f0 (regenerate submenu item)',
-      uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
-    }),
-    byIconToken('assistant-web-regenerate-item-different-model', ['#ffd536', '#9254a2'], {
-      uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
-    }),
-    byInputName('assistant-web-regenerate-input', 'contextual-retry-dropdown-input', {
-      uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
-    }),
-    byIconToken('assistant-more-actions-trigger', ['#623957', '#f6d0e2'], {
-      uiStateRefs: [
-        'user-turn-buttons-exposed',
-        'assistant-turn-non-web-buttons-exposed',
-        'assistant-turn-web-buttons-exposed',
+    bySelectorList(
+      'assistant-web-regenerate-trigger',
+      [
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])',
       ],
+      { uiStateRefs: ['assistant-turn-web-buttons-exposed'] },
+    ),
+    bySelectorList(
+      'assistant-web-regenerate-item-try-again',
+      ['[role="menu"] [role="menuitem"]:has(svg path[d^="M14.0219 8.22363"])'],
+      { uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'] },
+    ),
+    byInputName('assistant-web-regenerate-input', 'contextual-retry-feedback', {
+      uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
     }),
-    byTestId('assistant-more-actions-read-aloud', 'voice-play-turn-action-button', {
-      uiStateRefs: ['assistant-menu-read-aloud-branch'],
+    bySelectorList(
+      'assistant-more-actions-trigger',
+      [
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+      ],
+      {
+        identifier:
+          '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+        searchNeedles: ['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811'],
+        matchGroups: [['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811']],
+        uiStateRefs: [
+          'user-turn-buttons-exposed',
+          'assistant-turn-non-web-buttons-exposed',
+          'assistant-turn-web-buttons-exposed',
+        ],
+        notes:
+          'Native message overflow menu trigger scoped to .turn-action-controls and identified by its SVG path prefix.',
+      },
+    ),
+    byIconToken('assistant-read-aloud-direct-action', 'M9.75122 4.09203', {
+      identifier: 'SVG path prefix=M9.75122 4.09203 (direct Read Aloud action)',
+      uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
     }),
-    byIconToken('assistant-more-actions-branch', '#03583c', {
-      uiStateRefs: ['assistant-menu-read-aloud-branch'],
-    }),
+    bySelectorList(
+      'assistant-more-actions-branch',
+      ['[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])'],
+      {
+        identifier:
+          '[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])',
+        searchNeedles: ['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461'],
+        matchGroups: [['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461']],
+        uiStateRefs: ['assistant-menu-read-aloud-branch'],
+        notes:
+          'Branch in new chat is the role=menuitem with this SVG path prefix in the open message-action menu; it has no data-testid.',
+      },
+    ),
     byIconToken('assistant-thinking-trigger', ['#127a53', '#c9d737'], {
       matchGroups: [['#127a53', '#c9d737']],
       uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
@@ -515,25 +614,43 @@
         notes: 'Only exposed on a blank new conversation, not the fixed conversation fixture.',
       },
     ),
-    byIconToken('composer-web-search-action', ['#skill-globe-dark', '#6d72eb', '#6b0d8c'], {
-      matchGroups: [['#skill-globe-dark'], ['#6d72eb'], ['#6b0d8c']],
+    byIconToken('composer-web-search-action', 'M12 2c5.522', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-study-action', '#1fa93b', {
       uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('composer-create-image-action', ['#create-image-plugin', '#ccfd18', '#266724'], {
-      matchGroups: [['#create-image-plugin'], ['#ccfd18'], ['#266724']],
+    byIconToken('composer-create-image-action', 'M7 21.005', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('composer-deep-research-action', ['#skill-deep-research-dark', '#46f45a'], {
-      uiStateRefs: ['composer-add-files-and-more-menu'],
-    }),
-    byIconToken('dictate-start-button', ['#microphone-regular-24', '#33d595', '#29f921'], {
-      identifier: 'svg-token=#microphone-regular-24|#33d595|#29f921',
-      matchGroups: [['#microphone-regular-24'], ['#33d595'], ['#29f921']],
-      uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
-    }),
+    bySelectorList(
+      'composer-deep-research-action',
+      [
+        'button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])',
+      ],
+      {
+        matchGroups: [['data-list-navigation-item="true"', 'deep_research_app/icon.png']],
+        uiStateRefs: ['composer-add-files-and-more-menu'],
+        notes:
+          'The current Deep research menu row uses the observed app icon image inside a list-navigation button; matching it by the structural row and icon path avoids localized text.',
+      },
+    ),
+    bySelectorList(
+      'dictate-start-button',
+      [
+        'form[data-thread-find-composer="true"] button:has(svg path[d^="M12.4584 8.96973"])',
+        'form[data-chatgpt-composer] button:has(svg path[d^="M12.4584 8.96973"])',
+      ],
+      {
+        matchGroups: [
+          ['data-thread-find-composer="true"', 'button:has', 'M12.4584 8.96973'],
+          ['data-chatgpt-composer', 'button:has', 'M12.4584 8.96973'],
+        ],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        notes:
+          'The current Dictate button is identified by its SVG path prefix inside the observed composer form structures; the distinct Start Voice and composer-send controls are excluded without relying on localized labels or legacy SVG use IDs.',
+      },
+    ),
     manualTarget('dictate-submit-button', 'svg-token=#75ee4d|#fa1dbd', {
       searchNeedles: ['#75ee4d', '#fa1dbd'],
       notes: 'Only available after dictation has already started.',
@@ -542,13 +659,30 @@
       searchNeedles: ['#2dc143', '#85f94b'],
       notes: 'Only available while dictation is active.',
     }),
-    byTestId('share-chat-button', 'share-chat-button', {
-      uiStateRefs: ['topbar-bottom-disabled-header-area'],
-    }),
+    bySelectorList(
+      'share-chat-button',
+      [
+        '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
+      ],
+      {
+        identifier:
+          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
+        matchGroups: [
+          [
+            'data-testid="app-shell-header-context-menu-surface"',
+            'data-app-shell-header-obstacle="true"',
+            'M13.3337',
+          ],
+        ],
+        uiStateRefs: ['topbar-bottom-disabled-header-area'],
+        notes:
+          'Share button inside the app-shell header obstacle, identified by its SVG path prefix instead of a localized accessible name; the selector works before and after that wrapper is relocated to the bottom bar.',
+      },
+    ),
     byIconToken('composer-think-longer-action', '#e717cc', {
       uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
     }),
-    byIconToken('composer-add-photos-files-action', ['#paperclip', '#712359'], {
+    byIconToken('composer-add-photos-files-action', 'M6.1416 10.1663', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-more-submenu-trigger', '#f6d0e2', {
@@ -770,7 +904,8 @@
       uiStateRefs: targetStateRefs('edit-message-button'),
       activationProbe: clickTargetProbe('edit-message-button', {
         setup: 'sent-user-message',
-        notes: 'Side-effectful probe sends a disposable message and opens the user edit card.',
+        notes:
+          'Uses a user message in the audit-owned fixture and opens its edit card without submitting changes.',
       }),
     }),
     defineShortcutAction({
@@ -994,20 +1129,9 @@
       requiresHandler: false,
       notes: 'Deprecated/inert legacy default with no active handler.',
     }),
-    defineShortcutAction({
-      actionId: 'shortcutKeyRegenerateWithDifferentModel',
-      targetRefs: [
-        'assistant-web-regenerate-trigger',
-        'assistant-web-regenerate-item-different-model',
-      ],
-      uiStateRefs: targetStateRefs(
-        'assistant-web-regenerate-trigger',
-        'assistant-web-regenerate-item-different-model',
-      ),
-      activationProbe: clickTargetProbe('assistant-web-regenerate-item-different-model', {
-        uiStateRefs: ['assistant-web-regenerate-menu'],
-        notes: 'Capture-phase observer prevents the native regenerate action after target click.',
-      }),
+    notApplicable('shortcutKeyRegenerateWithDifferentModel', {
+      notes:
+        'The current regenerate menu has no different-model action; the runtime handler intentionally no-ops until a live target exists.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyRegenerateAskToChangeResponse',
@@ -1022,13 +1146,10 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyMoreDotsReadAloud',
-      targetRefs: ['assistant-more-actions-trigger', 'assistant-more-actions-read-aloud'],
-      uiStateRefs: targetStateRefs(
-        'assistant-more-actions-trigger',
-        'assistant-more-actions-read-aloud',
-      ),
-      activationProbe: clickTargetProbe('assistant-more-actions-read-aloud', {
-        uiStateRefs: ['assistant-menu-read-aloud-branch'],
+      targetRefs: ['assistant-read-aloud-direct-action'],
+      uiStateRefs: targetStateRefs('assistant-read-aloud-direct-action'),
+      activationProbe: clickTargetProbe('assistant-read-aloud-direct-action', {
+        uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
         notes: 'Capture-phase observer prevents the native read-aloud action after target click.',
       }),
     }),

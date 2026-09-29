@@ -126,6 +126,7 @@ const OPTIONS_DEFAULTS = {
   showLegacyArrowButtonsCheckbox: false,
 
   // === Toggles / sliders ===
+  codeboxWrapEnabled: false,
   pageUpDownTakeover: true,
   popupBottomBarOpacityValue: '0.6', // range -> string
   moveTopBarToBottomCheckbox: false,
@@ -299,12 +300,12 @@ if (typeof OptionsSync === 'undefined') {
         stored.shortcutKeyThinkingExtended = '\u00A0';
       },
 
-      // 3) Sanitize modelPickerKeyCodes to a 15-slot string array (pads from old 10)
+      // Sanitize string arrays; 15 is minimum compatibility padding, not a cap.
       (stored) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes) ? stored.modelPickerKeyCodes : [];
         const fifteen = new Array(15).fill('');
-        // Preserve existing positions; pad to 15
-        arr.slice(0, 15).forEach((v, i) => {
+        // Preserve every existing position; pad short historical arrays.
+        arr.slice().forEach((v, i) => {
           fifteen[i] = typeof v === 'string' ? v : '';
         });
         stored.modelPickerKeyCodes = fifteen;
@@ -314,7 +315,7 @@ if (typeof OptionsSync === 'undefined') {
       // the shared F-key effort row and numeric model/utility row.
       (stored, defaults) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes)
-          ? stored.modelPickerKeyCodes.slice(0, 15)
+          ? stored.modelPickerKeyCodes.slice()
           : [];
         while (arr.length < 15) arr.push('');
         const legacyIntegratedDefaults = [
@@ -393,7 +394,7 @@ if (typeof OptionsSync === 'undefined') {
         const namesKey = `modelNames${profile}`;
         const namesAtKey = `modelNames${profile}At`;
         if (!stored[catalogKey]) stored[catalogKey] = catalog;
-        if (Array.isArray(stored.modelNames)) stored[namesKey] = stored.modelNames.slice(0, 15);
+        if (Array.isArray(stored.modelNames)) stored[namesKey] = stored.modelNames.slice();
         if (stored.modelNamesAt) stored[namesAtKey] = stored.modelNamesAt;
       },
 
@@ -424,7 +425,7 @@ if (typeof OptionsSync === 'undefined') {
       // 5) Move untouched Configure shortcut from Digit3 to Digit0 when safe.
       (stored) => {
         const arr = Array.isArray(stored.modelPickerKeyCodes)
-          ? stored.modelPickerKeyCodes.slice(0, 15)
+          ? stored.modelPickerKeyCodes.slice()
           : [];
         while (arr.length < 15) arr.push('');
 

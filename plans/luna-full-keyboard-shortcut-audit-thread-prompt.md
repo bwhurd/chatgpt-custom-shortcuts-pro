@@ -1,116 +1,53 @@
-/goal Complete the entire five-batch keyboard-shortcut audit defined in `plans/0076-full-keyboard-shortcut-audit-plan.md`. Build and run the audit, validate every extension-owned keyboard behavior, produce the required actionable artifacts, and keep this goal active until all five batches and the final acceptance gate pass.
+/goal Complete the full automated audit of every current ChatGPT Custom Shortcuts Pro shortcut in C:\Users\bwhurd\Dropbox\CGCSP-Github\plans\0076-full-keyboard-shortcut-audit-plan.md, implementing and running the existing Playwright audit harness, personally reviewing evidence, and delivering the actionable repair report. Execute exactly the earliest unfinished batch per execution turn; keep the goal active across automatic continuations without asking me to say "continue." Finish only when all five batches and the final audit acceptance gate are proved.
 
-You are GPT-5.6 Luna Max executing a repository-grounded audit in:
+Run as **GPT-6-Luna with Max reasoning**. Work in `C:\Users\bwhurd\Dropbox\CGCSP-Github`. This is execution of an existing audit plan, not a request to create another plan, chat, or agent. Do not change models or delegate by default.
 
-`C:\Users\bwhurd\Dropbox\CGCSP-Github`
+## Read and resume
 
-Own the execution and browser evidence review personally. Playwright should exercise every behavior that can be tested safely and deterministically; you must inspect the resulting reports and failure evidence yourself. Do not treat a generated report, a unit test, a listener firing, or a delegated conclusion as proof without checking the expected observable behavior.
+- Read `AGENTS.md`, `plans/0076-full-keyboard-shortcut-audit-plan.md`, the validation section of `PROJECT_SPEC.md`, and owning `specs/0004-model-picker-and-shortcuts-spec.md` and `specs/0006-runtime-scrape-selector-validator-spec.md`. Read `specs/0001-adding-new-settings-spec.md` when working on the user-requested persistent codebox-wrap preference. Read the profile setup doc when preflighting Chrome. Discover with bounded rg; inspect only implicated symbols and current diff. Preserve unrelated changes.
+- Verify plan observations against current code. Batches 01 and 02 already have earned inventory/pipeline evidence; do not recreate the harness or reset their history. Batch 03 is earliest unfinished; the clean-profile extension path and an audit-owned fixture were revalidated on 2026-09-26. Revalidate only if that environment changes. Batch 04 and 05 are unstarted.
+- In each turn work only on that earliest unfinished batch, including its dependencies/checks and live proof. Record commands/results, paths, observed totals, limitations and recovery in the batch; mark [x] only when fully proven, [~] when partial, [!] with concrete blocker. Yield a concise evidence update and keep the goal active; never ask for “continue.”
+- Across compaction reread plan status and named run checkpoint/ledger, reconcile interrupted mutations first, then resume incomplete cases using existing filters. Do not blindly replay a Send/fork or invent a resume flag. Old catalog/source/environment observations require revalidation if changed.
 
-## Read order and scope
+## Existing user authorization
 
-At the start of the first execution turn, read in this exact order:
+- You are authorized to mutate the live ChatGPT app as necessary to audit all shortcuts: start disposable conversations, send test messages, spend tokens, create responses, stop/edit/regenerate, and create ChatGPT conversation branches/forks. Do not request this permission again; it overrides older no-token-safe defaults for these audit probes.
+- Keep fixed/fallback fixture conversations read-only. Use dedicated audit-owned chats/tabs for stateful tests, and preserve unrelated tabs, drafts, conversations, browser profile state and concurrent settings edits. If a deletion shortcut is discovered, test it only on audit-created data.
+- Improve dev audit harness/fixtures/owning docs as needed. Evidence-backed metadata correction may reflect current truth but must not conceal broken behavior. Direct product fixes are otherwise out of scope; the user explicitly authorized codebox wrapping and persistence of its last state, plus disclaimer-footer hiding. Complete those repairs and do not expand beyond them.
+- Permission does not include arbitrary messaging elsewhere, manifest permissions/host changes, destructive Git/filesystem changes, deleting unrelated user data, public share publication, release/version/archive work or deployment. No deployment is required for this audit.
 
-1. `AGENTS.md`
-2. `plans/0076-full-keyboard-shortcut-audit-plan.md`
-3. `PROJECT_SPEC.md`
-4. `specs/0004-model-picker-and-shortcuts-spec.md`
-5. `specs/0006-runtime-scrape-selector-validator-spec.md`
-6. `tests/playwright/chatgpt-local-profile-test-setup.md`
+## Current gaps to resolve
 
-Then inspect only the files and symbols named by the current batch. Do not read completed plans or `_temp-files/` history by default. You may read the specific run folder created or selected by this audit when a batch requires its evidence.
+- Reuse `tests/playwright/devscrape-wide.mjs`, `lib/devscrape-wide-core.mjs`, `lib/shortcut-target-inventory.mjs`, `lib/shortcut-audit-artifacts.mjs` and existing fixtures/script. Named registry parsing is already fixed; current observations are 51 globals, 44 handlers, 64 descriptors, 12 fixed contracts and 30 sparse profile slots with zero inventory issues. Derive future totals from sources.
+- `buildFixedAuditRow` currently passes source presence, `buildModelSlotAuditRow` creates placeholder not-run rows, and many global probes suppress target default clicks. Separate source/target/routing/semantic proof; neither source presence, intercepted click nor direct-menu mouse activation proves successful keyboard behavior.
+- Add real fixed and model case observations, stable subcases for profile/slot/action/modifier/precondition, and semantic validators before accepting behavioral passes. Existing CLI accepts `--phase global|model|all`; model is singular.
+- Account for all global actions, hidden/blank assignments, legacy/retired rows, Ctrl Send/Stop gates, Alt/Control/Meta/Shift/AltGraph/IME guards, response preview, overlay and PageUp/PageDown. Model phase also owns global model/effort actions filtered out of global phase by `isModelPhaseShortcut` (currently eight); include them alongside slot rows and reconcile all global ids across phases. Reconcile all 15 slots for both Chat/legacy and Work/latest and every presented action, both modifier modes, wrong profile/modifier isolation, popup persistence/duplicates and overlay parity.
+- Assert actual outcomes: committed message/edit, stopped generation, new regeneration variant, branch new conversation identity with parent context preserved and audit-message lineage, native selected model/effort/speed/reset, focus/open/closed/checked state, scroll/variant transitions and clipboard contents/MIME. Alt+C requires cleaned text/plain with no HTML per `plans/0081-alt-c-plain-text-clipboard-plan.md`. Reload extension and dedicated test tab without reloading the user's draft tab.
+- Exercise available physical/native states through supported browser facilities when feasible: synthetic disposable upload file, audio/microphone setup, clipboard permission. If impossible, record observed hardware/account/platform reason; do not leave a feasible test manual-pending forever. Sharing/open-upload shortcuts are proved at their intended picker/dialog boundary, without unnecessary external publication.
 
-Use the plan as execution truth, but verify its planning-time observations against current code before editing. Important current observations that may have changed:
+## Safety, troubleshooting, oversight and evidence
 
-- `extension/content.js` had 51 `shortcutDefaults` rows.
-- `extension/shared/shortcut-action-metadata.js` had 51 action definitions and 64 targets.
-- 42 actions were `scrape-targets`; 41 had executable probes, `shortcutKeyToggleChatWork` was `not-live-probed`, and nine rows were `not-applicable`.
-- `tests/playwright/lib/shortcut-target-inventory.mjs` parsed zero current handlers because it still expected `[shortcuts.someKey]:`, while runtime now uses named keys in `altShortcutActions`. This produced 44 false `missing-runtime-handler` issues and must be resolved before live results are trusted.
-- The existing audit did not represent the two 15-slot Chat/Legacy and Work/Latest model profiles as first-class executable rows.
+- Use serial disposable setups and small reusable generation/codebox fixtures; bounded retries and waits. Stop affected work on login, CAPTCHA, quota/rate limit, service/hardware boundary; preserve evidence and continue independent in-batch work. Do not bypass limits. For troubleshooting consult official support and upstream/community discussions first.
+- Use documented standard Chrome/CodexCleanProfile CDP posture. After shipped source edits, reload the unpacked `extension/` in chrome://extensions and refresh only the audit-owned ChatGPT tab before trusting browser or Playwright results. For manual installation/repair run `npm run playwright:chatgpt:setup-cdp-profile -- --pause-for-extension-setup`, opening chrome://extensions without --load-extension or --disable-extensions-except. Recheck reachable endpoint, login, fixture and actual extension id/path/current source. Historical failed launches are not current setup instructions.
+- Persist mutation intent before side effects and audit-owned chat/branch ids; use finally recovery, compare-before-restore and reread proof. Snapshot touched key presence/settings/profile modifiers/gates, active UI/model/mode and safely recoverable clipboard state. Collision-check temporary keys against globals and both profiles. Preserve concurrent edits as conflicts; record clipboard/native state restoration limits without leaking contents.
+- Keep complete named runs under ignored `_temp-files/inspector-captures/`: manifest, live/check JSON+HTML, audit JSON/CSV, repair Markdown, recovery and bounded failure evidence. Store exact chord/precondition, expected/actual, source/catalog fingerprint, proof type, owner, first/retry evidence and exact rerun.
+- Personally review representative passes for each action kind, every failure, conditional capability and recovery. A Playwright click observer is routing evidence; user authorization now permits the real semantic action.
+- Separate broken runtime, selector drift, harness coverage gap, environment/account absence, not-present and proven retirement. A missing target on this account is not upstream retirement. Confirm product failures twice with valid setup and retain both results. Corroborate retirement and mark uncertainty explicitly.
+- Report complete behavioral coverage separately from product health. Confirmed product defects may keep the live command nonzero and still allow audit completion with an actionable backlog. Unattempted required available cases, unexplained manual-pending/coverage gap, failed restoration, or missing essential live environment remain blockers. Do not make “zero defects” a completion requirement.
 
-Do not hard-code these counts as timeless truth. Reconcile the live sources and record current counts in evidence.
+## Commands and final gate
 
-## Execution cadence
-
-- Find the earliest `Luna Batch` whose status is not `[x]`.
-- Work on exactly that one batch in the current execution turn.
-- Never start a later batch in the same execution turn, even if the current batch finishes early.
-- At the end of the turn, update that batch's status and every evidence field in the plan, report the observable outcome, and yield.
-- Keep the overall `/goal` active across automatic continuations. Do not ask the user to type “continue.” On the next continuation, select the next earliest incomplete batch.
-- Use `[ ]` for not started, `[~]` for incomplete or unvalidated, `[x]` only after every batch acceptance criterion passes, and `[!]` only for a concrete in-scope blocker.
-- A failed or skipped required validation, missing live proof, missing artifact, unresolved recovery conflict, unexplained audit row, or stale documentation prevents `[x]`.
-
-## Guardrails
-
-- Preserve unrelated work. Check `git status --short` before edits and again before closing each batch. Do not reset, overwrite, or clean user changes.
-- Follow the repo's context budget: discover with `rg`, read focused symbols/ranges, and stop searching when the batch has enough evidence.
-- Use `apply_patch` for edits. Do not edit shipped runtime code merely to make the audit easier.
-- The audit may repair or extend its dev-only harness, metadata, tests, package command, and owning docs. It must not repair product shortcut behavior discovered during the run; put confirmed product defects into the repair backlog for a later authorized workstream.
-- Do not add manifest permissions, shipped popup controls, release-zip entries, versions, or `dist/` artifacts.
-- Before running any materially edited PowerShell script, run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path <script.ps1>` and treat parser/analyzer errors as blocking.
-- Run focused validation in every batch and the full relevant regression/live gate in Batch 05.
-- Use standard Chrome attached over CDP through `CodexCleanProfile`; do not substitute Chrome for Testing for the authenticated profile.
-- Reload the unpacked extension from `extension/` before trusting live results after any shipped-file change. Shipped changes are not expected under this plan.
-- If login, extension setup, account capability, or fixture access is unavailable, record the exact environment boundary and retained evidence. Do not weaken strict capture, fabricate success, or mark affected rows passed.
-
-## Audit truth and coverage
-
-The complete universe must be derived from current source and include:
-
-- global configurable actions from defaults, runtime ownership, metadata, schema, and popup surfaces;
-- Ctrl/Command Send and Stop gates;
-- the standalone overlay key listener;
-- ordinary Alt and Primary-Control+Alt response-preview behavior;
-- PageUp/PageDown takeover and its enable gate;
-- retired or unavailable keys that must remain inert/hidden;
-- every slot `0..14` in both `modelPickerKeyCodesLegacy` and `modelPickerKeyCodesLatest`;
-- every currently presented sparse model, effort, configure, speed, reset, and Chat/Work action;
-- Alt and Control model-picker modes, wrong-modifier rejection, and inactive-profile isolation;
-- popup assignment/persistence, canonical codes, duplicate transfer, and overlay/runtime parity.
-
-Every row needs a stable identity, proof method, expected and observed behavior, status, reason, evidence path, and rerun command. No behavior may vanish because it is unsafe or difficult. Use an explicit supervised, unavailable, not-present, or not-applicable classification.
-
-Use Playwright for every safe, deterministic path. For states Playwright cannot express directly, an injected `KeyboardEvent` may prove a guard only when the result says `event-injection`; it is not physical-key proof. Record macOS Command/Option execution as platform-unverified unless a real macOS runner exists.
-
-## Safety and recovery
-
-- Keep the primary fixture read-only.
-- Use only the disposable-conversation setups authorized by `specs/0006-runtime-scrape-selector-validator-spec.md` for Send, Stop, Edit, dictation, codebox, or any prompt-spending behavior.
-- Snapshot every storage key the audit may mutate. Use a per-key mutation ledger and compare-before-restore so a concurrent user edit is never silently overwritten.
-- Always attempt cleanup in `finally` paths, restore the primary fixture, reread storage, and write `storage-recovery.json`, including on partial failure.
-- A recovery conflict, missing recovery artifact, or leftover audit mutation blocks completion.
-- Keep evidence under ignored `_temp-files/inspector-captures/<run>/`. Never write cookies, auth tokens, full unrelated storage, or unnecessary conversation content.
-- Require a targeted second reproduction with valid preconditions before labeling a row `product-fail`.
-
-## Required artifacts
-
-Keep the current run manifest, dumps, `live-probes.json`, `check-report.json`, and `check-report.html`. Add and reconcile:
-
-- `shortcut-audit.json`
-- `shortcut-audit.csv`
-- `shortcut-repair-backlog.md`
-- `storage-recovery.json`
-- bounded failure-only evidence under `failures/`
-
-The Markdown backlog must make every confirmed failure directly repairable: stable id, action/profile/slot, chord/modifiers, expected versus observed, two reproduction records, exact repro and retest commands, evidence paths, likely owning files/symbols, suggested repair boundary, compatibility risks, and acceptance proof. Keep environment/account/tooling gaps separate from product defects.
-
-## Batch and final validation
-
-Run the exact commands named by the current batch. Use repo-native scripts where they exist. The intended final live command is `npm run playwright:chatgpt:audit-shortcuts -- --require-extension-capture`; verify the implemented CLI rather than inventing a different manual sequence.
-
-In Batch 05, perform all of these unless the current repo legitimately supersedes one and you document why:
-
-- `npm run validate:keys`
-- `node tests/shortcut-audit-inventory-fixture.mjs`
-- `node tests/shortcut-target-live-selector-fixture.mjs`
-- every new focused audit fixture
-- Node syntax checks for every changed MJS/JS entrypoint
-- `npx biome check` on all changed source/test/config files
-- `npm test`
-- `npm run playwright:chatgpt:audit-shortcuts -- --require-extension-capture`
-- `npm run playwright:chatgpt:check-scrape`
-
-Validate that JSON parses, CSV and JSON row identities/totals agree, local HTML/Markdown links resolve, confirmed failures have evidence, and storage recovery is clean.
-
-There is no production deployment for this work. The final release/deployment gate is proof that no shipped extension file, manifest permission, build include, version, release zip, or deployed system changed. If a production repair is needed, keep it in `shortcut-repair-backlog.md` for a separate plan.
-
-Update the owning specs and the local profile setup doc only after code and final run behavior are known. Mark the overall goal complete only when all five plan batches are `[x]`, all completion criteria pass, required live/browser proof is present, all mutations are recovered, actionable artifacts are internally consistent, and the plan contains final evidence. Creating the harness or producing a partial report is not completion.
+- Use the exact commands and narrow changed-file checks in each plan batch. Current starting commands are:
+  - `node tests/playwright/devscrape-wide.mjs --help`
+  - `node tests/shortcut-audit-inventory-fixture.mjs`
+  - `node tests/shortcut-audit-artifacts-fixture.mjs`
+  - `node tests/shortcut-audit-recovery-fixture.mjs`
+  - `npm run playwright:chatgpt:audit-shortcuts -- --inventory-only --no-open-report`
+  - `npm run playwright:chatgpt:audit-shortcuts -- --require-extension-capture --phase global`
+- When capturing from a prior audit-owned conversation, add `--audit-owned-fixture-from-run <completedSourceRunFolder>`. The CLI verifies the completed/recovered checkpoint and ownership; never pass a direct arbitrary URL. Current reusable source run: `2026-09-26_20-19-37_devscrapewide_c-69ea4723`.
+  - `npm run playwright:chatgpt:audit-shortcuts -- --require-extension-capture --phase model`
+- Use `--shortcut-action-id <id>`, `--fixed-contract-id <id>`, or `--model-profile <legacy|latest> --model-slot <0..14> --model-action-id <id>` for targeted semantic confirmation. Never accept filtered coverage as the full denominator.
+- Run `node --check` and configured Biome on changed JS/MJS/JSON, focused fixtures and `npm run validate:keys`. For changed PowerShell run the required syntax helper before execution. No unnecessary repo-wide test sweep.
+- In Batch 05 run the strict unfiltered full audit `npm run playwright:chatgpt:audit-shortcuts -- --require-extension-capture`, legacy compatibility checker, artifact integrity and recovery/live review; update owning docs. Confirm JSON/CSV/HTML/backlog identities, links, outcomes and restoration.
+- **User scope update (2026-09-27):** before resuming the remaining audit matrix, repair the directly reported shortcut targets and any additional catalogued target with confirmed live activation failure. This supersedes the earlier audit-only product-change restriction and is limited to demonstrated target/activation defects. Keep the supplied ChatGPT conversation read-only; make no release or deployment changes.
+- Finish only after all five batches [x], final required available live coverage and honest limitations, clean audit recovery, current docs and actionable repair recommendations. Rename the plan Done-0076 and update this prompt path reference only at execution closure. Mark the goal complete then, with report links, counts, confirmed failures, command exits and remaining capability limitations.

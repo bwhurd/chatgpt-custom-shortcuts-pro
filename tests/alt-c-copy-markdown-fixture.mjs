@@ -103,6 +103,59 @@ assert.deepEqual(
   'other extension copy paths should retain their rich payload',
 );
 
+const selectThenCopyStart = contentSource.indexOf('    function runSelectThenCopyShortcut()');
+const selectThenCopyEnd = contentSource.indexOf(
+  '    function getConversationCopyLabelText',
+  selectThenCopyStart,
+);
+assert.ok(selectThenCopyStart >= 0 && selectThenCopyEnd > selectThenCopyStart);
+const selectedClipboardCalls = [];
+const selectedTurn = { getBoundingClientRect: () => ({ top: 20 }) };
+const selectThenCopyContext = vm.createContext({
+  window: { selectThenCopyState: { lastSelectedIndex: -1 } },
+  getVisibleCopyTurnsAboveComposer: () => [selectedTurn],
+  copyTurnHasRole: () => true,
+  getPrimaryCopyContentElementsForTurn: () => [{}],
+  selectAndMaybeCopySingleMessage: (elements, shouldCopy) => {
+    selectedClipboardCalls.push({ elements, shouldCopy });
+  },
+});
+vm.runInContext(
+  `${contentSource.slice(selectThenCopyStart, selectThenCopyEnd).replace(/^    /gm, '')}\nglobalThis.runSelectThenCopyShortcut = runSelectThenCopyShortcut;`,
+  selectThenCopyContext,
+);
+selectThenCopyContext.runSelectThenCopyShortcut();
+assert.equal(
+  selectedClipboardCalls.length,
+  1,
+  'Select-and-copy must begin before the keyboard event returns so clipboard activation is retained',
+);
+assert.equal(selectedClipboardCalls[0].shouldCopy, true);
+
+const copyCodeSource = contentSource.match(/  function copyCode\(\) \{[\s\S]*?\n  \}/)?.[0];
+assert.ok(copyCodeSource, 'Copy-all-code-boxes action should remain inspectable');
+const codeBlockClipboardCalls = [];
+const copyCodeContext = vm.createContext({
+  cachedCopyCodeUserSeparator: ' -- separator -- ',
+  getAllCodeBlocks: () => ['first code block', 'second code block'],
+  navigator: {
+    clipboard: {
+      writeText(value) {
+        codeBlockClipboardCalls.push(value);
+        return Promise.resolve();
+      },
+    },
+  },
+  showToast() {},
+});
+vm.runInContext(`${copyCodeSource}\nglobalThis.copyCode = copyCode;`, copyCodeContext);
+copyCodeContext.copyCode();
+assert.deepEqual(
+  codeBlockClipboardCalls,
+  ['first code block -- separator -- second code block'],
+  'Copy all code boxes must invoke the clipboard writer synchronously with the cached separator',
+);
+
 const nestedBullets = [
   '* first level bullet',
   '    + second level bullet',

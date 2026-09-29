@@ -45,6 +45,43 @@ const cleanFinal = finalizeStorageRecoveryPlan(cleanPlan, { existing: 'before' }
 assert.equal(cleanFinal.status, 'clean');
 assert.ok(cleanFinal.entries.every((entry) => entry.status === 'restored'));
 
+const partialLedger = createStorageMutationLedger(
+  { written: 'before-write', untouched: 'before-write' },
+  { written: 'audit-value', untouched: 'audit-value' },
+);
+const partialPlan = buildStorageRecoveryPlan(partialLedger, {
+  written: 'audit-value',
+  untouched: 'before-write',
+});
+assert.deepEqual(partialPlan.setValues, { written: 'before-write' });
+assert.deepEqual(partialPlan.removeKeys, []);
+assert.deepEqual(partialPlan.unchangedKeys, ['untouched']);
+assert.deepEqual(partialPlan.conflictKeys, []);
+const partialFinal = finalizeStorageRecoveryPlan(partialPlan, {
+  written: 'before-write',
+  untouched: 'before-write',
+});
+assert.equal(partialFinal.status, 'clean');
+assert.equal(partialFinal.entries.find((entry) => entry.key === 'written').status, 'restored');
+assert.equal(partialFinal.entries.find((entry) => entry.key === 'untouched').status, 'unchanged');
+
+const changingGateLedger = createStorageMutationLedger(
+  { pageUpDownTakeover: true },
+  { pageUpDownTakeover: false },
+);
+changingGateLedger[0].auditValues.push(true);
+changingGateLedger[0].auditValue = true;
+const interruptedGatePlan = buildStorageRecoveryPlan(changingGateLedger, {
+  pageUpDownTakeover: false,
+});
+assert.deepEqual(interruptedGatePlan.setValues, { pageUpDownTakeover: true });
+assert.deepEqual(interruptedGatePlan.conflictKeys, []);
+const concurrentGatePlan = buildStorageRecoveryPlan(changingGateLedger, {
+  pageUpDownTakeover: 'user-change',
+});
+assert.deepEqual(concurrentGatePlan.setValues, {});
+assert.deepEqual(concurrentGatePlan.conflictKeys, ['pageUpDownTakeover']);
+
 const conflictPlan = buildStorageRecoveryPlan(ledger, {
   existing: 'user-edited-during-audit',
   temporary: 'audit-only',

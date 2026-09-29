@@ -42,7 +42,7 @@ The model picker has two separate but related state shapes:
   - actionable visible model labels used by popup/content after hydration
   - must not keep the legacy `→` arrow entry once hydrated
 - `modelPickerKeyCodesLatest` / `modelPickerKeyCodesLegacy`
-  - independent persisted 15-slot shortcut arrays for Work and Chat
+  - independent persisted variable-length shortcut arrays for Work and Chat; 15 is historical default padding, not an upper limit
   - matching defaults may reuse the same keys, but later edits are never mirrored or linked
 - `modelPickerKeyCodes`
   - legacy shared-array input retained only for one-time migration and backward-compatible export/import
@@ -94,7 +94,11 @@ The popup should not invent its own model-row grouping or label rules separate f
 
 ### Catalog refresh lifecycle
 
-The popup's manual model refresh is a two-surface operation:
+Current refresh (2026-09-25) uses the rendered structure catalogued in `specs/model-picker-live-catalog-2026-09-25.md`: blank-composer mode buttons with reciprocal `aria-pressed`, the `data-codex-intelligence-trigger` pill, and its `data-model-picker-view` Simple/Advanced panels. One scanner reads the active Advanced rows in native order, then selects each explicit model and walks its finite reasoning-slider range. Primary titles, effort labels/tokens/indexes and Default's recommended model/effort pairs are separate data. Catalog `surfaceMode` explicitly owns Chat/Work routing. Persist only after the complete surface scan and initial-selection restoration; await the storage acknowledgment before reporting success. Grow model slots and key/name arrays without renumbering assignments or truncating to the historical default length.
+
+The former pill-submenu, integrated-test-id and Configure-dialog **refresh scrapers** are retired. The historical notes below document previous formats and shortcut behavior; they are not fallback routes for the current refresh. Legacy shortcut-only handlers are not migrated by this refresh repair. Focused inventory, dual-surface, and beyond-15-slot fixtures plus syntax and lint checks pass; live extension refresh and storage/UI acceptance remain pending per plan 0082.
+
+Historical refresh cascade, retained for reference:
 - call the same native new-conversation helper used by the configurable New Conversation shortcut
 - wait for the blank-chat native Chat/Work radio group, then remember its selected mode
 - select Chat by structural radio order and run the existing catalog scraper into the Chat/Legacy snapshot
@@ -155,9 +159,11 @@ Current direct-DOM pattern:
 - use a narrow storage migration when changing a shipped default key such as `KeyK` to `Comma`
 - do not leave temporary standalone IIFEs in parallel once the main shortcut path owns the action
 
+The current app shell's sidebar toggle exposes `data-app-shell-sidebar-trigger="true"`; the narrow header uses `aria-controls="browser-sidebar-popover"`. New Chat lacks a test ID: the inspected sidebar and narrow-header SVG paths begin with `M6.33325 1.88379` and `M6.33325 1.80763` respectively. The shared native helpers prefer these current targets and retain older test IDs as fallbacks, so the bottom bar's static controls use the same native actions as shortcuts.
+
 Search Chats no longer assumes `data-testid="search-conversation-button"` or a fixed sprite fragment. Its primary language-independent targets are the button immediately before `close-sidebar-button` in `#sidebar-header`, or the `data-sidebar-item` immediately after `create-new-chat-button` in the collapsed or narrow sidebar. The old test id, sprite match, and narrow-popover opening route remain ordered fallbacks.
 
-Live icon-backed targets must keep the current sprite IDs as the primary match while retaining older IDs only as compatibility fallbacks. The current signed-in ChatGPT surface exposes More actions as `aria-label="More actions"` / `#623957`, composer tools as `#paperclip`, `#create-image-plugin`, `#skill-globe-dark`, and `#skill-deep-research-dark`, Temporary Chat as `aria-label="Temporary chat"` / `#chat-temp`, dictation as `#microphone-regular-24`, `#2dc143`, and `#75ee4d`, and the regenerate menu's former different-model action as `Use Thinking` / `#ffd536`. Runtime handlers should prefer stable ARIA or test-id selectors when available, then fall back to the sprite mapping.
+The ChatGPT app-shell changed several message-action labels, test IDs, and SVG targets after the earlier observations. Use the [live shortcut-target catalog](chatgpt-shortcut-target-catalog-2026-09-27.md) as the current comparison snapshot; it distinguishes confirmed mismatches from targets that require a different UI state. Do not copy a prior localized label or icon fragment into a new handler without current DOM evidence. Keep runtime selectors language-agnostic.
 
 For dev-only runtime selector validation, the deterministic shortcut inventory should derive from:
 - `extension/shared/shortcut-action-metadata.js` for explicit shortcut validation metadata
@@ -194,6 +200,8 @@ Removed ChatGPT features should stay inert for existing installs while disappear
 
 ## Runtime model switching
 
+For the current Chat and Work picker (`[data-model-picker-view]`), shortcut execution must use the active model catalog and only rows in the active panel. Model shortcuts open Advanced once, resolve the catalog option by its primary row title, activate it once, and verify the checked row before saving the selection. Effort shortcuts use the active Simple panel's `[data-reasoning-slider="true"]` control and the current model's catalog `sliderValue`; when Work's native Default row is selected, use the active model profile's catalog mapping or the semantic slider offset. Never activate a mounted inactive row or fall through to a legacy action after recognizing the current picker. Preserve legacy selector paths only when the current picker marker is absent.
+
 `window.toggleModelSelector` in `content.js` must support:
 - current single-level ChatGPT model menus
 - older submenu-based layouts if that path returns
@@ -219,9 +227,9 @@ When hydrating a Work catalog, the popup must preserve those scraped action ids 
 
 Catalogs persist `pillSpeedMenu` and `pillResetAvailable` from the observed menu. Popup/overlay utilities must follow those capabilities: never invent Speed for Chat or Reset when ChatGPT did not render the corresponding control.
 
-The current integrated Intelligence menu may expose its speed control as a single `role="menuitemcheckbox"[data-fast-mode-enabled]` (the 1.5x/fast mode toggle) instead of a two-row Speed submenu. When present, the scrape persists `integratedSpeedMenu` and the popup exposes the existing `toggle-speed` slot; `Reset to default` uses the same main-menu structural reset row and persists `integratedResetAvailable`. Runtime actions must route through the live integrated controls, and their shortcut hints must be laid out centered beneath the corresponding controls.
+The current integrated Intelligence menu may expose its speed control as a single `role="menuitemcheckbox"[data-fast-mode-enabled]` (the 1.5x/fast mode toggle) instead of a two-row Speed submenu. When present, the scrape persists `integratedSpeedMenu` and the popup exposes the existing `toggle-speed` slot; `Reset to default` uses the same main-menu structural reset row and persists `integratedResetAvailable`. Runtime actions must route through the live integrated controls. Their configured `Alt+key` hints sit just below the native icons as out-of-flow labels; never insert the hint into the icon's flex row or change the icon layout.
 
-The integrated simple Power slider is an effort control, not a model-list hint target. Do not append extension effort hints to the horizontal slider or retain ChatGPT's native `Alt+F4` label there. Effort shortcuts must still target this control: when Advanced is active, close the mounted picker and reopen the composer pill so the simple slider is live, then activate the matching structural tick directly. If a future shell omits tick metadata, a bounded `role="slider"` keyboard fallback may move the range. The integrated reset row's native hint is likewise hidden before the extension's configured `Alt+7` utility hint is rendered.
+The integrated simple Power slider is an effort control, not a model-list hint target. Show no shortcut labels on the horizontal effort slider or its ticks; specifically remove ChatGPT's native `Alt+F4` label there. Effort shortcuts must still target this control: when Advanced is active, close the mounted picker and reopen the composer pill so the simple slider is live, then activate the matching structural tick directly. If a future shell omits tick metadata, a bounded `role="slider"` keyboard fallback may move the range. The integrated reset row's native hint is hidden before the extension's configured `Alt+key` utility hint is placed below its icon.
 
 For a known Work `configure-option` shortcut, activation opens the structurally first submenu trigger and verifies that its controlled menu is the Model menu before selecting the catalog action directly. Full submenu discovery and hint scanning are fallback paths only when that verified direct route fails.
 
