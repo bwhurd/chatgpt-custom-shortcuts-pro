@@ -1012,6 +1012,9 @@
           'New Conversation should open a blank chat where the Temporary Chat button is available before any prompt is sent.',
       }),
     }),
+    manualOnly('shortcutKeyNewConversationInNewTab', {
+      notes: 'Opens a blank ChatGPT conversation in a new browser tab.',
+    }),
     defineShortcutAction({
       actionId: 'shortcutKeyToggleChatWork',
       targetRefs: ['create-new-chat-button', 'chat-work-surface-toggle'],

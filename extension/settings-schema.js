@@ -96,6 +96,7 @@
       shortcutKeyProExtended: 'label_switchToProExtended',
 
       shortcutKeyNewConversation: 'label_new_chat',
+      shortcutKeyNewConversationInNewTab: 'label_new_chat_new_tab',
       shortcutKeyToggleChatWork: 'label_toggleChatWork',
       shortcutKeyActivateInput: 'label_focus_input',
       shortcutKeyToggleSidebar: 'label_toggle_sidebar',
@@ -161,6 +162,7 @@
         header: 'Quick Clicks',
         keys: [
           'shortcutKeyNewConversation',
+          'shortcutKeyNewConversationInNewTab',
           'shortcutKeyActivateInput',
           'shortcutKeyToggleSidebar',
           'shortcutKeySearchConversationHistory',

@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 10.01.2026
+- Added: configurable shortcut to open a new conversation in a new tab.
+
 #### 09.30.2026
 - Fixed: Alt+C now cycles through visible message and code-block Copy buttons, starting with the lowest ([#79](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/pull/79), [@BenjaminKobjolke](https://github.com/BenjaminKobjolke)).
 - Fixed: Select + Copy One Message and Join + Copy All Messages follow ChatGPT's current message structure.

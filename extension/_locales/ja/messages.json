@@ -59,6 +59,9 @@
   "label_new_chat": {
     "message": "新しいチャット"
   },
+  "label_new_chat_new_tab": {
+    "message": "新しいタブで新しいチャット"
+  },
   "label_focus_input": {
     "message": "入力欄にフォーカス"
   },

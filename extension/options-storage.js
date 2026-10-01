@@ -14,6 +14,7 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyCopyLowest: 'c',
   selectThenCopy: 'x',
   shortcutKeyNewConversation: 'n',
+  shortcutKeyNewConversationInNewTab: '',
   shortcutKeyToggleChatWork: 'Digit5',
   shortcutKeyActivateInput: 'w',
   shortcutKeyToggleSidebar: 's',
