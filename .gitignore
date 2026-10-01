@@ -41,6 +41,9 @@ Thumbs.db
 *.pem
 *.ps1
 
+# Windows shortcuts can embed per-machine absolute paths and link metadata.
+ahk-tray-tools/DevScrapeValidatorTray.ahk.lnk
+
 # Coverage (if you add tests later)
 coverage/
 .nyc_output//css-cleanup/
