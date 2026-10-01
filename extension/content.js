@@ -24,12 +24,45 @@ const ScrollState = {
   finalScrollPosition: 0,
   userInterrupted: false,
 };
-const CONVERSATION_TURN_SELECTOR = '[data-turn-key], [data-testid^="conversation-turn-"]';
+const CONVERSATION_TURN_SELECTOR =
+  '[data-turn-key], article[data-turn], [data-testid^="conversation-turn-"]';
+const CHATGPT_MESSAGE_UNIT_SELECTOR = '[data-chatgpt-search-unit-key]';
+const CHATGPT_ROLE_MESSAGE_SELECTOR =
+  '[data-message-author-role="assistant"], [data-message-author-role="user"]';
 
-function getConversationTurns() {
-  return Array.from(document.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
-    (turn) => turn instanceof HTMLElement && turn.isConnected,
+function isRenderedConversationElement(element) {
+  if (!(element instanceof HTMLElement) || !element.isConnected) return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function getConversationScrollRoot() {
+  return (
+    Array.from(document.querySelectorAll('.thread-scroll-container')).find(
+      isRenderedConversationElement,
+    ) || null
   );
+}
+
+function getConversationTurns(scope = getConversationScrollRoot() || document) {
+  return Array.from(scope.querySelectorAll(CONVERSATION_TURN_SELECTOR)).filter(
+    isRenderedConversationElement,
+  );
+}
+
+function getConversationMessages(scope = getConversationScrollRoot() || document) {
+  for (const selector of [CHATGPT_MESSAGE_UNIT_SELECTOR, CHATGPT_ROLE_MESSAGE_SELECTOR]) {
+    const messages = Array.from(scope.querySelectorAll(selector)).filter(isRenderedConversationElement);
+    if (messages.length) return messages;
+  }
+
+  return getConversationTurns(scope);
+}
+
+function isActiveConversationScrollContainer(container) {
+  if (!isRenderedConversationElement(container)) return false;
+  const nativeRoot = getConversationScrollRoot();
+  return !nativeRoot || nativeRoot === container;
 }
 
 function stabilizeConversationScrollContainer(container) {
@@ -52,13 +85,15 @@ function resetScrollState() {
 }
 
 function getScrollableContainer() {
-  const conversationTurns = getConversationTurns();
-  if (!conversationTurns.length) return null;
+  const nativeRoot = getConversationScrollRoot();
+  const conversationMessages = getConversationMessages(nativeRoot || document);
+  if (!conversationMessages.length) return null;
+  if (nativeRoot) return stabilizeConversationScrollContainer(nativeRoot);
 
-  let commonAncestor = conversationTurns[0];
-  for (let i = 1; i < conversationTurns.length; i++) {
-    const turn = conversationTurns[i];
-    while (commonAncestor && !commonAncestor.contains(turn)) {
+  let commonAncestor = conversationMessages[0];
+  for (let i = 1; i < conversationMessages.length; i++) {
+    const message = conversationMessages[i];
+    while (commonAncestor && !commonAncestor.contains(message)) {
       commonAncestor = commonAncestor.parentElement;
     }
   }
@@ -72,7 +107,10 @@ function getScrollableContainer() {
     }
     container = container.parentElement;
   }
-  return stabilizeConversationScrollContainer(document.scrollingElement || document.documentElement);
+  const pageRoot = document.scrollingElement || document.documentElement;
+  return pageRoot.scrollHeight > pageRoot.clientHeight
+    ? stabilizeConversationScrollContainer(pageRoot)
+    : null;
 }
 
 function getComposerTopEdge() {
@@ -2251,11 +2289,7 @@ const clickElementLikeUser = (el) => {
   }
 
   function getConversationTurnMessages() {
-    const turns = getConversationTurns();
-    const individualMessages = turns.flatMap((turn) =>
-      Array.from(turn.querySelectorAll?.('[data-chatgpt-search-unit-key]') || []),
-    );
-    const candidates = individualMessages.length ? individualMessages : turns;
+    const candidates = getConversationMessages();
     const renderedMessages = candidates.filter((message) => {
       if (!message.firstElementChild) return false;
 
@@ -2466,15 +2500,7 @@ const clickElementLikeUser = (el) => {
   }
 
   function setBoundaryScrollPosition(scrollContainer, boundary) {
-    if (!(scrollContainer instanceof Element)) return NaN;
-    if (
-      !scrollContainer.isConnected &&
-      scrollContainer !== document.scrollingElement &&
-      scrollContainer !== document.documentElement &&
-      scrollContainer !== document.body
-    ) {
-      return NaN;
-    }
+    if (!isActiveConversationScrollContainer(scrollContainer)) return NaN;
 
     stabilizeConversationScrollContainer(scrollContainer);
     const targetY = getBoundaryScrollTop(scrollContainer, boundary);
@@ -2517,6 +2543,9 @@ const clickElementLikeUser = (el) => {
       onComplete: () => {
         settleBoundaryScrollTarget(scrollContainer, boundary);
       },
+      onUpdate() {
+        if (!isActiveConversationScrollContainer(scrollContainer)) this.kill();
+      },
     });
   }
 
@@ -2539,11 +2568,19 @@ const clickElementLikeUser = (el) => {
   }
 
   function settleMessageScrollTarget(scrollContainer, message, scrollOffset) {
-    if (!(message instanceof HTMLElement) || !message.isConnected) return;
+    if (
+      !(message instanceof HTMLElement) ||
+      !message.isConnected ||
+      !isActiveConversationScrollContainer(scrollContainer)
+    ) return;
 
     const startedAt = performance.now();
     const tick = () => {
-      if (!(message instanceof HTMLElement) || !message.isConnected) {
+      if (
+        !(message instanceof HTMLElement) ||
+        !message.isConnected ||
+        !isActiveConversationScrollContainer(scrollContainer)
+      ) {
         activeMessageScrollSettleFrame = null;
         return;
       }
@@ -2565,7 +2602,11 @@ const clickElementLikeUser = (el) => {
   }
 
   function alignMessageToVisualTop(scrollContainer, message, visualTop) {
-    if (!(message instanceof HTMLElement) || !message.isConnected) return;
+    if (
+      !(message instanceof HTMLElement) ||
+      !message.isConnected ||
+      !isActiveConversationScrollContainer(scrollContainer)
+    ) return;
 
     const actualTop = message.getBoundingClientRect().top - getScrollContainerTopEdge(scrollContainer);
     if (!Number.isFinite(actualTop)) return;
@@ -2619,6 +2660,9 @@ const clickElementLikeUser = (el) => {
       },
       onInterrupt: () => {
         activeMessageScrollTween = null;
+      },
+      onUpdate() {
+        if (!isActiveConversationScrollContainer(scrollContainer)) this.kill();
       },
     });
   }
@@ -4865,10 +4909,43 @@ const clickElementLikeUser = (el) => {
       return true;
     }
 
-    const COPY_CONVERSATION_TURN_SELECTOR =
-      'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"]';
+    const COPY_MESSAGE_UNIT_SELECTOR = '[data-chatgpt-search-unit-key]';
+    const COPY_LEGACY_CONVERSATION_TURN_SELECTOR =
+      'section[data-testid^="conversation-turn-"], article[data-turn], article[data-testid^="conversation-turn-"], [data-turn-key]';
+    const COPY_CONVERSATION_TURN_SELECTOR = [
+      COPY_MESSAGE_UNIT_SELECTOR,
+      COPY_LEGACY_CONVERSATION_TURN_SELECTOR,
+    ].join(', ');
     const COPY_CONTENT_SELECTOR = '.whitespace-pre-wrap, .prose, .markdown, .markdown-new-styling';
     const COPY_SHORTCUT_DEBUG = false;
+
+    function getCopyConversationMessages() {
+      const messageUnits = Array.from(document.querySelectorAll(COPY_MESSAGE_UNIT_SELECTOR));
+      if (messageUnits.length) return messageUnits;
+
+      const roleMessages = Array.from(
+        document.querySelectorAll(
+          '[data-message-author-role="assistant"], [data-message-author-role="user"]',
+        ),
+      );
+      if (roleMessages.length) return roleMessages;
+
+      return Array.from(document.querySelectorAll(COPY_LEGACY_CONVERSATION_TURN_SELECTOR));
+    }
+
+    function getCopyMessageRole(container) {
+      const messageRole = container?.getAttribute?.('data-message-author-role');
+      if (messageRole === 'assistant' || messageRole === 'user') return messageRole;
+
+      const turnRole = container?.getAttribute?.('data-turn');
+      if (turnRole === 'assistant' || turnRole === 'user') return turnRole;
+
+      const unitKey =
+        container?.getAttribute?.('data-chatgpt-search-unit-key') ||
+        container?.getAttribute?.('data-content-search-unit-key') ||
+        '';
+      return unitKey.match(/:(assistant|user)$/)?.[1] || '';
+    }
 
     function hasCopyTextContent(el) {
       return !!(el && (el.innerText || el.textContent || '').trim());
@@ -4888,7 +4965,8 @@ const clickElementLikeUser = (el) => {
       if (!container) return [];
       const roles = preferredRole ? [preferredRole] : ['assistant', 'user'];
       for (const role of roles) {
-        const selector = `[data-message-author-role="${role}"]`;
+        const selector =
+          `[data-message-author-role="${role}"], [data-chatgpt-search-unit-key$=":${role}"]`;
         const direct = container.matches?.(selector) ? [container] : [];
         const nested = Array.from(container.querySelectorAll?.(selector) || []);
         const matches = [...direct, ...nested];
@@ -4899,7 +4977,11 @@ const clickElementLikeUser = (el) => {
 
     function getCopyContentElementForRoleContainer(roleContainer) {
       if (!roleContainer) return null;
-      return roleContainer.querySelector?.(COPY_CONTENT_SELECTOR) || roleContainer;
+      return (
+        roleContainer.querySelector?.('[data-markdown-text-style="assistant-message"]') ||
+        roleContainer.querySelector?.(COPY_CONTENT_SELECTOR) ||
+        roleContainer
+      );
     }
 
     function getFallbackCopyContentElement(container) {
@@ -4917,8 +4999,8 @@ const clickElementLikeUser = (el) => {
     }
 
     function getPreferredCopyRoleForTurn(turn) {
-      const dataTurn = turn?.getAttribute?.('data-turn');
-      if (dataTurn === 'assistant' || dataTurn === 'user') return dataTurn;
+      const messageRole = getCopyMessageRole(turn);
+      if (messageRole) return messageRole;
       return getCopyRoleContainers(turn, 'assistant').length ? 'assistant' : 'user';
     }
 
@@ -4953,7 +5035,7 @@ const clickElementLikeUser = (el) => {
       if (assistantBodies.length) return dedupeCopyContentElements(assistantBodies);
       const directContentEls = getDirectCopyContentElementsForButton(btn);
       if (directContentEls.length) return directContentEls;
-      const turn = btn?.closest?.(`${COPY_CONVERSATION_TURN_SELECTOR}, [data-turn-key]`);
+      const turn = btn?.closest?.(COPY_CONVERSATION_TURN_SELECTOR);
       const contentEls = getPrimaryCopyContentElementsForTurn(turn);
       if (contentEls.length) return contentEls;
       // Current turns can omit the old role wrapper. Resolve only their message
@@ -4962,9 +5044,7 @@ const clickElementLikeUser = (el) => {
     }
 
     function getVisibleCopyTurnsAboveComposer() {
-      const allConversationTurns = Array.from(
-        document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR),
-      );
+      const allConversationTurns = getCopyConversationMessages();
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const composerTop = getComposerTopEdge();
@@ -6066,7 +6146,7 @@ const clickElementLikeUser = (el) => {
       includeUser,
       includeLabels,
     }) {
-      const allTurns = Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR));
+      const allTurns = getCopyConversationMessages();
       const filteredTurns = allTurns.filter((turn) => {
         if (copyTurnHasRole(turn, 'assistant') && includeAssistant) return true;
         if (copyTurnHasRole(turn, 'user') && includeUser) return true;
@@ -6089,8 +6169,10 @@ const clickElementLikeUser = (el) => {
       const selectionEls = [];
 
       for (const { els, turn } of turnContentGroups) {
-        const roleContainer = els[0]?.closest?.('[data-message-author-role]');
-        const role = roleContainer?.getAttribute?.('data-message-author-role') || 'assistant';
+        const roleContainer = els[0]?.closest?.(
+          '[data-message-author-role], [data-chatgpt-search-unit-key]',
+        );
+        const role = getCopyMessageRole(turn) || getCopyMessageRole(roleContainer) || 'assistant';
         const labelText = getConversationCopyLabelText(turn, role, includeLabels);
         const turnWrapper = document.createElement('div');
         turnWrapper.setAttribute('data-role', role);
@@ -6192,7 +6274,7 @@ const clickElementLikeUser = (el) => {
           : scrollContainer.getBoundingClientRect().bottom;
 
       return (
-        Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR)).find((turn) => {
+        getCopyConversationMessages().find((turn) => {
           const rect = turn.getBoundingClientRect();
           return rect.bottom > viewportTop && rect.top < viewportBottom;
         }) || null
@@ -6211,6 +6293,7 @@ const clickElementLikeUser = (el) => {
       return {
         anchor,
         anchorTestId: anchor?.getAttribute('data-testid') || '',
+        anchorMessageUnitKey: anchor?.getAttribute('data-chatgpt-search-unit-key') || '',
         anchorOffset,
         scrollContainer,
         scrollTop: Number(scrollContainer.scrollTop) || 0,
@@ -6221,11 +6304,14 @@ const clickElementLikeUser = (el) => {
       if (snapshot?.anchor instanceof HTMLElement && snapshot.anchor.isConnected) {
         return snapshot.anchor;
       }
-      if (!snapshot?.anchorTestId) return null;
+      if (!snapshot?.anchorTestId && !snapshot?.anchorMessageUnitKey) return null;
 
       return (
-        Array.from(document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR)).find(
-          (turn) => turn.getAttribute('data-testid') === snapshot.anchorTestId,
+        getCopyConversationMessages().find(
+          (turn) =>
+            (snapshot.anchorTestId && turn.getAttribute('data-testid') === snapshot.anchorTestId) ||
+            (snapshot.anchorMessageUnitKey &&
+              turn.getAttribute('data-chatgpt-search-unit-key') === snapshot.anchorMessageUnitKey),
         ) || null
       );
     }
@@ -6238,7 +6324,7 @@ const clickElementLikeUser = (el) => {
 
     function getCopyAllLazyLoadFingerprint(scrollContainer) {
       return [
-        document.querySelectorAll(COPY_CONVERSATION_TURN_SELECTOR).length,
+        getCopyConversationMessages().length,
         Math.round(Number(scrollContainer?.scrollHeight) || 0),
       ].join(':');
     }
@@ -8226,21 +8312,27 @@ const clickElementLikeUser = (el) => {
       const scrollContainer = getScrollableContainer();
       if (!scrollContainer) return;
 
-      const viewportHeight = window.innerHeight * 0.8; // Keep the native PageUp/PageDown feel
+      const viewportHeight = scrollContainer.clientHeight * 0.8;
       const direction = event.key === 'PageUp' ? -1 : 1;
       let targetScrollPosition = scrollContainer.scrollTop + direction * viewportHeight;
 
       // Ensure we don't scroll past the natural top/bottom limits
-      const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-      targetScrollPosition = Math.max(0, Math.min(targetScrollPosition, maxScroll));
+      const scrollRange = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+      const reversed = getComputedStyle(scrollContainer).flexDirection === 'column-reverse';
+      const minScroll = reversed ? -scrollRange : 0;
+      const maxScroll = reversed ? 0 : scrollRange;
+      targetScrollPosition = Math.max(minScroll, Math.min(targetScrollPosition, maxScroll));
 
       // Use GSAP for smooth scrolling with slow end effect
       gsap.to(scrollContainer, {
         duration: 0.3, // Slightly longer for smoother motion
-        scrollTo: {
-          y: targetScrollPosition,
-        },
+        ...(reversed
+          ? { scrollTop: targetScrollPosition }
+          : { scrollTo: { y: targetScrollPosition } }),
         ease: 'power4.out', // Ensures gradual deceleration at the end
+        onUpdate() {
+          if (!isActiveConversationScrollContainer(scrollContainer)) this.kill();
+        },
       });
     }
   }

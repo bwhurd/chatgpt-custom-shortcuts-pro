@@ -6,6 +6,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 09.30.2026
+- Fixed: Alt+C now cycles through visible message and code-block Copy buttons, starting with the lowest.
+- Fixed: Select + Copy One Message and Join + Copy All Messages follow ChatGPT's current message structure.
+
 #### 09.29.2026
 - Fixed: Fade Slim Sidebar tracks ChatGPT's current sidebar state and fades only while collapsed.
 - Fixed: Control+Enter sends through ChatGPT's current composer control.

@@ -11,7 +11,7 @@ const nextMessageStart = contentSource.indexOf('  function getNextMessagePositio
 const nextMessageEnd = contentSource.indexOf('  function goDownOneMessage(', nextMessageStart);
 const boundaryHelperStart = contentSource.indexOf('  function getMaxBoundaryScrollTop(');
 const boundaryHelperEnd = contentSource.indexOf(
-  '  function setBoundaryScrollPosition(',
+  '  function settleBoundaryScrollTarget(',
   boundaryHelperStart,
 );
 const messageScrollTargetStart = contentSource.indexOf('  function scrollToMessageTop(');
@@ -40,6 +40,7 @@ class FixtureElement {
     offsetTop = 0,
     rectTop = 0,
     rectHeight = 100,
+    flexDirection = 'column',
   } = {}) {
     this.parentElement = null;
     this.offsetParent = null;
@@ -54,10 +55,18 @@ class FixtureElement {
     this.offsetTop = offsetTop;
     this.rectTop = rectTop;
     this.rectHeight = rectHeight;
+    this.flexDirection = flexDirection;
   }
 
   getBoundingClientRect() {
-    return { top: this.rectTop, height: this.rectHeight };
+    for (let ancestor = this; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor.rectHeight === 0) return { top: 0, height: 0, width: 0 };
+    }
+    return { top: this.rectTop, height: this.rectHeight, width: 800 };
+  }
+
+  querySelectorAll(selector) {
+    return document.querySelectorAll(selector).filter((node) => this.contains(node));
   }
 
   append(child) {
@@ -98,6 +107,9 @@ for (const turn of [firstTurn, secondTurn, thirdTurn]) {
 }
 
 let selectedTurns = [firstTurn, secondTurn, thirdTurn];
+let selectedUnits = [];
+let selectedRoles = [];
+let nativeScrollRoots = [];
 let queriedSelector = '';
 const document = {
   body,
@@ -105,6 +117,9 @@ const document = {
   scrollingElement: documentElement,
   querySelectorAll(selector) {
     queriedSelector = selector;
+    if (selector === '.thread-scroll-container') return nativeScrollRoots;
+    if (selector === '[data-chatgpt-search-unit-key]') return selectedUnits;
+    if (selector.includes('data-message-author-role')) return selectedRoles;
     return selectedTurns;
   },
 };
@@ -112,7 +127,10 @@ const helperContext = {
   document,
   Element: FixtureElement,
   HTMLElement: FixtureElement,
-  getComputedStyle: (element) => ({ overflowY: element.overflowY }),
+  getComputedStyle: (element) => ({
+    overflowY: element.overflowY,
+    flexDirection: element.flexDirection,
+  }),
 };
 
 runInNewContext(
@@ -122,7 +140,7 @@ runInNewContext(
     .slice(nextMessageStart, nextMessageEnd)
     .replace(/^  /gm, '')}\n${contentSource
     .slice(boundaryHelperStart, boundaryHelperEnd)
-    .replace(/^  /gm, '')}\nglobalThis.scrollHelpers = { CONVERSATION_TURN_SELECTOR, getConversationTurns, getConversationTurnMessages, getScrollableContainer, getMessageTopScrollPositions, getMessageScrollTarget, getNextMessagePosition, getBoundaryScrollTop };`,
+    .replace(/^  /gm, '')}\nglobalThis.scrollHelpers = { CONVERSATION_TURN_SELECTOR, getConversationTurns, getConversationTurnMessages, getScrollableContainer, getMessageTopScrollPositions, getMessageScrollTarget, getNextMessagePosition, getBoundaryScrollTop, setBoundaryScrollPosition };`,
   helperContext,
 );
 
@@ -132,6 +150,7 @@ const {
   getConversationTurns,
   getScrollableContainer,
   getBoundaryScrollTop,
+  setBoundaryScrollPosition,
   getMessageScrollTarget,
   getMessageTopScrollPositions,
   getNextMessagePosition,
@@ -236,7 +255,86 @@ assert.match(
   'message shortcuts should animate to the computed content position instead of reusing viewport rect coordinates',
 );
 
+// ChatGPT retains A's connected DOM in a hidden panel when B is mounted.
+const nextConversationScroll = body.append(
+  new FixtureElement({ overflowY: 'auto', scrollHeight: 2000, clientHeight: 600 }),
+);
+const nextFirst = nextConversationScroll.append(new FixtureElement({ offsetTop: 0 }));
+const nextSecond = nextConversationScroll.append(new FixtureElement({ offsetTop: 500 }));
+for (const message of [nextFirst, nextSecond]) message.offsetParent = nextConversationScroll;
+nativeScrollRoots = [conversationScroll, nextConversationScroll];
+selectedUnits = [...selectedTurns, nextFirst, nextSecond];
+conversationScroll.rectHeight = 0;
+const previousTop = conversationScroll.scrollTop;
+const pendingPreviousSettle = () => setBoundaryScrollPosition(conversationScroll, 'bottom');
+
+assert.equal(getScrollableContainer(), nextConversationScroll, 'switching must select visible B');
+assert.deepEqual(Array.from(getConversationTurnMessages()), [nextFirst, nextSecond]);
+assert.equal(getMessageScrollTarget(nextConversationScroll, nextSecond, 25), 475);
+assert.equal(setBoundaryScrollPosition(nextConversationScroll, 'bottom'), 1400);
+assert.equal(nextConversationScroll.scrollTop, 1400);
+assert.ok(Number.isNaN(pendingPreviousSettle()), 'pending A settle must stop when A is hidden');
+assert.equal(conversationScroll.scrollTop, previousTop, 'B scrolling must leave hidden A untouched');
+
+// Returning to A works without replacing the document or reinitializing helpers.
+conversationScroll.rectHeight = 100;
+nextConversationScroll.rectHeight = 0;
+assert.equal(getScrollableContainer(), conversationScroll);
+assert.deepEqual(Array.from(getConversationTurnMessages()), selectedTurns);
+assert.ok(Number.isNaN(setBoundaryScrollPosition(nextConversationScroll, 'top')));
+assert.equal(nextConversationScroll.scrollTop, 1400, 'hidden B settle must not restore B');
+
+conversationScroll.isConnected = false;
+nextConversationScroll.rectHeight = 100;
+nextConversationScroll.flexDirection = 'column-reverse';
+assert.equal(getScrollableContainer(), nextConversationScroll, 'detached A must be ignored');
+assert.equal(getBoundaryScrollTop(nextConversationScroll, 'top'), -1400);
+assert.equal(getBoundaryScrollTop(nextConversationScroll, 'bottom'), 0);
+
+// Selector fallbacks stay scoped to the current root.
+selectedUnits = selectedTurns;
+selectedRoles = [nextFirst, nextSecond];
+assert.deepEqual(Array.from(getConversationTurnMessages()), selectedRoles);
+selectedRoles = [];
+selectedTurns = [nextFirst, nextSecond];
+assert.deepEqual(Array.from(getConversationTurnMessages()), selectedTurns);
+
+// Page takeover must use negative positions in the current column-reverse scroller.
+const pageTakeoverStart = contentSource.indexOf('// @note PageUp/PageDown Key Takeover Logic');
+const pageKeyStart = contentSource.indexOf('  function handleKeyDown(event)', pageTakeoverStart);
+const pageKeyEnd = contentSource.indexOf('  function handleUserInteraction()', pageKeyStart);
+assert.notEqual(pageKeyStart, -1);
+assert.notEqual(pageKeyEnd, -1);
+let pageTweenOptions;
+helperContext.ScrollState = { isAnimating: false };
+helperContext.gsap = {
+  to(target, options) {
+    pageTweenOptions = options;
+    target.scrollTop = options.scrollTop ?? options.scrollTo.y;
+  },
+};
+runInNewContext(
+  `${contentSource.slice(pageKeyStart, pageKeyEnd)}\nglobalThis.pageScroll = handleKeyDown;`,
+  helperContext,
+);
+const pageEvent = (key) => ({ key, stopPropagation() {}, preventDefault() {} });
+nextConversationScroll.scrollTop = 0;
+helperContext.pageScroll(pageEvent('PageUp'));
+assert.equal(nextConversationScroll.scrollTop, -480);
+helperContext.pageScroll(pageEvent('PageDown'));
+assert.equal(nextConversationScroll.scrollTop, 0);
+nextConversationScroll.flexDirection = 'column';
+helperContext.pageScroll(pageEvent('PageDown'));
+assert.equal(nextConversationScroll.scrollTop, 480);
+helperContext.pageScroll(pageEvent('PageUp'));
+assert.equal(nextConversationScroll.scrollTop, 0);
+nextConversationScroll.rectHeight = 0;
+let inactiveTweenKilled = false;
+pageTweenOptions.onUpdate.call({ kill() { inactiveTweenKilled = true; } });
+assert.equal(inactiveTweenKilled, true, 'page tween must stop after its conversation is hidden');
+
 selectedTurns = [];
+selectedUnits = [];
 assert.equal(getScrollableContainer(), null, 'no conversation turns should resolve to no target');
 
 console.log('Conversation message and boundary scroll target fixture passed.');

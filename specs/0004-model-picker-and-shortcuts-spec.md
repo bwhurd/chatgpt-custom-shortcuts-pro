@@ -178,6 +178,14 @@ New runtime shortcut actions must add an explicit metadata row in `extension/sha
 
 Activation probe metadata is the source of truth for future live shortcut checks. Use executable modes only for no-token-safe probes whose expected target can be verified deterministically, such as `click-target` for a stable button or `focus-target` for the composer input. Stateful, multi-step, token-spending, native-dialog, manual-only, or not-applicable shortcuts must be explicitly classified instead of left for the runner to guess.
 
+### Conversation scroll target ownership
+
+ChatGPT retains previous conversations in connected but hidden panels after navigation. Resolve the rendered `.thread-scroll-container` on each scroll action and scope message-unit, role-wrapper, and legacy-turn lookup to that container. A document-wide common ancestor can combine hidden and current messages and incorrectly target the non-scrolling document root. Legacy layouts without the native container may use rendered connected messages and their shared scrollable ancestor; the document fallback must have a real scroll range.
+
+One/two-message stepping, top/bottom actions, and PageUp/PageDown takeover share this active-container lookup. Animation updates and delayed settling must stop when their container is hidden or detached. PageUp/PageDown must respect negative scroll positions for `column-reverse` as well as ordinary positive positions.
+
+For a reload-works/navigation-fails report, compare the visible and hidden conversation scrollers before and after an in-page switch. `isConnected` alone does not establish current conversation ownership. Validate A → B → A without intervening reloads; an initial-page geometry fixture cannot prove this contract.
+
 ### Response thread navigation contract
 
 - Ordinary Alt-domain shortcuts require Alt/Option without Shift or either control-like
