@@ -4281,6 +4281,7 @@ const clickElementLikeUser = (el) => {
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',
     shortcutKeyScrollToTop: 'KeyT',
     shortcutKeyNewConversation: 'KeyN',
+    shortcutKeyNewConversationInNewTab: '',
     shortcutKeyToggleChatWork: 'Digit5',
     shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyToggleSidebar: 'KeyS',
@@ -7674,6 +7675,9 @@ const clickElementLikeUser = (el) => {
       shortcutKeySendEdit: runSendEditShortcut,
       shortcutKeyNewConversation: function newConversation() {
         triggerNativeNewConversationButton();
+      },
+      shortcutKeyNewConversationInNewTab: () => {
+        window.open('/', '_blank', 'noopener');
       },
       shortcutKeyToggleChatWork: () => {
         void triggerNativeChatWorkToggle();
@@ -17201,6 +17205,7 @@ ${groupMarkup.join('')}
           header: 'Quick Clicks',
           keys: [
             'shortcutKeyNewConversation',
+            'shortcutKeyNewConversationInNewTab',
             'shortcutKeyActivateInput',
             'shortcutKeyToggleSidebar',
             'shortcutKeySearchConversationHistory',

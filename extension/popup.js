@@ -2896,6 +2896,7 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyCopyAllCodeBlocks: 'BracketRight',
     copyCodeUserSeparator: '\n\n--- --- ---\n\n',
     shortcutKeyNewConversation: 'KeyN',
+    shortcutKeyNewConversationInNewTab: NBSP,
     shortcutKeyToggleChatWork: 'Digit5',
     shortcutKeySearchConversationHistory: 'Comma',
     shortcutKeyClickNativeScrollToBottom: 'KeyZ',

@@ -59,6 +59,9 @@
   "label_new_chat": {
     "message": "Новий чат"
   },
+  "label_new_chat_new_tab": {
+    "message": "Новий чат у новій вкладці"
+  },
   "label_focus_input": {
     "message": "Фокус на полі введення"
   },

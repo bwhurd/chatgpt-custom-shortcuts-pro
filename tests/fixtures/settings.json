@@ -14,6 +14,7 @@
     "shortcutKeySendEdit": "KeyD",
     "shortcutKeyCopyAllCodeBlocks": "BracketRight",
     "shortcutKeyNewConversation": "KeyN",
+    "shortcutKeyNewConversationInNewTab": "",
     "shortcutKeyToggleChatWork": "KeyG",
     "shortcutKeySearchConversationHistory": "KeyK",
     "shortcutKeyClickNativeScrollToBottom": "KeyZ",

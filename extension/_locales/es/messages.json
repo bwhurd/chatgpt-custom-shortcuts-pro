@@ -59,6 +59,9 @@
   "label_new_chat": {
     "message": "Nueva conversación"
   },
+  "label_new_chat_new_tab": {
+    "message": "Nueva conversación en una pestaña nueva"
+  },
   "label_focus_input": {
     "message": "Enfocar campo de chat"
   },
