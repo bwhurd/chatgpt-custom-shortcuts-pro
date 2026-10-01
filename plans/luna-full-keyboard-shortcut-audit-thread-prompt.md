@@ -1,6 +1,6 @@
-/goal Complete the full automated audit of every current ChatGPT Custom Shortcuts Pro shortcut in C:\Users\bwhurd\Dropbox\CGCSP-Github\plans\0076-full-keyboard-shortcut-audit-plan.md, implementing and running the existing Playwright audit harness, personally reviewing evidence, and delivering the actionable repair report. Execute exactly the earliest unfinished batch per execution turn; keep the goal active across automatic continuations without asking me to say "continue." Finish only when all five batches and the final audit acceptance gate are proved.
+/goal Complete the full automated audit of every current ChatGPT Custom Shortcuts Pro shortcut in ../plans/0076-full-keyboard-shortcut-audit-plan.md, implementing and running the existing Playwright audit harness, personally reviewing evidence, and delivering the actionable repair report. Execute exactly the earliest unfinished batch per execution turn; keep the goal active across automatic continuations without asking me to say "continue." Finish only when all five batches and the final audit acceptance gate are proved.
 
-Run as **GPT-6-Luna with Max reasoning**. Work in `C:\Users\bwhurd\Dropbox\CGCSP-Github`. This is execution of an existing audit plan, not a request to create another plan, chat, or agent. Do not change models or delegate by default.
+Run as **GPT-6-Luna with Max reasoning**. Work in `current checkout`. This is execution of an existing audit plan, not a request to create another plan, chat, or agent. Do not change models or delegate by default.
 
 ## Read and resume
 

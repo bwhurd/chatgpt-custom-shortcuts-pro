@@ -42,7 +42,7 @@ Thumbs.db
 *.ps1
 
 # Windows shortcuts can embed per-machine absolute paths and link metadata.
-ahk-tray-tools/DevScrapeValidatorTray.ahk.lnk
+*.lnk
 
 # Coverage (if you add tests later)
 coverage/
@@ -54,6 +54,11 @@ scrub-this-css.css
 !/dist/*.zip
 dist/*
 !dist/*.zip
+# This historical archive contains a local profile path; keep its local copy out of Git.
+/dist/4.5.0.1.zip
+
+# Retired historical experiment; retain any local working copy without publishing it.
+/tests/tampermonkey-dev-scrape/
 
 # Playwright
 .playwright/

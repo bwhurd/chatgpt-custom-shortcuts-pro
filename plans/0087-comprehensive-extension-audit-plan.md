@@ -6,7 +6,7 @@
 - [ ] Audit source, contracts, user flows, and available runtime evidence. Preserve extension code, tests, settings, permissions, release assets, and unrelated work. Repair implementation requires a separate request.
 - [ ] Six batches fit the six distinct evidence surfaces: architecture, security/package boundary, runtime/data contracts, page behavior, popup/UI behavior, and integrated closure. Dependencies are sequential: 01 -> 02 -> 03 -> 04 -> 05 -> 06. Later batches may expose earlier evidence that needs revalidation; reopen that gate instead of silently overriding it.
 - [ ] This file is an active execution plan, not a completed audit. Planning inspected selected source and documentation only; no baseline tests or live browser checks have been run for this workstream.
-- [ ] Root: `C:/Users/bwhurd/Dropbox/CGCSP-Github`. Shipped source: `extension/`. Paired handoff: `plans/luna-comprehensive-extension-audit-thread-prompt.md`.
+- [ ] Root: `current checkout`. Shipped source: `extension/`. Paired handoff: `plans/luna-comprehensive-extension-audit-thread-prompt.md`.
 
 ## Planning evidence and entry-point correction
 
@@ -32,7 +32,7 @@
 - [ ] No edits to source, test fixtures/baselines, root docs, subsystem specs, package/lock files, manifest permissions, or other plans. No publishing, uploads, dependency installation, browser-setting changes, builds, or releases. Audit artifacts own proposed documentation corrections and repairs.
 - [ ] Read no ignored captures, vendor/minified code, existing archives, or unrelated external configuration without the required scope authorization. Audit dependency declarations, load references, and package inclusion first; record a bounded gap if deeper excluded code is necessary. Do not infer safety of opaque dependencies.
 - [ ] Browser verification may use an already prepared, authorized test session and disposable local test state. No live Drive writes, login/logout/token revocation, ChatGPT sends/deletes, or changes to user settings/clipboard without specific authorization. Exercise these boundaries with an existing isolated harness where possible; otherwise leave required live proof pending.
-- [ ] Skill guidance is advisory to factual conclusions. Locate the installed `chrome-extensions` and `modern-web-guidance` skills via the catalog, or use their existing manifests under `C:/Users/bwhurd/tools/install-with-codex/.agents/skills/`. Their location is project-local. Do not reinstall them. Resolve API/security/policy uncertainty against current official Chrome documentation; for concrete troubleshooting, follow the repo's official/support and upstream discussion research rule before speculative diagnosis. Record citations and access dates in findings.
+- [ ] Skill guidance is advisory to factual conclusions. Locate the installed `chrome-extensions` and `modern-web-guidance` skills via the catalog, or use their existing manifests under `LOCAL_TOOLS_ROOT/install-with-codex/.agents/skills/`. Their location is project-local. Do not reinstall them. Resolve API/security/policy uncertainty against current official Chrome documentation; for concrete troubleshooting, follow the repo's official/support and upstream discussion research rule before speculative diagnosis. Record citations and access dates in findings.
 
 ## Persistent audit records and proof rules
 

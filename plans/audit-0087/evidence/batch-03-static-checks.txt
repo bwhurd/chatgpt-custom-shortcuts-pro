@@ -1,6 +1,6 @@
 Batch 03 static and isolated evidence
 Date: 2026-09-29
-Repository: C:/Users/bwhurd/Dropbox/CGCSP-Github
+Repository: current checkout
 
 Source fingerprint check
 - Parsed 42 entries from plans/audit-0087/evidence/batch-01-source-fingerprints.sha256.

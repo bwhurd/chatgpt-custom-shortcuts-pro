@@ -6,32 +6,32 @@ Make `moveTopBarToBottomCheckbox` start faster, do less work during slow page lo
 
 ## Current Findings
 
-- The startup path is improved, but it still uses several independent timing and observer layers in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5610):
+- The startup path is improved, but it still uses several independent timing and observer layers in [content.js](../extension/content.js#L5610):
   - `scheduleStartupVerificationPasses`
   - `scheduleRunMoveTopBarLogic`
   - `schedulePromoteToSteadyBottomBarObserver`
   - root-level startup and steady-state mutation observers
-- `waitForMoveTopBarTargets` in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5504) still watches `document.documentElement` with `subtree: true` and `attributes: true`. That is bounded, but it is still one of the heaviest startup watchers in the feature.
-- `injectBottomBar` in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5859) still performs repeated layout work:
+- `waitForMoveTopBarTargets` in [content.js](../extension/content.js#L5504) still watches `document.documentElement` with `subtree: true` and `attributes: true`. That is bounded, but it is still one of the heaviest startup watchers in the feature.
+- `injectBottomBar` in [content.js](../extension/content.js#L5859) still performs repeated layout work:
   - `getComputedStyle(composerContainer).width`
   - `clientWidth`
   - `scrollWidth`
   - transform scaling
   - repeated `requestAnimationFrame` scale passes
 - The feature still installs multiple follow-up observers after startup:
-  - startup bottom-bar observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5765)
-  - steady bottom-bar observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5803)
-  - duplicate-button observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6348)
-  - disclaimer observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6418)
-  - composer-label observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6471)
-- A new `ResizeObserver` and `window.resize` listener are attached from [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5946), but there is no explicit cleanup when the composer container is replaced.
-- The no-bottom-bar path still has its own broad disclaimer observer in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6528), so disclaimer logic is duplicated and inconsistent between enabled and disabled states.
-- `placeModelSwitcherInCenter` in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5675) still searches the full document across multiple selectors on each placement attempt.
+  - startup bottom-bar observer at [content.js](../extension/content.js#L5765)
+  - steady bottom-bar observer at [content.js](../extension/content.js#L5803)
+  - duplicate-button observer at [content.js](../extension/content.js#L6348)
+  - disclaimer observer at [content.js](../extension/content.js#L6418)
+  - composer-label observer at [content.js](../extension/content.js#L6471)
+- A new `ResizeObserver` and `window.resize` listener are attached from [content.js](../extension/content.js#L5946), but there is no explicit cleanup when the composer container is replaced.
+- The no-bottom-bar path still has its own broad disclaimer observer in [content.js](../extension/content.js#L6528), so disclaimer logic is duplicated and inconsistent between enabled and disabled states.
+- `placeModelSwitcherInCenter` in [content.js](../extension/content.js#L5675) still searches the full document across multiple selectors on each placement attempt.
 
 ## Inspector-Validated Structure Findings
 
 - The large inspector dump confirms that the relevant mount roots are more specific than the current startup path assumes:
-  - `#page-header` is present as a sticky sibling near the top of the scroll-root in [_temp-files/inspector-captures/header_thread_composer_HTML_from_inspector_big_file.txt](C:/Users/bwhurd/Dropbox/CGCSP-Github/_temp-files/inspector-captures/header_thread_composer_HTML_from_inspector_big_file.txt)
+  - `#page-header` is present as a sticky sibling near the top of the scroll-root in [_temp-files/inspector-captures/header_thread_composer_HTML_from_inspector_big_file.txt](../_temp-files/inspector-captures/header_thread_composer_HTML_from_inspector_big_file.txt)
   - `#thread-bottom-container` is a sticky bottom container that already wraps the composer and disclaimer
   - `#thread-bottom` sits directly inside `#thread-bottom-container`
   - `form[data-type="unified-composer"]` is inside `#thread-bottom`
@@ -119,7 +119,7 @@ Make `moveTopBarToBottomCheckbox` start faster, do less work during slow page lo
 
 ### 5. Consolidate Post-Startup Helper Observers
 
-- Review whether the duplicate-button observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6348) is still needed now that strong CSS hiding rules already exist in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6249).
+- Review whether the duplicate-button observer at [content.js](../extension/content.js#L6348) is still needed now that strong CSS hiding rules already exist in [content.js](../extension/content.js#L6249).
 - If JS is still needed, fold duplicate-button, disclaimer, and composer-label upkeep into a single container-scoped observer/controller instead of three separate ones.
 - Use the actual structure from the inspector dump to scope that controller to:
   - `#thread-bottom-container` for disclaimer upkeep

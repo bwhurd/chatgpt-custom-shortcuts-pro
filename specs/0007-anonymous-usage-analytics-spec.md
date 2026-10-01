@@ -44,7 +44,7 @@
 - Aptabase Cloud is acceptable for a small trial, but 7,000 installed users can exceed a 20,000 event/month free allowance quickly even with daily summaries.
 - Production uses self-hosted Aptabase on the existing LibreChat Oracle Always Free VM path.
 - The main `chordstash.com` Firebase/static hosting path is not a good fit because Aptabase needs Docker/server/database services.
-- The live VM deployment is `/opt/cgcsp-aptabase`, with a deployment bundle mirrored at `C:\Users\bwhurd\tools\librechat-web-deployment\oracle-poc\cgcsp-aptabase`.
+- The live VM deployment is `/opt/cgcsp-aptabase`, with a deployment bundle mirrored at `LOCAL_TOOLS_ROOT/librechat-web-deployment/oracle-poc/cgcsp-aptabase`.
 - Aptabase binds locally on the VM at `127.0.0.1:8003` and is exposed through Cloudflare Tunnel as `https://cgcsp.chordstash.com`.
 - The Aptabase app `ChatGPT Custom Shortcuts Pro` exists on the self-host instance.
 - Local ingestion to `/api/v0/events` and public Cloudflare ingestion to `https://cgcsp.chordstash.com/api/v0/events` have both been validated.
@@ -72,7 +72,7 @@
 - Historical analytics validation, for reference if collection is reintroduced:
 - Run `node --check` on touched extension JavaScript files.
 - Run `npx biome check` on touched extension JavaScript and report files.
-- Run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenUsageAnalyticsReport.ps1` after editing the report opener.
-- Run `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1` and then `.\ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1 -NoOpen` after editing the aggregate report helper.
+- Run `LOCAL_TOOLS_ROOT/scripts/Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenUsageAnalyticsReport.ps1` after editing the report opener.
+- Run `LOCAL_TOOLS_ROOT/scripts/Test-PowerShellSyntax.ps1 -Path ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1` and then `.\ahk-tray-tools\OpenAggregateUsageAnalyticsReport.ps1 -NoOpen` after editing the aggregate report helper.
 - Build with `node scripts/build-zip.js` and confirm `analytics.js`, `usage-report.*`, and `vendor/aptabase-browser/*` are included.
 - In a manually loaded dev Chrome profile, verify `csp.analytics.getReport` shows local counters, verify failed network attempts are daily-throttled if `cgcsp.chordstash.com` is not routable, and verify the manifest still has no analytics `host_permissions`.

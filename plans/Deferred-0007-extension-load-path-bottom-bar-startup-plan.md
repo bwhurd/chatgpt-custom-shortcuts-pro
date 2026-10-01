@@ -2,18 +2,18 @@
 
 ## Mission-Critical Findings
 
-- Non-popup reload menu thrash root cause was the reload-time auto-restore block in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L7720). That should stay removed.
-- `moveTopBarToBottomCheckbox` startup is currently delayed by stacked waits in [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5265):
+- Non-popup reload menu thrash root cause was the reload-time auto-restore block in [content.js](../extension/content.js#L7720). That should stay removed.
+- `moveTopBarToBottomCheckbox` startup is currently delayed by stacked waits in [content.js](../extension/content.js#L5265):
   - `gateIfLoginButtonPresent()` can wait up to about 5s (`25 * 200ms`) before doing anything.
-  - after that there is an extra `setTimeout(..., 500)` at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5313).
-  - then another `setTimeout(..., 500)` at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5370) before `runMoveTopBarLogic()`.
-  - then `waitForElement()` polls every `200ms` up to `12s` for header/composer pieces at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5315).
-- The late-appearance symptom after opening the popup is plausibly explained by the body-wide reinject observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5375). Popup open causes DOM mutations, which can trigger `runMoveTopBarLogic()` and finally inject the bar.
+  - after that there is an extra `setTimeout(..., 500)` at [content.js](../extension/content.js#L5313).
+  - then another `setTimeout(..., 500)` at [content.js](../extension/content.js#L5370) before `runMoveTopBarLogic()`.
+  - then `waitForElement()` polls every `200ms` up to `12s` for header/composer pieces at [content.js](../extension/content.js#L5315).
+- The late-appearance symptom after opening the popup is plausibly explained by the body-wide reinject observer at [content.js](../extension/content.js#L5375). Popup open causes DOM mutations, which can trigger `runMoveTopBarLogic()` and finally inject the bar.
 - The enabled bottom-bar path also adds several broad observers/scans that should be audited for load impact:
-  - duplicate-button observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5928)
-  - disclaimer observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L5965)
-  - composer-label stripping observer at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L6016)
-- There is also a broad `chrome.storage.sync.get(null)` on page load at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L1259) just to rehydrate arrow-button-related visibility state. This is a candidate to narrow.
+  - duplicate-button observer at [content.js](../extension/content.js#L5928)
+  - disclaimer observer at [content.js](../extension/content.js#L5965)
+  - composer-label stripping observer at [content.js](../extension/content.js#L6016)
+- There is also a broad `chrome.storage.sync.get(null)` on page load at [content.js](../extension/content.js#L1259) just to rehydrate arrow-button-related visibility state. This is a candidate to narrow.
 
 ## Likely Root Causes
 
@@ -35,7 +35,7 @@
   - injected bar removed
   - route changes that still support the feature
 - Narrow or gate broad observers/scans under `moveTopBarToBottomCheckbox` so they do not all wake during initial page load.
-- Narrow `chrome.storage.sync.get(null)` at [content.js](C:/Users/bwhurd/Dropbox/CGCSP-Github/content.js#L1259) to only the keys actually needed there.
+- Narrow `chrome.storage.sync.get(null)` at [content.js](../extension/content.js#L1259) to only the keys actually needed there.
 
 ## Focused Next Investigation
 

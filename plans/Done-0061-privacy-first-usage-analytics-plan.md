@@ -167,7 +167,7 @@
   - Likely file: `ahk-tray-tools/DevScrapeValidatorTray.ahk` unless a newer CGCSP tray owner supersedes it.
   - Menu label: `Open Usage Report` or similarly plain.
   - Target the canonical Aptabase dashboard/report URL or generated local HTML/Markdown report path chosen above.
-  - Before running a materially edited PowerShell helper from that workflow, validate with `C:\Users\bwhurd\tools\scripts\Test-PowerShellSyntax.ps1 -Path <script.ps1>` when applicable.
+  - Before running a materially edited PowerShell helper from that workflow, validate with `LOCAL_TOOLS_ROOT/scripts/Test-PowerShellSyntax.ps1 -Path <script.ps1>` when applicable.
 
 ## Validation
 

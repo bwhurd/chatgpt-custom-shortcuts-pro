@@ -1,12 +1,12 @@
-/goal Complete the comprehensive Chrome extension audit in C:/Users/bwhurd/Dropbox/CGCSP-Github/plans/0087-comprehensive-extension-audit-plan.md, one earliest unfinished batch per execution turn. Keep the overall goal active across automatic continuations without asking me to say "continue". Finish only when all six batches and their final acceptance gate are proven.
+/goal Complete the comprehensive Chrome extension audit in ../plans/0087-comprehensive-extension-audit-plan.md, one earliest unfinished batch per execution turn. Keep the overall goal active across automatic continuations without asking me to say "continue". Finish only when all six batches and their final acceptance gate are proven.
 
 # GPT-6-Luna Max audit handoff
 
 Use GPT-6-Luna with Max reasoning for execution. This text does not itself switch models: select those settings before launching. Work directly in this chat; do not create another chat or delegate agents.
 
-Repository root: `C:/Users/bwhurd/Dropbox/CGCSP-Github`.
-Extension source: `C:/Users/bwhurd/Dropbox/CGCSP-Github/extension`.
-Plan: `C:/Users/bwhurd/Dropbox/CGCSP-Github/plans/0087-comprehensive-extension-audit-plan.md`.
+Repository root: `current checkout`.
+Extension source: `../extension`.
+Plan: `../plans/0087-comprehensive-extension-audit-plan.md`.
 
 ## Task and boundaries
 
@@ -15,8 +15,8 @@ Perform an evidence-backed audit of ChatGPT Custom Shortcuts Pro, an MV3 extensi
 Read the root `AGENTS.md`, the plan, and only the overview/subsystem sections needed for the current batch. Verify planning observations against current source before using them. The requested `contents.html` was absent; `extension/content.js` is the likely intended page runtime and is declared by the manifest. Begin mapping from it plus `popup.html`, `popup.js`, and `manifest.json`, then follow actual dependencies.
 
 The installed skills are project-local to a different workspace. Use the skill catalog if available; otherwise read these existing files when applicable, without reinstalling:
-- `C:/Users/bwhurd/tools/install-with-codex/.agents/skills/chrome-extensions/SKILL.md`
-- `C:/Users/bwhurd/tools/install-with-codex/.agents/skills/modern-web-guidance/SKILL.md`
+- `LOCAL_TOOLS_ROOT/install-with-codex/.agents/skills/chrome-extensions/SKILL.md`
+- `LOCAL_TOOLS_ROOT/install-with-codex/.agents/skills/modern-web-guidance/SKILL.md`
 
 Use official Chrome documentation to resolve disputed API, privilege, CSP, lifecycle, and store-policy claims. Skill examples do not override official facts or repository evidence. For troubleshooting, follow AGENTS.md's official-support/upstream-research rule. Record source URLs and access dates for externally grounded findings.
 

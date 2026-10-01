@@ -76,9 +76,11 @@ Use:
 
 ## Tools
 
-- Open `C:\Users\bwhurd\tools\AGENTS.md` and the relevant section of `C:\Users\bwhurd\tools\PROJECT_SPEC.md` only when the task depends on machine-level tool behavior, command availability, or environment setup. This repo's docs and direct user instructions win.
-- Open `C:\Users\bwhurd\tools\install-with-codex\Specs\0002-codex-tool-wiring-spec.md` when the task depends on tool choice, install or repair routing, command resolution, or outside-project lookup.
-- If the task needs the same in-scope plain-text search or replacement across many files, open `C:\Users\bwhurd\tools\TEXT_SEARCH_REPLACE_SPEC.md` and use its preview-first workflow.
+Use `LOCAL_TOOLS_ROOT` as a placeholder for the local tools checkout root when a machine-local helper is required.
+
+- Open `LOCAL_TOOLS_ROOT/AGENTS.md` and the relevant section of `LOCAL_TOOLS_ROOT/PROJECT_SPEC.md` only when the task depends on machine-level tool behavior, command availability, or environment setup. This repo's docs and direct user instructions win.
+- Open `LOCAL_TOOLS_ROOT/install-with-codex/Specs/0002-codex-tool-wiring-spec.md` when the task depends on tool choice, install or repair routing, command resolution, or outside-project lookup.
+- If the task needs the same in-scope plain-text search or replacement across many files, open `LOCAL_TOOLS_ROOT/TEXT_SEARCH_REPLACE_SPEC.md` and use its preview-first workflow.
 - Use `rg` or `fd` for discovery, previewed `rg` plus `sd` for broad plain-text replacement, `sg` for syntax-aware rewrites, `jq` or `yq` for structured data, `uv` for Python tooling, `difft` for noisy diffs, and `xh` for deliberate HTTP or API inspection.
 
 ## File boundaries

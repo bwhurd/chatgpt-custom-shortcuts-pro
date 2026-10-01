@@ -5,7 +5,7 @@
 - Batch 01, Architecture and baseline: complete on 2026-09-29.
 - Current audit register state: no earlier coverage, findings, or recovery ledger existed; this batch initializes them.
 - No source, test, fixture, package, permission, browser setting, or user data was changed. Command evidence consists of the bounded validator transcript and the source fingerprint map.
-- Repository root: C:/Users/bwhurd/Dropbox/CGCSP-Github.
+- Repository root: current checkout.
 - Environment: local Windows checkout; Node v24.15.0 and npm 11.12.1 resolved. No dependencies or browsers were installed.
 - Browser readiness: the repository documents CodexCleanProfile and CDP ports 9333/9222/9223. No endpoint, login, active tab, or browser behavior was probed in Batch 01. Availability and authorization remain unverified.
 - Source snapshot time: 2026-09-29 07:01 UTC. Full SHA-256 map: [Batch 01 source fingerprints](evidence/batch-01-source-fingerprints.sha256).
