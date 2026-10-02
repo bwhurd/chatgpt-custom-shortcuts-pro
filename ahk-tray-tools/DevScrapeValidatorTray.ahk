@@ -14,6 +14,7 @@ openLatestPs := A_ScriptDir "\OpenLatestDevScrapeReport.ps1"
 openUsageReportPs := A_ScriptDir "\OpenUsageAnalyticsReport.ps1"
 openAggregateUsageReportPs := A_ScriptDir "\OpenAggregateUsageAnalyticsReport.ps1"
 pushGitPs := A_ScriptDir "\PushLocalToGit.ps1"
+configureGitPushPs := A_ScriptDir "\ConfigureGitPush.ps1"
 pushGitStatusPath := projectRoot "\_temp-files\tray-git-sync\git-sync-status.txt"
 pushGitPid := 0
 pushGitLastStatus := ""
@@ -49,13 +50,19 @@ Menu, Tray, Add, Open Latest Report, OpenLatestReport
 Menu, Tray, Add, Open Usage Report, OpenUsageReport
 Menu, Tray, Add, Open Aggregate Usage Report, OpenAggregateUsageReport
 Menu, Tray, Add, Run build-zip.js, RunBuildZip
+Menu, Tray, Add, Git push settings..., ConfigureGitPush
 Menu, Tray, Add, Push local to git, PushLocalToGit
+Menu, Tray, Add, Push with change note..., PushGitWithNote
 Menu, Tray, Add, Shutdown DevScrape Validator, ShutdownValidator
 Menu, Tray, Add
 Menu, Tray, Add, Reload Tray, ReloadTray
 Menu, Tray, Add, Shutdown and Exit Tray, ShutdownAndExitTray
 if !FileExist(pushGitPs)
     Menu, Tray, Disable, Push local to git
+if !FileExist(pushGitPs)
+    Menu, Tray, Disable, Push with change note...
+if !FileExist(configureGitPushPs)
+    Menu, Tray, Disable, Git push settings...
 if !FileExist(setupPs)
     Menu, Tray, Disable, Setup Extension Profile
 if !FileExist(openUsageReportPs)
@@ -140,26 +147,24 @@ RunBuildZip:
 return
 
 PushLocalToGit:
+    StartGitPush(0)
+return
+
+PushGitWithNote:
+    StartGitPush(1)
+return
+
+ConfigureGitPush:
     if (pushGitInProgress) {
-        ToastMessage("Git push is already running.", 5000)
+        ToastMessage("Git push is running. Try settings again when it finishes.", 5000)
         return
     }
 
-    FileDelete, %pushGitStatusPath%
-    pushGitPid := 0
-    pushGitLastStatus := "STEP|Starting local-to-git sync..."
-    pushGitInProgress := 1
-    Menu, Tray, Disable, Push local to git
-    ToastMessage("Starting local-to-git sync...", 5000)
-    Run, "%psExe%" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%pushGitPs%", %projectRoot%, Hide UseErrorLevel, pushGitPid
+    settingsPid := 0
+    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%configureGitPushPs%" -RepositoryRoot "%projectRoot%", %projectRoot%, Hide UseErrorLevel, settingsPid
     if (ErrorLevel) {
-        pushGitInProgress := 0
-        Menu, Tray, Enable, Push local to git
-        ToastMessage("Could not start Git push. Check PushLocalToGit.ps1.", 8000)
-        return
+        ToastMessage("Could not open Git push settings.", 8000)
     }
-
-    SetTimer, WatchPushGitProgress, 1500
 return
 
 WatchPushGitProgress:
@@ -180,6 +185,11 @@ WatchPushGitProgress:
     pushGitInProgress := 0
     if FileExist(pushGitPs)
         Menu, Tray, Enable, Push local to git
+    if FileExist(pushGitPs)
+        Menu, Tray, Enable, Push with change note...
+    Menu, Tray, Enable, Reload Tray
+    if FileExist(configureGitPushPs)
+        Menu, Tray, Enable, Git push settings...
 
     finalStatusKind := GetProgressStatusKind(pushGitLastStatus)
     if !(finalStatusKind = "OK" || finalStatusKind = "ERROR")
@@ -194,6 +204,10 @@ ShutdownValidator:
 return
 
 ReloadTray:
+    if (pushGitInProgress) {
+        ToastMessage("Wait for the Git push to finish before reloading the tray.", 5000)
+        return
+    }
     Reload
 return
 
@@ -222,6 +236,36 @@ return
 
 SetTrayWorking(tipText) {
     Menu, Tray, Tip, %tipText%
+}
+
+StartGitPush(withChangeNote) {
+    global psExe, projectRoot, pushGitPs, pushGitPid, pushGitLastStatus, pushGitInProgress
+    if (pushGitInProgress) {
+        ToastMessage("Git push is already running.", 5000)
+        return
+    }
+
+    noteArgument := withChangeNote ? "-WithChangeNote" : ""
+    pushGitPid := 0
+    pushGitLastStatus := ""
+    pushGitInProgress := 1
+    Menu, Tray, Disable, Push local to git
+    Menu, Tray, Disable, Push with change note...
+    Menu, Tray, Disable, Reload Tray
+    Menu, Tray, Disable, Git push settings...
+    ToastMessage("Starting local-to-git sync...", 5000)
+    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%pushGitPs%" -RunWorkflow %noteArgument%, %projectRoot%, Hide UseErrorLevel, pushGitPid
+    if (ErrorLevel) {
+        pushGitInProgress := 0
+        Menu, Tray, Enable, Push local to git
+        Menu, Tray, Enable, Push with change note...
+        Menu, Tray, Enable, Reload Tray
+        Menu, Tray, Enable, Git push settings...
+        ToastMessage("Could not start Git push. Check PushLocalToGit.ps1.", 8000)
+        return
+    }
+
+    SetTimer, WatchPushGitProgress, 1500
 }
 
 RunStartScript() {

@@ -71,16 +71,19 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 
 ## Validation and tooling posture
 
-- Do not default to Playwright for ordinary UI or overlay work in this repo. Use it only when the user explicitly asks for it or when smaller local/manual checks cannot prove the change.
+- Run `npm test` for popup changes. For other UI or overlay work, use Playwright only when the user explicitly asks for it or smaller local/manual checks cannot prove the change.
 - If Playwright is explicitly requested, first-time local setup in this repo is `npm ci` followed by `npm run playwright:install`; keep the install project-local so the scripted commands in `package.json` stay the source of truth.
 - Reload the unpacked extension from `extension/` in `chrome://extensions` before trusting manual or Playwright checks after shipped `extension/**` changes.
 - If Playwright is explicitly requested, prefer the narrowest command that can fail on the change: popup preview/screenshot for quick inspection, `npm run test:popup-visual` for popup regressions, and `npm run playwright:chatgpt:*` only for live ChatGPT-page flows.
 - `npm run playwright:install` installs browsers before the first Playwright run on a machine.
 - `package.json` owns the authoritative local scripts for popup preview, popup screenshots, popup visual tests, and ChatGPT extension scenarios.
 - `npm run preview:popup` and `npm run screenshot:popup` are the quick popup inspection paths.
-- `npm run test:popup-visual` is the popup visual check; `npm run test:popup-visual:update` is only for intentional popup baseline updates.
+- `npm run test:popup-visual` is an alias for the popup regression suite; `npm run test:popup-visual:update` is only for intentional popup baseline updates.
 - `npm run playwright:chatgpt:*` covers ChatGPT-page extension flows.
-- `npm test` runs the popup visual Playwright suite and is the default shipped-behavior merge gate.
+- `npm test` runs three isolated Chromium checks: the approved expanded-popup image, unmodified 784x580 layout/scrolling plus one toggle's sync-storage save/reopen round trip, and rejection of deliberately clipped content. It checks unexpected page errors and console warnings/errors. It does not prove every setting, shortcut execution, or live ChatGPT selectors. The existing image baseline is Windows-specific; no login is required.
+- For contributor reviews, run `npm run check` and `npm run test:validators` for maintained code/tool changes; use `npm run check:text` for doc-only changes. `check` combines Biome with the text checker; `test:validators` tests static-validator success/failure cases in isolated fixtures. Run `npm run validate:keys` for changes to popup controls, settings defaults/schema, locale keys, or settings fixtures; it checks real-project static settings wiring.
+- Biome includes maintained `.mjs` source and excludes generated outputs, captured benchmarks, personal editor settings, deployment-owned Netlify files, and plan evidence. The text checker covers eligible tracked and nonignored untracked files, preserves empty modules, and ignores generated/vendor/minified/personal inputs. `--write` repairs that same candidate set only when explicitly requested; contributor review commands stay read-only.
+- Popup test aliases use `scripts/run-popup-tests.js` to avoid conflicting color environment flags while preserving warning reporting, CLI arguments, and failure exit status. Tests wait for observable hydration and fonts, use fresh temporary profiles, and leave shipped runtime and approved baselines unchanged.
 - `specs/0006-runtime-scrape-selector-validator-spec.md` owns the dev-only runtime selector scrape/check workflow. Its dumps belong under `_temp-files/inspector-captures/` and its popup/report assets must stay out of shipped release zips.
 
 ## Documentation posture
@@ -90,6 +93,7 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 - `plans/` holds active, deferred, blocked, and completed plan markdown using status-in-filename protocol.
 - `_temp-files/` is a fully ignored local scratch area for copied inspector captures, reference scripts, and support material that should not be default startup reading.
 - Older Codex plan material now lives under `plans/Done-*` as archive-only reference material.
+- `ahk-tray-tools/README.md` owns local usage, settings, credential, privacy, and recovery guidance for the developer tray.
 
 ### Instruction ownership test: `AGENTS.md` vs. specs
 
