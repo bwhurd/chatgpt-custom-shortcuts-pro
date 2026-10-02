@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 
 import {
   buildStorageRecoveryPlan,
-  finalizeStorageRecoveryPlan,
   createStorageMutationLedger,
+  finalizeStorageRecoveryPlan,
 } from './playwright/lib/shortcut-audit-artifacts.mjs';
 
 const ledger = createStorageMutationLedger(
@@ -93,7 +93,10 @@ const conflictFinal = finalizeStorageRecoveryPlan(conflictPlan, {
   existing: 'user-edited-during-audit',
 });
 assert.equal(conflictFinal.status, 'conflict');
-assert.equal(conflictFinal.entries.find((entry) => entry.key === 'existing').status, 'conflict-preserved');
+assert.equal(
+  conflictFinal.entries.find((entry) => entry.key === 'existing').status,
+  'conflict-preserved',
+);
 assert.equal(conflictFinal.entries.find((entry) => entry.key === 'temporary').status, 'restored');
 
 console.log('shortcut audit storage ledger preserves concurrent edits and restores cleanly');

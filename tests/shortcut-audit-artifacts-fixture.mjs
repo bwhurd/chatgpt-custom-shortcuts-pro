@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
+import { resolveAuditOwnedFixtureFromCheckpoint } from './playwright/lib/devscrape-wide-core.mjs';
 import {
   buildShortcutAuditReport,
   buildShortcutRerunCommand,
   evaluateShortcutAuditExit,
   writeShortcutAuditArtifacts,
 } from './playwright/lib/shortcut-audit-artifacts.mjs';
-import { resolveAuditOwnedFixtureFromCheckpoint } from './playwright/lib/devscrape-wide-core.mjs';
 
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'csp-shortcut-audit-fixture-'));
 try {
@@ -35,7 +34,8 @@ try {
         proofMethod: 'playwright-live',
         reason: 'Failure | needs targeted rerun',
         evidencePath: '',
-        rerunCommand: 'npm run playwright:chatgpt:audit-shortcuts -- --phase global --shortcut-action-id shortcut|with-pipe',
+        rerunCommand:
+          'npm run playwright:chatgpt:audit-shortcuts -- --phase global --shortcut-action-id shortcut|with-pipe',
         owner: 'extension/content.js',
       },
     ],
@@ -121,17 +121,22 @@ try {
   );
   const semanticAudit = buildShortcutAuditReport({
     inventory: {
-      shortcuts: ['source-only', 'click-only', 'intercepted-only', 'native-success', 'single-failure', 'confirmed-failure'].map(
-        (actionId) => ({
-          actionId,
-          label: actionId,
-          defaultCode: 'KeyA',
-          handlerRef: 'content.js:handler',
-          validationMode: 'scrape-targets',
-          activationProbeMode: 'click-target',
-          activationProbeExpectedTargetRef: 'button-target',
-        }),
-      ),
+      shortcuts: [
+        'source-only',
+        'click-only',
+        'intercepted-only',
+        'native-success',
+        'single-failure',
+        'confirmed-failure',
+      ].map((actionId) => ({
+        actionId,
+        label: actionId,
+        defaultCode: 'KeyA',
+        handlerRef: 'content.js:handler',
+        validationMode: 'scrape-targets',
+        activationProbeMode: 'click-target',
+        activationProbeExpectedTargetRef: 'button-target',
+      })),
       fixedKeyboardContracts: [
         { contractId: 'source-only-contract', classification: 'fixed-gate', status: 'present' },
         { contractId: 'live-contract', classification: 'fixed-listener', status: 'present' },
@@ -271,7 +276,11 @@ try {
   assert.throws(
     () =>
       resolveAuditOwnedFixtureFromCheckpoint(
-        { ...auditFixtureCheckpoint, fixtureUrl: 'https://chatgpt.com/c/fixed-fixture', auditFixtureUrl: 'https://chatgpt.com/c/fixed-fixture' },
+        {
+          ...auditFixtureCheckpoint,
+          fixtureUrl: 'https://chatgpt.com/c/fixed-fixture',
+          auditFixtureUrl: 'https://chatgpt.com/c/fixed-fixture',
+        },
         { protectedFixtureUrls: ['https://chatgpt.com/c/fixed-fixture'] },
       ),
     /not a verified audit-owned conversation/,

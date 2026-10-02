@@ -302,14 +302,8 @@
       ],
       {
         matchGroups: [
-          [
-            'data-thread-find-composer="true"',
-            'data-composer-navigation-target="add-context"',
-          ],
-          [
-            'data-chatgpt-composer',
-            'data-composer-navigation-target="add-context"',
-          ],
+          ['data-thread-find-composer="true"', 'data-composer-navigation-target="add-context"'],
+          ['data-chatgpt-composer', 'data-composer-navigation-target="add-context"'],
         ],
         notes:
           'Current Add context menu opener, scoped to the observed ChatGPT composer forms and identified by structural attributes instead of a stale test id or localized label.',
@@ -333,10 +327,7 @@
     }),
     bySelectorList(
       'edit-message-button',
-      [
-        'button[aria-label="Edit message"]',
-        'button:has(svg path[d^="M11.7313"])',
-      ],
+      ['button[aria-label="Edit message"]', 'button:has(svg path[d^="M11.7313"])'],
       {
         identifier: 'button:has(svg path[d^="M11.7313"])',
         searchNeedles: ['M11.7313'],
@@ -542,9 +533,7 @@
     }),
     bySelectorList(
       'assistant-web-regenerate-trigger',
-      [
-        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])',
-      ],
+      ['.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])'],
       { uiStateRefs: ['assistant-turn-web-buttons-exposed'] },
     ),
     bySelectorList(
@@ -557,9 +546,7 @@
     }),
     bySelectorList(
       'assistant-more-actions-trigger',
-      [
-        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
-      ],
+      ['.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])'],
       {
         identifier:
           '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
@@ -626,9 +613,7 @@
     }),
     bySelectorList(
       'composer-deep-research-action',
-      [
-        'button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])',
-      ],
+      ['button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])'],
       {
         matchGroups: [['data-list-navigation-item="true"', 'deep_research_app/icon.png']],
         uiStateRefs: ['composer-add-files-and-more-menu'],
@@ -1192,7 +1177,10 @@
       targetRefs: ['assistant-read-aloud-direct-action'],
       uiStateRefs: targetStateRefs('assistant-read-aloud-direct-action'),
       activationProbe: clickTargetProbe('assistant-read-aloud-direct-action', {
-        uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
+        uiStateRefs: [
+          'assistant-turn-non-web-buttons-exposed',
+          'assistant-turn-web-buttons-exposed',
+        ],
         notes: 'Capture-phase observer prevents the native read-aloud action after target click.',
       }),
     }),

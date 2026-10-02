@@ -110,13 +110,18 @@ assert.equal(
 );
 
 const standaloneGateStart = contentSource.indexOf('function shouldHoldStandaloneWorkBottomBar');
-const standaloneGateEnd = contentSource.indexOf('function createBottomBarController', standaloneGateStart);
+const standaloneGateEnd = contentSource.indexOf(
+  'function createBottomBarController',
+  standaloneGateStart,
+);
 assert.ok(
   standaloneGateStart >= 0 && standaloneGateEnd > standaloneGateStart,
   'blank-Work standalone visibility gate should exist',
 );
 const standaloneGateContext = vm.createContext({
   location: { pathname: '/' },
+  document: { querySelector: () => (standaloneGateContext.hasComposer ? {} : null) },
+  hasComposer: false,
   mode: '',
   getNativeChatWorkSurfaceMode: () => standaloneGateContext.mode,
 });
@@ -127,7 +132,12 @@ globalThis.mode = 'chat';
 globalThis.holdChatWithoutNativeRow = shouldHoldStandaloneWorkBottomBar(false);
 globalThis.mode = 'work';
 globalThis.holdWorkWithoutNativeRow = shouldHoldStandaloneWorkBottomBar(false);
-globalThis.holdWorkWithNativeRow = shouldHoldStandaloneWorkBottomBar(true);`,
+globalThis.holdWorkWithNativeRow = shouldHoldStandaloneWorkBottomBar(true);
+globalThis.hasComposer = true;
+globalThis.holdAppShellWork = shouldHoldStandaloneWorkBottomBar(false);
+globalThis.hasComposer = false;
+location.pathname = '/c/fixture';
+globalThis.holdExistingConversation = shouldHoldStandaloneWorkBottomBar(false);`,
   standaloneGateContext,
   { filename: 'topbar-blank-work-standalone-gate.js' },
 );
@@ -150,6 +160,16 @@ assert.equal(
   standaloneGateContext.holdWorkWithNativeRow,
   false,
   'blank Work should reveal normally once the native utility row is available',
+);
+assert.equal(
+  standaloneGateContext.holdAppShellWork,
+  false,
+  'the app-shell composer does not need the old post-form utility row',
+);
+assert.equal(
+  standaloneGateContext.holdExistingConversation,
+  false,
+  'existing conversations should not wait on blank Work hydration',
 );
 
 assert.doesNotMatch(
@@ -181,18 +201,26 @@ assert.ok(
 );
 
 class FakeHeaderActionsElement {
-  constructor(controlKind = 'none', { connected = true } = {}) {
+  constructor(controlKind = 'none', { connected = true, appShell = false } = {}) {
     this.controlKind = controlKind;
     this.isConnected = connected;
     this.parentElement = null;
     this.parentNode = null;
     this.children = [];
+    this.appShell = appShell;
+  }
+
+  matches(selector) {
+    assert.equal(selector, '[data-app-shell-header-obstacle="true"]');
+    return this.appShell;
   }
 
   querySelector(selector) {
     assert.equal(
       selector,
-      'button[data-testid="share-chat-button"], button[data-testid="conversation-options-button"]',
+      this.appShell
+        ? 'button[aria-haspopup="menu"]'
+        : 'button[data-testid="share-chat-button"], button[data-testid="conversation-options-button"]',
       'header relocation should use stable post-conversation controls',
     );
     return this.controlKind === 'conversation' ? {} : null;
@@ -232,6 +260,9 @@ populatedMovedActions.parentNode = bottomRightSlot;
 
 const headerActionsContext = vm.createContext({
   Element: FakeHeaderActionsElement,
+  location: { pathname: '/' },
+  appShellActions: new FakeHeaderActionsElement('conversation', { appShell: true }),
+  emptyAppShellActions: new FakeHeaderActionsElement('none', { appShell: true }),
   SELECTORS: {
     CONVERSATION_HEADER_RELOCATION_CONTROLS:
       'button[data-testid="share-chat-button"], button[data-testid="conversation-options-button"]',
@@ -250,6 +281,10 @@ vm.runInContext(
 globalThis.emptyReady = hasRelocatableConversationHeaderControls(emptyActions);
 globalThis.preConversationReady = hasRelocatableConversationHeaderControls(preConversationActions);
 globalThis.populatedReady = hasRelocatableConversationHeaderControls(populatedActions);
+globalThis.appShellBlankReady = hasRelocatableConversationHeaderControls(appShellActions);
+location.pathname = '/c/synthetic';
+globalThis.appShellConversationReady = hasRelocatableConversationHeaderControls(appShellActions);
+globalThis.emptyAppShellConversationReady = hasRelocatableConversationHeaderControls(emptyAppShellActions);
 globalThis.emptyRestored = restoreInactiveConversationHeaderActions(
   emptyMovedActions,
   nativeActionsHome,
@@ -272,6 +307,21 @@ assert.equal(
   headerActionsContext.emptyReady,
   false,
   'the blank-chat empty header-actions placeholder must remain in the native header',
+);
+assert.equal(
+  headerActionsContext.appShellBlankReady,
+  false,
+  'blank app-shell header controls should stay home',
+);
+assert.equal(
+  headerActionsContext.appShellConversationReady,
+  true,
+  'conversation app-shell menu controls may relocate',
+);
+assert.equal(
+  headerActionsContext.emptyAppShellConversationReady,
+  false,
+  'an app-shell slot without a menu must stay home',
 );
 assert.equal(
   headerActionsContext.preConversationReady,
@@ -471,8 +521,7 @@ const outsideBottomBarGuardIndex = controllerSource.indexOf(
   relevantMutationStart,
 );
 assert.ok(
-  trackedHeaderMutationIndex >= 0 &&
-    outsideBottomBarGuardIndex > trackedHeaderMutationIndex,
+  trackedHeaderMutationIndex >= 0 && outsideBottomBarGuardIndex > trackedHeaderMutationIndex,
   'tracked header-action child changes should reconcile even while the native container is mounted in the bottom bar',
 );
 assert.doesNotMatch(

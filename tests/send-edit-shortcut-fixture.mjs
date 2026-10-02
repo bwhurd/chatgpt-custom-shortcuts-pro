@@ -29,7 +29,9 @@ optionsContext.globalThis = optionsContext;
 runInNewContext(optionsStorageSource, optionsContext, { filename: 'extension/options-storage.js' });
 
 const migrateStoredSettings = (stored) => {
-  optionsConfig.migrations.forEach((migration) => migration(stored, optionsConfig.defaults));
+  optionsConfig.migrations.forEach((migration) => {
+    migration(stored, optionsConfig.defaults);
+  });
   return stored;
 };
 const createStoredSettings = (overrides) => {
@@ -51,26 +53,32 @@ assert.equal(
   'KeyD',
   'the KeyboardEvent.code representation should remain stored as configured',
 );
-const customCollision = migrateStoredSettings(createStoredSettings({
-  shortcutKeySendEdit: 'd',
-  shortcutKeyToggleSidebar: 'KeyG',
-}));
+const customCollision = migrateStoredSettings(
+  createStoredSettings({
+    shortcutKeySendEdit: 'd',
+    shortcutKeyToggleSidebar: 'KeyG',
+  }),
+);
 assert.equal(customCollision.shortcutKeySendEdit, 'd');
 assert.equal(customCollision.shortcutKeyToggleSidebar, 'KeyG');
-const modelPickerCollision = migrateStoredSettings(createStoredSettings({
-  shortcutKeySendEdit: 'd',
-  modelPickerKeyCodesLatest: ['KeyG'],
-}));
+const modelPickerCollision = migrateStoredSettings(
+  createStoredSettings({
+    shortcutKeySendEdit: 'd',
+    modelPickerKeyCodesLatest: ['KeyG'],
+  }),
+);
 assert.equal(modelPickerCollision.shortcutKeySendEdit, 'd');
 assert.deepEqual(modelPickerCollision.modelPickerKeyCodesLatest, ['KeyG']);
-const customSendEdit = migrateStoredSettings(createStoredSettings({
-  shortcutKeySendEdit: 'z',
-}));
+const customSendEdit = migrateStoredSettings(
+  createStoredSettings({
+    shortcutKeySendEdit: 'z',
+  }),
+);
 assert.equal(customSendEdit.shortcutKeySendEdit, 'z', 'other custom SendEdit values must remain');
 
 const sendEditSource = contentSource
   .slice(moduleStart, moduleEnd + '\n    })();'.length)
-  .replace(/^    /gm, '');
+  .replace(/^ {4}/gm, '');
 
 class FixtureElement {
   constructor(tagName, { attributes = {}, classes = [], rect = {} } = {}) {
@@ -125,9 +133,8 @@ class FixtureElement {
 
     const attributes = Array.from(selector.matchAll(/\[([^\]]+)\]/g), (match) => match[1]);
     for (const expression of attributes) {
-      const [, name, operator, rawValue] = expression.match(
-        /^([\w:-]+)(?:\s*(\^=|\$=|\*=|=)\s*["']?([^"']*)["']?)?$/,
-      ) || [];
+      const [, name, operator, rawValue] =
+        expression.match(/^([\w:-]+)(?:\s*(\^=|\$=|\*=|=)\s*["']?([^"']*)["']?)?$/) || [];
       if (!name) return false;
       const value = this.getAttribute(name);
       if (operator === undefined) {
@@ -262,7 +269,11 @@ for (const focused of [true, false]) {
   assert.equal(harness.scheduled.length, 1, 'the edit submit button should be scheduled once');
   assert.equal(harness.scheduled[0].delay, 250);
   harness.scheduled[0].callback();
-  assert.equal(harness.submitButton.clickCount, 1, 'the language-neutral submit control should activate');
+  assert.equal(
+    harness.submitButton.clickCount,
+    1,
+    'the language-neutral submit control should activate',
+  );
   assert.equal(harness.cancelButton.clickCount, 0, 'the cancel control must not be selected');
 }
 

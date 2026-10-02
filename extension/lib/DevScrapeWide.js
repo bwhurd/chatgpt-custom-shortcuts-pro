@@ -15,7 +15,7 @@ const CAPTURE_ROOT_DIR_NAME = 'inspector-captures';
 const RUN_FOLDER_SUFFIX = 'devscrapewide_c-69ea4723';
 const RUN_MANIFEST_NAME = 'run-manifest.json';
 const DEFERRED_FILENAME = '1c_TopbarToBottomEnabled_ThreadBottom.txt';
-const CONTENT_SOURCE_PATH = 'content.js';
+
 const DEV_SCRAPE_WIDE_ALLOWED_FIXTURE_URLS = Object.freeze([
   DEV_SCRAPE_WIDE_FIXTURE_URL,
   DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL,
@@ -957,18 +957,6 @@ async function idbSet(key, value) {
   });
 }
 
-async function getStoredLastRunFolderInfo() {
-  const stored = await chrome.storage.local.get(DEV_SCRAPE_WIDE_LAST_FOLDER_KEY);
-  const value = stored?.[DEV_SCRAPE_WIDE_LAST_FOLDER_KEY];
-  if (!value || typeof value !== 'object') return null;
-  const folderName = String(value.folderName || '').trim();
-  if (!folderName) return null;
-  return {
-    folderName,
-    completedAt: typeof value.completedAt === 'string' ? value.completedAt : null,
-  };
-}
-
 async function setStoredLastRunFolderInfo({ folderName, completedAt = null }) {
   const normalizedFolderName = String(folderName || '').trim();
   if (!normalizedFolderName) return;
@@ -1041,107 +1029,11 @@ async function writeTextFile(directoryHandle, fileName, text) {
   await writable.close();
 }
 
-async function readTextFile(directoryHandle, fileName) {
-  const fileHandle = await directoryHandle.getFileHandle(fileName);
-  const file = await fileHandle.getFile();
-  return file.text();
-}
-
-async function listDirectoryEntries(directoryHandle) {
-  const entries = [];
-  for await (const [name, handle] of directoryHandle.entries()) {
-    entries.push({ name, handle });
-  }
-  return entries;
-}
-
-function buildRunSortKey(date, suffix = 0) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-  return `${String(date.getTime()).padStart(16, '0')}_${String(Math.max(0, suffix)).padStart(4, '0')}`;
-}
-
-function parseRunFolderSortKey(name) {
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})_devscrapewide_c-69ea4723(?:([_-])(\d+))?$/.exec(
-      String(name || ''),
-    );
-  if (!match) return '';
-  return buildRunSortKey(
-    new Date(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3]),
-      Number(match[4]),
-      Number(match[5]),
-      Number(match[6]),
-    ),
-    Number.parseInt(match[8] || '0', 10),
-  );
-}
-
-function parseManifestSortKey(manifest) {
-  const stamp = manifest?.completedAt || manifest?.startedAt;
-  if (!stamp) return '';
-  return buildRunSortKey(new Date(stamp));
-}
-
-async function getNamedRunDirectoryHandle(rootHandle, folderName) {
-  const normalizedFolderName = String(folderName || '').trim();
-  if (!normalizedFolderName) return null;
-  try {
-    const handle = await rootHandle.getDirectoryHandle(normalizedFolderName);
-    return { name: normalizedFolderName, handle };
-  } catch {
-    return null;
-  }
-}
-
-async function getLatestRunDirectoryHandle(rootHandle) {
-  const directories = await Promise.all(
-    (await listDirectoryEntries(rootHandle))
-      .filter((entry) => entry.handle?.kind === 'directory')
-      .map(async (entry) => {
-        const folderSortKey = parseRunFolderSortKey(entry.name);
-        if (folderSortKey) return { ...entry, sortKey: folderSortKey };
-        try {
-          const manifestText = await readTextFile(entry.handle, RUN_MANIFEST_NAME);
-          return {
-            ...entry,
-            sortKey: parseManifestSortKey(JSON.parse(manifestText)),
-          };
-        } catch {
-          return null;
-        }
-      }),
-  );
-  const sortableDirectories = directories.filter((entry) => entry?.sortKey);
-  sortableDirectories.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
-  return sortableDirectories[sortableDirectories.length - 1] || null;
-}
-
-async function getPreferredRunDirectoryHandle(rootHandle) {
-  const storedFolderInfo = await getStoredLastRunFolderInfo();
-  const storedRunDirectory = await getNamedRunDirectoryHandle(
-    rootHandle,
-    storedFolderInfo?.folderName,
-  );
-  if (storedRunDirectory) return storedRunDirectory;
-  return getLatestRunDirectoryHandle(rootHandle);
-}
-
 async function storeLastRunAfterPersist(runDirectoryName, completedAt) {
   await setStoredLastRunFolderInfo({
     folderName: runDirectoryName,
     completedAt: completedAt || new Date().toISOString(),
   });
-}
-
-async function fetchPackagedText(relativePath) {
-  const response = await fetch(chrome.runtime.getURL(relativePath), { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Could not read packaged file: ${relativePath}`);
-  }
-  return response.text();
 }
 
 function resolveWideScrapeFixtureUrl(fixtureUrl) {
@@ -1338,19 +1230,6 @@ export async function persistWideScrapeRun({ windowObj, rootHandle, scrapeResult
     failedCount: manifest.artifacts.filter((artifact) => artifact.status === 'failed').length,
     deferredCount: manifest.deferredFiles.length,
   };
-}
-
-async function loadRunFromDirectory(directoryHandle) {
-  const manifestText = await readTextFile(directoryHandle, RUN_MANIFEST_NAME);
-  const manifest = JSON.parse(manifestText);
-  const textEntries = (await listDirectoryEntries(directoryHandle)).filter(
-    (entry) => entry.handle?.kind === 'file' && entry.name.toLowerCase().endsWith('.txt'),
-  );
-  const files = {};
-  for (const entry of textEntries) {
-    files[entry.name] = await readTextFile(directoryHandle, entry.name);
-  }
-  return { manifest, files };
 }
 
 export async function runWideScrapeCheck() {

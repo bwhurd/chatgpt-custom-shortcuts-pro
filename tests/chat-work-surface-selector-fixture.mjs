@@ -11,6 +11,7 @@ class FakeElement {
   constructor(attributes = {}, children = [], { visible = true } = {}) {
     this.attributes = new Map(Object.entries(attributes));
     this.children = children;
+    for (const child of children) child.parentElement = this;
     this.isConnected = true;
     this.visible = visible;
   }
@@ -31,8 +32,8 @@ class FakeElement {
     if (selector !== modelPickerSelectors.CHAT_WORK_SURFACE_RADIO_SELECTOR) return [];
     return this.children.filter(
       (child) =>
-        child.getAttribute('role') === 'radio' &&
-        child.hasAttribute('aria-checked'),
+        (child.getAttribute('role') === 'radio' && child.hasAttribute('aria-checked')) ||
+        child.hasAttribute('aria-pressed'),
     );
   }
 }
@@ -96,8 +97,9 @@ assert.deepEqual(
 );
 
 assert.deepEqual(modelPickerSelectors.getChatWorkSurfaceToggleSelectors(), [
-  'header [role="radiogroup"] button[role="radio"][aria-checked]',
-  'header [role="group"] button[role="radio"][aria-checked]',
+  'header [role="radiogroup"] button[role="radio"][aria-checked], button[aria-pressed]',
+  'header [role="group"] button[role="radio"][aria-checked], button[aria-pressed]',
+  'main [role="group"]:has(> button[aria-pressed]) button[role="radio"][aria-checked], button[aria-pressed]',
 ]);
 assert.deepEqual(modelPickerSelectors.getChatWorkSurfaceToggleMatchGroups(), [
   ['role="radiogroup"', 'role="radio"', 'aria-checked='],
@@ -114,17 +116,33 @@ const toggleTarget = shortcutMetadata.TARGET_DESCRIPTORS.find(
   (descriptor) => descriptor.targetId === 'chat-work-surface-toggle',
 );
 assert.ok(toggleTarget, 'Chat/Work should retain a runtime-selector validation target');
-assert.ok(
-  toggleTarget.searchNeedles.includes(
-    'header [role="radiogroup"] button[role="radio"][aria-checked]',
-  ),
-  'runtime validation should recognize the current radiogroup wrapper',
+assert.deepEqual(
+  toggleTarget.searchNeedles,
+  modelPickerSelectors.getChatWorkSurfaceToggleSelectors(),
+  'runtime validation should use every supported executable surface selector',
 );
-assert.ok(
-  toggleTarget.searchNeedles.includes(
-    'header [role="group"] button[role="radio"][aria-checked]',
-  ),
-  'runtime validation should retain the legacy group wrapper',
+
+const pressed = [
+  new FakeElement({ 'aria-pressed': 'true' }),
+  new FakeElement({ 'aria-pressed': 'false' }),
+];
+const pressedGroup = group('group', pressed);
+assert.deepEqual(
+  modelPickerSelectors.getNativeChatWorkSurfaceRadios(documentWith(pressedGroup), windowObj),
+  pressed,
+);
+pressed[1].attributes.set('aria-pressed', 'true');
+assert.deepEqual(
+  modelPickerSelectors.getNativeChatWorkSurfaceRadios(documentWith(pressedGroup), windowObj),
+  [],
+  'pressed controls must have reciprocal state',
+);
+pressed[1].attributes.set('aria-pressed', 'false');
+pressed[1].parentElement = new FakeElement();
+assert.deepEqual(
+  modelPickerSelectors.getNativeChatWorkSurfaceRadios(documentWith(pressedGroup), windowObj),
+  [],
+  'nested unrelated pressed buttons must not become surface controls',
 );
 
 console.log('Chat/Work surface selection accepts current and legacy structural wrappers');

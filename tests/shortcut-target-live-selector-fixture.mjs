@@ -54,21 +54,15 @@ assert.deepEqual(
   'The opener descriptor should use the observed form-scoped structural selectors',
 );
 assert.deepEqual(composerToolMenuOpenerTarget.matchGroups, [
-  [
-    'data-thread-find-composer="true"',
-    'data-composer-navigation-target="add-context"',
-  ],
-  [
-    'data-chatgpt-composer',
-    'data-composer-navigation-target="add-context"',
-  ],
+  ['data-thread-find-composer="true"', 'data-composer-navigation-target="add-context"'],
+  ['data-chatgpt-composer', 'data-composer-navigation-target="add-context"'],
 ]);
 
 const composerToolMenuOpenerSelectorsSource = contentSource.match(
-  /  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = \[[\s\S]*?\n  \];/,
+  / {2}const COMPOSER_TOOL_MENU_OPENER_SELECTORS = \[[\s\S]*?\n {2}\];/,
 )?.[0];
 const composerToolOpenerFinderSource = contentSource.match(
-  /  const findComposerToolMenuOpener = \(\) => \{[\s\S]*?\n  \};/,
+  / {2}const findComposerToolMenuOpener = \(\) => \{[\s\S]*?\n {2}\};/,
 )?.[0];
 const composerToolActionStart = contentSource.indexOf('  const COMPOSER_TOOL_ITEM_SELECTOR = [');
 const composerToolActionEnd = contentSource.indexOf('\n  const sleep =', composerToolActionStart);
@@ -77,17 +71,17 @@ const composerToolSelectorsAndCuesSource = contentSource
     contentSource.indexOf('  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = ['),
     composerToolActionEnd,
   )
-  .replace(/^  /gm, '');
+  .replace(/^ {2}/gm, '');
 const composerToolFinderStart = contentSource.indexOf('  const findComposerToolItemByIcon =');
 const runComposerToolActionSource = contentSource.match(
-  /  const runActionByIcon = async \(iconPathPrefix, delays = DELAYS\) => \{[\s\S]*?\n  \};/,
+  / {2}const runActionByIcon = async \(iconPathPrefix, delays = DELAYS\) => \{[\s\S]*?\n {2}\};/,
 )?.[0];
 const composerToolFinderAndOpenerSource = contentSource
   .slice(
     composerToolFinderStart,
     contentSource.indexOf('  const runActionByIcon =', composerToolFinderStart),
   )
-  .replace(/^  /gm, '');
+  .replace(/^ {2}/gm, '');
 assert.ok(
   composerToolMenuOpenerSelectorsSource &&
     composerToolOpenerFinderSource &&
@@ -167,9 +161,7 @@ const composerToolActionContext = {
         return composerToolActionState.menuOpen ? [composerToolMenuIcon] : [];
       }
       if (selector.includes('img[src*="deep_research_app/icon.png"]')) {
-        return composerToolActionState.menuOpen
-          ? [{ closest: () => deepResearchMenuItem }]
-          : [];
+        return composerToolActionState.menuOpen ? [{ closest: () => deepResearchMenuItem }] : [];
       }
       return [];
     },
@@ -193,7 +185,7 @@ runInNewContext(
   [
     composerToolSelectorsAndCuesSource,
     composerToolFinderAndOpenerSource,
-    runComposerToolActionSource.replace(/^  /gm, ''),
+    runComposerToolActionSource.replace(/^ {2}/gm, ''),
     'globalThis.runComposerToolAction = runActionByIcon;',
   ].join('\n'),
   composerToolActionContext,
@@ -207,8 +199,16 @@ assert.equal(
   1,
   'A closed tool menu should resolve its composer opener',
 );
-assert.equal(composerToolActionState.openerClicks, 1, 'A closed tool menu should open exactly once');
-assert.equal(composerToolActionState.itemClicks, 1, 'The selected tool icon target should still click exactly once');
+assert.equal(
+  composerToolActionState.openerClicks,
+  1,
+  'A closed tool menu should open exactly once',
+);
+assert.equal(
+  composerToolActionState.itemClicks,
+  1,
+  'The selected tool icon target should still click exactly once',
+);
 await composerToolActionContext.runComposerToolAction('img:deep_research_app/icon.png', {
   waitActionItem: 100,
   beforeFinalClick: 0,
@@ -225,10 +225,18 @@ for (const [actionId, expectedTargetRef] of [
   ['shortcutKeyDeepResearch', 'composer-deep-research-action'],
   ['shortcutKeyAddPhotosFiles', 'composer-add-photos-files-action'],
 ]) {
-  const action = shortcutMetadata.SHORTCUT_ACTIONS.find((candidate) => candidate.actionId === actionId);
+  const action = shortcutMetadata.SHORTCUT_ACTIONS.find(
+    (candidate) => candidate.actionId === actionId,
+  );
   assert.ok(action, `${actionId} should remain active`);
-  assert.ok(action.targetRefs.includes('composer-plus-button'), `${actionId} should use the shared opener`);
-  assert.ok(action.targetRefs.includes(expectedTargetRef), `${actionId} should preserve its tool-specific icon target`);
+  assert.ok(
+    action.targetRefs.includes('composer-plus-button'),
+    `${actionId} should use the shared opener`,
+  );
+  assert.ok(
+    action.targetRefs.includes(expectedTargetRef),
+    `${actionId} should preserve its tool-specific icon target`,
+  );
 }
 
 const deepResearchTarget = descriptorById.get('composer-deep-research-action');
@@ -246,9 +254,12 @@ const expectedComposerSelectors = [
   'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
 ];
 const composerInputSelectorsSource = contentSource.match(
-  /  const COMPOSER_INPUT_SELECTORS = \[[\s\S]*?\n  \];/,
+  / {2}const COMPOSER_INPUT_SELECTORS = \[[\s\S]*?\n {2}\];/,
 )?.[0];
-assert.ok(composerInputSelectorsSource, 'The composer target selector contract should remain inspectable');
+assert.ok(
+  composerInputSelectorsSource,
+  'The composer target selector contract should remain inspectable',
+);
 const composerSelectorsContext = {};
 runInNewContext(
   `${composerInputSelectorsSource}\nglobalThis.composerInputSelectors = COMPOSER_INPUT_SELECTORS;`,
@@ -270,18 +281,8 @@ assert.equal(
   'The composer descriptor should match the observed form-scoped live textbox structures',
 );
 assert.deepEqual(composerTarget.matchGroups, [
-  [
-    'data-thread-find-composer="true"',
-    'ProseMirror',
-    'contenteditable="true"',
-    'role="textbox"',
-  ],
-  [
-    'data-chatgpt-composer',
-    'data-composer-markdown',
-    'contenteditable="true"',
-    'role="textbox"',
-  ],
+  ['data-thread-find-composer="true"', 'ProseMirror', 'contenteditable="true"', 'role="textbox"'],
+  ['data-chatgpt-composer', 'data-composer-markdown', 'contenteditable="true"', 'role="textbox"'],
 ]);
 assert.deepEqual(composerTarget.searchNeedles, [
   'data-thread-find-composer="true"',
@@ -370,7 +371,7 @@ assert.deepEqual(stopAndTranscribeAction.targetRefs, ['stop-dictation-button']);
 assert.equal(stopAndTranscribeAction.activationProbe.mode, 'manual-only');
 assert.equal(stopAndTranscribeAction.activationProbe.safe, false);
 const dictationRuntimeSource = contentSource.match(
-  /    const DictationShortcut = \(\(\) => \{[\s\S]*?\n    \}\)\(\);/,
+  / {4}const DictationShortcut = \(\(\) => \{[\s\S]*?\n {4}\}\)\(\);/,
 )?.[0];
 assert.ok(dictationRuntimeSource, 'The Dictation shortcut runtime should remain inspectable');
 assert.doesNotMatch(
@@ -386,8 +387,7 @@ assert.equal(
 const activeTargetIds = new Set(
   shortcutMetadata.SHORTCUT_ACTIONS.filter((action) =>
     ['scrape-targets', 'manual-only'].includes(action.validationMode),
-  )
-    .flatMap((action) => action.targetRefs),
+  ).flatMap((action) => action.targetRefs),
 );
 for (const targetId of Object.keys(currentTargetTokens)) {
   assert.ok(activeTargetIds.has(targetId), `${targetId} should be covered by an active shortcut`);
@@ -426,7 +426,10 @@ class FixtureDictationNode {
       return this.buttons.find((button) => button.getAttribute('aria-label') === ariaLabel) || null;
     }
     if (selector === '#composer-submit-button') {
-      return this.buttons.find((button) => button.getAttribute('id') === 'composer-submit-button') || null;
+      return (
+        this.buttons.find((button) => button.getAttribute('id') === 'composer-submit-button') ||
+        null
+      );
     }
     const testId = selector.match(/^button\[data-testid="([^"]+)"\]$/)?.[1];
     if (testId) {
@@ -492,13 +495,21 @@ const dictationContext = {
   smartClick: (button) => button.click(),
 };
 runInNewContext(
-  `${dictationRuntimeSource.replace(/^    /gm, '')}\nglobalThis.runDictationToggle = DictationShortcut.runToggle;\nglobalThis.runStopAndTranscribeDictation = DictationShortcut.runStopAndTranscribe;\nglobalThis.runDictationCancel = DictationShortcut.runCancel;`,
+  `${dictationRuntimeSource.replace(/^ {4}/gm, '')}\nglobalThis.runDictationToggle = DictationShortcut.runToggle;\nglobalThis.runStopAndTranscribeDictation = DictationShortcut.runStopAndTranscribe;\nglobalThis.runDictationCancel = DictationShortcut.runCancel;`,
   dictationContext,
 );
 dictationContext.runDictationToggle();
-assert.equal(dictateButton.clickCount, 1, 'The observed Dictate button should be clicked exactly once');
+assert.equal(
+  dictateButton.clickCount,
+  1,
+  'The observed Dictate button should be clicked exactly once',
+);
 assert.equal(voiceModeButton.clickCount, 0, 'The adjacent Start Voice button must not be clicked');
-assert.equal(composerSendButton.clickCount, 0, 'The composer Send button must not be clicked as Dictate');
+assert.equal(
+  composerSendButton.clickCount,
+  0,
+  'The composer Send button must not be clicked as Dictate',
+);
 
 dictationComposer.buttons = [cancelDictationButton, stopDictationButton, transcribeAndSendButton];
 scheduledTimers.shift()();
@@ -533,21 +544,21 @@ assert.equal(
 );
 assert.equal(composerSendButton.clickCount, 0, 'Stop and Transcribe must not click composer Send');
 
-const branchMenuHelperStart = contentSource.indexOf('  const DEFAULT_MENU_DELAYS = Object.freeze({');
+const branchMenuHelperStart = contentSource.indexOf(
+  '  const DEFAULT_MENU_DELAYS = Object.freeze({',
+);
 const branchMenuHelperEnd = contentSource.indexOf(
   '  // Runtime bridge: model-picker thinking fallbacks and shortcut handlers reuse this Radix menu path.',
   branchMenuHelperStart,
 );
 const branchMenuHelperSource = contentSource
   .slice(branchMenuHelperStart, branchMenuHelperEnd)
-  .replace(/^  /gm, '');
-const branchShortcutSource = contentSource.match(
-  /    function runBranchInNewChatShortcut\(\) \{[\s\S]*?\n    \}/,
-)?.[0].replace(/^    /gm, '');
+  .replace(/^ {2}/gm, '');
+const branchShortcutSource = contentSource
+  .match(/ {4}function runBranchInNewChatShortcut\(\) \{[\s\S]*?\n {4}\}/)?.[0]
+  .replace(/^ {4}/gm, '');
 assert.ok(
-  branchMenuHelperStart >= 0 &&
-    branchMenuHelperEnd > branchMenuHelperStart &&
-    branchShortcutSource,
+  branchMenuHelperStart >= 0 && branchMenuHelperEnd > branchMenuHelperStart && branchShortcutSource,
   'Branch in new chat should use the inspectable shared menu cascade',
 );
 assert.match(
@@ -606,9 +617,7 @@ class FixtureBranchNode {
       return (this.getAttribute('class') || '').split(/\s+/).includes('turn-action-controls');
     }
     if (selector.startsWith(':is(') && selector.includes('[role="menuitem"]')) {
-      return ['menuitem', 'menuitemradio', 'menuitemcheckbox'].includes(
-        this.getAttribute('role'),
-      );
+      return ['menuitem', 'menuitemradio', 'menuitemcheckbox'].includes(this.getAttribute('role'));
     }
     return false;
   }
@@ -790,10 +799,26 @@ runInNewContext(
 );
 branchMenuContext.runBranchShortcut();
 while (branchTimers.length) branchTimers.shift().callback();
-assert.equal(latestOverflowButton.focusCount, 1, 'Branch should open the lowest visible response menu');
-assert.equal(olderOverflowButton.focusCount, 0, 'Branch must not open the higher distractor response menu');
-assert.equal(latestBranchItem.clickCount, 1, 'Branch should activate the exact item in the opened menu once');
-assert.equal(olderBranchItem.clickCount, 0, 'Branch must not activate the item in another open response menu');
+assert.equal(
+  latestOverflowButton.focusCount,
+  1,
+  'Branch should open the lowest visible response menu',
+);
+assert.equal(
+  olderOverflowButton.focusCount,
+  0,
+  'Branch must not open the higher distractor response menu',
+);
+assert.equal(
+  latestBranchItem.clickCount,
+  1,
+  'Branch should activate the exact item in the opened menu once',
+);
+assert.equal(
+  olderBranchItem.clickCount,
+  0,
+  'Branch must not activate the item in another open response menu',
+);
 
 delete latestOverflowButton.attributes['aria-controls'];
 branchMenuContext.runBranchShortcut();
@@ -844,7 +869,7 @@ assert.equal(
 );
 
 const readAloudRuntimeSource = contentSource.match(
-  /const READ_ALOUD_TARGET_BUTTON_ATTRIBUTE = 'data-csp-read-aloud-shortcut-target';[\s\S]*?function runReadAloudShortcut\(\) \{[\s\S]*?\n    \}/,
+  /const READ_ALOUD_TARGET_BUTTON_ATTRIBUTE = 'data-csp-read-aloud-shortcut-target';[\s\S]*?function runReadAloudShortcut\(\) \{[\s\S]*?\n {4}\}/,
 )?.[0];
 assert.ok(readAloudRuntimeSource, 'Read Aloud shortcut target logic should remain inspectable');
 assert.match(
@@ -878,13 +903,13 @@ class FixtureHTMLElement {
 }
 
 const composerVisibilitySource = contentSource.match(
-  /  function isDirectActionVisible\(el\) \{[\s\S]*?\n  \}/,
+  / {2}function isDirectActionVisible\(el\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const composerVisibleFinderSource = contentSource.match(
-  /  function findFirstVisibleElement\(selectors\) \{[\s\S]*?\n  \}/,
+  / {2}function findFirstVisibleElement\(selectors\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const composerActivationSource = contentSource.match(
-  /  function triggerDirectComposerActivation\(\) \{[\s\S]*?\n  \}/,
+  / {2}function triggerDirectComposerActivation\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 assert.ok(
   composerVisibilitySource && composerVisibleFinderSource && composerActivationSource,
@@ -1053,7 +1078,11 @@ const markedComposer = runComposerActivationFixture([
     inputAttributes: { 'data-composer-markdown': '', contenteditable: 'true', role: 'textbox' },
   },
 ]);
-assert.equal(markedComposer.result, true, 'Activate Input should preserve the marked composer variant');
+assert.equal(
+  markedComposer.result,
+  true,
+  'Activate Input should preserve the marked composer variant',
+);
 assert.equal(markedComposer.activeElement, markedComposer.composerInputs[0]);
 assert.deepEqual(markedComposer.selectorQueries, expectedComposerSelectors);
 assert.equal(markedComposer.selectedRange.target, markedComposer.composerInputs[0]);
@@ -1069,28 +1098,32 @@ const nonComposerTextboxes = runComposerActivationFixture([
     inputAttributes: { 'data-composer-markdown': '', contenteditable: 'true', role: 'textbox' },
   },
 ]);
-assert.equal(nonComposerTextboxes.result, false, 'Activate Input must not focus Edit or Search textboxes');
+assert.equal(
+  nonComposerTextboxes.result,
+  false,
+  'Activate Input must not focus Edit or Search textboxes',
+);
 assert.equal(nonComposerTextboxes.activeElement, null);
 assert.equal(nonComposerTextboxes.focusCalls.length, 0);
 assert.deepEqual(nonComposerTextboxes.selectorQueries, expectedComposerSelectors);
 
 const searchConversationSelectorsSource = contentSource.match(
-  /  const SEARCH_CONVERSATION_SELECTORS = \[[\s\S]*?\n  \];/,
+  / {2}const SEARCH_CONVERSATION_SELECTORS = \[[\s\S]*?\n {2}\];/,
 )?.[0];
 const searchSafeClickSource = contentSource.match(
-  /  function safeClick\(el\) \{[\s\S]*?\n  \}/,
+  / {2}function safeClick\(el\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const searchPointerClickSource = contentSource.match(
-  /  function safeClickSearchConversationButton\(el\) \{[\s\S]*?\n  \}/,
+  / {2}function safeClickSearchConversationButton\(el\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const searchVisibilitySource = contentSource.match(
-  /  function isDirectActionVisible\(el\) \{[\s\S]*?\n  \}/,
+  / {2}function isDirectActionVisible\(el\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const searchVisibleFinderSource = contentSource.match(
-  /  function findFirstVisibleElement\(selectors\) \{[\s\S]*?\n  \}/,
+  / {2}function findFirstVisibleElement\(selectors\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const searchShortcutSource = contentSource.match(
-  /  function triggerNativeSearchConversationButton\(\) \{[\s\S]*?\n  \}/,
+  / {2}function triggerNativeSearchConversationButton\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 assert.ok(
   searchConversationSelectorsSource &&
@@ -1179,7 +1212,11 @@ assert.ok(
 );
 assert.equal(searchShortcutContext.runSearchConversationShortcut(), true);
 assert.deepEqual(searchSelectorQueries, [currentSearchSelector]);
-assert.equal(hiddenSearchButton.clickCount, 0, 'Search must skip the hidden zero-size rail duplicate');
+assert.equal(
+  hiddenSearchButton.clickCount,
+  0,
+  'Search must skip the hidden zero-size rail duplicate',
+);
 assert.equal(
   visibleSearchButton.clickCount,
   1,
@@ -1192,28 +1229,28 @@ assert.equal(
 );
 
 const newChatSelectorsSource = contentSource.match(
-  /  const NEW_CHAT_SELECTORS = \[[\s\S]*?\n  \];/,
+  / {2}const NEW_CHAT_SELECTORS = \[[\s\S]*?\n {2}\];/,
 )?.[0];
 const narrowSidebarSelectorsSource = contentSource.match(
-  /  const NARROW_SIDEBAR_POPOVER_SELECTORS = \[[\s\S]*?\n  \];/,
+  / {2}const NARROW_SIDEBAR_POPOVER_SELECTORS = \[[\s\S]*?\n {2}\];/,
 )?.[0];
 const newChatSpriteTokensSource = contentSource.match(
-  /  const NEW_CHAT_SPRITE_FRAGMENT = '[^']+';\n  const NEW_CHAT_SPRITE_FALLBACK_FRAGMENT = '[^']+';/,
+  / {2}const NEW_CHAT_SPRITE_FRAGMENT = '[^']+';\n {2}const NEW_CHAT_SPRITE_FALLBACK_FRAGMENT = '[^']+';/,
 )?.[0];
 const newChatOpenPopoverSource = contentSource.match(
-  /  async function openNarrowSidebarPopover\([^)]*\) \{[\s\S]*?\n  \}/,
+  / {2}async function openNarrowSidebarPopover\([^)]*\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const newChatWaitForTargetSource = contentSource.match(
-  /  function waitForFirstVisibleElement\(selectors, timeoutMs = 800\) \{[\s\S]*?\n  \}/,
+  / {2}function waitForFirstVisibleElement\(selectors, timeoutMs = 800\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const newChatFallbackSource = contentSource.match(
-  /  function navigateToNewConversationFallback\(\) \{[\s\S]*?\n  \}/,
+  / {2}function navigateToNewConversationFallback\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const newChatNarrowShortcutSource = contentSource.match(
-  /  async function triggerNativeNewConversationFromNarrowPopover\(\) \{[\s\S]*?\n  \}/,
+  / {2}async function triggerNativeNewConversationFromNarrowPopover\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const newChatShortcutSource = contentSource.match(
-  /  function triggerNativeNewConversationButton\(\) \{[\s\S]*?\n  \}/,
+  / {2}function triggerNativeNewConversationButton\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 assert.ok(
   newChatSelectorsSource &&
@@ -1271,25 +1308,32 @@ class FixtureNewChatButton extends FixtureHTMLElement {
 function createNewChatFixture() {
   const projectActionCandidates = Array.from(
     { length: 5 },
-    () => new FixtureNewChatButton('M6.33325 1.88379 20x20 project action', {
-      left: 40,
-      top: 80,
-      width: 20,
-      height: 20,
-    }),
+    () =>
+      new FixtureNewChatButton('M6.33325 1.88379 20x20 project action', {
+        left: 40,
+        top: 80,
+        width: 20,
+        height: 20,
+      }),
   );
-  const hiddenProjectActionDuplicate = new FixtureNewChatButton(
-    'M6.33325 1.88379 0x0 duplicate',
-    { left: 0, top: 0, width: 0, height: 0 },
-  );
-  const hiddenGenericDuplicate = new FixtureNewChatButton(
-    'M8.16675 2.50127 0x0 duplicate',
-    { left: 0, top: 0, width: 0, height: 0 },
-  );
-  const genericNewChatButton = new FixtureNewChatButton(
-    'M8.16675 2.50127 generic action',
-    { left: 12, top: 20, width: 36, height: 36 },
-  );
+  const hiddenProjectActionDuplicate = new FixtureNewChatButton('M6.33325 1.88379 0x0 duplicate', {
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  });
+  const hiddenGenericDuplicate = new FixtureNewChatButton('M8.16675 2.50127 0x0 duplicate', {
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  });
+  const genericNewChatButton = new FixtureNewChatButton('M8.16675 2.50127 generic action', {
+    left: 12,
+    top: 20,
+    width: 36,
+    height: 36,
+  });
   const narrowPopoverOpener = new FixtureNewChatButton('sidebar opener', {
     left: 4,
     top: 8,
@@ -1368,14 +1412,20 @@ assert.ok(
   'The project-row action SVG must not remain in the generic selector list',
 );
 assert.ok(
-  Array.from(newChatFixture.context.newChatSelectors).every((selector) => !selector.includes('aria-label')),
+  Array.from(newChatFixture.context.newChatSelectors).every(
+    (selector) => !selector.includes('aria-label'),
+  ),
   'New Chat target resolution must not depend on localized accessible labels',
 );
 assert.equal(newChatFixture.projectActionCandidates.length, 5);
 assert.equal(newChatFixture.hiddenProjectActionDuplicate.getBoundingClientRect().width, 0);
 assert.equal(newChatFixture.context.runNewChatShortcut(), true);
 assert.deepEqual(newChatFixture.selectorQueries, [currentNewChatSelector]);
-assert.equal(newChatFixture.hiddenGenericDuplicate.clickCount, 0, 'New Chat must skip hidden duplicates');
+assert.equal(
+  newChatFixture.hiddenGenericDuplicate.clickCount,
+  0,
+  'New Chat must skip hidden duplicates',
+);
 assert.equal(
   newChatFixture.genericNewChatButton.clickCount,
   1,
@@ -1402,13 +1452,13 @@ assert.ok(
 );
 
 const newConversationBinding = contentSource.match(
-  /shortcutKeyNewConversation: function newConversation\(\) \{[\s\S]*?\n      \},/,
+  /shortcutKeyNewConversation: function newConversation\(\) \{[\s\S]*?\n {6}\},/,
 )?.[0];
 const chatWorkToggleHelper = contentSource.match(
-  /  async function triggerNativeChatWorkToggle\(\) \{[\s\S]*?\n  \}/,
+  / {2}async function triggerNativeChatWorkToggle\(\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const chatWorkToggleBinding = contentSource.match(
-  /shortcutKeyToggleChatWork: \(\) => \{[\s\S]*?\n      \},/,
+  /shortcutKeyToggleChatWork: \(\) => \{[\s\S]*?\n {6}\},/,
 )?.[0];
 assert.ok(newConversationBinding && chatWorkToggleHelper && chatWorkToggleBinding);
 assert.match(newConversationBinding, /triggerNativeNewConversationButton\(\)/);
@@ -1472,10 +1522,7 @@ class FixtureReadAloudButton extends FixtureHTMLElement {
     else this.turn.stopCount = (this.turn.stopCount ?? 0) + 1;
 
     const nextKind = this.kind === 'play' ? 'stop' : 'play';
-    this.turn.actionControls.replaceButton(
-      this,
-      new FixtureReadAloudButton(this.turn, nextKind),
-    );
+    this.turn.actionControls.replaceButton(this, new FixtureReadAloudButton(this.turn, nextKind));
   }
 }
 
@@ -1491,16 +1538,21 @@ const fixtureDocument = {
   documentElement: fixtureDocumentElement,
   querySelector(selector) {
     if (selector === '[data-csp-read-aloud-shortcut-target="true"]') {
-      return [olderResponse, latestResponse]
-        .flatMap((turn) => turn.actionControls.querySelectorAll('button'))
-        .find((button) => button.getAttribute('data-csp-read-aloud-shortcut-target') === 'true') ?? null;
+      return (
+        [olderResponse, latestResponse]
+          .flatMap((turn) => turn.actionControls.querySelectorAll('button'))
+          .find(
+            (button) => button.getAttribute('data-csp-read-aloud-shortcut-target') === 'true',
+          ) ?? null
+      );
     }
     return null;
   },
   querySelectorAll(selector) {
     if (selector === '.turn-action-controls button[aria-pressed]') {
-      return [olderResponse, latestResponse]
-        .flatMap((turn) => turn.actionControls.querySelectorAll('button'));
+      return [olderResponse, latestResponse].flatMap((turn) =>
+        turn.actionControls.querySelectorAll('button'),
+      );
     }
     if (selector === '[data-turn-key], [data-testid^="conversation-turn-"]') {
       return [olderResponse, latestResponse].filter((turn) => turn.isConnected);
@@ -1528,7 +1580,11 @@ const activateReadAloudInFreshContext = () => {
 
 activateReadAloudInFreshContext();
 const latestStop = latestResponse.actionControls.buttons[0];
-assert.equal(latestStop.kind, 'stop', 'The first shortcut should activate Play on the latest response');
+assert.equal(
+  latestStop.kind,
+  'stop',
+  'The first shortcut should activate Play on the latest response',
+);
 assert.equal(olderPlay.kind, 'play', 'The next-higher response should remain at Play');
 assert.equal(
   fixtureDocumentElement.getAttribute('data-csp-read-aloud-target-turn-value'),
@@ -1537,20 +1593,31 @@ assert.equal(
 );
 activateReadAloudInFreshContext();
 
-assert.equal(latestResponse.stopCount, 1, 'The second shortcut should activate Stop on that same response');
+assert.equal(
+  latestResponse.stopCount,
+  1,
+  'The second shortcut should activate Stop on that same response',
+);
 assert.equal(latestResponse.playCount, 1, 'The latest response should have started only once');
-assert.equal(olderResponse.playCount ?? 0, 0, 'The second shortcut must not start the next-higher response');
+assert.equal(
+  olderResponse.playCount ?? 0,
+  0,
+  'The second shortcut must not start the next-higher response',
+);
 
 const shareClickRuntimeSource = contentSource.match(
-  /  const clickButtonBySelector = async \([\s\S]*?\n  \};/,
+  / {2}const clickButtonBySelector = async \([\s\S]*?\n {2}\};/,
 )?.[0];
 assert.ok(shareClickRuntimeSource, 'The shared selector click helper should remain inspectable');
 const shareDirectClickRuntimeSource = contentSource.match(
   /const clickElementLikeUser = \(el\) => \{[\s\S]*?\n\};/,
 )?.[0];
-assert.ok(shareDirectClickRuntimeSource, 'The shared direct-click helper should remain inspectable');
+assert.ok(
+  shareDirectClickRuntimeSource,
+  'The shared direct-click helper should remain inspectable',
+);
 const shareShortcutSource = contentSource.match(
-  /shortcutKeyShare: \(\) => \{[\s\S]*?\n      \},/,
+  /shortcutKeyShare: \(\) => \{[\s\S]*?\n {6}\},/,
 )?.[0];
 assert.ok(shareShortcutSource, 'The Share shortcut should activate the current native control');
 assert.match(
@@ -1620,7 +1687,7 @@ staleShareButton.scrollIntoView = () => {
 let shareSelectorQueryCount = 0;
 let shareWaitForCalls = 0;
 let shareSleepCalls = 0;
-let moveTopBarToBottom = false;
+const moveTopBarToBottom = false;
 const shareShortcutContext = {
   document: {
     querySelectorAll(selector) {
@@ -1653,18 +1720,37 @@ runInNewContext(
   shareShortcutContext,
 );
 shareShortcutContext.runShareShortcut();
-assert.equal(shareSelectorQueryCount, 2, 'Immediate Share activation should re-resolve after scrolling');
-assert.equal(shareWaitForCalls, 0, 'Share activation must not yield to asynchronous target polling');
+assert.equal(
+  shareSelectorQueryCount,
+  2,
+  'Immediate Share activation should re-resolve after scrolling',
+);
+assert.equal(
+  shareWaitForCalls,
+  0,
+  'Share activation must not yield to asynchronous target polling',
+);
 assert.equal(shareSleepCalls, 0, 'Share activation must not wait for the generic click delay');
-assert.equal(staleShareButton.clickCount, 0, 'Share must not click a node detached by scrollIntoView');
-assert.equal(currentShareButton.clickCount, 1, 'Share should click the current native button exactly once');
+assert.equal(
+  staleShareButton.clickCount,
+  0,
+  'Share must not click a node detached by scrollIntoView',
+);
+assert.equal(
+  currentShareButton.clickCount,
+  1,
+  'Share should click the current native button exactly once',
+);
 
 const editTurnLogicStart = contentSource.indexOf('      const EDIT_ICON_TOKENS =');
-const editTurnLogicEnd = contentSource.indexOf('      const getEditButtonData =', editTurnLogicStart);
+const editTurnLogicEnd = contentSource.indexOf(
+  '      const getEditButtonData =',
+  editTurnLogicStart,
+);
 assert.ok(editTurnLogicStart >= 0 && editTurnLogicEnd > editTurnLogicStart);
 const editTurnLogicSource = contentSource
   .slice(editTurnLogicStart, editTurnLogicEnd)
-  .replace(/^      /gm, '');
+  .replace(/^ {6}/gm, '');
 const editTurnContext = {
   CONVERSATION_TURN_SELECTOR: '[data-turn-key], [data-testid^="conversation-turn-"]',
   escapeAttributeSelectorFragment: (value) => value,
@@ -1674,9 +1760,7 @@ const editTurnContext = {
       .map((selector) => `${prefix} ${selector.trim()}`)
       .join(', '),
   svgSelectorForTokens: (tokens) =>
-    tokens
-      .map((token) => `svg path[d^="${token}"], svg use[href*="${token}"]`)
-      .join(', '),
+    tokens.map((token) => `svg path[d^="${token}"], svg use[href*="${token}"]`).join(', '),
   document: { querySelectorAll: () => [] },
 };
 runInNewContext(
@@ -1688,7 +1772,11 @@ assert.deepEqual(
   ['button svg path[d^="M11.7313"], button svg use[href*="M11.7313"]'],
   'Edit target resolution should use only its language-independent icon structure',
 );
-assert.doesNotMatch(editTurnLogicSource, /aria-label/, 'Edit target resolution must not depend on localized labels');
+assert.doesNotMatch(
+  editTurnLogicSource,
+  /aria-label/,
+  'Edit target resolution must not depend on localized labels',
+);
 const makeEditTurn = (attributes) => ({
   attributes: { ...attributes },
   isConnected: true,
@@ -1723,7 +1811,11 @@ const editButton = {
   },
 };
 const editAnchor = editTurnContext.getEditTargetAnchor(editButton);
-assert.equal(editAnchor.userEditTurnValidated, true, 'A self-marked user bubble validates its edit target');
+assert.equal(
+  editAnchor.userEditTurnValidated,
+  true,
+  'A self-marked user bubble validates its edit target',
+);
 editedUserTurn.attributes['data-user-message-bubble'] = 'false';
 assert.equal(
   editTurnContext.resolveEditTargetTurn(editAnchor),
@@ -1742,11 +1834,14 @@ assert.equal(
 );
 
 const editActivationStart = contentSource.indexOf('      const clickEditButton =');
-const editActivationEnd = contentSource.indexOf('\n      const getScrollContainerMetrics', editActivationStart);
+const editActivationEnd = contentSource.indexOf(
+  '\n      const getScrollContainerMetrics',
+  editActivationStart,
+);
 assert.ok(editActivationStart >= 0 && editActivationEnd > editActivationStart);
 const editActivationSource = contentSource
   .slice(editActivationStart, editActivationEnd)
-  .replace(/^      /gm, '');
+  .replace(/^ {6}/gm, '');
 const editActivationEvents = [];
 const editActivationContext = {
   window: { PointerEvent: FixturePointerEvent },
@@ -1777,9 +1872,21 @@ editActivationButton.click = () => {
   editActivationButton.editModeEntered = true;
 };
 assert.equal(editActivationContext.clickEditButton(editActivationButton), true);
-assert.equal(editActivationButton.focusCount, 1, 'Edit should focus its resolved native button once');
-assert.equal(editActivationButton.clickCount, 1, 'Edit should enter edit mode with exactly one click activation');
-assert.equal(editActivationButton.editModeEntered, true, 'The activation should target Edit, not a submit control');
+assert.equal(
+  editActivationButton.focusCount,
+  1,
+  'Edit should focus its resolved native button once',
+);
+assert.equal(
+  editActivationButton.clickCount,
+  1,
+  'Edit should enter edit mode with exactly one click activation',
+);
+assert.equal(
+  editActivationButton.editModeEntered,
+  true,
+  'The activation should target Edit, not a submit control',
+);
 assert.equal(editActivationEvents.filter((eventType) => eventType === 'pointerdown').length, 1);
 assert.equal(editActivationEvents.filter((eventType) => eventType === 'pointerup').length, 1);
 assert.equal(editActivationEvents.filter((eventType) => eventType === 'click').length, 1);
@@ -1790,7 +1897,11 @@ assert.ok(
 const disabledEditButton = new FixtureShareButton();
 disabledEditButton.disabled = true;
 assert.equal(editActivationContext.clickEditButton(disabledEditButton), false);
-assert.equal(disabledEditButton.clickCount, 0, 'A disabled native Edit button must not be activated');
+assert.equal(
+  disabledEditButton.clickCount,
+  0,
+  'A disabled native Edit button must not be activated',
+);
 
 const copyTargetLogicStart = contentSource.indexOf('  const findButtonsBySvgPathPrefix =');
 const copyTargetLogicEnd = contentSource.indexOf(
@@ -1799,15 +1910,15 @@ const copyTargetLogicEnd = contentSource.indexOf(
 );
 const copyTargetLogicSource = contentSource
   .slice(copyTargetLogicStart, copyTargetLogicEnd)
-  .replace(/^  /gm, '');
+  .replace(/^ {2}/gm, '');
 const nativeCodeBoxCopyFinderSource = copyTargetLogicSource.match(
   /function findNativeCodeBoxCopyButtons\(\) \{[\s\S]*?\n\}/,
 )?.[0];
 const copyViewportSource = contentSource.match(
-  /  const isFullyInViewport = \(el\) => \{[\s\S]*?\n  \};/,
+  / {2}const isFullyInViewport = \(el\) => \{[\s\S]*?\n {2}\};/,
 )?.[0];
 const copyFromLowestSource = contentSource.match(
-  /  async function copyFromLowestButton\(dPrefix, opts = \{\}\) \{[\s\S]*?\n  \}/,
+  / {2}async function copyFromLowestButton\(dPrefix, opts = \{\}\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const messageCopyIconPathPrefix = contentSource.match(
   /const COPY_MESSAGE_ACTION_ICON_PATH_PREFIX = '([^']+)';/,
@@ -1925,7 +2036,9 @@ class FixtureCopyNode extends FixtureHTMLElement {
   }
 }
 
-function makeCodeBoxCopyFixture({ copyButtonRect = { top: 80, left: 20, bottom: 100, right: 80 } } = {}) {
+function makeCodeBoxCopyFixture({
+  copyButtonRect = { top: 80, left: 20, bottom: 100, right: 80 },
+} = {}) {
   const wrapper = new FixtureCopyNode({
     attributes: { 'data-markdown-copy': 'code-block' },
   });
@@ -1998,17 +2111,19 @@ function makeCodeBoxCopyFixture({ copyButtonRect = { top: 80, left: 20, bottom: 
     [
       `const COPY_MESSAGE_ACTION_ICON_PATH_PREFIX = '${messageCopyIconPathPrefix}';`,
       'const toTokenArray = (tokens) => (Array.isArray(tokens) ? tokens : [tokens]);',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal JavaScript source evaluated by this fixture.
       'const svgSelectorForTokens = (tokens) => `svg path[d^="${Array.isArray(tokens) ? tokens[0] : tokens}"]`;',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal JavaScript source evaluated by this fixture.
       'const withPrefix = (selector, prefix) => `${prefix} ${selector}`;',
       'const isAboveComposer = () => true;',
-      copyViewportSource.replace(/^  /gm, ''),
+      copyViewportSource.replace(/^ {2}/gm, ''),
       copyTargetLogicSource,
       'let copyLowestRunToken = 0;',
       'const cancelCopyLowestDelays = () => {};',
       'const delayCopyLowest = async () => true;',
       'let copyMessageFromButton = () => { copyCounters.formattedMessageCopy += 1; return false; };',
       'function sanitizeCopiedText(text) { copyCounters.clipboardTransform += 1; return text; }',
-      copyFromLowestSource.replace(/^  /gm, ''),
+      copyFromLowestSource.replace(/^ {2}/gm, ''),
       'globalThis.getVisibleCopyButtons = getVisibleCopyButtonsSorted;',
       `globalThis.runAltCCopy = () => copyFromLowestButton(['${messageCopyIconPathPrefix}'], { delayBeforeClick: 0 });`,
     ].join('\n'),
@@ -2025,10 +2140,13 @@ function makeCodeBoxCopyFixture({ copyButtonRect = { top: 80, left: 20, bottom: 
 }
 
 const codeBoxCopyFixture = makeCodeBoxCopyFixture();
-const visibleCodeBoxCopyTargets = codeBoxCopyFixture.context.getVisibleCopyButtons(
-  messageCopyIconPathPrefix,
+const visibleCodeBoxCopyTargets =
+  codeBoxCopyFixture.context.getVisibleCopyButtons(messageCopyIconPathPrefix);
+assert.equal(
+  visibleCodeBoxCopyTargets.length,
+  1,
+  'Only the native code-block Copy button should qualify',
 );
-assert.equal(visibleCodeBoxCopyTargets.length, 1, 'Only the native code-block Copy button should qualify');
 assert.equal(
   visibleCodeBoxCopyTargets[0],
   codeBoxCopyFixture.nativeCopyButton,
@@ -2036,8 +2154,16 @@ assert.equal(
 );
 await codeBoxCopyFixture.context.runAltCCopy();
 await codeBoxCopyFixture.context.runAltCCopy();
-assert.equal(codeBoxCopyFixture.nativeCopyButton.clickCount, 2, 'Repeated Alt+C should click native Copy once per activation');
-assert.equal(codeBoxCopyFixture.wordWrapButton.clickCount, 0, 'Alt+C must not click the word-wrap control');
+assert.equal(
+  codeBoxCopyFixture.nativeCopyButton.clickCount,
+  2,
+  'Repeated Alt+C should click native Copy once per activation',
+);
+assert.equal(
+  codeBoxCopyFixture.wordWrapButton.clickCount,
+  0,
+  'Alt+C must not click the word-wrap control',
+);
 assert.equal(
   codeBoxCopyFixture.scrollToBottomButton.clickCount,
   0,
@@ -2060,6 +2186,12 @@ assert.equal(
   'A hidden native code-block Copy button should not be selected',
 );
 await hiddenCodeBoxCopyFixture.context.runAltCCopy();
-assert.equal(hiddenCodeBoxCopyFixture.nativeCopyButton.clickCount, 0, 'A hidden copy target should be a no-op');
+assert.equal(
+  hiddenCodeBoxCopyFixture.nativeCopyButton.clickCount,
+  0,
+  'A hidden copy target should be a no-op',
+);
 
-console.log('live shortcut targets match current ChatGPT controls; Branch menu cascade, Read Aloud, same-task Share, validated Edit turns, and exact native code-block Copy pass focused fixtures');
+console.log(
+  'live shortcut targets match current ChatGPT controls; Branch menu cascade, Read Aloud, same-task Share, validated Edit turns, and exact native code-block Copy pass focused fixtures',
+);

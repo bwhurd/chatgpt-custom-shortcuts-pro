@@ -6,8 +6,8 @@ const contentSource = await readFile(new URL('../extension/content.js', import.m
 const extractBetween = (startMarker, endMarker, name) => {
   const start = contentSource.indexOf(startMarker);
   const end = contentSource.indexOf(endMarker, start);
-  assert.ok(start >= 0 && end > start, name + ' source markers should remain inspectable');
-  return contentSource.slice(start, end).replace(/^      /gm, '');
+  assert.ok(start >= 0 && end > start, `${name} source markers should remain inspectable`);
+  return contentSource.slice(start, end).replace(/^ {6}/gm, '');
 };
 
 const directClickSource = contentSource.match(
@@ -25,11 +25,15 @@ const editActivationSource = extractBetween(
   '      const getScrollContainerMetrics',
   'Edit button activation',
 );
-const openEditSource = contentSource.match(
-  /      const openEditButton = \(button\) => \{[\s\S]*?\n      \};/,
-)?.[0]?.replace(/^      /gm, '');
+const openEditSource = contentSource
+  .match(/ {6}const openEditButton = \(button\) => \{[\s\S]*?\n {6}\};/)?.[0]
+  ?.replace(/^ {6}/gm, '');
 assert.ok(openEditSource, 'The Edit state opener should remain inspectable');
-assert.doesNotMatch(editTargetSource, /aria-label/i, 'Edit targeting must remain language-agnostic');
+assert.doesNotMatch(
+  editTargetSource,
+  /aria-label/i,
+  'Edit targeting must remain language-agnostic',
+);
 
 class FixtureMouseEvent {
   constructor(type, init) {
@@ -114,10 +118,10 @@ class FixtureEditButton {
 }
 
 const runtimeDependencies = [
-  "const CONVERSATION_TURN_SELECTOR = '[data-turn-key], [data-testid^=\"conversation-turn-\"]';",
+  'const CONVERSATION_TURN_SELECTOR = \'[data-turn-key], [data-testid^="conversation-turn-"]\';',
   'const escapeAttributeSelectorFragment = (value) => String(value);',
-  'const withPrefix = (selectors, prefix) => selectors.split(\',\').map((selector) => prefix + \' \' + selector.trim()).join(\', \');',
-  'const svgSelectorForTokens = (tokens) => tokens.map((token) => \'svg path[d^="\' + token + \'"], svg use[href*="\' + token + \'"]\').join(\', \');',
+  "const withPrefix = (selectors, prefix) => selectors.split(',').map((selector) => prefix + ' ' + selector.trim()).join(', ');",
+  "const svgSelectorForTokens = (tokens) => tokens.map((token) => 'svg path[d^=\"' + token + '\"], svg use[href*=\"' + token + '\"]').join(', ');",
   'const document = globalThis.document;',
   'const findOpenedEditField = (turn) => turn?.editField?.isConnected ? turn.editField : null;',
   'const handleOpenedEditField = () => { globalThis.openedEditFieldCallbackCalls += 1; };',
@@ -164,8 +168,16 @@ assert.equal(editButton.focusCount, 1, 'The resolved native Edit button should b
 assert.equal(editButton.focusOptions?.preventScroll, true);
 assert.equal(editButton.clickCount, 1, 'Edit should be activated exactly once');
 assert.equal(userTurn.enteredEditMode, true, 'One native click should enter Edit state');
-assert.equal(userTurn.editField?.contenteditable, 'true', 'The Edit state should expose its native textbox');
-assert.equal(context.waitForOpenedEditFieldCalls, 1, 'The activation should wait for the Edit state');
+assert.equal(
+  userTurn.editField?.contenteditable,
+  'true',
+  'The Edit state should expose its native textbox',
+);
+assert.equal(
+  context.waitForOpenedEditFieldCalls,
+  1,
+  'The activation should wait for the Edit state',
+);
 assert.equal(context.openedEditFieldCallbackCalls, 1, 'The opened Edit state should be observed');
 assert.equal(userTurn.submitCount, 0, 'Entering Edit must not submit edited text');
 assert.equal(userTurn.submittedText, null);
@@ -181,14 +193,22 @@ for (const attributes of [{ disabled: true }, { 'aria-disabled': 'true' }]) {
   const disabledTurn = new FixtureTurn('user');
   const disabledButton = new FixtureEditButton(disabledTurn, attributes);
   context.openEditButton(disabledButton);
-  assert.equal(disabledButton.clickCount, 0, 'A disabled native Edit control must not be activated');
+  assert.equal(
+    disabledButton.clickCount,
+    0,
+    'A disabled native Edit control must not be activated',
+  );
   assert.equal(disabledTurn.enteredEditMode, false);
 }
 
 const assistantTurn = new FixtureTurn('assistant');
 const foreignButton = new FixtureEditButton(assistantTurn);
 context.openEditButton(foreignButton);
-assert.equal(foreignButton.clickCount, 0, 'An Edit-looking control in a foreign turn must be rejected');
+assert.equal(
+  foreignButton.clickCount,
+  0,
+  'An Edit-looking control in a foreign turn must be rejected',
+);
 assert.equal(assistantTurn.enteredEditMode, false);
 assert.equal(assistantTurn.submitCount, 0);
 

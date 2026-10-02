@@ -1,11 +1,11 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium } from 'playwright';
 
 const logPath = process.argv[2];
 function write(entry) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
-  fs.appendFileSync(logPath, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
+  fs.appendFileSync(logPath, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
 }
 
 (async () => {
@@ -15,12 +15,19 @@ function write(entry) {
   async function watchPage(page) {
     if (seen.has(page)) return;
     seen.add(page);
-    page.on('console', (msg) => write({ type: 'console', url: page.url(), level: msg.type(), text: msg.text() }));
-    page.on('pageerror', (err) => write({ type: 'pageerror', url: page.url(), text: String(err && err.stack || err) }));
+    page.on('console', (msg) =>
+      write({ type: 'console', url: page.url(), level: msg.type(), text: msg.text() }),
+    );
+    page.on('pageerror', (err) =>
+      write({ type: 'pageerror', url: page.url(), text: String(err?.stack || err) }),
+    );
   }
   const pages = () => browser.contexts().flatMap((c) => c.pages());
   for (const context of browser.contexts()) {
-    context.on('page', async (page) => { write({ type: 'page-open', url: page.url() }); await watchPage(page); });
+    context.on('page', async (page) => {
+      write({ type: 'page-open', url: page.url() });
+      await watchPage(page);
+    });
   }
   for (const page of pages()) await watchPage(page);
   const started = Date.now();
@@ -31,20 +38,33 @@ function write(entry) {
       try {
         const state = await page.evaluate(() => {
           const params = new URLSearchParams(location.search);
-          const refreshButton = Array.from(document.querySelectorAll('button')).find((el) => /refresh models/i.test((el.textContent || '').trim()));
-          const toasts = Array.from(document.querySelectorAll('#toast-container .toast')).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+          const refreshButton = Array.from(document.querySelectorAll('button')).find((el) =>
+            /refresh models/i.test((el.textContent || '').trim()),
+          );
+          const toasts = Array.from(document.querySelectorAll('#toast-container .toast')).map(
+            (el) => (el.textContent || '').replace(/\s+/g, ' ').trim(),
+          );
           return {
             href: location.href,
             sourceTabId: params.get('sourceTabId') || '',
             actionWindow: params.get('actionWindow') || '',
             scrapeState: String(window.__modelCatalogScrapeState || 'idle'),
-            refreshButton: refreshButton ? { text: (refreshButton.textContent || '').replace(/\s+/g, ' ').trim(), disabled: !!refreshButton.disabled } : null,
+            refreshButton: refreshButton
+              ? {
+                  text: (refreshButton.textContent || '').replace(/\s+/g, ' ').trim(),
+                  disabled: !!refreshButton.disabled,
+                }
+              : null,
             toasts,
           };
         });
         write({ type: 'popup-state', ...state });
       } catch (error) {
-        write({ type: 'popup-state-error', url: page.url(), text: String(error && error.message || error) });
+        write({
+          type: 'popup-state-error',
+          url: page.url(),
+          text: String(error?.message || error),
+        });
       }
     }
     await new Promise((r) => setTimeout(r, 1000));
@@ -52,6 +72,6 @@ function write(entry) {
   write({ type: 'end' });
   await browser.close();
 })().catch((error) => {
-  write({ type: 'fatal', text: String(error && error.stack || error) });
+  write({ type: 'fatal', text: String(error?.stack || error) });
   process.exit(1);
 });

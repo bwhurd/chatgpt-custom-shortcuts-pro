@@ -28,6 +28,7 @@ It is not meant to prove that the live ChatGPT page still exposes the same DOM s
 - `tests/validate-keys.js`
   - thin CLI entrypoint
   - resolves repo root, runs the validator helper, prints the report, exits non-zero on failure
+  - accepts optional `--repo-root <path>` for checking an isolated project fixture; the default remains this repo
 - `tests/lib/settings-wiring-validator.js`
   - main validator logic
   - popup inventory extraction
@@ -49,6 +50,10 @@ It is not meant to prove that the live ChatGPT page still exposes the same DOM s
   - export/import key coverage source, not shipped default-value truth
 - `extension/_locales/*/messages.json`
   - popup label/tooltip locale coverage source
+- `extension/manifest.json`
+  - declares the required `default_locale`; validation reads it without changing permissions or access
+- `tests/settings-wiring-validator.test.js`
+  - isolated positive/negative wiring and CLI exit-code regression tests
 
 ## Core posture
 
@@ -57,6 +62,8 @@ It is not meant to prove that the live ChatGPT page still exposes the same DOM s
 `extension/popup.html` is the primary inventory source of truth for popup-backed settings.
 
 The validator should discover ordinary popup-backed settings from `data-sync` controls in `popup.html`, not from a large manual allowlist.
+
+Ordinary controls require nonblank, unique storage keys and nonblank, unique control IDs so runtime binding cannot silently skip or target the wrong control. Apply model-picker exclusions before these checks; excluded generated controls do not define this ordinary-control contract. An empty ordinary inventory must fail rather than produce a vacuous pass.
 
 ### Supplemental inventory rule
 
@@ -133,6 +140,8 @@ If model picker rendering changes, update the exclusion rule rather than broaden
 ## Authoritative source loading
 
 The validator should prefer deterministic, narrow source loading over executing the full extension.
+
+Require nonempty `OPTIONS_DEFAULTS` and `CSP_SETTINGS_SCHEMA` objects and a declared default locale whose directory is present. An empty locale collection is a failure. JSON errors name the implicated path; an optional UTF-8 BOM is accepted without rewriting source bytes. Malformed source and missing files must make the CLI exit non-zero with an actionable error.
 
 ### `options-storage.js`
 
@@ -320,7 +329,16 @@ Keep success output concise. The current success summary includes:
 - overall pass line
 - number of popup-backed controls validated
 - number of supplemental keys validated
-- confirmation that the prototype checks passed
+- confirmation for prototype checks present in the ordinary popup inventory; do not claim coverage for absent prototypes
+
+## Regression commands
+
+- `npm run validate:keys` checks this repo's static wiring.
+- `npm run test:validators` runs the isolated wiring and text-checker regression suites with built-in `node:test`. Negative cases assert the intended diagnostic as well as failure, while CLI cases verify success/failure exit codes.
+- Wiring cases cover default/export/schema/translation drift, blank or duplicate bindings/IDs, missing authoritative inputs/locales, malformed JSON/source, BOM-prefixed JSON, and intentional model-picker exclusions. Positive cases verify read-only source preservation.
+- Text-checker cases use temporary Git repositories to prove tracked/untracked coverage, newline/whitespace detection, empty files, Unicode paths/content, explicit repair idempotence, ignored/generated exclusions, and deleted-file handling.
+
+Keep these tests independent of real browser state, real user settings, committed-fixture mutations, and exact current inventory counts. Popup behavior proof belongs to `npm test`; these static cases do not claim that shortcuts work on live ChatGPT pages.
 
 ## Repair expectations
 

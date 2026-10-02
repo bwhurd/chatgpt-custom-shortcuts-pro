@@ -7,7 +7,10 @@ const helperStart = contentSource.indexOf('const CONVERSATION_TURN_SELECTOR =');
 const helperEnd = contentSource.indexOf('function getComposerTopEdge', helperStart);
 const messageHelperStart = contentSource.indexOf('  function getConversationTurnMessages() {');
 const messageHelperEnd = contentSource.indexOf('  function getColorAlpha', messageHelperStart);
-const nextMessageStart = contentSource.indexOf('  function getNextMessagePosition(', messageHelperStart);
+const nextMessageStart = contentSource.indexOf(
+  '  function getNextMessagePosition(',
+  messageHelperStart,
+);
 const nextMessageEnd = contentSource.indexOf('  function goDownOneMessage(', nextMessageStart);
 const boundaryHelperStart = contentSource.indexOf('  function getMaxBoundaryScrollTop(');
 const boundaryHelperEnd = contentSource.indexOf(
@@ -136,11 +139,14 @@ const helperContext = {
 runInNewContext(
   `${contentSource.slice(helperStart, helperEnd)}\n${contentSource
     .slice(messageHelperStart, messageHelperEnd)
-    .replace(/^  /gm, '')}\n${contentSource
+    .replace(/^ {2}/gm, '')}\n${contentSource
     .slice(nextMessageStart, nextMessageEnd)
-    .replace(/^  /gm, '')}\n${contentSource
+    .replace(/^ {2}/gm, '')}\n${contentSource
     .slice(boundaryHelperStart, boundaryHelperEnd)
-    .replace(/^  /gm, '')}\nglobalThis.scrollHelpers = { CONVERSATION_TURN_SELECTOR, getConversationTurns, getConversationTurnMessages, getScrollableContainer, getMessageTopScrollPositions, getMessageScrollTarget, getNextMessagePosition, getBoundaryScrollTop, setBoundaryScrollPosition };`,
+    .replace(
+      /^ {2}/gm,
+      '',
+    )}\nglobalThis.scrollHelpers = { CONVERSATION_TURN_SELECTOR, getConversationTurns, getConversationTurnMessages, getScrollableContainer, getMessageTopScrollPositions, getMessageScrollTarget, getNextMessagePosition, getBoundaryScrollTop, setBoundaryScrollPosition };`,
   helperContext,
 );
 
@@ -189,9 +195,7 @@ assert.deepEqual(
 const scrollOffset = 25;
 const downThreshold = scrollOffset + 5;
 const upThreshold = scrollOffset - 5;
-const upwardTargets = messageTurns.filter(
-  (turn) => turn.getBoundingClientRect().top < upThreshold,
-);
+const upwardTargets = messageTurns.filter((turn) => turn.getBoundingClientRect().top < upThreshold);
 assert.equal(upwardTargets.length, 2);
 assert.equal(
   getMessageScrollTarget(conversationScroll, upwardTargets.at(-1), scrollOffset),
@@ -204,8 +208,16 @@ assert.equal(
   'two-message up should clamp at the conversation top',
 );
 
-const firstDown = getNextMessagePosition(messagePositions, conversationScroll.scrollTop, downThreshold);
-assert.equal(firstDown?.message, secondTurn, 'one-message down should choose the next content turn');
+const firstDown = getNextMessagePosition(
+  messagePositions,
+  conversationScroll.scrollTop,
+  downThreshold,
+);
+assert.equal(
+  firstDown?.message,
+  secondTurn,
+  'one-message down should choose the next content turn',
+);
 assert.equal(
   getMessageScrollTarget(conversationScroll, firstDown.message, scrollOffset),
   341,
@@ -221,7 +233,11 @@ for (let step = 0; step < 2; step++) {
   twoDownTargets.push(targetTop);
   virtualTop = targetTop;
 }
-assert.deepEqual(twoDownTargets, [341, 510], 'two-message down should advance across both turns and clamp at bottom');
+assert.deepEqual(
+  twoDownTargets,
+  [341, 510],
+  'two-message down should advance across both turns and clamp at bottom',
+);
 
 assert.equal(getBoundaryScrollTop(conversationScroll, 'top'), 0);
 assert.equal(
@@ -230,13 +246,17 @@ assert.equal(
   'top and bottom targets should use the same current conversation scroller',
 );
 
-const shortcutScrollActionsStart = contentSource.indexOf(
-  'shortcutKeyScrollUpOneMessage: () => {',
+const shortcutScrollActionsStart = contentSource.indexOf('shortcutKeyScrollUpOneMessage: () => {');
+const shortcutScrollActionsEnd = contentSource.indexOf(
+  '// @note Toggle Sidebar Function',
+  shortcutScrollActionsStart,
 );
-const shortcutScrollActionsEnd = contentSource.indexOf('// @note Toggle Sidebar Function', shortcutScrollActionsStart);
 assert.notEqual(shortcutScrollActionsStart, -1, 'native-bottom shortcut action is missing');
 assert.notEqual(shortcutScrollActionsEnd, -1, 'scroll shortcut action block end marker is missing');
-const shortcutScrollActions = contentSource.slice(shortcutScrollActionsStart, shortcutScrollActionsEnd);
+const shortcutScrollActions = contentSource.slice(
+  shortcutScrollActionsStart,
+  shortcutScrollActionsEnd,
+);
 assert.match(shortcutScrollActions, /shortcutKeyScrollUpOneMessage:[\s\S]*?goUpOneMessage\(\)/);
 assert.match(shortcutScrollActions, /shortcutKeyScrollDownOneMessage:[\s\S]*?goDownOneMessage\(\)/);
 assert.match(shortcutScrollActions, /shortcutKeyScrollUpTwoMessages:[\s\S]*?goUpTwoMessages\(/);
@@ -274,7 +294,11 @@ assert.equal(getMessageScrollTarget(nextConversationScroll, nextSecond, 25), 475
 assert.equal(setBoundaryScrollPosition(nextConversationScroll, 'bottom'), 1400);
 assert.equal(nextConversationScroll.scrollTop, 1400);
 assert.ok(Number.isNaN(pendingPreviousSettle()), 'pending A settle must stop when A is hidden');
-assert.equal(conversationScroll.scrollTop, previousTop, 'B scrolling must leave hidden A untouched');
+assert.equal(
+  conversationScroll.scrollTop,
+  previousTop,
+  'B scrolling must leave hidden A untouched',
+);
 
 // Returning to A works without replacing the document or reinitializing helpers.
 conversationScroll.rectHeight = 100;
@@ -330,7 +354,11 @@ helperContext.pageScroll(pageEvent('PageUp'));
 assert.equal(nextConversationScroll.scrollTop, 0);
 nextConversationScroll.rectHeight = 0;
 let inactiveTweenKilled = false;
-pageTweenOptions.onUpdate.call({ kill() { inactiveTweenKilled = true; } });
+pageTweenOptions.onUpdate.call({
+  kill() {
+    inactiveTweenKilled = true;
+  },
+});
 assert.equal(inactiveTweenKilled, true, 'page tween must stop after its conversation is hidden');
 
 selectedTurns = [];

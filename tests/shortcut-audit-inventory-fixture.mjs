@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-
+import shortcutActionMetadata from '../extension/shared/shortcut-action-metadata.js';
 import { loadDevScrapeWideContract } from './playwright/lib/devscrape-wide-core.mjs';
 import {
   buildShortcutValidationInventory,
@@ -10,17 +10,22 @@ import {
   parseOptionsDefaultsFromSource,
   parseSettingsSchemaSource,
 } from './playwright/lib/shortcut-target-inventory.mjs';
-import shortcutActionMetadata from '../extension/shared/shortcut-action-metadata.js';
 
-const [contentSource, optionsSource, modelLabelsSource, settingsSchemaSource, localeSource, contract] =
-  await Promise.all([
-    readFile(new URL('../extension/content.js', import.meta.url), 'utf8'),
-    readFile(new URL('../extension/options-storage.js', import.meta.url), 'utf8'),
-    readFile(new URL('../extension/shared/model-picker-labels.js', import.meta.url), 'utf8'),
-    readFile(new URL('../extension/settings-schema.js', import.meta.url), 'utf8'),
-    readFile(new URL('../extension/_locales/en/messages.json', import.meta.url), 'utf8'),
-    loadDevScrapeWideContract(),
-  ]);
+const [
+  contentSource,
+  optionsSource,
+  modelLabelsSource,
+  settingsSchemaSource,
+  localeSource,
+  contract,
+] = await Promise.all([
+  readFile(new URL('../extension/content.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/options-storage.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/shared/model-picker-labels.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/settings-schema.js', import.meta.url), 'utf8'),
+  readFile(new URL('../extension/_locales/en/messages.json', import.meta.url), 'utf8'),
+  loadDevScrapeWideContract(),
+]);
 
 const scrapeStateRegistry = [
   ...(contract.exports.DUMP_REGISTRY || []),
@@ -45,7 +50,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   inventory.allRuntimeActionIds.filter(
-    (actionId) => !shortcutActionMetadata.SHORTCUT_ACTIONS.some((action) => action.actionId === actionId),
+    (actionId) =>
+      !shortcutActionMetadata.SHORTCUT_ACTIONS.some((action) => action.actionId === actionId),
   ),
   [],
   'every default or handler action should have explicit shortcut metadata',
@@ -63,7 +69,9 @@ assert.ok(
   'Search Conversations should prefer the current language-independent titlebar Search SVG path',
 );
 
-const expectedListenerIds = getExpectedKeyboardListenerContracts().map((contractRow) => contractRow.contractId);
+const expectedListenerIds = getExpectedKeyboardListenerContracts().map(
+  (contractRow) => contractRow.contractId,
+);
 assert.deepEqual(
   inventory.keyboardListeners.map((listener) => listener.contractId),
   expectedListenerIds,

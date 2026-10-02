@@ -9,7 +9,7 @@ const sliceEnd = contentSource.indexOf('    const handleCtrlShortcutEvent', slic
 assert.notEqual(sliceStart, -1, 'Alt modifier helper start marker is missing');
 assert.notEqual(sliceEnd, -1, 'Alt shortcut handler end marker is missing');
 
-const handlerSource = contentSource.slice(sliceStart, sliceEnd).replace(/^    /gm, '');
+const handlerSource = contentSource.slice(sliceStart, sliceEnd).replace(/^ {4}/gm, '');
 
 function runCase({
   event,

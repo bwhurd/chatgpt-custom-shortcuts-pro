@@ -4,12 +4,6 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import modelPickerSelectors from '../../../extension/shared/model-picker-selectors.js';
 import {
-  buildShortcutValidationInventory,
-  parseModelPickerLabelsSource,
-  parseOptionsDefaultsFromSource,
-  parseSettingsSchemaSource,
-} from './shortcut-target-inventory.mjs';
-import {
   AUDIT_ARTIFACT_FILENAMES,
   buildShortcutAuditReport,
   buildStorageRecoveryPlan,
@@ -18,6 +12,12 @@ import {
   finalizeStorageRecoveryPlan,
   writeShortcutAuditArtifacts,
 } from './shortcut-audit-artifacts.mjs';
+import {
+  buildShortcutValidationInventory,
+  parseModelPickerLabelsSource,
+  parseOptionsDefaultsFromSource,
+  parseSettingsSchemaSource,
+} from './shortcut-target-inventory.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,9 +86,7 @@ const PREVIOUS_THREAD_ACTION_ID = 'shortcutKeyPreviousThread';
 const NEXT_THREAD_ACTION_ID = 'shortcutKeyNextThread';
 const CLICK_SEND_ACTION_ID = 'shortcutKeyClickSendButton';
 const CLICK_STOP_ACTION_ID = 'shortcutKeyClickStopButton';
-const SEND_EDIT_ACTION_ID = 'shortcutKeySendEdit';
-const TOGGLE_DICTATE_ACTION_ID = 'shortcutKeyToggleDictate';
-const CANCEL_DICTATION_ACTION_ID = 'shortcutKeyCancelDictation';
+
 const COPY_ALL_CODE_BLOCKS_ACTION_ID = 'shortcutKeyCopyAllCodeBlocks';
 const TOGGLE_CODEBOX_WRAP_ACTION_ID = 'shortcutKeyToggleCodeboxWrap';
 const NEW_CONVERSATION_TARGET_READY_DELAY_MS = 500;
@@ -395,15 +393,24 @@ export async function waitForAuditOwnedFixtureContent(page, fixtureUrl, timeout 
     ({ expectedUrl, minimumUserMessages, minimumAssistantMessages }) => {
       if (window.location.href !== expectedUrl) return false;
       const units = Array.from(
-        document.querySelectorAll('[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"]'),
+        document.querySelectorAll(
+          '[data-chatgpt-search-unit-key$=":user"], [data-chatgpt-search-unit-key$=":assistant"]',
+        ),
       );
       const countRole = (role) =>
         units.filter((unit) =>
           unit.getAttribute('data-chatgpt-search-unit-key')?.endsWith(`:${role}`),
         ).length;
       const legacyMessages = Array.from(document.querySelectorAll('[data-message-author-role]'));
-      const userCount = countRole('user') || legacyMessages.filter((unit) => unit.getAttribute('data-message-author-role') === 'user').length;
-      const assistantCount = countRole('assistant') || legacyMessages.filter((unit) => unit.getAttribute('data-message-author-role') === 'assistant').length;
+      const userCount =
+        countRole('user') ||
+        legacyMessages.filter((unit) => unit.getAttribute('data-message-author-role') === 'user')
+          .length;
+      const assistantCount =
+        countRole('assistant') ||
+        legacyMessages.filter(
+          (unit) => unit.getAttribute('data-message-author-role') === 'assistant',
+        ).length;
       return userCount >= minimumUserMessages && assistantCount >= minimumAssistantMessages;
     },
     {
@@ -462,7 +469,9 @@ export async function evaluateWideScrapePageInfo(page, options = {}) {
 }
 
 async function getExtensionId(context, options = {}) {
-  const extensionIdFromProfile = await readExtensionIdFromSecurePreferences(options.extensionProfileDir);
+  const extensionIdFromProfile = await readExtensionIdFromSecurePreferences(
+    options.extensionProfileDir,
+  );
   if (extensionIdFromProfile) {
     return extensionIdFromProfile;
   }
@@ -551,7 +560,7 @@ async function readMoveTopBarToBottomSetting(context, options = {}) {
               return;
             }
             resolve({
-              present: Object.prototype.hasOwnProperty.call(items, key),
+              present: Object.hasOwn(items, key),
               value: items[key],
             });
           });
@@ -595,14 +604,15 @@ async function restoreMoveTopBarToBottomSetting(context, originalSetting, option
                 return;
               }
               const restored = {
-                present: Object.prototype.hasOwnProperty.call(items, key),
+                present: Object.hasOwn(items, key),
                 value: items[key],
               };
-              if (
-                restored.present !== original.present ||
-                restored.value !== original.value
-              ) {
-                reject(new Error('Move Top Bar to Bottom setting did not restore its original storage value.'));
+              if (restored.present !== original.present || restored.value !== original.value) {
+                reject(
+                  new Error(
+                    'Move Top Bar to Bottom setting did not restore its original storage value.',
+                  ),
+                );
                 return;
               }
               resolve();
@@ -758,7 +768,8 @@ async function setSidebarState(page, state) {
       ].join(', '),
     )
     .first();
-  const hasClose = (await closeButton.count()) > 0 && (await closeButton.isVisible().catch(() => false));
+  const hasClose =
+    (await closeButton.count()) > 0 && (await closeButton.isVisible().catch(() => false));
   if (state === 'collapsed') {
     if (hasClose) {
       await waitBeforeBrowserInteraction();
@@ -786,9 +797,9 @@ async function getTurnMetas(page) {
       );
       if (legacyTurns.length > 0) {
         return legacyTurns.map((turn) => ({
-        testId: turn.getAttribute('data-testid') || '',
-        turnRef: turn.getAttribute('data-turn') || '',
-        hasWeb: !!turn.querySelector('[data-testid="webpage-citation-pill"]'),
+          testId: turn.getAttribute('data-testid') || '',
+          turnRef: turn.getAttribute('data-turn') || '',
+          hasWeb: !!turn.querySelector('[data-testid="webpage-citation-pill"]'),
         }));
       }
 
@@ -936,10 +947,13 @@ function getTurnMenuProbeConfig(menuKind = 'more-actions') {
     };
   }
   return {
-    triggerSelectors: [
-      'button[aria-label="More actions"]',
+    triggerSelectors: ['button[aria-label="More actions"]'],
+    expectedNeedles: [
+      'voice-play-turn-action-button',
+      '#03583c',
+      'Read aloud',
+      'Branch in new chat',
     ],
-    expectedNeedles: ['voice-play-turn-action-button', '#03583c', 'Read aloud', 'Branch in new chat'],
   };
 }
 
@@ -969,7 +983,11 @@ async function getLatestOpenMenuHtml(page) {
             document.querySelectorAll('button[data-list-navigation-item="true"]'),
           ).filter(isVisible);
           for (const item of listItems) {
-            for (let ancestor = item.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+            for (
+              let ancestor = item.parentElement;
+              ancestor && ancestor !== document.body;
+              ancestor = ancestor.parentElement
+            ) {
               const style = window.getComputedStyle(ancestor);
               const rect = ancestor.getBoundingClientRect();
               if (
@@ -1120,7 +1138,9 @@ async function openModelSwitcherMenu(page) {
       lastError = error;
     }
   }
-  throw new Error(`Model switcher menu did not open${lastError ? `: ${lastError.message || lastError}` : ''}`);
+  throw new Error(
+    `Model switcher menu did not open${lastError ? `: ${lastError.message || lastError}` : ''}`,
+  );
 }
 
 async function findModelThinkingEffortAction(page, options = {}) {
@@ -1174,7 +1194,10 @@ async function openModelThinkingEffortMenu(page, options = {}) {
   }
   const row = action.locator('xpath=ancestor::*[@data-model-picker-thinking-effort-row="true"][1]');
   if ((await row.count().catch(() => 0)) > 0) {
-    await row.first().hover({ force: true }).catch(() => {});
+    await row
+      .first()
+      .hover({ force: true })
+      .catch(() => {});
   }
   await action.hover({ force: true }).catch(() => {});
   const controlledId = (await action.getAttribute('aria-controls').catch(() => '')) || '';
@@ -1200,9 +1223,8 @@ async function openModelThinkingEffortMenu(page, options = {}) {
       if (controlled && isVisible(controlled)) return controlled.outerHTML;
       const menus = Array.from(document.querySelectorAll(menuSelector)).filter(isVisible);
       return (
-        menus
-          .filter((menu) => /Standard|Extended/i.test(menu.textContent || ''))
-          .at(-1)?.outerHTML || ''
+        menus.filter((menu) => /Standard|Extended/i.test(menu.textContent || '')).at(-1)
+          ?.outerHTML || ''
       );
     },
     {
@@ -1279,7 +1301,10 @@ function isComposerPlusMenuHtml(html) {
 }
 
 function isComposerMoreSubmenuHtml(html) {
-  return Boolean(html) && (html.includes('#1fa93b') || html.includes('#e717cc') || html.includes('#cf3864'));
+  return (
+    Boolean(html) &&
+    (html.includes('#1fa93b') || html.includes('#e717cc') || html.includes('#cf3864'))
+  );
 }
 
 async function ensureComposerPlusMenuOpen(page) {
@@ -1351,7 +1376,11 @@ async function openComposerMoreSubmenu(page) {
     const openCountAfter = await page
       .locator('[data-radix-menu-content][data-state="open"][role="menu"]')
       .count();
-    if (isComposerMoreSubmenuHtml(html) || (html && openCountAfter > openCountBefore) || html !== firstMenuHtml) {
+    if (
+      isComposerMoreSubmenuHtml(html) ||
+      (html && openCountAfter > openCountBefore) ||
+      html !== firstMenuHtml
+    ) {
       return html;
     }
   }
@@ -1390,7 +1419,7 @@ async function openConversationOptionsMenu(page) {
     await button.click({ force: true }).catch(() => {});
     await page.waitForTimeout(350);
     const html = await getLatestOpenMenuHtml(page);
-    if (html && html.includes('role="menuitem"')) {
+    if (html?.includes('role="menuitem"')) {
       return html;
     }
   }
@@ -1428,7 +1457,10 @@ async function openConfigureDialog(page) {
       `${modelPickerSelectors.MODEL_MENU_SELECTOR} ${modelPickerSelectors.MODEL_CONFIGURE_MENU_ITEM_SELECTOR}`,
     )
     .first();
-  if (!((await configureItem.count()) > 0) || !(await configureItem.isVisible().catch(() => false))) {
+  if (
+    !((await configureItem.count()) > 0) ||
+    !(await configureItem.isVisible().catch(() => false))
+  ) {
     throw new Error('Could not find visible model-configure-modal item');
   }
   await configureItem.click({ force: true });
@@ -1503,7 +1535,8 @@ async function selectConfigureOption(page, optionId) {
   } else {
     for (let index = 0; index < optionCount; index += 1) {
       const candidate = options.nth(index);
-      const text = (await candidate.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() || '';
+      const text =
+        (await candidate.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() || '';
       if (text === target.label || text.startsWith(`${target.label}Alt+`)) {
         option = candidate;
         break;
@@ -1537,7 +1570,8 @@ async function captureByType(page, captureType, state) {
         header?.closest?.('[data-scroll-root]')?.outerHTML ||
         header?.parentElement?.outerHTML ||
         header?.outerHTML ||
-        document.querySelector('main header [data-testid="app-shell-header-context-menu-surface"]')
+        document
+          .querySelector('main header [data-testid="app-shell-header-context-menu-surface"]')
           ?.closest('header')?.outerHTML ||
         document.querySelector('main header')?.outerHTML ||
         ''
@@ -1552,8 +1586,11 @@ async function captureByType(page, captureType, state) {
   }
   if (captureType === 'configure-dialog') {
     return (
-      (await page.locator('[role="dialog"]').first().evaluate((node) => node.outerHTML).catch(() => '')) ||
-      ''
+      (await page
+        .locator('[role="dialog"]')
+        .first()
+        .evaluate((node) => node.outerHTML)
+        .catch(() => '')) || ''
     );
   }
   if (captureType === 'configure-listbox') {
@@ -1569,7 +1606,9 @@ async function captureByType(page, captureType, state) {
           rect.height > 0
         );
       };
-      const listbox = Array.from(document.querySelectorAll('[role="listbox"]')).filter(isVisible).at(-1);
+      const listbox = Array.from(document.querySelectorAll('[role="listbox"]'))
+        .filter(isVisible)
+        .at(-1);
       return listbox?.outerHTML || '';
     });
   }
@@ -1605,7 +1644,12 @@ async function captureTopBarMovedThreadBottom(context, fixtureUrl, options = {})
     filename: '1c_TopbarToBottomEnabled_ThreadBottom.txt',
     stateId: 'topbar-bottom-enabled-thread-bottom',
     label: 'Top bar moved to bottom thread-bottom area',
-    steps: [{ type: 'toggle-move-topbar-to-bottom', label: 'enable MoveTopBarToBottom extension setting' }],
+    steps: [
+      {
+        type: 'toggle-move-topbar-to-bottom',
+        label: 'enable MoveTopBarToBottom extension setting',
+      },
+    ],
     capture: { type: 'thread-bottom' },
   };
   const capturePage = await context.newPage();
@@ -1673,7 +1717,10 @@ async function captureTopBarMovedThreadBottom(context, fixtureUrl, options = {})
       }`,
     );
   }
-  return artifact || buildArtifactRecord(definition, 'failed', '', 'Top-bar capture did not return an artifact.');
+  return (
+    artifact ||
+    buildArtifactRecord(definition, 'failed', '', 'Top-bar capture did not return an artifact.')
+  );
 }
 
 export async function runWideScrapeWithPlaywright(page, context, options = {}) {
@@ -1824,11 +1871,7 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
     }
   }
 
-  const oneCArtifact = await captureTopBarMovedThreadBottom(
-    context,
-    fixtureUrl,
-    options,
-  );
+  const oneCArtifact = await captureTopBarMovedThreadBottom(context, fixtureUrl, options);
   artifacts.push(oneCArtifact);
 
   for (const deferred of exports.DEFERRED_ARTIFACTS) {
@@ -1843,8 +1886,9 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
     pageInfo,
     startedAt,
     completedAt: new Date().toISOString(),
-    capturedCount: artifacts.filter((artifact) => artifact.status === 'captured' || artifact.status === 'alias')
-      .length,
+    capturedCount: artifacts.filter(
+      (artifact) => artifact.status === 'captured' || artifact.status === 'alias',
+    ).length,
     failedCount: artifacts.filter((artifact) => artifact.status === 'failed').length,
     deferredCount: artifacts.filter((artifact) => artifact.status === 'deferred').length,
     artifacts,
@@ -1870,7 +1914,7 @@ export async function verifyExtensionRuntimeReachable(context, options = {}) {
   }
 }
 
-export async function refreshModelCatalogForValidation(page, context, options = {}) {
+export async function refreshModelCatalogForValidation(page, context, _options = {}) {
   const session = await context.newCDPSession(page);
   const executionContexts = [];
   session.on('Runtime.executionContextCreated', (event) => {
@@ -1938,10 +1982,13 @@ async function readExtensionSyncStorage(context, extensionId, keys) {
   const extensionPage = await context.newPage();
   try {
     await waitAroundExtensionPageAction();
-    await extensionPage.goto(`chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 5000,
-    });
+    await extensionPage.goto(
+      `chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`,
+      {
+        waitUntil: 'domcontentloaded',
+        timeout: 5000,
+      },
+    );
     await waitAroundExtensionPageAction();
     return await extensionPage.evaluate(
       (storageKeys) =>
@@ -1973,10 +2020,13 @@ async function mutateExtensionSyncStorage(context, extensionId, operation) {
   const extensionPage = await context.newPage();
   try {
     await waitAroundExtensionPageAction();
-    await extensionPage.goto(`chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 5000,
-    });
+    await extensionPage.goto(
+      `chrome-extension://${extensionId}/popup.html?playwrightProbe=storage`,
+      {
+        waitUntil: 'domcontentloaded',
+        timeout: 5000,
+      },
+    );
     await waitAroundExtensionPageAction();
     return await extensionPage.evaluate(
       ({ op, payload }) =>
@@ -2109,7 +2159,7 @@ async function prepareLiveProbeState(page, stateId, scrapeStateRegistry, fixture
 
 export async function prepareNewConversationProbeState(
   page,
-  fixtureUrl,
+  _fixtureUrl,
   { reportSettle = false } = {},
 ) {
   await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -2117,8 +2167,14 @@ export async function prepareNewConversationProbeState(
   await closeOpenMenus(page);
   await closeTransientUi(page);
   const blankState = await captureLiveProbeSemanticSnapshot(page, null);
-  if (blankState.userMessageCount || blankState.assistantMessageCount || blankState.composerHasText) {
-    throw new Error('ChatGPT home did not open a blank audit chat; no existing conversation or draft was changed.');
+  if (
+    blankState.userMessageCount ||
+    blankState.assistantMessageCount ||
+    blankState.composerHasText
+  ) {
+    throw new Error(
+      'ChatGPT home did not open a blank audit chat; no existing conversation or draft was changed.',
+    );
   }
   if (reportSettle) {
     console.log(
@@ -2148,7 +2204,10 @@ async function setComposerText(page, text) {
   if (!composer) throw new Error('Could not find a visible prompt composer.');
 
   const expectedText = String(text);
-  const normalize = (value) => String(value || '').replace(/\r\n?/g, '\n').trim();
+  const normalize = (value) =>
+    String(value || '')
+      .replace(/\r\n?/g, '\n')
+      .trim();
   await composer.fill(expectedText, { timeout: 5000 });
   const actualText = await composer.evaluate((element) =>
     element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
@@ -2287,17 +2346,19 @@ async function waitForLatestUserTurn(page) {
 async function waitForCommittedUserTurn(page, { minimumCount = 1, previousHash = '' } = {}) {
   await page.waitForFunction(
     ({ minimumCount, previousHash, selectors }) => {
-      const messages = selectors
-        .map((selector) => Array.from(document.querySelectorAll(selector)))
-        .find((matches) => matches.length) || [];
+      const messages =
+        selectors
+          .map((selector) => Array.from(document.querySelectorAll(selector)))
+          .find((matches) => matches.length) || [];
       const latestRawText = messages.at(-1)?.textContent || '';
       const latestText = latestRawText.trim();
       const composer = document.querySelector(
         '#prompt-textarea, textarea, [role="textbox"], [contenteditable="true"]',
       );
-      const composerText = composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
-        ? composer.value
-        : composer?.innerText || composer?.textContent || '';
+      const composerText =
+        composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
+          ? composer.value
+          : composer?.innerText || composer?.textContent || '';
       const hashText = (value) => {
         let hash = 2166136261;
         for (let index = 0; index < value.length; index += 1) {
@@ -2323,9 +2384,10 @@ async function waitForAssistantResponseCompletion(
 ) {
   await page.waitForFunction(
     ({ minimumCount, previousCount, previousHash, selectors }) => {
-      const assistants = selectors
-        .map((selector) => Array.from(document.querySelectorAll(selector)))
-        .find((matches) => matches.length) || [];
+      const assistants =
+        selectors
+          .map((selector) => Array.from(document.querySelectorAll(selector)))
+          .find((matches) => matches.length) || [];
       const latest = assistants.at(-1);
       const latestRawText = latest?.textContent || '';
       const latestText = latestRawText.trim();
@@ -2337,12 +2399,19 @@ async function waitForAssistantResponseCompletion(
         return `${value.length}:${(hash >>> 0).toString(16)}`;
       };
       const stopVisible = Array.from(
-        document.querySelectorAll('button[data-testid="stop-button"], button[data-test-id="stop-button"]'),
+        document.querySelectorAll(
+          'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+        ),
       ).some((button) => {
         if (!(button instanceof HTMLElement)) return false;
         const style = getComputedStyle(button);
         const rect = button.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
       });
       const sendButton = document.querySelector(
         'button[data-testid="send-button"], #composer-submit-button, form:has([role="textbox"]) button[type="submit"]',
@@ -2355,7 +2424,12 @@ async function waitForAssistantResponseCompletion(
         if (!(button instanceof HTMLElement)) return false;
         const style = getComputedStyle(button);
         const rect = button.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
       });
       const currentHash = latestText ? hashText(latestRawText) : '';
       return (
@@ -2402,7 +2476,12 @@ async function createAuditOwnedFixtureConversation(
             if (!(node instanceof HTMLElement)) return false;
             const style = getComputedStyle(node);
             const rect = node.getBoundingClientRect();
-            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            return (
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
           }),
         )
       );
@@ -2411,8 +2490,15 @@ async function createAuditOwnedFixtureConversation(
     { timeout: 20000 },
   );
   let before = await captureLiveProbeSemanticSnapshot(page, null);
-  if (before.userMessageCount || before.assistantMessageCount || before.composerHasText || /\/c\//.test(before.url)) {
-    throw new Error('ChatGPT home was not a blank audit chat; no existing conversation or draft was changed.');
+  if (
+    before.userMessageCount ||
+    before.assistantMessageCount ||
+    before.composerHasText ||
+    /\/c\//.test(before.url)
+  ) {
+    throw new Error(
+      'ChatGPT home was not a blank audit chat; no existing conversation or draft was changed.',
+    );
   }
   await page.waitForTimeout(NEW_CONVERSATION_SETTLE_MS);
 
@@ -2458,7 +2544,9 @@ async function createAuditOwnedFixtureConversation(
     }
     const conversationId = page.url().match(/\/c\/([^/]+)/)?.[1] || '';
     if (!conversationId || before.userMessageCount < 2 || before.assistantMessageCount < 2) {
-      throw new Error('The audit-owned fixture did not finish with two committed user turns and two assistant responses.');
+      throw new Error(
+        'The audit-owned fixture did not finish with two committed user turns and two assistant responses.',
+      );
     }
     checkpoint.auditFixtureUrl = page.url();
     checkpoint.completedCases.push({
@@ -2538,7 +2626,10 @@ async function prepareSentUserMessageProbeState(page, fixtureUrl) {
 
 async function prepareDictationActiveProbeState(page, fixtureUrl) {
   await prepareNewConversationProbeState(page, fixtureUrl);
-  await page.context().grantPermissions(['microphone'], { origin: 'https://chatgpt.com' }).catch(() => {});
+  await page
+    .context()
+    .grantPermissions(['microphone'], { origin: 'https://chatgpt.com' })
+    .catch(() => {});
   await clickEnabledButton(page, [
     'button[aria-label="Start dictation"]',
     'button:has(svg use[href*="#33d595"])',
@@ -2640,91 +2731,97 @@ async function isViewportProbeTargetReached(page, target) {
 }
 
 async function isDomStateProbeTargetReached(page, target) {
-  return page.evaluate(({ targetId, codeboxSelectors }) => {
-    const container =
-      typeof window.getScrollableContainer === 'function'
-        ? window.getScrollableContainer()
-        : document.scrollingElement || document.documentElement;
-    const getScrollTop = (node) =>
-      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
-    const start = window.__CGCSP_SCROLL_PROBE_START__ || {};
-    const currentTop = getScrollTop(container);
-    if (targetId === 'message-scroll-up-delta') {
-      return Number.isFinite(start.top) && (start.top - currentTop >= 80 || currentTop <= 40);
-    }
-    if (targetId === 'message-scroll-down-delta') {
-      return (
-        Number.isFinite(start.top) &&
-        (currentTop - start.top >= 80 ||
-          (Number.isFinite(start.max) && start.max - currentTop <= 40))
-      );
-    }
-    if (targetId === 'codebox-wrap-enabled') {
-      const codeboxes = Array.from(document.querySelectorAll(codeboxSelectors.join(', ')));
-      const allVisibleCodeboxesWrap =
-        codeboxes.length > 0 &&
-        codeboxes.every((code) => {
-          const style = getComputedStyle(code);
-          const scrollport =
-            code.closest('.cm-editor')?.querySelector('.cm-scroller') ||
-            code.closest('pre')?.parentElement ||
-            code.parentElement ||
-            code;
-          const lineBox = code.closest('pre') || code.closest('.cm-content') || code.parentElement || code;
-          const lineBoxStyle = getComputedStyle(lineBox);
-          const availableWidth =
-            lineBox.clientWidth -
-            Number.parseFloat(lineBoxStyle.paddingLeft || '0') -
-            Number.parseFloat(lineBoxStyle.paddingRight || '0');
-          const text = String(code.textContent || '');
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          if (context) context.font = style.font;
-          const longestLineWidth = Math.max(
-            0,
-            ...(text.split(/\r?\n/).map((line) => (context ? context.measureText(line).width : 0))),
-          );
-          const range = document.createRange();
-          const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
-          const lineTops = [];
-          let textNode = walker.nextNode();
-          while (textNode) {
-            range.selectNodeContents(textNode);
-            for (const rect of range.getClientRects()) {
-              if (rect.width > 0.5 && rect.height > 0.5) lineTops.push(rect.top);
+  return page.evaluate(
+    ({ targetId, codeboxSelectors }) => {
+      const container =
+        typeof window.getScrollableContainer === 'function'
+          ? window.getScrollableContainer()
+          : document.scrollingElement || document.documentElement;
+      const getScrollTop = (node) =>
+        node === window
+          ? window.scrollY || document.documentElement.scrollTop || 0
+          : node.scrollTop;
+      const start = window.__CGCSP_SCROLL_PROBE_START__ || {};
+      const currentTop = getScrollTop(container);
+      if (targetId === 'message-scroll-up-delta') {
+        return Number.isFinite(start.top) && (start.top - currentTop >= 80 || currentTop <= 40);
+      }
+      if (targetId === 'message-scroll-down-delta') {
+        return (
+          Number.isFinite(start.top) &&
+          (currentTop - start.top >= 80 ||
+            (Number.isFinite(start.max) && start.max - currentTop <= 40))
+        );
+      }
+      if (targetId === 'codebox-wrap-enabled') {
+        const codeboxes = Array.from(document.querySelectorAll(codeboxSelectors.join(', ')));
+        const allVisibleCodeboxesWrap =
+          codeboxes.length > 0 &&
+          codeboxes.every((code) => {
+            const style = getComputedStyle(code);
+            const scrollport =
+              code.closest('.cm-editor')?.querySelector('.cm-scroller') ||
+              code.closest('pre')?.parentElement ||
+              code.parentElement ||
+              code;
+            const lineBox =
+              code.closest('pre') || code.closest('.cm-content') || code.parentElement || code;
+            const lineBoxStyle = getComputedStyle(lineBox);
+            const availableWidth =
+              lineBox.clientWidth -
+              Number.parseFloat(lineBoxStyle.paddingLeft || '0') -
+              Number.parseFloat(lineBoxStyle.paddingRight || '0');
+            const text = String(code.textContent || '');
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            if (context) context.font = style.font;
+            const longestLineWidth = Math.max(
+              0,
+              ...text.split(/\r?\n/).map((line) => (context ? context.measureText(line).width : 0)),
+            );
+            const range = document.createRange();
+            const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+            const lineTops = [];
+            let textNode = walker.nextNode();
+            while (textNode) {
+              range.selectNodeContents(textNode);
+              for (const rect of range.getClientRects()) {
+                if (rect.width > 0.5 && rect.height > 0.5) lineTops.push(rect.top);
+              }
+              textNode = walker.nextNode();
             }
-            textNode = walker.nextNode();
-          }
-          lineTops.sort((left, right) => left - right);
-          const lineHeight = Number.parseFloat(style.lineHeight) || 18;
-          const visualLineCount = lineTops.reduce((count, top, index) => {
-            if (index === 0 || top - lineTops[index - 1] > Math.max(2, lineHeight * 0.35)) {
-              return count + 1;
-            }
-            return count;
-          }, 0);
-          const hardLineCount = Math.max(
-            1,
-            1 + (text.match(/\r?\n/g) || []).length,
-            code.querySelectorAll('br').length + 1,
-          );
-          const requiresWrap = availableWidth > 0 && longestLineWidth > availableWidth + 2;
-          const hasActualWrap = visualLineCount > hardLineCount;
-          return (
-            style.whiteSpace === 'pre-wrap' &&
-            style.overflowWrap === 'anywhere' &&
-            availableWidth > 0 &&
-            (!requiresWrap || hasActualWrap) &&
-            scrollport.scrollWidth <= scrollport.clientWidth + 2
-          );
-        });
-      return (
-        document.documentElement.classList.contains('csp-codebox-wrap-enabled') &&
-        allVisibleCodeboxesWrap
-      );
-    }
-    return false;
-  }, { targetId: target?.targetId || '', codeboxSelectors: [...CODEBOX_CONTENT_SELECTORS] });
+            lineTops.sort((left, right) => left - right);
+            const lineHeight = Number.parseFloat(style.lineHeight) || 18;
+            const visualLineCount = lineTops.reduce((count, top, index) => {
+              if (index === 0 || top - lineTops[index - 1] > Math.max(2, lineHeight * 0.35)) {
+                return count + 1;
+              }
+              return count;
+            }, 0);
+            const hardLineCount = Math.max(
+              1,
+              1 + (text.match(/\r?\n/g) || []).length,
+              code.querySelectorAll('br').length + 1,
+            );
+            const requiresWrap = availableWidth > 0 && longestLineWidth > availableWidth + 2;
+            const hasActualWrap = visualLineCount > hardLineCount;
+            return (
+              style.whiteSpace === 'pre-wrap' &&
+              style.overflowWrap === 'anywhere' &&
+              availableWidth > 0 &&
+              (!requiresWrap || hasActualWrap) &&
+              scrollport.scrollWidth <= scrollport.clientWidth + 2
+            );
+          });
+        return (
+          document.documentElement.classList.contains('csp-codebox-wrap-enabled') &&
+          allVisibleCodeboxesWrap
+        );
+      }
+      return false;
+    },
+    { targetId: target?.targetId || '', codeboxSelectors: [...CODEBOX_CONTENT_SELECTORS] },
+  );
 }
 
 async function readClipboardPermissionState(page) {
@@ -2796,12 +2893,15 @@ async function clearClipboardForProbe(page, session) {
   session.clipboardMimeTypes = originalMetadata.types;
   await restoreClipboardPayload(page, items);
   const verification = await readClipboardMetadata(page);
-  const matches = items.length === 0
-    ? verification.plainTextLength === 0
-    : verification.payloadFingerprint === fingerprintClipboardPayload(items);
+  const matches =
+    items.length === 0
+      ? verification.plainTextLength === 0
+      : verification.payloadFingerprint === fingerprintClipboardPayload(items);
   if (!matches) {
     session.clipboardRestoreStatus = 'snapshot-verification-failed';
-    throw new Error('Clipboard snapshot could not be re-written and verified; no clipboard probe was started.');
+    throw new Error(
+      'Clipboard snapshot could not be re-written and verified; no clipboard probe was started.',
+    );
   }
   session.clipboardRestoreStatus = 'captured-and-verified';
   await page.evaluate(() => navigator.clipboard.writeText(''));
@@ -2888,10 +2988,12 @@ async function restoreClipboardAfterProbe(page, session) {
       await restoreClipboardPayload(page, session.clipboardSnapshot.items);
       const finalMetadata = await readClipboardMetadata(page);
       const items = session.clipboardSnapshot.items;
-      contentRestored = items.length === 0
-        ? finalMetadata.plainTextLength === 0
-        : finalMetadata.payloadFingerprint === fingerprintClipboardPayload(items);
-      mimeTypesRestored = JSON.stringify(finalMetadata.types) ===
+      contentRestored =
+        items.length === 0
+          ? finalMetadata.plainTextLength === 0
+          : finalMetadata.payloadFingerprint === fingerprintClipboardPayload(items);
+      mimeTypesRestored =
+        JSON.stringify(finalMetadata.types) ===
         JSON.stringify(session.clipboardSnapshot.originalMetadata.types);
     }
 
@@ -2910,9 +3012,8 @@ async function restoreClipboardAfterProbe(page, session) {
     session.clipboardPermissionAfter = permissionAfter;
     const permissionsRestored =
       JSON.stringify(permissionAfter) === JSON.stringify(session.clipboardPermissionBefore);
-    session.clipboardRestoreStatus = contentRestored && mimeTypesRestored && permissionsRestored
-      ? 'clean'
-      : 'partial';
+    session.clipboardRestoreStatus =
+      contentRestored && mimeTypesRestored && permissionsRestored ? 'clean' : 'partial';
     return {
       status: session.clipboardRestoreStatus,
       contentRestored,
@@ -2939,7 +3040,12 @@ async function restoreClipboardAfterProbe(page, session) {
   }
 }
 
-async function prepareClipboardSingleMessageProbeState(page, scrapeStateRegistry, fixtureUrl, session) {
+async function prepareClipboardSingleMessageProbeState(
+  page,
+  scrapeStateRegistry,
+  fixtureUrl,
+  session,
+) {
   await prepareLiveProbeState(
     page,
     'assistant-turn-non-web-buttons-exposed',
@@ -2969,32 +3075,39 @@ function createCodeboxProbeSession() {
 }
 
 async function countAssistantCodeBlocks(page) {
-  return page.evaluate(({ selectors, containerSelector }) => {
-    const isVisible = (node) => {
-      if (!(node instanceof HTMLElement)) return false;
-      const style = getComputedStyle(node);
-      const rect = node.getBoundingClientRect();
-      return (
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        rect.width > 0 &&
-        rect.height > 0
-      );
-    };
-    return Array.from(document.querySelectorAll(selectors.join(', '))).filter((node) => {
-      return (
-        Boolean(node.closest?.(containerSelector)) &&
-        Boolean(String(node.textContent || '').trim()) &&
-        isVisible(node instanceof HTMLElement ? node : node.parentElement)
-      );
-    }).length;
-  }, {
-    selectors: [...CODEBOX_CONTENT_SELECTORS],
-    containerSelector: CODEBOX_VALIDATION_CONTAINER_SELECTOR,
-  });
+  return page.evaluate(
+    ({ selectors, containerSelector }) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      return Array.from(document.querySelectorAll(selectors.join(', '))).filter((node) => {
+        return (
+          Boolean(node.closest?.(containerSelector)) &&
+          Boolean(String(node.textContent || '').trim()) &&
+          isVisible(node instanceof HTMLElement ? node : node.parentElement)
+        );
+      }).length;
+    },
+    {
+      selectors: [...CODEBOX_CONTENT_SELECTORS],
+      containerSelector: CODEBOX_VALIDATION_CONTAINER_SELECTOR,
+    },
+  );
 }
 
-async function waitForAssistantCodeBlockCount(page, minimumCount, timeout = CODEBOX_RESPONSE_TIMEOUT_MS) {
+async function waitForAssistantCodeBlockCount(
+  page,
+  minimumCount,
+  timeout = CODEBOX_RESPONSE_TIMEOUT_MS,
+) {
   await page.waitForFunction(
     ({ expectedCount, selectors, containerSelector }) => {
       const isVisible = (node) => {
@@ -3042,7 +3155,9 @@ async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEO
         );
       };
       const visibleStopButtons = Array.from(
-        document.querySelectorAll('button[data-testid="stop-button"], button[data-test-id="stop-button"]'),
+        document.querySelectorAll(
+          'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+        ),
       ).filter(isVisible);
       const visibleComposers = Array.from(
         document.querySelectorAll(
@@ -3056,9 +3171,11 @@ async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEO
           ].join(', '),
         ),
       ).filter(isVisible);
-      const assistantMessages = Array.from(document.querySelectorAll(
-        '[data-message-author-role="assistant"], [data-chatgpt-selection-message-id][data-chatgpt-selection-conversation-id]',
-      ));
+      const assistantMessages = Array.from(
+        document.querySelectorAll(
+          '[data-message-author-role="assistant"], [data-chatgpt-selection-message-id][data-chatgpt-selection-conversation-id]',
+        ),
+      );
       const latestAssistant = assistantMessages.at(-1);
       const assistantTurn = latestAssistant?.closest('[data-content-search-turn-key]');
       const completionAction = Array.from(
@@ -3121,40 +3238,45 @@ async function prepareCodeboxWrapProbeState(page, fixtureUrl, session) {
 async function clipboardProbeHasText(page, shortcut) {
   const codeBlockCount =
     shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID ? await countAssistantCodeBlocks(page) : 0;
-  return page.evaluate(async ({ actionId, codeBlockCount }) => {
-    const hashText = (value) => {
-      const text = String(value || '');
-      let hash = 2166136261;
-      for (let index = 0; index < text.length; index += 1) {
-        hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  return page.evaluate(
+    async ({ actionId, codeBlockCount }) => {
+      const hashText = (value) => {
+        const text = String(value || '');
+        let hash = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+        }
+        return `${text.length}:${(hash >>> 0).toString(16)}`;
+      };
+      const items = await navigator.clipboard.read();
+      const types = [...new Set(items.flatMap((item) => item.types))].sort();
+      const text = await navigator.clipboard.readText().catch(() => '');
+      const normalized = String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      let matches = normalized.length >= 20;
+      if (actionId === 'shortcutKeyCopyAllCodeBlocks') {
+        matches =
+          codeBlockCount >= 2 &&
+          normalized.length >= 40 &&
+          normalized.includes('--- --- ---') &&
+          !/no code boxes found/i.test(normalized);
+      } else if (actionId === 'selectThenCopyAllMessages') {
+        matches = normalized.length >= 80;
       }
-      return `${text.length}:${(hash >>> 0).toString(16)}`;
-    };
-    const items = await navigator.clipboard.read();
-    const types = [...new Set(items.flatMap((item) => item.types))].sort();
-    const text = await navigator.clipboard.readText().catch(() => '');
-    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-    let matches = normalized.length >= 20;
-    if (actionId === 'shortcutKeyCopyAllCodeBlocks') {
-      matches =
-        codeBlockCount >= 2 &&
-        normalized.length >= 40 &&
-        normalized.includes('--- --- ---') &&
-        !/no code boxes found/i.test(normalized);
-    } else if (actionId === 'selectThenCopyAllMessages') {
-      matches = normalized.length >= 80;
-    }
-    if (actionId === 'shortcutKeyCopyLowest') {
-      matches = matches && types.length === 1 && types[0] === 'text/plain';
-    }
-    return {
-      matches,
-      types,
-      hasHtml: types.includes('text/html'),
-      plainTextLength: text.length,
-      plainTextHash: hashText(text),
-    };
-  }, { actionId: shortcut.actionId, codeBlockCount });
+      if (actionId === 'shortcutKeyCopyLowest') {
+        matches = matches && types.length === 1 && types[0] === 'text/plain';
+      }
+      return {
+        matches,
+        types,
+        hasHtml: types.includes('text/html'),
+        plainTextLength: text.length,
+        plainTextHash: hashText(text),
+      };
+    },
+    { actionId: shortcut.actionId, codeBlockCount },
+  );
 }
 
 function orderLiveProbeShortcuts(shortcuts) {
@@ -3179,7 +3301,11 @@ function orderLiveProbeShortcuts(shortcuts) {
   const copyCodeBlocksIndex = ordered.findIndex(
     (shortcut) => shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID,
   );
-  if (codeboxWrapIndex !== -1 && copyCodeBlocksIndex !== -1 && copyCodeBlocksIndex < codeboxWrapIndex) {
+  if (
+    codeboxWrapIndex !== -1 &&
+    copyCodeBlocksIndex !== -1 &&
+    copyCodeBlocksIndex < codeboxWrapIndex
+  ) {
     const [codeboxWrapShortcut] = ordered.splice(codeboxWrapIndex, 1);
     const insertionIndex = ordered.findIndex(
       (shortcut) => shortcut.actionId === COPY_ALL_CODE_BLOCKS_ACTION_ID,
@@ -3230,9 +3356,7 @@ function isModelPhaseShortcut(shortcut) {
   ) {
     return true;
   }
-  return (shortcut.targetIds || []).some((targetId) =>
-    String(targetId).startsWith('model-'),
-  );
+  return (shortcut.targetIds || []).some((targetId) => String(targetId).startsWith('model-'));
 }
 
 function getOppositeResponseNavigationActionId(actionId) {
@@ -3240,7 +3364,10 @@ function getOppositeResponseNavigationActionId(actionId) {
 }
 
 function getResponseNavigationAriaLabel(target) {
-  if (target?.targetId === PREVIOUS_THREAD_ACTION_ID || target?.targetId === 'previous-response-button') {
+  if (
+    target?.targetId === PREVIOUS_THREAD_ACTION_ID ||
+    target?.targetId === 'previous-response-button'
+  ) {
     return 'Previous response';
   }
   if (target?.targetId === NEXT_THREAD_ACTION_ID || target?.targetId === 'next-response-button') {
@@ -3325,11 +3452,16 @@ async function prepareResponseNavigationProbeState(
   scrapeStateRegistry,
   fixtureUrl,
 ) {
-  const probeStateId = shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
+  const probeStateId =
+    shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
   await prepareLiveProbeState(page, probeStateId, scrapeStateRegistry, fixtureUrl);
   const oppositeActionId = getOppositeResponseNavigationActionId(shortcut.actionId);
   const oppositeAriaLabel = getResponseNavigationAriaLabelForAction(oppositeActionId);
-  await clickResponseNavigationTargetRepeated(page, oppositeAriaLabel, RESPONSE_NAVIGATION_ATTEMPTS);
+  await clickResponseNavigationTargetRepeated(
+    page,
+    oppositeAriaLabel,
+    RESPONSE_NAVIGATION_ATTEMPTS,
+  );
   await waitForEnabledResponseNavigationTarget(page, target);
 }
 
@@ -3348,101 +3480,104 @@ async function prepareGptConversationProbeState(page, fixtureUrl) {
 }
 
 async function installLiveProbeObserver(page, options = {}) {
-  await page.evaluate(({ preventDefault }) => {
-    window.__CGCSP_LIVE_SHORTCUT_PROBE__?.cleanup?.();
-    const state = {
-      clicks: [],
-      submits: [],
-      keydowns: [],
-      startedAt: Date.now(),
-    };
-    const describeNode = (node) => {
-      const element = node instanceof Element ? node : node?.parentElement;
-      if (!element) {
+  await page.evaluate(
+    ({ preventDefault }) => {
+      window.__CGCSP_LIVE_SHORTCUT_PROBE__?.cleanup?.();
+      const state = {
+        clicks: [],
+        submits: [],
+        keydowns: [],
+        startedAt: Date.now(),
+      };
+      const describeNode = (node) => {
+        const element = node instanceof Element ? node : node?.parentElement;
+        if (!element) {
+          return {
+            selector: '',
+            textSnippet: '',
+            html: '',
+          };
+        }
+        const path = [];
+        let current = element;
+        for (let depth = 0; current && depth < 6; depth += 1) {
+          const tag = current.tagName ? current.tagName.toLowerCase() : '';
+          const parts = [tag];
+          const testId = current.getAttribute?.('data-testid');
+          const id = current.getAttribute?.('id');
+          const ariaLabel = current.getAttribute?.('aria-label');
+          const role = current.getAttribute?.('role');
+          if (testId) parts.push(`[data-testid="${testId}"]`);
+          if (id) parts.push(`#${id}`);
+          if (ariaLabel) parts.push(`[aria-label="${ariaLabel}"]`);
+          if (role) parts.push(`[role="${role}"]`);
+          path.push(parts.join(''));
+          current = current.parentElement;
+        }
+        const htmlChain = [];
+        current = element;
+        for (let depth = 0; current && depth < 5; depth += 1) {
+          htmlChain.push(current.outerHTML || '');
+          current = current.parentElement;
+        }
         return {
-          selector: '',
-          textSnippet: '',
-          html: '',
+          selector: path.join(' < '),
+          textSnippet: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+          html: htmlChain.join('\n'),
         };
-      }
-      const path = [];
-      let current = element;
-      for (let depth = 0; current && depth < 6; depth += 1) {
-        const tag = current.tagName ? current.tagName.toLowerCase() : '';
-        const parts = [tag];
-        const testId = current.getAttribute?.('data-testid');
-        const id = current.getAttribute?.('id');
-        const ariaLabel = current.getAttribute?.('aria-label');
-        const role = current.getAttribute?.('role');
-        if (testId) parts.push(`[data-testid="${testId}"]`);
-        if (id) parts.push(`#${id}`);
-        if (ariaLabel) parts.push(`[aria-label="${ariaLabel}"]`);
-        if (role) parts.push(`[role="${role}"]`);
-        path.push(parts.join(''));
-        current = current.parentElement;
-      }
-      const htmlChain = [];
-      current = element;
-      for (let depth = 0; current && depth < 5; depth += 1) {
-        htmlChain.push(current.outerHTML || '');
-        current = current.parentElement;
-      }
-      return {
-        selector: path.join(' < '),
-        textSnippet: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-        html: htmlChain.join('\n'),
       };
-    };
-    const onClick = (event) => {
-      state.clicks.push(describeNode(event.target));
-      if (preventDefault) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    };
-    const onSubmit = (event) => {
-      state.submits.push(describeNode(event.target));
-      if (preventDefault) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    };
-    const onKeydown = (event) => {
-      const observed = {
-        key: event.key,
-        code: event.code,
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
-        altGraph: event.getModifierState?.('AltGraph') || false,
-        isComposing: event.isComposing,
-        isTrusted: event.isTrusted,
-        defaultPrevented: event.defaultPrevented,
+      const onClick = (event) => {
+        state.clicks.push(describeNode(event.target));
+        if (preventDefault) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
       };
-      state.keydowns.push(observed);
-      queueMicrotask(() => {
-        observed.defaultPrevented = event.defaultPrevented;
-      });
-    };
-    document.addEventListener('click', onClick, true);
-    document.addEventListener('submit', onSubmit, true);
-    // Extension key handlers are installed before this audit observer. A
-    // bubbling listener therefore sees whether the real key path claimed the
-    // event without intercepting or changing its default behavior.
-    document.addEventListener('keydown', onKeydown, true);
-    window.__CGCSP_LIVE_SHORTCUT_PROBE__ = {
-      state,
-      describeNode,
-      cleanup() {
-        document.removeEventListener('click', onClick, true);
-        document.removeEventListener('submit', onSubmit, true);
-        document.removeEventListener('keydown', onKeydown, true);
-      },
-    };
-  }, {
-    preventDefault: options.preventDefault !== false,
-  });
+      const onSubmit = (event) => {
+        state.submits.push(describeNode(event.target));
+        if (preventDefault) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      };
+      const onKeydown = (event) => {
+        const observed = {
+          key: event.key,
+          code: event.code,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          altGraph: event.getModifierState?.('AltGraph') || false,
+          isComposing: event.isComposing,
+          isTrusted: event.isTrusted,
+          defaultPrevented: event.defaultPrevented,
+        };
+        state.keydowns.push(observed);
+        queueMicrotask(() => {
+          observed.defaultPrevented = event.defaultPrevented;
+        });
+      };
+      document.addEventListener('click', onClick, true);
+      document.addEventListener('submit', onSubmit, true);
+      // Extension key handlers are installed before this audit observer. A
+      // bubbling listener therefore sees whether the real key path claimed the
+      // event without intercepting or changing its default behavior.
+      document.addEventListener('keydown', onKeydown, true);
+      window.__CGCSP_LIVE_SHORTCUT_PROBE__ = {
+        state,
+        describeNode,
+        cleanup() {
+          document.removeEventListener('click', onClick, true);
+          document.removeEventListener('submit', onSubmit, true);
+          document.removeEventListener('keydown', onKeydown, true);
+        },
+      };
+    },
+    {
+      preventDefault: options.preventDefault !== false,
+    },
+  );
 }
 
 async function readLiveProbeObserver(page) {
@@ -3463,10 +3598,12 @@ async function readLiveProbeObserver(page) {
 }
 
 async function cleanupLiveProbeObserver(page) {
-  await page.evaluate(() => {
-    window.__CGCSP_LIVE_SHORTCUT_PROBE__?.cleanup?.();
-    delete window.__CGCSP_LIVE_SHORTCUT_PROBE__;
-  }).catch(() => {});
+  await page
+    .evaluate(() => {
+      window.__CGCSP_LIVE_SHORTCUT_PROBE__?.cleanup?.();
+      delete window.__CGCSP_LIVE_SHORTCUT_PROBE__;
+    })
+    .catch(() => {});
 }
 
 function getTargetNeedleGroups(target) {
@@ -3480,136 +3617,117 @@ function getTargetNeedleGroups(target) {
 }
 
 async function captureLiveProbeSemanticSnapshot(page, target) {
-  return page.evaluate(({
-    targetGroups,
-    userMessageSelectors,
-    assistantMessageSelectors,
-    codeboxContentSelectors,
-  }) => {
-    const isVisible = (node) => {
-      if (!(node instanceof HTMLElement)) return false;
-      const style = getComputedStyle(node);
-      const rect = node.getBoundingClientRect();
-      return (
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        style.pointerEvents !== 'none' &&
-        rect.width > 0 &&
-        rect.height > 0
+  return page.evaluate(
+    ({
+      targetGroups,
+      userMessageSelectors,
+      assistantMessageSelectors,
+      codeboxContentSelectors,
+    }) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.pointerEvents !== 'none' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const matchesTarget = (node) => {
+        const html = String(node?.outerHTML || '');
+        return targetGroups.some((group) => group.every((needle) => html.includes(needle)));
+      };
+      const targetNodes = Array.from(
+        document.querySelectorAll(
+          'button, a, [role], [data-testid], [id], [aria-controls], [name], input, [contenteditable="true"]',
+        ),
+      ).filter((node) => matchesTarget(node));
+      const visibleTargetNodes = targetNodes.filter(isVisible);
+      const visibleDialogs = Array.from(
+        document.querySelectorAll('[role="dialog"], [aria-modal="true"]'),
+      )
+        .filter(isVisible)
+        .map((node) =>
+          [
+            node.id,
+            node.getAttribute('data-testid'),
+            node.getAttribute('aria-label'),
+            node.getAttribute('aria-modal'),
+          ]
+            .filter(Boolean)
+            .join('|'),
+        );
+      const root = document.scrollingElement || document.documentElement;
+      const container =
+        typeof window.getScrollableContainer === 'function'
+          ? window.getScrollableContainer()
+          : root;
+      const scrollTop =
+        container === window
+          ? window.scrollY || root.scrollTop || 0
+          : Number(container?.scrollTop || 0);
+      const scrollMax =
+        container === window
+          ? Math.max(0, root.scrollHeight - window.innerHeight)
+          : Math.max(
+              0,
+              Number(container?.scrollHeight || 0) - Number(container?.clientHeight || 0),
+            );
+      const activeElement = document.activeElement;
+      const activeTarget = matchesTarget(activeElement);
+      const composer = document.querySelector(
+        '#prompt-textarea, [name="prompt-textarea"], [data-testid="composer-input"], [contenteditable="true"][role="textbox"]',
       );
-    };
-    const matchesTarget = (node) => {
-      const html = String(node?.outerHTML || '');
-      return targetGroups.some((group) => group.every((needle) => html.includes(needle)));
-    };
-    const targetNodes = Array.from(
-      document.querySelectorAll(
-        'button, a, [role], [data-testid], [id], [aria-controls], [name], input, [contenteditable="true"]',
-      ),
-    ).filter((node) => matchesTarget(node));
-    const visibleTargetNodes = targetNodes.filter(isVisible);
-    const visibleDialogs = Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]'))
-      .filter(isVisible)
-      .map((node) =>
-        [
-          node.id,
-          node.getAttribute('data-testid'),
-          node.getAttribute('aria-label'),
-          node.getAttribute('aria-modal'),
-        ]
-          .filter(Boolean)
-          .join('|'),
-      );
-    const root = document.scrollingElement || document.documentElement;
-    const container =
-      typeof window.getScrollableContainer === 'function'
-        ? window.getScrollableContainer()
-        : root;
-    const scrollTop =
-      container === window
-        ? window.scrollY || root.scrollTop || 0
-        : Number(container?.scrollTop || 0);
-    const scrollMax =
-      container === window
-        ? Math.max(0, root.scrollHeight - window.innerHeight)
-        : Math.max(0, Number(container?.scrollHeight || 0) - Number(container?.clientHeight || 0));
-    const activeElement = document.activeElement;
-    const activeTarget = matchesTarget(activeElement);
-    const composer = document.querySelector(
-      '#prompt-textarea, [name="prompt-textarea"], [data-testid="composer-input"], [contenteditable="true"][role="textbox"]',
-    );
-    const composerText =
-      composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
-        ? composer.value
-        : composer?.innerText || composer?.textContent || '';
-    const hashText = (value) => {
-      const text = String(value || '');
-      let hash = 2166136261;
-      for (let index = 0; index < text.length; index += 1) {
-        hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
-      }
-      return `${text.length}:${(hash >>> 0).toString(16)}`;
-    };
-    const findMessageNodes = (selectors) => {
-      for (const selector of selectors) {
-        const nodes = Array.from(document.querySelectorAll(selector));
-        if (nodes.length) return nodes;
-      }
-      return [];
-    };
-    const userMessageNodes = findMessageNodes(userMessageSelectors);
-    const assistantMessageNodes = findMessageNodes(assistantMessageSelectors);
-    const messages = [
-      ...userMessageNodes.map((node) => ({ node, role: 'user' })),
-      ...assistantMessageNodes.map((node) => ({ node, role: 'assistant' })),
-    ]
-      .sort((left, right) => {
-        if (left.node === right.node) return 0;
-        return left.node.compareDocumentPosition(right.node) & Node.DOCUMENT_POSITION_FOLLOWING
-          ? -1
-          : 1;
-      })
-      .map(({ node, role }) => ({
-        role,
-        id:
-          node.getAttribute('data-message-id') ||
-          node.id ||
-          node.getAttribute('data-chatgpt-selection-message-id') ||
-          node.closest('[data-chatgpt-search-message-ids]')
-            ?.getAttribute('data-chatgpt-search-message-ids')
-            ?.split(/\s+/)[0] ||
-          '',
-        contentHash: hashText(node.textContent),
-      }));
-    const userMessages = messages.filter((message) => message.role === 'user');
-    const assistantMessages = messages.filter((message) => message.role === 'assistant');
-    const targetControls = visibleTargetNodes.map((node) => ({
-      key:
-        node.id ||
-        node.getAttribute('data-testid') ||
-        node.getAttribute('aria-controls') ||
-        node.getAttribute('aria-label') ||
-        node.getAttribute('name') ||
-        '',
-      pressed: node.getAttribute('aria-pressed'),
-      checked: node.getAttribute('aria-checked') ?? (node.checked ? 'true' : null),
-      expanded: node.getAttribute('aria-expanded'),
-      selected: node.getAttribute('aria-selected'),
-    }));
-    const targetTextHashes = visibleTargetNodes.map((node) => ({
-      key:
-        node.id ||
-        node.getAttribute('data-testid') ||
-        node.getAttribute('aria-label') ||
-        node.getAttribute('name') ||
-        '',
-      hash: hashText(node.innerText || node.textContent || ''),
-    }));
-    const controls = Array.from(
-      document.querySelectorAll('[aria-pressed], [aria-checked], [aria-expanded], [aria-selected], input[type="checkbox"], input[type="radio"]'),
-    )
-      .filter(isVisible)
-      .map((node) => ({
+      const composerText =
+        composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
+          ? composer.value
+          : composer?.innerText || composer?.textContent || '';
+      const hashText = (value) => {
+        const text = String(value || '');
+        let hash = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+        }
+        return `${text.length}:${(hash >>> 0).toString(16)}`;
+      };
+      const findMessageNodes = (selectors) => {
+        for (const selector of selectors) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          if (nodes.length) return nodes;
+        }
+        return [];
+      };
+      const userMessageNodes = findMessageNodes(userMessageSelectors);
+      const assistantMessageNodes = findMessageNodes(assistantMessageSelectors);
+      const messages = [
+        ...userMessageNodes.map((node) => ({ node, role: 'user' })),
+        ...assistantMessageNodes.map((node) => ({ node, role: 'assistant' })),
+      ]
+        .sort((left, right) => {
+          if (left.node === right.node) return 0;
+          return left.node.compareDocumentPosition(right.node) & Node.DOCUMENT_POSITION_FOLLOWING
+            ? -1
+            : 1;
+        })
+        .map(({ node, role }) => ({
+          role,
+          id:
+            node.getAttribute('data-message-id') ||
+            node.id ||
+            node.getAttribute('data-chatgpt-selection-message-id') ||
+            node
+              .closest('[data-chatgpt-search-message-ids]')
+              ?.getAttribute('data-chatgpt-search-message-ids')
+              ?.split(/\s+/)[0] ||
+            '',
+          contentHash: hashText(node.textContent),
+        }));
+      const userMessages = messages.filter((message) => message.role === 'user');
+      const assistantMessages = messages.filter((message) => message.role === 'assistant');
+      const targetControls = visibleTargetNodes.map((node) => ({
         key:
           node.id ||
           node.getAttribute('data-testid') ||
@@ -3621,152 +3739,188 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
         checked: node.getAttribute('aria-checked') ?? (node.checked ? 'true' : null),
         expanded: node.getAttribute('aria-expanded'),
         selected: node.getAttribute('aria-selected'),
-      }))
-      .filter((control) => control.key);
-    const audioElements = Array.from(document.querySelectorAll('audio, video'));
-    const header = document.getElementById('page-header');
-    const bottom = document.getElementById('thread-bottom');
-    const codeboxNodes = Array.from(
-      document.querySelectorAll(codeboxContentSelectors.join(', ')),
-    ).filter(isVisible);
-    const codeboxWrapMetrics = codeboxNodes.map((code) => {
-      const style = getComputedStyle(code);
-      const pre = code.closest('pre');
-      const lineBox = pre || code.closest('.cm-content') || code.parentElement || code;
-      const lineBoxStyle = getComputedStyle(lineBox);
-      const scrollport =
-        code.closest('.cm-editor')?.querySelector('.cm-scroller') ||
-        pre?.parentElement ||
-        code.parentElement ||
-        code;
-      const availableWidth =
-        lineBox.clientWidth -
-        Number.parseFloat(lineBoxStyle.paddingLeft || '0') -
-        Number.parseFloat(lineBoxStyle.paddingRight || '0');
-      const logicalLines = [''];
-      const appendLogicalText = (node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          const parts = String(node.textContent || '').split(/\r?\n/);
-          logicalLines[logicalLines.length - 1] += parts[0];
-          for (const part of parts.slice(1)) logicalLines.push(part);
-          return;
+      }));
+      const targetTextHashes = visibleTargetNodes.map((node) => ({
+        key:
+          node.id ||
+          node.getAttribute('data-testid') ||
+          node.getAttribute('aria-label') ||
+          node.getAttribute('name') ||
+          '',
+        hash: hashText(node.innerText || node.textContent || ''),
+      }));
+      const controls = Array.from(
+        document.querySelectorAll(
+          '[aria-pressed], [aria-checked], [aria-expanded], [aria-selected], input[type="checkbox"], input[type="radio"]',
+        ),
+      )
+        .filter(isVisible)
+        .map((node) => ({
+          key:
+            node.id ||
+            node.getAttribute('data-testid') ||
+            node.getAttribute('aria-controls') ||
+            node.getAttribute('aria-label') ||
+            node.getAttribute('name') ||
+            '',
+          pressed: node.getAttribute('aria-pressed'),
+          checked: node.getAttribute('aria-checked') ?? (node.checked ? 'true' : null),
+          expanded: node.getAttribute('aria-expanded'),
+          selected: node.getAttribute('aria-selected'),
+        }))
+        .filter((control) => control.key);
+      const audioElements = Array.from(document.querySelectorAll('audio, video'));
+      const header = document.getElementById('page-header');
+      const bottom = document.getElementById('thread-bottom');
+      const codeboxNodes = Array.from(
+        document.querySelectorAll(codeboxContentSelectors.join(', ')),
+      ).filter(isVisible);
+      const codeboxWrapMetrics = codeboxNodes.map((code) => {
+        const style = getComputedStyle(code);
+        const pre = code.closest('pre');
+        const lineBox = pre || code.closest('.cm-content') || code.parentElement || code;
+        const lineBoxStyle = getComputedStyle(lineBox);
+        const scrollport =
+          code.closest('.cm-editor')?.querySelector('.cm-scroller') ||
+          pre?.parentElement ||
+          code.parentElement ||
+          code;
+        const availableWidth =
+          lineBox.clientWidth -
+          Number.parseFloat(lineBoxStyle.paddingLeft || '0') -
+          Number.parseFloat(lineBoxStyle.paddingRight || '0');
+        const logicalLines = [''];
+        const appendLogicalText = (node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const parts = String(node.textContent || '').split(/\r?\n/);
+            logicalLines[logicalLines.length - 1] += parts[0];
+            for (const part of parts.slice(1)) logicalLines.push(part);
+            return;
+          }
+          if (node instanceof HTMLBRElement) {
+            logicalLines.push('');
+            return;
+          }
+          node.childNodes.forEach(appendLogicalText);
+        };
+        appendLogicalText(code);
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (context) context.font = style.font;
+        const longestLineWidth = Math.max(
+          0,
+          ...logicalLines.map((line) => (context ? context.measureText(line).width : 0)),
+        );
+        const range = document.createRange();
+        const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+        const lineTops = [];
+        let textNode = walker.nextNode();
+        while (textNode) {
+          range.selectNodeContents(textNode);
+          for (const rect of range.getClientRects()) {
+            if (rect.width > 0.5 && rect.height > 0.5) lineTops.push(rect.top);
+          }
+          textNode = walker.nextNode();
         }
-        if (node instanceof HTMLBRElement) {
-          logicalLines.push('');
-          return;
-        }
-        node.childNodes.forEach(appendLogicalText);
-      };
-      appendLogicalText(code);
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (context) context.font = style.font;
-      const longestLineWidth = Math.max(
-        0,
-        ...logicalLines.map((line) => (context ? context.measureText(line).width : 0)),
-      );
-      const range = document.createRange();
-      const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
-      const lineTops = [];
-      let textNode = walker.nextNode();
-      while (textNode) {
-        range.selectNodeContents(textNode);
-        for (const rect of range.getClientRects()) {
-          if (rect.width > 0.5 && rect.height > 0.5) lineTops.push(rect.top);
-        }
-        textNode = walker.nextNode();
-      }
-      lineTops.sort((left, right) => left - right);
-      const lineHeight = Number.parseFloat(style.lineHeight) || 18;
-      const visualLineCount = lineTops.reduce((count, top, index) => {
-        if (index === 0 || top - lineTops[index - 1] > Math.max(2, lineHeight * 0.35)) {
-          return count + 1;
-        }
-        return count;
-      }, 0);
-      const hardLineCount = Math.max(1, logicalLines.length);
-      const requiresWrap = availableWidth > 0 && longestLineWidth > availableWidth + 2;
-      const hasActualWrap = visualLineCount > hardLineCount;
+        lineTops.sort((left, right) => left - right);
+        const lineHeight = Number.parseFloat(style.lineHeight) || 18;
+        const visualLineCount = lineTops.reduce((count, top, index) => {
+          if (index === 0 || top - lineTops[index - 1] > Math.max(2, lineHeight * 0.35)) {
+            return count + 1;
+          }
+          return count;
+        }, 0);
+        const hardLineCount = Math.max(1, logicalLines.length);
+        const requiresWrap = availableWidth > 0 && longestLineWidth > availableWidth + 2;
+        const hasActualWrap = visualLineCount > hardLineCount;
+        return {
+          whiteSpace: style.whiteSpace,
+          overflowWrap: style.overflowWrap,
+          codeDisplay: style.display,
+          codeClientWidth: code.clientWidth,
+          codeScrollWidth: code.scrollWidth,
+          lineBoxClientWidth: lineBox.clientWidth,
+          availableWidth,
+          longestLineWidth,
+          hardLineCount,
+          visualLineCount,
+          wrappedLineCount: Math.max(0, visualLineCount - hardLineCount),
+          requiresWrap,
+          hasActualWrap,
+          scrollportClientWidth: scrollport.clientWidth,
+          scrollportScrollWidth: scrollport.scrollWidth,
+        };
+      });
+      const codeboxWrappedCount = codeboxWrapMetrics.filter(
+        (metric) =>
+          metric.whiteSpace === 'pre-wrap' &&
+          metric.overflowWrap === 'anywhere' &&
+          metric.availableWidth > 0 &&
+          (!metric.requiresWrap || metric.hasActualWrap) &&
+          metric.scrollportScrollWidth <= metric.scrollportClientWidth + 2,
+      ).length;
       return {
-        whiteSpace: style.whiteSpace,
-        overflowWrap: style.overflowWrap,
-        codeDisplay: style.display,
-        codeClientWidth: code.clientWidth,
-        codeScrollWidth: code.scrollWidth,
-        lineBoxClientWidth: lineBox.clientWidth,
-        availableWidth,
-        longestLineWidth,
-        hardLineCount,
-        visualLineCount,
-        wrappedLineCount: Math.max(0, visualLineCount - hardLineCount),
-        requiresWrap,
-        hasActualWrap,
-        scrollportClientWidth: scrollport.clientWidth,
-        scrollportScrollWidth: scrollport.scrollWidth,
+        url: location.href,
+        title: document.title,
+        hasComposer: Boolean(composer && isVisible(composer)),
+        composerFocused: Boolean(
+          composer && (activeElement === composer || composer.contains(activeElement)),
+        ),
+        activeTarget,
+        visibleTarget: visibleTargetNodes.length > 0,
+        visibleTargetCount: visibleTargetNodes.length,
+        targetControls,
+        targetTextHashes,
+        visibleDialogCount: visibleDialogs.length,
+        visibleDialogs,
+        controls,
+        messageCount: messages.length,
+        userMessageCount: userMessages.length,
+        assistantMessageCount: assistantMessages.length,
+        lastUserHash: userMessages.at(-1)?.contentHash || '',
+        lastAssistantHash: assistantMessages.at(-1)?.contentHash || '',
+        messageIds: messages.map((message) => message.id).filter(Boolean),
+        composerHasText: Boolean(String(composerText).trim()),
+        composerTextHash: hashText(composerText),
+        editableUserMessageCount: document.querySelectorAll(
+          [
+            '[data-message-author-role="user"] [contenteditable="true"]',
+            '[data-message-author-role="user"] textarea',
+            '[data-user-message-bubble="true"] [contenteditable="true"]',
+            '[data-user-message-bubble="true"] textarea',
+            '[data-chatgpt-search-unit-key$=":user"] [contenteditable="true"]',
+            '[data-chatgpt-search-unit-key$=":user"] textarea',
+          ].join(', '),
+        ).length,
+        codeboxWrapEnabled: document.documentElement.classList.contains('csp-codebox-wrap-enabled'),
+        codeboxCount: codeboxNodes.length,
+        codeboxWrappedCount,
+        codeboxHorizontalOverflowCount: codeboxWrapMetrics.filter(
+          (metric) => metric.scrollportScrollWidth > metric.scrollportClientWidth + 2,
+        ).length,
+        codeboxWrapRequiredCount: codeboxWrapMetrics.filter((metric) => metric.requiresWrap).length,
+        codeboxActuallyWrappedCount: codeboxWrapMetrics.filter((metric) => metric.hasActualWrap)
+          .length,
+        codeboxWrapSatisfied:
+          codeboxNodes.length > 0 && codeboxWrappedCount === codeboxNodes.length,
+        codeboxWrapMetrics,
+        filePickerInputs: Array.from(document.querySelectorAll('input[type="file"]')).filter(
+          isVisible,
+        ).length,
+        audioPlaying: audioElements.some((element) => !element.paused),
+        scrollTop,
+        scrollMax,
+        headerVisible: Boolean(header && isVisible(header)),
+        bottomVisible: Boolean(bottom && isVisible(bottom)),
       };
-    });
-    const codeboxWrappedCount = codeboxWrapMetrics.filter(
-      (metric) =>
-        metric.whiteSpace === 'pre-wrap' &&
-        metric.overflowWrap === 'anywhere' &&
-        metric.availableWidth > 0 &&
-        (!metric.requiresWrap || metric.hasActualWrap) &&
-        metric.scrollportScrollWidth <= metric.scrollportClientWidth + 2,
-    ).length;
-    return {
-      url: location.href,
-      title: document.title,
-      hasComposer: Boolean(composer && isVisible(composer)),
-      composerFocused: Boolean(composer && (activeElement === composer || composer.contains(activeElement))),
-      activeTarget,
-      visibleTarget: visibleTargetNodes.length > 0,
-      visibleTargetCount: visibleTargetNodes.length,
-      targetControls,
-      targetTextHashes,
-      visibleDialogCount: visibleDialogs.length,
-      visibleDialogs,
-      controls,
-      messageCount: messages.length,
-      userMessageCount: userMessages.length,
-      assistantMessageCount: assistantMessages.length,
-      lastUserHash: userMessages.at(-1)?.contentHash || '',
-      lastAssistantHash: assistantMessages.at(-1)?.contentHash || '',
-      messageIds: messages.map((message) => message.id).filter(Boolean),
-      composerHasText: Boolean(String(composerText).trim()),
-      composerTextHash: hashText(composerText),
-      editableUserMessageCount: document.querySelectorAll(
-        [
-          '[data-message-author-role="user"] [contenteditable="true"]',
-          '[data-message-author-role="user"] textarea',
-          '[data-user-message-bubble="true"] [contenteditable="true"]',
-          '[data-user-message-bubble="true"] textarea',
-          '[data-chatgpt-search-unit-key$=":user"] [contenteditable="true"]',
-          '[data-chatgpt-search-unit-key$=":user"] textarea',
-        ].join(', '),
-      ).length,
-      codeboxWrapEnabled: document.documentElement.classList.contains('csp-codebox-wrap-enabled'),
-      codeboxCount: codeboxNodes.length,
-      codeboxWrappedCount,
-      codeboxHorizontalOverflowCount: codeboxWrapMetrics.filter(
-        (metric) => metric.scrollportScrollWidth > metric.scrollportClientWidth + 2,
-      ).length,
-      codeboxWrapRequiredCount: codeboxWrapMetrics.filter((metric) => metric.requiresWrap).length,
-      codeboxActuallyWrappedCount: codeboxWrapMetrics.filter((metric) => metric.hasActualWrap).length,
-      codeboxWrapSatisfied: codeboxNodes.length > 0 && codeboxWrappedCount === codeboxNodes.length,
-      codeboxWrapMetrics,
-      filePickerInputs: Array.from(document.querySelectorAll('input[type="file"]')).filter(isVisible).length,
-      audioPlaying: audioElements.some((element) => !element.paused),
-      scrollTop,
-      scrollMax,
-      headerVisible: Boolean(header && isVisible(header)),
-      bottomVisible: Boolean(bottom && isVisible(bottom)),
-    };
-  }, {
-    targetGroups: getTargetNeedleGroups(target),
-    userMessageSelectors: [...USER_MESSAGE_SELECTORS],
-    assistantMessageSelectors: [...ASSISTANT_MESSAGE_SELECTORS],
-    codeboxContentSelectors: [...CODEBOX_CONTENT_SELECTORS],
-  });
+    },
+    {
+      targetGroups: getTargetNeedleGroups(target),
+      userMessageSelectors: [...USER_MESSAGE_SELECTORS],
+      assistantMessageSelectors: [...ASSISTANT_MESSAGE_SELECTORS],
+      codeboxContentSelectors: [...CODEBOX_CONTENT_SELECTORS],
+    },
+  );
 }
 
 export function buildCodeboxWrapPersistenceProof(
@@ -3778,7 +3932,9 @@ export function buildCodeboxWrapPersistenceProof(
     ? reloadedSnapshot.codeboxWrapMetrics
     : [];
   const requiredWrapMetrics = codeboxWrapMetrics.filter((metric) => metric?.requiresWrap === true);
-  const actuallyWrappedCount = requiredWrapMetrics.filter((metric) => metric.hasActualWrap === true).length;
+  const actuallyWrappedCount = requiredWrapMetrics.filter(
+    (metric) => metric.hasActualWrap === true,
+  ).length;
   const wrapClassRestored = reloadedSnapshot?.codeboxWrapEnabled === true;
   const horizontalOverflowCount = Number.isFinite(reloadedSnapshot?.codeboxHorizontalOverflowCount)
     ? reloadedSnapshot.codeboxHorizontalOverflowCount
@@ -3831,15 +3987,18 @@ function evaluateLiveProbeSemantic(
   const proof = {
     status: 'not-run',
     proofMethod: 'none',
-    expected: shortcut.activationProbeExpectedTargetRef || shortcut.notes || 'Declared shortcut behavior.',
+    expected:
+      shortcut.activationProbeExpectedTargetRef || shortcut.notes || 'Declared shortcut behavior.',
     observed: '',
     reason: 'No action-specific semantic postcondition is registered for this shortcut yet.',
   };
   if (!before || !after) return proof;
   const conversationId = (url) => String(url || '').match(/\/c\/([^/]+)/)?.[1] || '';
   const clipboardMatched = clipboardEvidence === true || clipboardEvidence?.matches === true;
-  const targetStateChanged = JSON.stringify(before.targetControls) !== JSON.stringify(after.targetControls);
-  const generalControlStateChanged = JSON.stringify(before.controls) !== JSON.stringify(after.controls);
+  const targetStateChanged =
+    JSON.stringify(before.targetControls) !== JSON.stringify(after.targetControls);
+  const generalControlStateChanged =
+    JSON.stringify(before.controls) !== JSON.stringify(after.controls);
   const responseChanged =
     before.lastAssistantHash !== after.lastAssistantHash ||
     after.assistantMessageCount > before.assistantMessageCount;
@@ -3847,8 +4006,11 @@ function evaluateLiveProbeSemantic(
   if (shortcut.activationProbeMode === 'focus-target') {
     proof.proofMethod = 'active-element-state';
     proof.status = after.activeTarget ? 'pass' : 'fail';
-    proof.observed = after.activeTarget ? 'The expected target owns keyboard focus.' : 'The expected target did not gain keyboard focus.';
-    proof.reason = proof.status === 'pass' ? '' : 'Keyboard focus did not reach the expected target.';
+    proof.observed = after.activeTarget
+      ? 'The expected target owns keyboard focus.'
+      : 'The expected target did not gain keyboard focus.';
+    proof.reason =
+      proof.status === 'pass' ? '' : 'Keyboard focus did not reach the expected target.';
   } else if (shortcut.activationProbeMode === 'opens-target') {
     if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
       const newBlankConversation =
@@ -3863,7 +4025,8 @@ function evaluateLiveProbeSemantic(
       const dialogOpened = after.visibleDialogCount > before.visibleDialogCount;
       proof.status = appeared || dialogOpened ? 'pass' : 'fail';
       proof.observed = `visibleTarget ${before.visibleTarget} -> ${after.visibleTarget}; dialogs ${before.visibleDialogCount} -> ${after.visibleDialogCount}`;
-      proof.reason = proof.status === 'pass' ? '' : 'The expected UI boundary did not newly become visible.';
+      proof.reason =
+        proof.status === 'pass' ? '' : 'The expected UI boundary did not newly become visible.';
     }
   } else if (shortcut.activationProbeMode === 'viewport-target') {
     proof.proofMethod = 'scroll-position-and-boundary';
@@ -3873,7 +4036,10 @@ function evaluateLiveProbeSemantic(
       target?.targetId === 'thread-bottom' && after.scrollMax - after.scrollTop <= 160;
     proof.status = moved && (reachedTop || reachedBottom) ? 'pass' : 'fail';
     proof.observed = `scrollTop ${before.scrollTop} -> ${after.scrollTop}; target boundary reached=${reachedTop || reachedBottom}`;
-    proof.reason = proof.status === 'pass' ? '' : 'Scroll position did not move to the expected viewport boundary.';
+    proof.reason =
+      proof.status === 'pass'
+        ? ''
+        : 'Scroll position did not move to the expected viewport boundary.';
   } else if (shortcut.activationProbeMode === 'dom-state') {
     proof.proofMethod = 'dom-postcondition';
     if (target?.targetId === 'codebox-wrap-enabled') {
@@ -3881,23 +4047,35 @@ function evaluateLiveProbeSemantic(
         after.codeboxCount > 0 &&
         after.codeboxWrappedCount === after.codeboxCount &&
         after.codeboxHorizontalOverflowCount === 0;
-      proof.status = after.codeboxWrapEnabled && !before.codeboxWrapEnabled && wrapped ? 'pass' : 'fail';
+      proof.status =
+        after.codeboxWrapEnabled && !before.codeboxWrapEnabled && wrapped ? 'pass' : 'fail';
       proof.observed = `wrap class ${before.codeboxWrapEnabled} -> ${after.codeboxWrapEnabled}; style/overflow pass=${after.codeboxWrappedCount}/${after.codeboxCount}; lines wrapped=${after.codeboxActuallyWrappedCount}/${after.codeboxWrapRequiredCount} codeboxes requiring it; overflowing codeboxes=${after.codeboxHorizontalOverflowCount}`;
-      proof.reason = proof.status === 'pass' ? '' : 'The shortcut did not wrap overlong rendered code lines and remove horizontal overflow.';
-    } else if (target?.targetId === 'message-scroll-up-delta' || target?.targetId === 'message-scroll-down-delta') {
+      proof.reason =
+        proof.status === 'pass'
+          ? ''
+          : 'The shortcut did not wrap overlong rendered code lines and remove horizontal overflow.';
+    } else if (
+      target?.targetId === 'message-scroll-up-delta' ||
+      target?.targetId === 'message-scroll-down-delta'
+    ) {
       const difference = after.scrollTop - before.scrollTop;
       const movedInExpectedDirection =
         target.targetId === 'message-scroll-up-delta' ? difference < -40 : difference > 40;
       proof.status = movedInExpectedDirection ? 'pass' : 'fail';
       proof.observed = `scrollTop ${before.scrollTop} -> ${after.scrollTop}`;
-      proof.reason = proof.status === 'pass' ? '' : 'Message scrolling did not move in the expected direction.';
+      proof.reason =
+        proof.status === 'pass' ? '' : 'Message scrolling did not move in the expected direction.';
     }
   } else if (shortcut.activationProbeMode === 'clipboard-text') {
     proof.proofMethod = 'clipboard-content';
     proof.status = clipboardMatched ? 'pass' : 'fail';
     proof.observed = `Clipboard content check passed=${clipboardMatched}; types=${(clipboardEvidence?.types || []).join(',')}; HTML present=${Boolean(clipboardEvidence?.hasHtml)}; plain-text length=${clipboardEvidence?.plainTextLength ?? 0}; hash=${clipboardEvidence?.plainTextHash || ''}`;
-    proof.reason = proof.status === 'pass' ? '' : 'Clipboard content did not satisfy the action-specific check.';
-  } else if (shortcut.activationProbeMode === 'click-target' || shortcut.activationProbeMode === 'direct-menu-target') {
+    proof.reason =
+      proof.status === 'pass' ? '' : 'Clipboard content did not satisfy the action-specific check.';
+  } else if (
+    shortcut.activationProbeMode === 'click-target' ||
+    shortcut.activationProbeMode === 'direct-menu-target'
+  ) {
     proof.proofMethod = 'action-specific-postcondition';
     let matched = false;
     switch (shortcut.actionId) {
@@ -3917,9 +4095,14 @@ function evaluateLiveProbeSemantic(
         proof.reason = matched ? '' : 'A new custom GPT conversation did not open.';
         break;
       case 'shortcutKeyClickSendButton':
-        matched = after.userMessageCount > before.userMessageCount && !after.composerHasText && responseChanged;
+        matched =
+          after.userMessageCount > before.userMessageCount &&
+          !after.composerHasText &&
+          responseChanged;
         proof.observed = `user messages ${before.userMessageCount} -> ${after.userMessageCount}; assistant response changed=${responseChanged}; draft remains=${after.composerHasText}`;
-        proof.reason = matched ? '' : 'The draft was not committed and followed by a changed assistant response.';
+        proof.reason = matched
+          ? ''
+          : 'The draft was not committed and followed by a changed assistant response.';
         break;
       case 'shortcutKeyClickStopButton':
         matched = before.visibleTarget && !after.visibleTarget;
@@ -3938,7 +4121,9 @@ function evaluateLiveProbeSemantic(
           !after.composerHasText &&
           responseChanged;
         proof.observed = `user-message hash changed=${after.lastUserHash !== before.lastUserHash}; assistant response changed=${responseChanged}; draft remains=${after.composerHasText}`;
-        proof.reason = matched ? '' : 'The edited user message was not committed and followed by a changed assistant response.';
+        proof.reason = matched
+          ? ''
+          : 'The edited user message was not committed and followed by a changed assistant response.';
         break;
       case 'shortcutKeyMoreDotsBranchInNewChat':
         matched =
@@ -3949,7 +4134,9 @@ function evaluateLiveProbeSemantic(
           before.lastUserHash === after.lastUserHash &&
           before.lastAssistantHash === after.lastAssistantHash;
         proof.observed = `conversation identity changed=${conversationId(before.url) !== conversationId(after.url)}; message count/context hashes preserved=${before.messageCount === after.messageCount && before.lastUserHash === after.lastUserHash && before.lastAssistantHash === after.lastAssistantHash}`;
-        proof.reason = matched ? '' : 'Branch did not create a new conversation with the same audit-message context.';
+        proof.reason = matched
+          ? ''
+          : 'Branch did not create a new conversation with the same audit-message context.';
         break;
       case 'shortcutKeyTemporaryChat':
         matched = targetStateChanged || generalControlStateChanged;
@@ -3988,13 +4175,17 @@ function evaluateLiveProbeSemantic(
           before.lastAssistantHash !== after.lastAssistantHash;
         proof.proofMethod = 'response-variant-preview-hash';
         proof.observed = `conversation identity preserved=${before.url === after.url}; response count preserved=${before.assistantMessageCount === after.assistantMessageCount}; displayed response variant changed=${before.lastAssistantHash !== after.lastAssistantHash}`;
-        proof.reason = matched ? '' : 'The Ctrl+Alt response preview did not switch the displayed response variant.';
+        proof.reason = matched
+          ? ''
+          : 'The Ctrl+Alt response preview did not switch the displayed response variant.';
         break;
       case 'shortcutKeyCopyLowest':
         matched = clipboardMatched;
         proof.proofMethod = 'clipboard-content';
         proof.observed = `plain-text-only copy passed=${matched}; types=${(clipboardEvidence?.types || []).join(',')}; HTML present=${Boolean(clipboardEvidence?.hasHtml)}; plain-text length=${clipboardEvidence?.plainTextLength ?? 0}; hash=${clipboardEvidence?.plainTextHash || ''}`;
-        proof.reason = matched ? '' : 'Alt+C did not place a qualifying plain-text-only response on the clipboard.';
+        proof.reason = matched
+          ? ''
+          : 'Alt+C did not place a qualifying plain-text-only response on the clipboard.';
         break;
       case 'shortcutKeySearchWeb':
       case 'shortcutKeyCreateImage':
@@ -4010,10 +4201,13 @@ function evaluateLiveProbeSemantic(
           before.messageCount === after.messageCount;
         proof.proofMethod = 'canceled-file-chooser-boundary';
         proof.observed = `native file chooser observed and canceled=${fileChooserObserved}; conversation state unchanged=${before.composerTextHash === after.composerTextHash && before.messageCount === after.messageCount}`;
-        proof.reason = matched ? '' : 'The file chooser boundary was not observed and canceled without uploading a file.';
+        proof.reason = matched
+          ? ''
+          : 'The file chooser boundary was not observed and canceled without uploading a file.';
         break;
       default:
-        proof.reason = 'No action-specific semantic postcondition is registered for this click-target action yet.';
+        proof.reason =
+          'No action-specific semantic postcondition is registered for this click-target action yet.';
         return proof;
     }
     proof.status = matched ? 'pass' : 'fail';
@@ -4032,45 +4226,6 @@ async function waitForLiveProbeTargetPresence(page, target) {
     needleGroups,
     { timeout: 5000 },
   );
-}
-
-async function clickLiveProbeTarget(page, target) {
-  const needleGroups = getTargetNeedleGroups(target);
-  await waitBeforeBrowserInteraction();
-  const clicked = await page.evaluate((groups) => {
-    const matchesNeedles = (html) =>
-      groups.some((group) => group.every((needle) => String(html || '').includes(String(needle))));
-    const isVisible = (node) => {
-      if (!(node instanceof HTMLElement)) return false;
-      const style = getComputedStyle(node);
-      const rect = node.getBoundingClientRect();
-      return (
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        style.pointerEvents !== 'none' &&
-        rect.width > 0 &&
-        rect.height > 0
-      );
-    };
-    const candidates = Array.from(
-      document.querySelectorAll(
-        'div.__menu-item[tabindex], [role="menuitem"], [role="menuitemradio"], button, a',
-      ),
-    ).filter(isVisible);
-    const targetNode =
-      candidates.find((node) => matchesNeedles(node.outerHTML)) ||
-      candidates.find((node) => {
-        const match = Array.from(node.querySelectorAll('svg,path,use')).find((child) =>
-          matchesNeedles(child.outerHTML),
-        );
-        return Boolean(match);
-      });
-    targetNode?.click?.();
-    return Boolean(targetNode);
-  }, needleGroups);
-  if (!clicked) {
-    throw new Error(`Could not click live probe target ${target?.targetId || target?.identifier || ''}.`);
-  }
 }
 
 function keyForShortcutCode(code) {
@@ -4169,9 +4324,10 @@ async function recoverTemporaryShortcutAssignments({
   mutationLedger = null,
   onRecoveryUpdate = null,
 } = {}) {
-  const auditKeys = Array.isArray(mutationLedger) && mutationLedger.length
-    ? mutationLedger.map((entry) => entry.key)
-    : Object.keys(temporaryShortcutAssignments || {});
+  const auditKeys =
+    Array.isArray(mutationLedger) && mutationLedger.length
+      ? mutationLedger.map((entry) => entry.key)
+      : Object.keys(temporaryShortcutAssignments || {});
   if (!auditKeys.length) {
     return buildStorageRecoveryReport({
       status: 'not-needed',
@@ -4184,11 +4340,7 @@ async function recoverTemporaryShortcutAssignments({
   let plan = null;
   try {
     await onRecoveryUpdate?.({ stage: 'observing-before-restore', ledger });
-    const observedBeforeRestore = await readExtensionSyncStorage(
-      context,
-      extensionId,
-      auditKeys,
-    );
+    const observedBeforeRestore = await readExtensionSyncStorage(context, extensionId, auditKeys);
     plan = buildStorageRecoveryPlan(ledger, observedBeforeRestore);
     await onRecoveryUpdate?.({ stage: 'restore-planned', ledger, plan });
     if (Object.keys(plan.setValues).length > 0) {
@@ -4251,9 +4403,7 @@ async function writeAuditStorageSetting({
     [entry] = createStorageMutationLedger(originalStorage, { [key]: value });
     mutationLedger.push(entry);
   }
-  entry.auditValues = [
-    ...new Set([...(entry.auditValues || [entry.auditValue]), value]),
-  ];
+  entry.auditValues = [...new Set([...(entry.auditValues || [entry.auditValue]), value])];
   entry.auditPresent = true;
   entry.auditValue = value;
   entry.restoreAction = 'pending';
@@ -4298,21 +4448,24 @@ async function dispatchLiveShortcut(page, code) {
   }
 
   await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-  await page.evaluate(({ shortcutCode, shortcutKey }) => {
-    const eventInit = {
-      key: shortcutKey,
-      code: shortcutCode,
-      altKey: true,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    };
-    document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-    document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-  }, {
-    shortcutCode: code,
-    shortcutKey: keyForShortcutCode(code),
-  });
+  await page.evaluate(
+    ({ shortcutCode, shortcutKey }) => {
+      const eventInit = {
+        key: shortcutKey,
+        code: shortcutCode,
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
+      document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+      document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+    },
+    {
+      shortcutCode: code,
+      shortcutKey: keyForShortcutCode(code),
+    },
+  );
 }
 
 async function dispatchControlShortcut(page, code) {
@@ -4329,21 +4482,24 @@ async function dispatchControlShortcut(page, code) {
   }
 
   await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-  await page.evaluate(({ shortcutCode, shortcutKey }) => {
-    const eventInit = {
-      key: shortcutKey,
-      code: shortcutCode,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    };
-    document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-    document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-  }, {
-    shortcutCode: code,
-    shortcutKey: keyForShortcutCode(code),
-  });
+  await page.evaluate(
+    ({ shortcutCode, shortcutKey }) => {
+      const eventInit = {
+        key: shortcutKey,
+        code: shortcutCode,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
+      document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+      document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+    },
+    {
+      shortcutCode: code,
+      shortcutKey: keyForShortcutCode(code),
+    },
+  );
 }
 
 async function dispatchAltControlShortcut(page, code) {
@@ -4364,22 +4520,25 @@ async function dispatchAltControlShortcut(page, code) {
   }
 
   await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-  await page.evaluate(({ shortcutCode, shortcutKey }) => {
-    const eventInit = {
-      key: shortcutKey,
-      code: shortcutCode,
-      altKey: true,
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-    };
-    document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-    document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-  }, {
-    shortcutCode: code,
-    shortcutKey: keyForShortcutCode(code),
-  });
+  await page.evaluate(
+    ({ shortcutCode, shortcutKey }) => {
+      const eventInit = {
+        key: shortcutKey,
+        code: shortcutCode,
+        altKey: true,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
+      document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+      document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+    },
+    {
+      shortcutCode: code,
+      shortcutKey: keyForShortcutCode(code),
+    },
+  );
 }
 
 async function dispatchShortcutForAction(page, shortcut, code) {
@@ -4515,7 +4674,9 @@ async function runFixedShortcutContractProbes({
   trackAuditOwnedConversation,
   fixedContractIds = [],
 } = {}) {
-  const contractById = new Map((contracts || []).map((contract) => [contract.contractId, contract]));
+  const contractById = new Map(
+    (contracts || []).map((contract) => [contract.contractId, contract]),
+  );
   const requested = new Set(fixedContractIds || []);
   const shouldRun = (contractId) => !requested.size || requested.has(contractId);
   const rows = [];
@@ -4545,7 +4706,9 @@ async function runFixedShortcutContractProbes({
           'probe-error',
           contract.classification,
           '',
-          error?.message || String(error) || 'Fixed-contract probe failed before semantic evaluation.',
+          error?.message ||
+            String(error) ||
+            'Fixed-contract probe failed before semantic evaluation.',
         ),
       );
     }
@@ -4591,7 +4754,9 @@ async function runFixedShortcutContractProbes({
         'ctrl-alt-response-variant-preview',
         'Ctrl+Alt previous/next changes the displayed response variant without changing the conversation or response count.',
         `previous=${previous?.semantic?.observed || 'not run'}; next=${next?.semantic?.observed || 'not run'}`,
-        passed ? '' : 'Both live Ctrl+Alt preview directions must change the displayed response variant.',
+        passed
+          ? ''
+          : 'Both live Ctrl+Alt preview directions must change the displayed response variant.',
       ),
       {
         modifiers: 'Ctrl+Alt + assigned previous/next key',
@@ -4609,7 +4774,10 @@ async function runFixedShortcutContractProbes({
   let pageScrollMatrix = null;
   const getPageScrollMatrix = async () => {
     if (pageScrollMatrix) return pageScrollMatrix;
-    if (!extensionId) throw new Error('Extension sync storage was unavailable for the PageUp/PageDown gate matrix.');
+    if (!extensionId)
+      throw new Error(
+        'Extension sync storage was unavailable for the PageUp/PageDown gate matrix.',
+      );
     const cases = [];
     for (const enabled of [false, true]) {
       await writeAuditStorageSetting({
@@ -4628,7 +4796,9 @@ async function runFixedShortcutContractProbes({
         await setLiveProbeScrollPosition(page, 'middle');
         const before = await captureLiveProbeSemanticSnapshot(page, pageScrollTarget);
         if (before.scrollMax < 120) {
-          throw new Error('The authenticated fixture does not have enough scroll range for PageUp/PageDown behavior proof.');
+          throw new Error(
+            'The authenticated fixture does not have enough scroll range for PageUp/PageDown behavior proof.',
+          );
         }
         const observed = await observeFixedChord(page, code, [], pageScrollTarget, 700);
         const delta = observed.after.scrollTop - observed.before.scrollTop;
@@ -4643,7 +4813,8 @@ async function runFixedShortcutContractProbes({
           delta,
           defaultPrevented: observed.keydown?.defaultPrevented ?? null,
           isTrusted: observed.keydown?.isTrusted ?? false,
-          passed: observed.dispatch.status === 'dispatched' && movedInDirection && keydownMatchesGate,
+          passed:
+            observed.dispatch.status === 'dispatched' && movedInDirection && keydownMatchesGate,
         });
       }
     }
@@ -4657,7 +4828,13 @@ async function runFixedShortcutContractProbes({
     } catch (error) {
       return buildFixedContractLiveRow(
         contract,
-        fixedSemantic('coverage-gap', 'keyboard-scroll-state', 'PageUp/PageDown moves the viewport when takeover is enabled.', '', error?.message || String(error)),
+        fixedSemantic(
+          'coverage-gap',
+          'keyboard-scroll-state',
+          'PageUp/PageDown moves the viewport when takeover is enabled.',
+          '',
+          error?.message || String(error),
+        ),
       );
     }
     const enabledCases = cases.filter((item) => item.enabled);
@@ -4669,11 +4846,16 @@ async function runFixedShortcutContractProbes({
         'keyboard-scroll-and-default-prevention',
         'Enabled PageUp and PageDown both move the page in the expected direction and claim the native key event.',
         JSON.stringify(enabledCases),
-        passed ? '' : 'Enabled PageUp/PageDown did not both move in the expected direction and prevent the native default.',
+        passed
+          ? ''
+          : 'Enabled PageUp/PageDown did not both move in the expected direction and prevent the native default.',
       ),
       {
         modifiers: 'PageUp / PageDown without modifiers',
-        routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-keydown-and-scroll-delta' },
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-keydown-and-scroll-delta',
+        },
         evidence: { cases: enabledCases },
       },
     );
@@ -4685,7 +4867,13 @@ async function runFixedShortcutContractProbes({
     } catch (error) {
       return buildFixedContractLiveRow(
         contract,
-        fixedSemantic('coverage-gap', 'keyboard-scroll-state', 'Disabled takeover preserves native PageUp/PageDown behavior.', '', error?.message || String(error)),
+        fixedSemantic(
+          'coverage-gap',
+          'keyboard-scroll-state',
+          'Disabled takeover preserves native PageUp/PageDown behavior.',
+          '',
+          error?.message || String(error),
+        ),
       );
     }
     const passed = cases.length === 4 && cases.every((item) => item.passed);
@@ -4696,28 +4884,43 @@ async function runFixedShortcutContractProbes({
         'enabled-disabled-trusted-keydown-matrix',
         'Enabled PageUp/PageDown are claimed; disabled PageUp/PageDown pass through to native scrolling.',
         JSON.stringify(cases),
-        passed ? '' : 'One or more enabled/disabled PageUp/PageDown key cases failed or could not be observed.',
+        passed
+          ? ''
+          : 'One or more enabled/disabled PageUp/PageDown key cases failed or could not be observed.',
       ),
       {
         modifiers: 'PageUp / PageDown enabled and disabled',
-        routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-keydown-and-scroll-delta' },
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-keydown-and-scroll-delta',
+        },
         evidence: { cases },
       },
     );
   });
 
   await finishCase('alt-modifier-isolation', async (contract) => {
-    const shortcut = inventory.shortcuts.find((item) => item.actionId === 'shortcutKeyActivateInput');
+    const shortcut = inventory.shortcuts.find(
+      (item) => item.actionId === 'shortcutKeyActivateInput',
+    );
     const code = resolveShortcutDispatchCode(shortcut || {}, activeShortcutCodes);
     if (!code) {
       return buildFixedContractLiveRow(
         contract,
-        fixedSemantic('coverage-gap', 'modifier-pass-through', 'Unexpected modifiers pass through.', '', 'No validation key was available for the input-focus action.'),
+        fixedSemantic(
+          'coverage-gap',
+          'modifier-pass-through',
+          'Unexpected modifiers pass through.',
+          '',
+          'No validation key was available for the input-focus action.',
+        ),
       );
     }
     await resetFixturePage(page, fixtureUrl);
     await closeTransientUi(page);
-    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await page.evaluate(
+      () => document.activeElement instanceof HTMLElement && document.activeElement.blur(),
+    );
     const target = targetById['prompt-textarea'];
     const cases = [];
     const limitations = [];
@@ -4733,10 +4936,19 @@ async function runFixedShortcutContractProbes({
         !observed.after.activeTarget &&
         keydown?.isTrusted === true &&
         keydown?.defaultPrevented === false;
-      if (unsupportedAltGraph) limitations.push('Playwright did not expose a trusted AltGraph state for this key event.');
-      cases.push({ modifier, activeTarget: observed.after.activeTarget, defaultPrevented: keydown?.defaultPrevented ?? null, altGraph: keydown?.altGraph ?? false, passed });
+      if (unsupportedAltGraph)
+        limitations.push('Playwright did not expose a trusted AltGraph state for this key event.');
+      cases.push({
+        modifier,
+        activeTarget: observed.after.activeTarget,
+        defaultPrevented: keydown?.defaultPrevented ?? null,
+        altGraph: keydown?.altGraph ?? false,
+        passed,
+      });
     }
-    limitations.push('Physical IME composition (isComposing/keyCode 229) cannot be generated by the Playwright keyboard driver on this Windows profile.');
+    limitations.push(
+      'Physical IME composition (isComposing/keyCode 229) cannot be generated by the Playwright keyboard driver on this Windows profile.',
+    );
     const passed = cases.length === 4 && cases.every((item) => item.passed);
     return buildFixedContractLiveRow(
       contract,
@@ -4745,22 +4957,38 @@ async function runFixedShortcutContractProbes({
         'trusted-keydown-modifier-matrix',
         'Shift, Control, Meta, and AltGraph variants do not claim the ordinary Alt shortcut; IME composition is separately limited.',
         JSON.stringify(cases),
-        passed ? limitations.join(' ') : `Modifier isolation did not pass for all tested chords. ${limitations.join(' ')}`,
+        passed
+          ? limitations.join(' ')
+          : `Modifier isolation did not pass for all tested chords. ${limitations.join(' ')}`,
       ),
       {
         modifiers: 'Alt + Shift / Control / Meta / AltGraph',
-        routingProof: { status: passed ? 'observed-pass-through' : 'not-observed', proofMethod: 'trusted-keydown-default-prevention' },
+        routingProof: {
+          status: passed ? 'observed-pass-through' : 'not-observed',
+          proofMethod: 'trusted-keydown-default-prevention',
+        },
         evidence: { cases, limitations },
       },
     );
   });
 
   await finishCase('shortcut-overlay-dismissal', async (contract) => {
-    const showOverlay = inventory.shortcuts.find((item) => item.actionId === 'shortcutKeyShowOverlay');
+    const showOverlay = inventory.shortcuts.find(
+      (item) => item.actionId === 'shortcutKeyShowOverlay',
+    );
     const code = resolveShortcutDispatchCode(showOverlay || {}, activeShortcutCodes);
     const target = targetById['shortcut-overlay'];
     if (!code || !target) {
-      return buildFixedContractLiveRow(contract, fixedSemantic('coverage-gap', 'escape-dismissal', 'Escape closes the visible extension shortcut overlay.', '', 'Overlay key or structural target was unavailable.'));
+      return buildFixedContractLiveRow(
+        contract,
+        fixedSemantic(
+          'coverage-gap',
+          'escape-dismissal',
+          'Escape closes the visible extension shortcut overlay.',
+          '',
+          'Overlay key or structural target was unavailable.',
+        ),
+      );
     }
     await resetFixturePage(page, fixtureUrl);
     await closeTransientUi(page);
@@ -4768,26 +4996,52 @@ async function runFixedShortcutContractProbes({
     await dispatchObservedKeyboardChord(page, code, ['Alt']);
     await page.waitForTimeout(500);
     const before = await captureLiveProbeSemanticSnapshot(page, target);
-    if (!before.visibleTarget) throw new Error('The extension shortcut overlay did not open for the Escape dismissal case.');
+    if (!before.visibleTarget)
+      throw new Error('The extension shortcut overlay did not open for the Escape dismissal case.');
     const observed = await observeFixedChord(page, 'Escape', [], target, 500);
     const passed = observed.before.visibleTarget && !observed.after.visibleTarget;
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'visible-overlay-dismissal', 'Escape closes the extension shortcut overlay.', `overlay ${observed.before.visibleTarget} -> ${observed.after.visibleTarget}`, passed ? '' : 'Escape did not dismiss the visible extension shortcut overlay.'),
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'visible-overlay-dismissal',
+        'Escape closes the extension shortcut overlay.',
+        `overlay ${observed.before.visibleTarget} -> ${observed.after.visibleTarget}`,
+        passed ? '' : 'Escape did not dismiss the visible extension shortcut overlay.',
+      ),
       {
         modifiers: 'Escape',
-        targetProof: { status: observed.before.visibleTarget ? 'present' : 'not-present', expectedTargetRef: 'shortcut-overlay', observedTargetRef: observed.before.visibleTarget ? 'shortcut-overlay' : '', proofMethod: 'visible-overlay-state' },
-        routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-keydown-and-overlay-state' },
+        targetProof: {
+          status: observed.before.visibleTarget ? 'present' : 'not-present',
+          expectedTargetRef: 'shortcut-overlay',
+          observedTargetRef: observed.before.visibleTarget ? 'shortcut-overlay' : '',
+          proofMethod: 'visible-overlay-state',
+        },
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-keydown-and-overlay-state',
+        },
       },
     );
   });
 
   await finishCase('overlay-alt-only-capture', async (contract) => {
-    const showOverlay = inventory.shortcuts.find((item) => item.actionId === 'shortcutKeyShowOverlay');
+    const showOverlay = inventory.shortcuts.find(
+      (item) => item.actionId === 'shortcutKeyShowOverlay',
+    );
     const code = resolveShortcutDispatchCode(showOverlay || {}, activeShortcutCodes);
     const target = targetById['shortcut-overlay'];
     if (!code || !target) {
-      return buildFixedContractLiveRow(contract, fixedSemantic('coverage-gap', 'alt-only-keydown-matrix', 'Only plain Alt plus the configured key opens the overlay.', '', 'Overlay key or structural target was unavailable.'));
+      return buildFixedContractLiveRow(
+        contract,
+        fixedSemantic(
+          'coverage-gap',
+          'alt-only-keydown-matrix',
+          'Only plain Alt plus the configured key opens the overlay.',
+          '',
+          'Overlay key or structural target was unavailable.',
+        ),
+      );
     }
     await resetFixturePage(page, fixtureUrl);
     await closeTransientUi(page);
@@ -4796,25 +5050,53 @@ async function runFixedShortcutContractProbes({
       await page.keyboard.press('Escape').catch(() => {});
       const observed = await observeFixedChord(page, code, ['Alt', modifier], target);
       const keydown = observed.keydown;
-      const unsupportedAltGraph = modifier === 'AltGraph' && (observed.dispatch.status !== 'dispatched' || keydown?.altGraph !== true);
+      const unsupportedAltGraph =
+        modifier === 'AltGraph' &&
+        (observed.dispatch.status !== 'dispatched' || keydown?.altGraph !== true);
       cases.push({
         modifier,
         visible: observed.after.visibleTarget,
         defaultPrevented: keydown?.defaultPrevented ?? null,
         altGraph: keydown?.altGraph ?? false,
-        passed: !unsupportedAltGraph && observed.dispatch.status === 'dispatched' && !observed.after.visibleTarget && keydown?.defaultPrevented === false,
-        unsupported: unsupportedAltGraph ? observed.dispatch.reason || 'No trusted AltGraph state was observed.' : '',
+        passed:
+          !unsupportedAltGraph &&
+          observed.dispatch.status === 'dispatched' &&
+          !observed.after.visibleTarget &&
+          keydown?.defaultPrevented === false,
+        unsupported: unsupportedAltGraph
+          ? observed.dispatch.reason || 'No trusted AltGraph state was observed.'
+          : '',
       });
     }
     const passed = cases.length === 4 && cases.every((item) => item.passed);
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'trusted-keydown-alt-only-matrix', 'Shift, Control, Meta, and AltGraph prevent overlay capture.', JSON.stringify(cases), passed ? '' : 'The overlay opened or captured a modified key, or AltGraph could not be observed.'),
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'trusted-keydown-alt-only-matrix',
+        'Shift, Control, Meta, and AltGraph prevent overlay capture.',
+        JSON.stringify(cases),
+        passed
+          ? ''
+          : 'The overlay opened or captured a modified key, or AltGraph could not be observed.',
+      ),
       {
         modifiers: 'Alt + Shift / Control / Meta / AltGraph',
-        targetProof: { status: 'present', expectedTargetRef: 'shortcut-overlay', observedTargetRef: 'shortcut-overlay', proofMethod: 'structural-target-match' },
-        routingProof: { status: passed ? 'observed-pass-through' : 'not-observed', proofMethod: 'trusted-keydown-default-prevention' },
-        evidence: { cases, limitation: 'IME composition cannot be generated by the Playwright keyboard driver on this Windows profile.' },
+        targetProof: {
+          status: 'present',
+          expectedTargetRef: 'shortcut-overlay',
+          observedTargetRef: 'shortcut-overlay',
+          proofMethod: 'structural-target-match',
+        },
+        routingProof: {
+          status: passed ? 'observed-pass-through' : 'not-observed',
+          proofMethod: 'trusted-keydown-default-prevention',
+        },
+        evidence: {
+          cases,
+          limitation:
+            'IME composition cannot be generated by the Playwright keyboard driver on this Windows profile.',
+        },
       },
     );
   });
@@ -4827,7 +5109,9 @@ async function runFixedShortcutContractProbes({
     const sendTarget = targetById['send-button'];
     checkpoint.currentCase.phase = 'disabled-gate-pending';
     await persistCheckpoint();
-    await page.evaluate(() => { window.enableSendWithControlEnterCheckbox = false; });
+    await page.evaluate(() => {
+      window.enableSendWithControlEnterCheckbox = false;
+    });
     const disabled = await observeFixedChord(page, 'Enter', ['Control'], sendTarget, 350);
     const disabledPass =
       disabled.after.userMessageCount === disabled.before.userMessageCount &&
@@ -4837,10 +5121,13 @@ async function runFixedShortcutContractProbes({
     await setComposerText(page, '');
     checkpoint.currentCase.phase = 'enabled-gate-pending';
     await persistCheckpoint();
-    await page.evaluate(() => { window.enableSendWithControlEnterCheckbox = true; });
+    await page.evaluate(() => {
+      window.enableSendWithControlEnterCheckbox = true;
+    });
     await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
     const enabled = await observeFixedChord(page, 'Enter', ['Control'], sendTarget, 600);
-    const enabledChordRouted = enabled.dispatch.status === 'dispatched' &&
+    const enabledChordRouted =
+      enabled.dispatch.status === 'dispatched' &&
       enabled.keydown?.isTrusted === true &&
       enabled.keydown?.defaultPrevented === true;
     let responseCompleted = false;
@@ -4884,11 +5171,27 @@ async function runFixedShortcutContractProbes({
     const passed = disabledPass && enabledDispatched && responseCompleted;
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'enabled-disabled-control-send-and-response', 'Disabled Ctrl+Enter preserves the draft and passes through; enabled Ctrl+Enter commits it and receives a completed assistant response.', `disabled: user messages ${disabled.before.userMessageCount} -> ${disabled.after.userMessageCount}; draft remains=${disabled.after.composerHasText}; defaultPrevented=${disabled.keydown?.defaultPrevented}; enabled: user messages ${enabled.before.userMessageCount} -> ${enabledAfter.userMessageCount}; assistant messages ${enabled.before.assistantMessageCount} -> ${enabledAfter.assistantMessageCount}; response completed=${responseCompleted}; defaultPrevented=${enabled.keydown?.defaultPrevented}`, passed ? '' : 'The disabled pass-through, enabled user-message commit, or completed assistant-response transition was not observed.'),
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'enabled-disabled-control-send-and-response',
+        'Disabled Ctrl+Enter preserves the draft and passes through; enabled Ctrl+Enter commits it and receives a completed assistant response.',
+        `disabled: user messages ${disabled.before.userMessageCount} -> ${disabled.after.userMessageCount}; draft remains=${disabled.after.composerHasText}; defaultPrevented=${disabled.keydown?.defaultPrevented}; enabled: user messages ${enabled.before.userMessageCount} -> ${enabledAfter.userMessageCount}; assistant messages ${enabled.before.assistantMessageCount} -> ${enabledAfter.assistantMessageCount}; response completed=${responseCompleted}; defaultPrevented=${enabled.keydown?.defaultPrevented}`,
+        passed
+          ? ''
+          : 'The disabled pass-through, enabled user-message commit, or completed assistant-response transition was not observed.',
+      ),
       {
         modifiers: 'Ctrl+Enter with gate disabled and enabled',
-        targetProof: { status: 'present', expectedTargetRef: 'send-button', observedTargetRef: 'send-button', proofMethod: 'structural-target-match' },
-        routingProof: { status: passed ? 'observed-enabled-and-disabled' : 'not-observed', proofMethod: 'trusted-keydown-default-prevention' },
+        targetProof: {
+          status: 'present',
+          expectedTargetRef: 'send-button',
+          observedTargetRef: 'send-button',
+          proofMethod: 'structural-target-match',
+        },
+        routingProof: {
+          status: passed ? 'observed-enabled-and-disabled' : 'not-observed',
+          proofMethod: 'trusted-keydown-default-prevention',
+        },
         evidence: {
           disabledNoOp: disabledPass,
           enabledDispatch: enabledDispatched,
@@ -4904,22 +5207,51 @@ async function runFixedShortcutContractProbes({
     trackAuditOwnedConversation(page.url());
     const stopTarget = targetById['stop-button'];
     const before = await captureLiveProbeSemanticSnapshot(page, stopTarget);
-    if (!before.visibleTarget) throw new Error('A live generation Stop control was not visible before the Ctrl+Backspace gate case.');
-    await page.evaluate(() => { window.enableStopWithControlBackspaceCheckbox = false; });
+    if (!before.visibleTarget)
+      throw new Error(
+        'A live generation Stop control was not visible before the Ctrl+Backspace gate case.',
+      );
+    await page.evaluate(() => {
+      window.enableStopWithControlBackspaceCheckbox = false;
+    });
     const disabled = await observeFixedChord(page, 'Backspace', ['Control'], stopTarget, 350);
-    const disabledPass = disabled.after.visibleTarget && disabled.keydown?.defaultPrevented === false;
-    await page.evaluate(() => { window.enableStopWithControlBackspaceCheckbox = true; });
+    const disabledPass =
+      disabled.after.visibleTarget && disabled.keydown?.defaultPrevented === false;
+    await page.evaluate(() => {
+      window.enableStopWithControlBackspaceCheckbox = true;
+    });
     const enabled = await observeFixedChord(page, 'Backspace', ['Control'], stopTarget, 1500);
     const enabledPass = enabled.before.visibleTarget && !enabled.after.visibleTarget;
     const passed = disabledPass && enabledPass;
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'enabled-disabled-control-stop-matrix', 'Disabled Ctrl+Backspace preserves active generation; enabled Ctrl+Backspace stops it.', `disabled stop visible=${disabled.after.visibleTarget}, defaultPrevented=${disabled.keydown?.defaultPrevented}; enabled stop ${enabled.before.visibleTarget} -> ${enabled.after.visibleTarget}`, passed ? '' : 'Ctrl+Backspace did not preserve/stop generation according to the enabled gate.'),
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'enabled-disabled-control-stop-matrix',
+        'Disabled Ctrl+Backspace preserves active generation; enabled Ctrl+Backspace stops it.',
+        `disabled stop visible=${disabled.after.visibleTarget}, defaultPrevented=${disabled.keydown?.defaultPrevented}; enabled stop ${enabled.before.visibleTarget} -> ${enabled.after.visibleTarget}`,
+        passed
+          ? ''
+          : 'Ctrl+Backspace did not preserve/stop generation according to the enabled gate.',
+      ),
       {
         modifiers: 'Ctrl+Backspace with gate disabled and enabled',
-        targetProof: { status: before.visibleTarget ? 'present' : 'not-present', expectedTargetRef: 'stop-button', observedTargetRef: before.visibleTarget ? 'stop-button' : '', proofMethod: 'visible-stop-state' },
-        routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-keydown-and-generation-state' },
-        evidence: { disabledNoOp: disabledPass, enabledStop: enabledPass, linkedPositive: globalById.get('shortcutKeyClickStopButton')?.semantic?.status || 'not-run' },
+        targetProof: {
+          status: before.visibleTarget ? 'present' : 'not-present',
+          expectedTargetRef: 'stop-button',
+          observedTargetRef: before.visibleTarget ? 'stop-button' : '',
+          proofMethod: 'visible-stop-state',
+        },
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-keydown-and-generation-state',
+        },
+        evidence: {
+          disabledNoOp: disabledPass,
+          enabledStop: enabledPass,
+          linkedPositive:
+            globalById.get('shortcutKeyClickStopButton')?.semantic?.status || 'not-run',
+        },
       },
     );
   });
@@ -4930,44 +5262,66 @@ async function runFixedShortcutContractProbes({
     await openModelSwitcherMenu(page);
     const slotInfos = await page.evaluate(() => {
       const profile = window.__activeModelPickerShortcutProfile || '';
-      const groups = window.ModelLabels?.getPopupPresentationGroups?.(
-        window.__activeModelConfigId || window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID,
-        window.MODEL_NAMES || [],
-        window.__modelCatalog || null,
-      ) || [];
-      const codes = window.__modelPickerKeyCodesProfiles?.[profile] || window.__modelPickerKeyCodes || [];
-      return groups.flatMap((group) => (Array.isArray(group.actions) ? group.actions : []))
-        .map((action) => ({ profile, slot: Number(action.slot), actionId: String(action.id || action.actionId || ''), code: codes[Number(action.slot)] || '' }))
+      const groups =
+        window.ModelLabels?.getPopupPresentationGroups?.(
+          window.__activeModelConfigId || window.ModelLabels?.DEFAULT_ACTIVE_CONFIG_ID,
+          window.MODEL_NAMES || [],
+          window.__modelCatalog || null,
+        ) || [];
+      const codes =
+        window.__modelPickerKeyCodesProfiles?.[profile] || window.__modelPickerKeyCodes || [];
+      return groups
+        .flatMap((group) => (Array.isArray(group.actions) ? group.actions : []))
+        .map((action) => ({
+          profile,
+          slot: Number(action.slot),
+          actionId: String(action.id || action.actionId || ''),
+          code: codes[Number(action.slot)] || '',
+        }))
         .filter((action) => Number.isInteger(action.slot) && action.slot >= 0 && action.code)
         .sort((left, right) => left.slot - right.slot);
     });
     if (!slotInfos.length) {
       return buildFixedContractLiveRow(
         contract,
-        fixedSemantic('account-unavailable', 'model-catalog-slot-dispatch', 'An assigned, currently presented model slot can be selected through its real keyboard shortcut.', '', 'The authenticated account exposed no assigned current model slot in the active ChatGPT catalog.'),
+        fixedSemantic(
+          'account-unavailable',
+          'model-catalog-slot-dispatch',
+          'An assigned, currently presented model slot can be selected through its real keyboard shortcut.',
+          '',
+          'The authenticated account exposed no assigned current model slot in the active ChatGPT catalog.',
+        ),
       );
     }
     const useControl = await page.evaluate(() => window.useControlForModelSwitcherRadio === true);
     const modelTarget = targetById['model-switcher-button'];
-    const readModelLabelHash = () => page.evaluate((selectors) => {
-      const isVisible = (node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        const style = getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-      };
-      let button = null;
-      for (const selector of selectors) {
-        button = Array.from(document.querySelectorAll(selector)).find(isVisible) || null;
-        if (button) break;
-      }
-      const text = button?.innerText || button?.textContent || '';
-      let hash = 2166136261;
-      for (let index = 0; index < text.length; index += 1) {
-        hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
-      }
-      return button && text.trim() ? `${text.length}:${(hash >>> 0).toString(16)}` : '';
-    }, modelPickerSelectors.MODEL_MENU_BUTTON_SELECTORS || ['button[data-testid="model-switcher-dropdown-button"]']);
+    const readModelLabelHash = () =>
+      page.evaluate((selectors) => {
+        const isVisible = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        };
+        let button = null;
+        for (const selector of selectors) {
+          button = Array.from(document.querySelectorAll(selector)).find(isVisible) || null;
+          if (button) break;
+        }
+        const text = button?.innerText || button?.textContent || '';
+        let hash = 2166136261;
+        for (let index = 0; index < text.length; index += 1) {
+          hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+        }
+        return button && text.trim() ? `${text.length}:${(hash >>> 0).toString(16)}` : '';
+      }, modelPickerSelectors.MODEL_MENU_BUTTON_SELECTORS || [
+        'button[data-testid="model-switcher-dropdown-button"]',
+      ]);
     let selected = null;
     const attempts = [];
     for (const slotInfo of slotInfos) {
@@ -4977,17 +5331,28 @@ async function runFixedShortcutContractProbes({
       checkpoint.currentCase.intendedSideEffect = `model-picker-slot:${slotInfo.slot}:${slotInfo.actionId}`;
       await persistCheckpoint();
       const beforeLabelHash = await readModelLabelHash();
-      const observed = await observeFixedChord(page, slotInfo.code, [useControl ? 'Control' : 'Alt'], modelTarget, 1200);
+      const observed = await observeFixedChord(
+        page,
+        slotInfo.code,
+        [useControl ? 'Control' : 'Alt'],
+        modelTarget,
+        1200,
+      );
       const afterLabelHash = await readModelLabelHash();
       const menuClosed = await page.evaluate((selector) => {
-      const isVisible = (node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        const style = getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-      };
-      return !Array.from(document.querySelectorAll(selector)).some(isVisible);
-    }, modelPickerSelectors.MODEL_MENU_SELECTOR);
+        const isVisible = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        };
+        return !Array.from(document.querySelectorAll(selector)).some(isVisible);
+      }, modelPickerSelectors.MODEL_MENU_SELECTOR);
       const passed =
         observed.dispatch.status === 'dispatched' &&
         observed.keydown?.isTrusted === true &&
@@ -5013,11 +5378,27 @@ async function runFixedShortcutContractProbes({
     const slotInfo = selected?.slotInfo || slotInfos[0];
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'assigned-model-slot-selection', `Profile ${slotInfo.profile || 'active'}, slot ${slotInfo.slot} selects a different native model action and closes the picker.`, JSON.stringify(attempts), passed ? '' : 'No assigned model slot changed the native model selection and closed the picker.'),
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'assigned-model-slot-selection',
+        `Profile ${slotInfo.profile || 'active'}, slot ${slotInfo.slot} selects a different native model action and closes the picker.`,
+        JSON.stringify(attempts),
+        passed
+          ? ''
+          : 'No assigned model slot changed the native model selection and closed the picker.',
+      ),
       {
         modifiers: `${useControl ? 'Control' : 'Alt'} + ${slotInfo.code}`,
-        targetProof: { status: 'present', expectedTargetRef: 'model-switcher-button', observedTargetRef: 'model-switcher-button', proofMethod: 'model-picker-native-control-state' },
-        routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-window-keydown' },
+        targetProof: {
+          status: 'present',
+          expectedTargetRef: 'model-switcher-button',
+          observedTargetRef: 'model-switcher-button',
+          proofMethod: 'model-picker-native-control-state',
+        },
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-window-keydown',
+        },
         evidence: { selectedSlot: selected ? slotInfo.slot : null, attempts },
       },
     );
@@ -5037,7 +5418,13 @@ async function runFixedShortcutContractProbes({
     if (!barState) {
       return buildFixedContractLiveRow(
         contract,
-        fixedSemantic('account-unavailable', 'interaction-refresh-state', 'A live interaction event refreshes the extension-owned sidebar state.', '', 'The authenticated ChatGPT layout did not render #stage-sidebar-tiny-bar, so this source contract has no live target in the current account/layout.'),
+        fixedSemantic(
+          'account-unavailable',
+          'interaction-refresh-state',
+          'A live interaction event refreshes the extension-owned sidebar state.',
+          '',
+          'The authenticated ChatGPT layout did not render #stage-sidebar-tiny-bar, so this source contract has no live target in the current account/layout.',
+        ),
       );
     }
     let changed = false;
@@ -5051,7 +5438,9 @@ async function runFixedShortcutContractProbes({
         return true;
       });
       observed = await observeFixedChord(page, 'F8', [], null, 500);
-      afterOpacity = await page.evaluate(() => document.getElementById('stage-sidebar-tiny-bar')?.style.opacity || '');
+      afterOpacity = await page.evaluate(
+        () => document.getElementById('stage-sidebar-tiny-bar')?.style.opacity || '',
+      );
     } finally {
       await page.evaluate((style) => {
         const bar = document.getElementById('stage-sidebar-tiny-bar');
@@ -5064,8 +5453,23 @@ async function runFixedShortcutContractProbes({
     const passed = changed && observed.keydown?.isTrusted === true && afterOpacity !== '0.23';
     return buildFixedContractLiveRow(
       contract,
-      fixedSemantic(passed ? 'pass' : 'coverage-gap', 'trusted-keydown-refresh-state', 'A keydown schedules the sidebar interaction refresh and repairs the stale opacity state.', `opacity ${barState.opacity} -> ${afterOpacity}; key=${observed.keydown?.code || ''}`, passed ? '' : 'The keydown did not produce an observable refresh of the live sidebar state.'),
-      { modifiers: 'F8 unmodified', routingProof: { status: passed ? 'observed' : 'not-observed', proofMethod: 'trusted-keydown-and-dom-state' }, evidence: { before: barState, afterOpacity } },
+      fixedSemantic(
+        passed ? 'pass' : 'coverage-gap',
+        'trusted-keydown-refresh-state',
+        'A keydown schedules the sidebar interaction refresh and repairs the stale opacity state.',
+        `opacity ${barState.opacity} -> ${afterOpacity}; key=${observed.keydown?.code || ''}`,
+        passed
+          ? ''
+          : 'The keydown did not produce an observable refresh of the live sidebar state.',
+      ),
+      {
+        modifiers: 'F8 unmodified',
+        routingProof: {
+          status: passed ? 'observed' : 'not-observed',
+          proofMethod: 'trusted-keydown-and-dom-state',
+        },
+        evidence: { before: barState, afterOpacity },
+      },
     );
   });
 
@@ -5104,7 +5508,10 @@ function buildNonExecutableLiveProbeRow(shortcut, dispatchCode = '') {
     probeMode,
     expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
     status,
-    reason: shortcut.activationProbe?.notes || shortcut.notes || 'No live activation probe is configured.',
+    reason:
+      shortcut.activationProbe?.notes ||
+      shortcut.notes ||
+      'No live activation probe is configured.',
     observedSelector: '',
     observedTextSnippet: '',
     durationMs: 0,
@@ -5145,7 +5552,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     ...(exports.DEFERRED_ARTIFACTS || []),
   ];
   const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
-  const targetById = Object.fromEntries(inventory.targets.map((target) => [target.targetId, target]));
+  const targetById = Object.fromEntries(
+    inventory.targets.map((target) => [target.targetId, target]),
+  );
   const fixedOnly = requestedActionIds.size === 0 && fixedContractIds.size > 0;
   const selectedGlobalActionIds = new Set(requestedActionIds);
   if (fixedContractIds.has('runtime-shortcut-dispatch')) {
@@ -5159,19 +5568,24 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     selectedGlobalActionIds.add(NEXT_THREAD_ACTION_ID);
   }
   const runGlobalActions = !fixedOnly || selectedGlobalActionIds.size > 0;
-  const phaseShortcuts = inventory.shortcuts.filter((shortcut) =>
-    phase === 'all' || (phase === 'model' ? isModelPhaseShortcut(shortcut) : !isModelPhaseShortcut(shortcut)),
+  const phaseShortcuts = inventory.shortcuts.filter(
+    (shortcut) =>
+      phase === 'all' ||
+      (phase === 'model' ? isModelPhaseShortcut(shortcut) : !isModelPhaseShortcut(shortcut)),
   );
   const globalShortcutsToRun = !runGlobalActions
     ? []
     : requestedActionIds.size || fixedContractIds.size
       ? phaseShortcuts.filter((shortcut) => selectedGlobalActionIds.has(shortcut.actionId))
       : phaseShortcuts;
-  const fixedContractsToRun = options.includeFixedContracts === false || phase === 'model' || (requestedActionIds.size > 0 && fixedContractIds.size === 0)
-    ? []
-    : (inventory.fixedKeyboardContracts || []).filter(
-        (contract) => !fixedContractIds.size || fixedContractIds.has(contract.contractId),
-      );
+  const fixedContractsToRun =
+    options.includeFixedContracts === false ||
+    phase === 'model' ||
+    (requestedActionIds.size > 0 && fixedContractIds.size === 0)
+      ? []
+      : (inventory.fixedKeyboardContracts || []).filter(
+          (contract) => !fixedContractIds.size || fixedContractIds.has(contract.contractId),
+        );
   const executableProbeShortcuts = inventory.shortcuts.filter(
     (shortcut) =>
       globalShortcutsToRun.includes(shortcut) &&
@@ -5203,7 +5617,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     mutationOccurred: false,
     currentCase: null,
     completedCases: [],
-    auditOwnedConversationIds: fixtureOwnership?.conversationId ? [fixtureOwnership.conversationId] : [],
+    auditOwnedConversationIds: fixtureOwnership?.conversationId
+      ? [fixtureOwnership.conversationId]
+      : [],
     storageRecoveryStatus: 'not-run',
     clipboardRecoveryStatus: 'not-needed',
     clipboardRecovery: null,
@@ -5263,16 +5679,14 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       ...inventory.shortcuts.map((shortcut) => shortcut.actionId),
       ...AUDIT_STORAGE_SNAPSHOT_KEYS,
     ];
-    activeShortcutCodes = await readExtensionSyncStorage(
-      context,
-      extensionId,
-      [...new Set(storageSnapshotKeys)],
-    );
+    activeShortcutCodes = await readExtensionSyncStorage(context, extensionId, [
+      ...new Set(storageSnapshotKeys),
+    ]);
     originalActiveShortcutCodes = { ...activeShortcutCodes };
     const storedValues = {};
     const catalogFingerprints = {};
     for (const key of storageSnapshotKeys) {
-      const present = Object.prototype.hasOwnProperty.call(activeShortcutCodes, key);
+      const present = Object.hasOwn(activeShortcutCodes, key);
       if (key === 'modelCatalogLatest' || key === 'modelCatalogLegacy') {
         catalogFingerprints[key] = {
           present,
@@ -5389,7 +5803,8 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
 
       const startedAt = Date.now();
       const target = targetById[shortcut.activationProbeExpectedTargetRef];
-      const probeStateId = shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
+      const probeStateId =
+        shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
       let fileChooserObserved = false;
       let resolveFileChooser;
       const fileChooserEvent =
@@ -5415,11 +5830,11 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             ? `No default shortcut key code is assigned and active extension storage was unavailable for a temporary assignment. ${extensionStorageWarning}`
             : 'No assigned shortcut key code was found in active storage or defaults.';
           const row = buildSkippedLiveProbeRow(
-              shortcut,
-              extensionStorageWarning ? 'environment-fail' : 'skipped',
-              reason,
-              dispatchCode,
-            );
+            shortcut,
+            extensionStorageWarning ? 'environment-fail' : 'skipped',
+            reason,
+            dispatchCode,
+          );
           rows.push(row);
           checkpoint.completedCases.push({
             rowId: `global:${shortcut.actionId}`,
@@ -5432,12 +5847,11 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           continue;
         }
         if (!target) {
-          throw new Error(`Unknown expected probe target: ${shortcut.activationProbeExpectedTargetRef}`);
+          throw new Error(
+            `Unknown expected probe target: ${shortcut.activationProbeExpectedTargetRef}`,
+          );
         }
-        if (
-          !probeStateId &&
-          !STATELESS_LIVE_PROBE_SETUPS.includes(shortcut.activationProbeSetup)
-        ) {
+        if (!probeStateId && !STATELESS_LIVE_PROBE_SETUPS.includes(shortcut.activationProbeSetup)) {
           throw new Error('Shortcut has no probe scrape state to prepare.');
         }
 
@@ -5503,11 +5917,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             codeboxProbeSession,
           );
         } else if (shortcut.activationProbeSetup === 'clipboard-entire-conversation') {
-          await prepareClipboardEntireConversationProbeState(
-            page,
-            fixtureUrl,
-            codeboxProbeSession,
-          );
+          await prepareClipboardEntireConversationProbeState(page, fixtureUrl, codeboxProbeSession);
         } else if (shortcut.activationProbeSetup === 'clipboard-code-blocks') {
           await prepareClipboardCodeBlocksProbeState(page, fixtureUrl, codeboxProbeSession);
         } else if (shortcut.activationProbeSetup === 'codebox-conversation') {
@@ -5532,7 +5942,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             (entry) => entry.key === 'codeboxWrapEnabled',
           );
           if (!codeboxPreferenceMutation) {
-            throw new Error('Codebox wrap preference mutation was not recorded before shortcut dispatch.');
+            throw new Error(
+              'Codebox wrap preference mutation was not recorded before shortcut dispatch.',
+            );
           }
           codeboxPreferenceMutation.auditValues = [false, true];
           checkpoint.mutationLedger = mutationLedger;
@@ -5685,9 +6097,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
               ? afterSnapshot.codeboxWrapEnabled && afterSnapshot.codeboxWrapSatisfied
               : await isDomStateProbeTargetReached(page, target)
             : false;
-        const matchingKeydown = [...(observed.keydowns || [])]
-          .reverse()
-          .find((event) => event.code === dispatchCode) || null;
+        const matchingKeydown =
+          [...(observed.keydowns || [])].reverse().find((event) => event.code === dispatchCode) ||
+          null;
         const routed =
           shortcut.activationProbeMode === 'focus-target'
             ? focusMatch
@@ -5756,7 +6168,8 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           } catch (error) {
             persistenceProof = {
               status: 'environment-fail',
-              proofMethod: 'chrome.storage.sync read plus audit-owned page reload and rendered line geometry',
+              proofMethod:
+                'chrome.storage.sync read plus audit-owned page reload and rendered line geometry',
               reason: error?.message || String(error),
             };
             checkpoint.currentCase.persistenceProof = persistenceProof;
@@ -5770,9 +6183,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         }
         const routingProof = {
           status: routed ? 'observed' : intercepted ? 'intercepted' : 'not-observed',
-          proofMethod: intercepted
-            ? 'trusted-keydown-default-prevention'
-            : 'keyboard-event-path',
+          proofMethod: intercepted ? 'trusted-keydown-default-prevention' : 'keyboard-event-path',
           observedTargetRef: routed
             ? shortcut.activationProbeMode === 'focus-target'
               ? shortcut.activationProbeExpectedTargetRef
@@ -5800,9 +6211,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         };
         const targetProof = {
           status:
-            beforeSnapshot.visibleTarget ||
-            afterSnapshot.visibleTarget ||
-            Boolean(clickMatch)
+            beforeSnapshot.visibleTarget || afterSnapshot.visibleTarget || Boolean(clickMatch)
               ? 'present'
               : 'not-present',
           proofMethod: 'structural-target-match',
@@ -5830,9 +6239,11 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           probeMode: shortcut.activationProbeMode,
           expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
           status,
-          reason: semantic.reason || (status === 'pass'
-            ? 'Keyboard activation produced the expected semantic postcondition.'
-            : `Keyboard routing did not yet have a registered semantic postcondition for ${shortcut.activationProbeExpectedTargetRef}.${extensionStorageWarning ? ` ${extensionStorageWarning}` : ''}`),
+          reason:
+            semantic.reason ||
+            (status === 'pass'
+              ? 'Keyboard activation produced the expected semantic postcondition.'
+              : `Keyboard routing did not yet have a registered semantic postcondition for ${shortcut.activationProbeExpectedTargetRef}.${extensionStorageWarning ? ` ${extensionStorageWarning}` : ''}`),
           observedSelector: observedNode.selector || '',
           observedTextSnippet: '',
           targetProof,
@@ -5954,9 +6365,11 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     for (const shortcut of orderedShortcuts) {
       if (rows.some((row) => row.actionId === shortcut.actionId)) continue;
       const dispatchCode = resolveShortcutDispatchCode(shortcut, activeShortcutCodes);
-      const row = EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) && shortcut.activationProbeSafe
-        ? buildSkippedLiveProbeRow(shortcut, 'environment-fail', failureReason, dispatchCode)
-        : buildNonExecutableLiveProbeRow(shortcut, dispatchCode);
+      const row =
+        EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) &&
+        shortcut.activationProbeSafe
+          ? buildSkippedLiveProbeRow(shortcut, 'environment-fail', failureReason, dispatchCode)
+          : buildNonExecutableLiveProbeRow(shortcut, dispatchCode);
       rows.push(row);
       checkpoint.completedCases.push({
         rowId: `global:${shortcut.actionId}`,
@@ -5968,16 +6381,18 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     }
     for (const contract of fixedContractsToRun) {
       if (fixedRows.some((row) => row.contractId === contract.contractId)) continue;
-      fixedRows.push(buildFixedContractLiveRow(
-        contract,
-        fixedSemantic(
-          'environment-fail',
-          'audit-setup-failure',
-          contract.classification,
-          '',
-          failureReason,
+      fixedRows.push(
+        buildFixedContractLiveRow(
+          contract,
+          fixedSemantic(
+            'environment-fail',
+            'audit-setup-failure',
+            contract.classification,
+            '',
+            failureReason,
+          ),
         ),
-      ));
+      );
     }
     await persistCheckpoint().catch(() => {});
   } finally {
@@ -6221,9 +6636,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
       error: reason || 'Inventory-only run did not attach to a browser.',
       aliasOf: definition.aliasOf || null,
       captureBytes: 0,
-      clickPath: Array.isArray(definition.steps)
-        ? definition.steps.map((step) => step.label)
-        : [],
+      clickPath: Array.isArray(definition.steps) ? definition.steps.map((step) => step.label) : [],
     })),
   };
   await writeFile(
@@ -6351,10 +6764,14 @@ async function buildLegacyManifestFromFiles(folderName, folderPath, exports) {
           stateId: definition.stateId,
           label: definition.label,
           status: fileNames.has(definition.filename) ? 'alias' : 'failed',
-          error: fileNames.has(definition.filename) ? null : `Alias file ${definition.filename} is missing`,
+          error: fileNames.has(definition.filename)
+            ? null
+            : `Alias file ${definition.filename} is missing`,
           aliasOf: definition.aliasOf || null,
           captureBytes: 0,
-          clickPath: Array.isArray(definition.steps) ? definition.steps.map((step) => step.label) : [],
+          clickPath: Array.isArray(definition.steps)
+            ? definition.steps.map((step) => step.label)
+            : [],
         };
       }
       return {
@@ -6362,10 +6779,14 @@ async function buildLegacyManifestFromFiles(folderName, folderPath, exports) {
         stateId: definition.stateId,
         label: definition.label,
         status: fileNames.has(definition.filename) ? 'captured' : 'failed',
-        error: fileNames.has(definition.filename) ? null : `Legacy scrape folder is missing ${definition.filename}`,
+        error: fileNames.has(definition.filename)
+          ? null
+          : `Legacy scrape folder is missing ${definition.filename}`,
         aliasOf: null,
         captureBytes: 0,
-        clickPath: Array.isArray(definition.steps) ? definition.steps.map((step) => step.label) : [],
+        clickPath: Array.isArray(definition.steps)
+          ? definition.steps.map((step) => step.label)
+          : [],
       };
     }),
     ...exports.DEFERRED_ARTIFACTS.map((artifact) => ({
@@ -6388,8 +6809,9 @@ async function buildLegacyManifestFromFiles(folderName, folderPath, exports) {
     pageInfo: null,
     startedAt: null,
     completedAt: null,
-    capturedCount: artifacts.filter((artifact) => artifact.status === 'captured' || artifact.status === 'alias')
-      .length,
+    capturedCount: artifacts.filter(
+      (artifact) => artifact.status === 'captured' || artifact.status === 'alias',
+    ).length,
     failedCount: artifacts.filter((artifact) => artifact.status === 'failed').length,
     deferredCount: artifacts.filter((artifact) => artifact.status === 'deferred').length,
     writtenFiles: [...fileNames].sort(),
@@ -6426,9 +6848,9 @@ export async function getLatestRunFolder() {
         }
       }),
   );
-  const sortableDirectories = directories.filter(Boolean).sort((left, right) =>
-    left.sortKey.localeCompare(right.sortKey),
-  );
+  const sortableDirectories = directories
+    .filter(Boolean)
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey));
   return sortableDirectories[sortableDirectories.length - 1] || null;
 }
 
@@ -6469,7 +6891,9 @@ export async function loadRunDirectory(folderName = null) {
     );
   }
   const entries = await readdir(target.path, { withFileTypes: true });
-  const textEntries = entries.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.txt'));
+  const textEntries = entries.filter(
+    (entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.txt'),
+  );
   let manifest = null;
   try {
     manifest = await loadRunManifest(target.path);
@@ -6606,9 +7030,7 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
       notes: shortcut.notes || '',
     };
   });
-  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows)
-    ? run.liveProbeReport.rows
-    : [];
+  const liveProbeRows = Array.isArray(run.liveProbeReport?.rows) ? run.liveProbeReport.rows : [];
   const shortcutSummary = {
     total: shortcutRows.length,
     passed: shortcutRows.filter((row) => row.status === 'pass').length,
@@ -6788,7 +7210,9 @@ export async function buildCheckReport({ folderName = null } = {}) {
   );
 
   const shortcutRows = inventory.shortcuts.map((shortcut) => {
-    const targetRowsForShortcut = shortcut.targetIds.map((targetId) => targetRowById[targetId]).filter(Boolean);
+    const targetRowsForShortcut = shortcut.targetIds
+      .map((targetId) => targetRowById[targetId])
+      .filter(Boolean);
     const targetStatuses = targetRowsForShortcut.map((row) => row.status);
     const sourceIssues = [];
     if (shortcut.missingMetadata) {
@@ -6819,11 +7243,13 @@ export async function buildCheckReport({ folderName = null } = {}) {
       statusReason = sourceIssues.join('; ');
     } else if (shortcut.validationMode === 'not-applicable') {
       status = 'not-applicable';
-      statusReason = shortcut.notes || 'This shortcut does not rely on a deterministic ChatGPT click target.';
+      statusReason =
+        shortcut.notes || 'This shortcut does not rely on a deterministic ChatGPT click target.';
     } else if (shortcut.validationMode === 'manual-only') {
       status = 'manual';
       statusReason =
-        shortcut.notes || 'This shortcut needs manual or behavioral verification outside the scrape-only validator.';
+        shortcut.notes ||
+        'This shortcut needs manual or behavioral verification outside the scrape-only validator.';
     } else if (!targetRowsForShortcut.length) {
       status = 'partial';
       statusReason = 'The shortcut is classified for scrape validation but has no target rows yet.';
@@ -6900,11 +7326,10 @@ export async function buildCheckReport({ folderName = null } = {}) {
     (row) => row.status === 'partial' && !livePassedActionIds.has(row.actionId),
   );
   const manualShortcutRows = shortcutRows.filter((row) => row.status === 'manual');
-  const needsCoverageShortcutRows = shortcutRows.filter((row) =>
-    ['partial', 'manual'].includes(row.status) && !livePassedActionIds.has(row.actionId),
+  const needsCoverageShortcutRows = shortcutRows.filter(
+    (row) => ['partial', 'manual'].includes(row.status) && !livePassedActionIds.has(row.actionId),
   );
-  const liveProbeSummary =
-    run.liveProbeReport?.summary || buildLiveProbeSummary([], 'not-run');
+  const liveProbeSummary = run.liveProbeReport?.summary || buildLiveProbeSummary([], 'not-run');
   const currentRunIndex = sortedRunFolders.findIndex((item) => item.name === run.folderName);
   const latestRun = sortedRunFolders[sortedRunFolders.length - 1] || null;
   const previousReportLinks = sortedRunFolders
@@ -6974,7 +7399,9 @@ function escapeHtml(value) {
 
 function folderPathLinkHtml(folderPath) {
   if (!folderPath) return '<span class="mono">(unknown)</span>';
-  const href = pathToFileURL(folderPath.endsWith(path.sep) ? folderPath : `${folderPath}${path.sep}`).href;
+  const href = pathToFileURL(
+    folderPath.endsWith(path.sep) ? folderPath : `${folderPath}${path.sep}`,
+  ).href;
   return `<a class="mono" href="${escapeHtml(href)}" title="Open local scrape folder">${escapeHtml(folderPath)}</a>`;
 }
 
@@ -6992,10 +7419,9 @@ function localDateTimeText(value) {
 }
 
 function parseRunFolderDate(name) {
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})_devscrapewide_c-69ea4723/.exec(
-      String(name || ''),
-    );
+  const match = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})_devscrapewide_c-69ea4723/.exec(
+    String(name || ''),
+  );
   if (!match) return null;
   const date = new Date(
     Number(match[1]),
@@ -7115,14 +7541,13 @@ export function renderCheckReportHtml(report) {
     },
     {
       area: 'Shortcut Target Audit',
-      status:
-        inventoryOnly
-          ? 'Not Run'
-          : (shortcutSummary.failed || 0) > 0
-            ? 'Needs Fix'
-            : actionablePartialShortcutRows.length > 0
-              ? 'Partial'
-              : 'Pass',
+      status: inventoryOnly
+        ? 'Not Run'
+        : (shortcutSummary.failed || 0) > 0
+          ? 'Needs Fix'
+          : actionablePartialShortcutRows.length > 0
+            ? 'Partial'
+            : 'Pass',
       good: shortcutSummary.passed || 0,
       needs: inventoryOnly
         ? shortcutSummary.notRun || 0
@@ -7359,8 +7784,7 @@ export function renderCheckReportHtml(report) {
     '<table><thead><tr><th>Target Id</th><th>Kind</th><th>Canonical Identifier</th><th>Match Groups</th><th>Expected Scrape States / Files</th><th>Matched Dump Files</th><th>Status</th><th>Dependent Shortcuts</th></tr></thead><tbody>',
     targetRows
       .map((row) => {
-        const className =
-          row.status === 'pass' ? 'ok' : row.status === 'fail' ? 'fail' : 'warn';
+        const className = row.status === 'pass' ? 'ok' : row.status === 'fail' ? 'fail' : 'warn';
         return [
           '<tr>',
           `<td class="mono">${escapeHtml(row.targetId)}</td>`,
@@ -7369,7 +7793,13 @@ export function renderCheckReportHtml(report) {
           `<td class="mono">${escapeHtml((row.matchGroups || []).map((group) => `[${(group || []).join(' + ')}]`).join(' OR ') || '(none)')}</td>`,
           `<td><div class="mono">${escapeHtml((row.expectedUiStateRefs || []).join(', ') || '(not covered by current scrape family)')}</div><div class="muted mono">${escapeHtml((row.expectedFiles || []).join(', ') || '(no scrape file requirement)')}</div></td>`,
           `<td class="mono">${escapeHtml((row.matchedExpectedFiles || row.allMatchedFiles || []).join(', ') || '(none)')}</td>`,
-          `<td class="${className}">${escapeHtml(row.status === 'no-scrape-coverage' ? 'NO SCRAPE COVERAGE' : String(row.status || '').replaceAll('-', ' ').toUpperCase())}<div class="muted">${escapeHtml(row.statusReason || '')}</div></td>`,
+          `<td class="${className}">${escapeHtml(
+            row.status === 'no-scrape-coverage'
+              ? 'NO SCRAPE COVERAGE'
+              : String(row.status || '')
+                  .replaceAll('-', ' ')
+                  .toUpperCase(),
+          )}<div class="muted">${escapeHtml(row.statusReason || '')}</div></td>`,
           `<td class="mono">${escapeHtml((row.usedByActionIds || []).join(', ') || '(none)')}</td>`,
           '</tr>',
         ].join('');

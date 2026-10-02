@@ -59,7 +59,9 @@ const stored = {
   shortcutKeyThinkingStandard: 'Digit8',
   shortcutKeyThinkingExtended: 'Digit9',
 };
-optionsConfig.migrations.forEach((migration) => migration(stored, optionsConfig.defaults));
+optionsConfig.migrations.forEach((migration) => {
+  migration(stored, optionsConfig.defaults);
+});
 retiredKeys.forEach((key) => {
   assert.equal(stored[key], '\u00A0', `${key} should migrate to the cleared NBSP value`);
 });

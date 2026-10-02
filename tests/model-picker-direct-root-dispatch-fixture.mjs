@@ -9,9 +9,14 @@ const dispatchEnd = contentSource.indexOf(
   '\n        function dispatchActionWithoutVisibleHint(action, options, complete) {',
   dispatchStart,
 );
-assert.ok(dispatchStart >= 0 && dispatchEnd > dispatchStart, 'hint dispatch route should be present');
+assert.ok(
+  dispatchStart >= 0 && dispatchEnd > dispatchStart,
+  'hint dispatch route should be present',
+);
 const dispatchSource = contentSource.slice(dispatchStart, dispatchEnd);
-const existingMenuIndex = dispatchSource.indexOf('const existingMain = getVisibleModelMenuState().main;');
+const existingMenuIndex = dispatchSource.indexOf(
+  'const existingMain = getVisibleModelMenuState().main;',
+);
 const openClosedMenuIndex = dispatchSource.indexOf('if (!(existingMain instanceof Element))');
 assert.ok(
   existingMenuIndex >= 0 && openClosedMenuIndex > existingMenuIndex,
@@ -19,14 +24,23 @@ assert.ok(
 );
 const applyHintsIndex = dispatchSource.indexOf('ModelPickerHints.apply();');
 const directMenuIndex = dispatchSource.indexOf('getOpenComposerModelRadioMenu();', applyHintsIndex);
-const directTargetIndex = dispatchSource.indexOf('getUniqueVisibleMenuItemForSlot(', directMenuIndex);
-const legacyAdvancedIndex = dispatchSource.indexOf('ensurePillAdvancedOptionsExpanded(mainMenu)', directTargetIndex);
+const directTargetIndex = dispatchSource.indexOf(
+  'getUniqueVisibleMenuItemForSlot(',
+  directMenuIndex,
+);
+const legacyAdvancedIndex = dispatchSource.indexOf(
+  'ensurePillAdvancedOptionsExpanded(mainMenu)',
+  directTargetIndex,
+);
 assert.ok(
   applyHintsIndex >= 0 &&
     directMenuIndex > applyHintsIndex &&
     dispatchSource.includes('directComposerMenu?.menu === mainMenu') &&
     directTargetIndex > directMenuIndex &&
-    dispatchSource.includes('sourceSlot,\n              directComposerMenu.menu', directTargetIndex) &&
+    dispatchSource.includes(
+      'sourceSlot,\n              directComposerMenu.menu',
+      directTargetIndex,
+    ) &&
     dispatchSource.indexOf('return directComposerTarget;', directTargetIndex) > directTargetIndex &&
     legacyAdvancedIndex > directTargetIndex,
   'the profile-specific root row should be returned before legacy Advanced handling',
@@ -71,7 +85,11 @@ for (const scenario of scenarios) {
     (row) => row.role === 'menuitemradio' && /^gpt[-\s]*\d/i.test(row.label),
   );
   const matches = modelRows.filter((row) => row.hints?.[scenario.profile] === scenario.shortcut);
-  assert.equal(matches.length, 1, `${scenario.profile} slot ${scenario.slot} should target one root model`);
+  assert.equal(
+    matches.length,
+    1,
+    `${scenario.profile} slot ${scenario.slot} should target one root model`,
+  );
   assert.equal(matches[0].label, scenario.expected);
   assert.ok(!['Default', 'High', 'Fast'].includes(matches[0].label));
 }

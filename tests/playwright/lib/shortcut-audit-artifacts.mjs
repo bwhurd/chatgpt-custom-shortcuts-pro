@@ -39,7 +39,7 @@ function isModelPhaseAction(shortcut) {
 }
 
 function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object || {}, key);
+  return Object.hasOwn(object || {}, key);
 }
 
 function valuesEqual(left, right) {
@@ -94,8 +94,7 @@ export function buildStorageRecoveryPlan(ledger = [], observedStorage = {}) {
       observedPresent === entry.auditPresent &&
       auditValues.some((auditValue) => valuesEqual(observedValue, auditValue));
     const originalValueMatches =
-      observedPresent === entry.originalPresent &&
-      valuesEqual(observedValue, entry.originalValue);
+      observedPresent === entry.originalPresent && valuesEqual(observedValue, entry.originalValue);
     const restoreAction = auditValueMatches
       ? entry.originalPresent
         ? 'set-original'
@@ -171,8 +170,8 @@ export function finalizeStorageRecoveryPlan(plan, finalStorage = {}) {
           : finalMatchesExpected && entry.restoreAction === 'leave-unchanged'
             ? 'unchanged'
             : finalMatchesExpected
-            ? 'restored'
-            : 'restore-failed',
+              ? 'restored'
+              : 'restore-failed',
     };
   });
   const conflictCount = entries.filter((entry) => entry.compareBeforeRestore === 'conflict').length;
@@ -208,7 +207,10 @@ function shellArg(value) {
   return /^[A-Za-z0-9_./:=+-]+$/.test(text) ? text : `"${text.replaceAll('"', '\\"')}"`;
 }
 
-export function buildShortcutRerunCommand(row, script = 'npm run playwright:chatgpt:audit-shortcuts') {
+export function buildShortcutRerunCommand(
+  row,
+  script = 'npm run playwright:chatgpt:audit-shortcuts',
+) {
   const args = ['--'];
   if (row?.phase) args.push('--phase', row.phase);
   if (row?.kind === 'global' && row.actionId) {
@@ -306,11 +308,13 @@ function buildGlobalAuditRow(shortcut, liveRow, options) {
     expected: expectedBehavior,
     observed: observedBehavior,
     status,
-    proofMethod: liveRow?.semantic?.proofMethod || (liveRow
-      ? 'playwright-routing-only'
-      : options.runMode === 'environment-fail'
-        ? 'environment-failure'
-        : 'inventory-only'),
+    proofMethod:
+      liveRow?.semantic?.proofMethod ||
+      (liveRow
+        ? 'playwright-routing-only'
+        : options.runMode === 'environment-fail'
+          ? 'environment-failure'
+          : 'inventory-only'),
     reason:
       liveRow?.reason ||
       (options.runMode === 'environment-fail'
@@ -379,10 +383,13 @@ function buildFixedAuditRow(contract, options) {
     expected: `Exercise fixed keyboard contract ${contract.classification} and verify its postcondition.`,
     observed: semanticProof.observed || liveRow?.observedSelector || liveRow?.reason || '',
     status,
-    proofMethod: semanticProof.proofMethod || (liveRow ? 'playwright-routing-only' : 'source-inventory'),
-    reason: liveRow?.reason || (sourcePresent
-      ? 'Source contract is present; live keyboard behavior has not been proved.'
-      : contract.message || 'Expected fixed/gated contract is missing.'),
+    proofMethod:
+      semanticProof.proofMethod || (liveRow ? 'playwright-routing-only' : 'source-inventory'),
+    reason:
+      liveRow?.reason ||
+      (sourcePresent
+        ? 'Source contract is present; live keyboard behavior has not been proved.'
+        : contract.message || 'Expected fixed/gated contract is missing.'),
     evidencePath: 'shortcut-audit.json',
     rerunCommand: '',
     owner: 'extension/content.js',
@@ -593,13 +600,17 @@ export function renderShortcutAuditCsv(report) {
 }
 
 function markdownCell(value) {
-  return String(value ?? '').replaceAll('|', '\\|').replaceAll('\n', '<br>');
+  return String(value ?? '')
+    .replaceAll('|', '\\|')
+    .replaceAll('\n', '<br>');
 }
 
 export function renderShortcutRepairBacklog(report) {
   const rows = report?.rows || [];
   const productFailures = rows.filter((row) => row.status === 'product-fail');
-  const coverageRows = rows.filter((row) => ['coverage-gap', 'selector-drift'].includes(row.status));
+  const coverageRows = rows.filter((row) =>
+    ['coverage-gap', 'selector-drift'].includes(row.status),
+  );
   const environmentRows = rows.filter((row) => row.status === 'environment-fail');
   const accountRows = rows.filter((row) => row.status === 'account-unavailable');
   const manualRows = rows.filter((row) => row.status === 'manual-pending');
@@ -614,23 +625,33 @@ export function renderShortcutRepairBacklog(report) {
     '',
   ];
   if (!productFailures.length) {
-    lines.push('No confirmed product failures were recorded. A live probe failure must be reproduced once more with valid preconditions before it is promoted here.');
+    lines.push(
+      'No confirmed product failures were recorded. A live probe failure must be reproduced once more with valid preconditions before it is promoted here.',
+    );
   } else {
     for (const row of productFailures) {
       lines.push(`### ${row.rowId} — ${row.label || row.actionId || row.contractId}`);
       lines.push('');
       lines.push(`- Stable id: \`${row.rowId}\``);
-      lines.push(`- Action/profile/slot: \`${row.actionId || '(fixed contract)'}\` / \`${row.profile || '-'}\` / \`${row.slot ?? '-'}\``);
+      lines.push(
+        `- Action/profile/slot: \`${row.actionId || '(fixed contract)'}\` / \`${row.profile || '-'}\` / \`${row.slot ?? '-'}\``,
+      );
       lines.push(`- Chord/modifiers: \`${row.code || '(none)'}\` / ${markdownCell(row.modifiers)}`);
       lines.push(`- Status: \`${row.status}\``);
       lines.push(`- Expected: ${markdownCell(row.expected)}`);
       lines.push(`- Observed: ${markdownCell(row.observed)}`);
       lines.push(`- Reason: ${markdownCell(row.reason)}`);
-      lines.push(`- Reproduction evidence: ${row.evidencePath ? `\`${row.evidencePath}\`` : 'pending targeted confirmation'}`);
+      lines.push(
+        `- Reproduction evidence: ${row.evidencePath ? `\`${row.evidencePath}\`` : 'pending targeted confirmation'}`,
+      );
       lines.push(`- Exact rerun: \`${row.rerunCommand}\``);
       lines.push(`- Likely owner: \`${row.owner}\``);
-      lines.push('- Suggested repair boundary: inspect the owning runtime handler and its canonical target metadata; do not change the fixed fixture or audit harness to hide the failure.');
-      lines.push('- Acceptance proof: targeted rerun passes twice, expected observable state is present, and storage recovery is clean.');
+      lines.push(
+        '- Suggested repair boundary: inspect the owning runtime handler and its canonical target metadata; do not change the fixed fixture or audit harness to hide the failure.',
+      );
+      lines.push(
+        '- Acceptance proof: targeted rerun passes twice, expected observable state is present, and storage recovery is clean.',
+      );
       lines.push('');
     }
   }
@@ -639,7 +660,9 @@ export function renderShortcutRepairBacklog(report) {
     lines.push('None recorded.');
   } else {
     for (const row of [...environmentRows, ...accountRows]) {
-      lines.push(`- \`${row.rowId}\`: ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`);
+      lines.push(
+        `- \`${row.rowId}\`: ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`,
+      );
     }
   }
   lines.push('', '## Coverage gaps and selector drift', '');
@@ -657,7 +680,9 @@ export function renderShortcutRepairBacklog(report) {
     lines.push('None recorded.');
   } else {
     for (const row of manualRows) {
-      lines.push(`- \`${row.rowId}\`: ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`);
+      lines.push(
+        `- \`${row.rowId}\`: ${markdownCell(row.reason)} (rerun: \`${row.rerunCommand}\`)`,
+      );
     }
   }
   lines.push('', '## Inventory and run context', '');
@@ -671,7 +696,9 @@ export function renderShortcutRepairBacklog(report) {
 }
 
 function safeEvidenceName(rowId) {
-  return String(rowId || 'unknown-row').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 140);
+  return String(rowId || 'unknown-row')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .slice(0, 140);
 }
 
 export async function writeShortcutAuditArtifacts(folderPath, report, recoveryReport) {
@@ -724,7 +751,11 @@ export async function writeShortcutAuditArtifacts(folderPath, report, recoveryRe
       proofMethod: row.proofMethod,
       rerunCommand: row.rerunCommand,
     };
-    await writeFile(path.join(folderPath, relativePath), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+    await writeFile(
+      path.join(folderPath, relativePath),
+      `${JSON.stringify(evidence, null, 2)}\n`,
+      'utf8',
+    );
     row.evidencePath = relativePath;
     evidenceEntries.push({ rowId: row.rowId, status: row.status, path: relativePath });
   }
@@ -800,7 +831,9 @@ export function evaluateShortcutAuditExit(report, recoveryReport, { inventoryOnl
       report?.checkpoint &&
       !['clean', 'not-needed'].includes(report.checkpoint.clipboardRecoveryStatus)
     ) {
-      reasons.push(`clipboard recovery ${report.checkpoint.clipboardRecoveryStatus || 'unverified'}`);
+      reasons.push(
+        `clipboard recovery ${report.checkpoint.clipboardRecoveryStatus || 'unverified'}`,
+      );
     }
     const environmentRows = (report?.rows || []).filter((row) => row.status === 'environment-fail');
     if (environmentRows.length) reasons.push(`${environmentRows.length} environment failure(s)`);

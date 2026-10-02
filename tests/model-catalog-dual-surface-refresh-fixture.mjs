@@ -7,7 +7,10 @@ const popupSource = await readFile(new URL('../extension/popup.js', import.meta.
 
 const coordinatorStart = contentSource.indexOf('const refreshChatWorkModelCatalogsOnce');
 const coordinatorEnd = contentSource.indexOf('const getConfigureClickTargets', coordinatorStart);
-assert.ok(coordinatorStart >= 0 && coordinatorEnd > coordinatorStart, 'dual-surface coordinator should exist');
+assert.ok(
+  coordinatorStart >= 0 && coordinatorEnd > coordinatorStart,
+  'dual-surface coordinator should exist',
+);
 
 const coordinator = contentSource.slice(coordinatorStart, coordinatorEnd);
 const stableSurfaceStart = contentSource.indexOf('const waitForStableNativeChatWorkSurface');
@@ -60,7 +63,10 @@ assert.doesNotMatch(
 );
 
 const popupScrapeStart = popupSource.indexOf('const runScrape = async () =>');
-const popupScrapeEnd = popupSource.indexOf('window.__startModelCatalogScrape = runScrape', popupScrapeStart);
+const popupScrapeEnd = popupSource.indexOf(
+  'window.__startModelCatalogScrape = runScrape',
+  popupScrapeStart,
+);
 const popupScrape = popupSource.slice(popupScrapeStart, popupScrapeEnd);
 assert.match(
   popupScrape,
@@ -182,7 +188,11 @@ globalThis.triggerManualRefresh = triggerManualCatalogRefresh;`,
   { filename: 'popup-model-catalog-manual-refresh-outcome.js' },
 );
 const manualPartialResult = await manualRefreshContext.triggerManualRefresh('fixture');
-assert.equal(manualPartialResult, partialResult, 'manual refresh should return the usable partial result');
+assert.equal(
+  manualPartialResult,
+  partialResult,
+  'manual refresh should return the usable partial result',
+);
 assert.equal(
   manualRefreshContext.promptValues.at(-1),
   false,

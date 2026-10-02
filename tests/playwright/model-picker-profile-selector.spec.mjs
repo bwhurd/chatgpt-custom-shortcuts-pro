@@ -102,7 +102,9 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
     await page.goto(`chrome-extension://${extensionId}/popup.html`, {
       waitUntil: 'domcontentloaded',
     });
-    await page.waitForFunction(() => document.querySelectorAll('#model-picker-grid .mp-input').length > 0);
+    await page.waitForFunction(
+      () => document.querySelectorAll('#model-picker-grid .mp-input').length > 0,
+    );
     await page.waitForTimeout(500);
     await page.evaluate(
       async ({ latest, legacy, workCodes, chatCodes }) => {
@@ -134,8 +136,7 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
       },
     );
 
-    const profileButton = (profile) =>
-      page.locator(`[data-model-catalog-profile="${profile}"]`);
+    const profileButton = (profile) => page.locator(`[data-model-catalog-profile="${profile}"]`);
     await expect(page.locator('#mp-model-catalog-profile-selector button')).toHaveText([
       'Chat Models',
       'Work Models',
@@ -145,17 +146,14 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
     const modelToggleGroup = () =>
       page.locator('#model-picker-grid .mp-grid-group[data-group="model-toggles"]');
     const modelToggleInputs = () => modelToggleGroup().locator('.mp-input');
-    const chatWorkToggleInput = () =>
-      modelToggleGroup().locator('#shortcutKeyToggleChatWork');
+    const chatWorkToggleInput = () => modelToggleGroup().locator('#shortcutKeyToggleChatWork');
     const modelGroupIds = () =>
       page
         .locator('#model-picker-grid > .mp-grid-group')
         .evaluateAll((groups) => groups.map((group) => group.getAttribute('data-group')));
     const modifierControl = page.locator('#mp-model-switcher-modifier-selector');
 
-    await modifierControl
-      .locator('a[data-target="useControlForModelSwitcherRadio"]')
-      .click();
+    await modifierControl.locator('a[data-target="useControlForModelSwitcherRadio"]').click();
     await expect(page.locator('#useControlForModelSwitcherRadio')).toBeChecked();
     await expect
       .poll(() =>
@@ -171,7 +169,9 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
 
     await expect
       .poll(() =>
-        modifierControl.locator('a.active').evaluate((element) => getComputedStyle(element).backgroundColor),
+        modifierControl
+          .locator('a.active')
+          .evaluate((element) => getComputedStyle(element).backgroundColor),
       )
       .toBe('rgb(0, 63, 122)');
 
@@ -181,7 +181,13 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
       const modifierSelector = document.querySelector('#mp-model-switcher-modifier-selector');
       const modifierButton = modifierSelector?.querySelector('a.active');
       const modelGrid = document.querySelector('#model-picker-grid');
-      if (!profileSelector || !profileButton || !modifierSelector || !modifierButton || !modelGrid) {
+      if (
+        !profileSelector ||
+        !profileButton ||
+        !modifierSelector ||
+        !modifierButton ||
+        !modelGrid
+      ) {
         return null;
       }
 
@@ -211,16 +217,24 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
     });
 
     expect(segmentedControlLayout).not.toBeNull();
-    expect(Math.abs(segmentedControlLayout.profileLeft - segmentedControlLayout.gridLeft)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(segmentedControlLayout.profileBottom - segmentedControlLayout.modifierBottom)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(segmentedControlLayout.profileLeft - segmentedControlLayout.gridLeft),
+    ).toBeLessThanOrEqual(0.5);
+    expect(
+      Math.abs(segmentedControlLayout.profileBottom - segmentedControlLayout.modifierBottom),
+    ).toBeLessThanOrEqual(1);
     expect(segmentedControlLayout.profileBorderColor).toBe('rgb(0, 63, 122)');
     expect(segmentedControlLayout.modifierBorderColor).toBe('rgb(0, 63, 122)');
     expect(segmentedControlLayout.profileActiveBackground).toBe('rgb(0, 63, 122)');
     expect(segmentedControlLayout.modifierActiveBackground).toBe('rgb(0, 63, 122)');
-    expect(segmentedControlLayout.profileFontFamily).toBe(segmentedControlLayout.modifierFontFamily);
+    expect(segmentedControlLayout.profileFontFamily).toBe(
+      segmentedControlLayout.modifierFontFamily,
+    );
     expect(segmentedControlLayout.profileFontSize).toBe(segmentedControlLayout.modifierFontSize);
     expect(segmentedControlLayout.profileFontStyle).toBe(segmentedControlLayout.modifierFontStyle);
-    expect(segmentedControlLayout.profileFontWeight).toBe(segmentedControlLayout.modifierFontWeight);
+    expect(segmentedControlLayout.profileFontWeight).toBe(
+      segmentedControlLayout.modifierFontWeight,
+    );
 
     await expect(profileButton('legacy')).toHaveAttribute('aria-selected', 'true');
     await expect(configureInputs()).toHaveCount(4);
@@ -235,8 +249,7 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
       .poll(() =>
         serviceWorker.evaluate(
           async () =>
-            (await chrome.storage.sync.get('shortcutKeyToggleChatWork'))
-              .shortcutKeyToggleChatWork,
+            (await chrome.storage.sync.get('shortcutKeyToggleChatWork')).shortcutKeyToggleChatWork,
         ),
       )
       .toBe('KeyG');
@@ -257,9 +270,10 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
     await reopenedPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(
-      reopenedPopup.locator('[data-model-catalog-profile="latest"]'),
-    ).toHaveAttribute('aria-selected', 'true');
+    await expect(reopenedPopup.locator('[data-model-catalog-profile="latest"]')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     await reopenedPopup.close();
 
     await expect(configureInputs()).toHaveCount(4);
@@ -313,10 +327,7 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
             'modelPickerKeyCodesLatest',
             'modelPickerKeyCodesLegacy',
           ]);
-          return [
-            stored.modelPickerKeyCodesLatest[10],
-            stored.modelPickerKeyCodesLegacy[6],
-          ];
+          return [stored.modelPickerKeyCodesLatest[10], stored.modelPickerKeyCodesLegacy[6]];
         }),
       )
       .toEqual(['KeyK', 'KeyM']);
@@ -352,10 +363,7 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
             'modelPickerKeyCodesLatest',
             'modelPickerKeyCodesLegacy',
           ]);
-          return [
-            stored.modelPickerKeyCodesLatest[8],
-            stored.modelPickerKeyCodesLegacy[8],
-          ];
+          return [stored.modelPickerKeyCodesLatest[8], stored.modelPickerKeyCodesLegacy[8]];
         }),
       )
       .toEqual(['KeyC', 'KeyC']);

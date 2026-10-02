@@ -5,10 +5,7 @@ import vm from 'node:vm';
 const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
 const helperStart = contentSource.indexOf('function getSlimSidebarHost');
 const runtimeStart = contentSource.indexOf('(() => {', helperStart);
-const runtimeEnd = contentSource.indexOf(
-  '// @note Show Assigned Shortcuts Overlay',
-  runtimeStart,
-);
+const runtimeEnd = contentSource.indexOf('// @note Show Assigned Shortcuts Overlay', runtimeStart);
 
 assert.ok(
   helperStart >= 0 && runtimeStart > helperStart && runtimeEnd > runtimeStart,
@@ -62,7 +59,7 @@ assert.doesNotMatch(
   'rail clicks should not maintain a second competing fade state',
 );
 assert.ok(
-  !runtimeSource.includes("          '[data-state=\"open\"]',"),
+  !runtimeSource.includes('          \'[data-state="open"]\','),
   'ordinary open-state widgets should not be treated as page overlays',
 );
 assert.ok(
@@ -178,10 +175,18 @@ globalThis.resetScroll = resetCollapsedSlimSidebarScroll;`,
   { filename: 'fade-slim-sidebar-host-helpers.js' },
 );
 assert.equal(helperContext.getHost(), currentHost, 'the current app-shell host should win');
-assert.equal(helperContext.getFadeTarget(), currentHost, 'the app-shell should be the current fallback target');
+assert.equal(
+  helperContext.getFadeTarget(),
+  currentHost,
+  'the app-shell should be the current fallback target',
+);
 assert.equal(helperContext.isOpen(currentHost), true, 'aria-expanded="true" should be expanded');
 currentHost.setAttribute('data-state', 'closed');
-assert.equal(helperContext.isOpen(currentHost), false, 'explicit host data-state should take precedence');
+assert.equal(
+  helperContext.isOpen(currentHost),
+  false,
+  'explicit host data-state should take precedence',
+);
 currentHost.removeAttribute('data-state');
 currentToggle.setAttribute('aria-expanded', 'false');
 assert.equal(helperContext.isOpen(currentHost), false, 'aria-expanded="false" should be collapsed');
@@ -192,7 +197,11 @@ currentHost.scrollLeft = 189;
 helperContext.resetScroll(currentHost);
 assert.equal(currentHost.scrollLeft, 189, 'expanded host scroll should not be changed');
 helperElements.set(legacyBar.id, legacyBar);
-assert.equal(helperContext.getFadeTarget(), legacyBar, 'the legacy tiny bar should remain the primary target');
+assert.equal(
+  helperContext.getFadeTarget(),
+  legacyBar,
+  'the legacy tiny bar should remain the primary target',
+);
 helperElements.delete(legacyBar.id);
 helperElements.delete('app-shell-sidebar');
 assert.equal(helperContext.getHost(), stageHost, 'stage-slideover should remain a fallback');
@@ -213,9 +222,7 @@ const document = {
   body: new TestNode(),
   getElementById: (id) => elements.get(id) ?? null,
   querySelectorAll: (selector) =>
-    selector === 'button[aria-controls="app-shell-sidebar"][aria-expanded]'
-      ? [currentToggle]
-      : [],
+    selector === 'button[aria-controls="app-shell-sidebar"][aria-expanded]' ? [currentToggle] : [],
   querySelector: () => null,
   addEventListener() {},
   removeEventListener() {},
@@ -299,33 +306,79 @@ assert.equal(
   'retired stage hosts should not receive current-host hover handlers',
 );
 runTimersTo(3700);
-assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'collapsed idle should use configured opacity');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '0.3',
+  'collapsed idle should use configured opacity',
+);
 
 currentHost.hovered = true;
 currentHost.listeners.get('mouseenter')();
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'entering the collapsed host should reveal the rail');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'entering the collapsed host should reveal the rail',
+);
 runTimersTo(now + 5000);
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'a steady hover should prevent the idle fade');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'a steady hover should prevent the idle fade',
+);
 
 currentHost.hovered = false;
 currentHost.listeners.get('mouseleave')();
 runTimersTo(now + 2500);
-assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'leaving the collapsed rail should fade to idle');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '0.3',
+  'leaving the collapsed rail should fade to idle',
+);
 
 currentToggle.setAttribute('aria-expanded', 'true');
 observers.at(-1).callback([]);
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'expanding the shell should restore full opacity');
-assert.equal(currentHost.style.pointerEvents, '', 'expanded sidebar pointer interaction should remain intact');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'expanding the shell should restore full opacity',
+);
+assert.equal(
+  currentHost.style.pointerEvents,
+  '',
+  'expanded sidebar pointer interaction should remain intact',
+);
 runTimersTo(now + 5000);
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'expanded idle must never fade the full sidebar');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'expanded idle must never fade the full sidebar',
+);
 
 currentToggle.setAttribute('aria-expanded', 'false');
 observers.at(-1).callback([]);
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'collapsing should reveal the rail before idling');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'collapsing should reveal the rail before idling',
+);
 runTimersTo(now);
-assert.equal(currentHost.styleValues.get('opacity'), '1', 'collapsed transition should restore the rail');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '1',
+  'collapsed transition should restore the rail',
+);
 runTimersTo(now + 2500);
-assert.equal(currentHost.styleValues.get('opacity'), '0.3', 'the collapsed rail should return to idle opacity');
-assert.equal(currentHost.style.pointerEvents, '', 'collapsed idle should preserve pointer interaction');
+assert.equal(
+  currentHost.styleValues.get('opacity'),
+  '0.3',
+  'the collapsed rail should return to idle opacity',
+);
+assert.equal(
+  currentHost.style.pointerEvents,
+  '',
+  'collapsed idle should preserve pointer interaction',
+);
 
-console.log('Fade Slim Sidebar fades the collapsed app-shell rail and preserves the expanded sidebar');
+console.log(
+  'Fade Slim Sidebar fades the collapsed app-shell rail and preserves the expanded sidebar',
+);

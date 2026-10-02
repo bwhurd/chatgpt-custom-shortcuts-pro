@@ -178,9 +178,9 @@ export function parseModelPickerLabelsSource(modelPickerLabelsSource) {
 
 export function parseRuntimeHandlerActionIds(contentSource) {
   const source = String(contentSource || '');
-  const handlerActionIds = [
-    ...source.matchAll(COMPUTED_SHORTCUT_HANDLER_KEY_PATTERN),
-  ].map((match) => match[1]);
+  const handlerActionIds = [...source.matchAll(COMPUTED_SHORTCUT_HANDLER_KEY_PATTERN)].map(
+    (match) => match[1],
+  );
   const registryMatch = ALT_SHORTCUT_ACTIONS_PATTERN.exec(source);
   if (registryMatch) {
     handlerActionIds.push(
@@ -199,9 +199,7 @@ function getLineNumber(source, index) {
 function classifyKeyboardListener(source, match) {
   const tail = source.slice(match.index, match.index + 700);
   const expected = EXPECTED_KEYBOARD_LISTENER_CONTRACTS.find(
-    (contract) =>
-      contract.owner === match[1] &&
-      tail.includes(contract.handlerRef),
+    (contract) => contract.owner === match[1] && tail.includes(contract.handlerRef),
   );
   if (expected) {
     return {
@@ -243,7 +241,7 @@ function buildSourceKeyboardContractInventory(contentSource) {
     const positions = expected.sourceNeedles.map((needle) => source.indexOf(needle));
     const missingNeedles = expected.sourceNeedles.filter((needle) => !source.includes(needle));
     const firstPosition = positions.find((position) => position >= 0) ?? -1;
-    const { sourceNeedles, ...descriptor } = expected;
+    const { sourceNeedles: _sourceNeedles, ...descriptor } = expected;
     return {
       ...descriptor,
       line: firstPosition >= 0 ? getLineNumber(source, firstPosition) : null,
@@ -317,9 +315,7 @@ function buildScrapeStateInfoById(scrapeStateRegistry) {
 
 function resolveFilesForStateRefs(uiStateRefs, scrapeStateInfoById) {
   return uniqueSorted(
-    (uiStateRefs || [])
-      .map((stateId) => scrapeStateInfoById[stateId]?.filename)
-      .filter(Boolean),
+    (uiStateRefs || []).map((stateId) => scrapeStateInfoById[stateId]?.filename).filter(Boolean),
   );
 }
 
@@ -647,7 +643,8 @@ export function buildShortcutValidationInventory({
   const unknownActivationProbeModesByAction = Object.fromEntries(
     SHORTCUT_ACTIONS.map((definition) => [
       definition.actionId,
-      definition.activationProbe?.mode && !ACTIVATION_PROBE_MODES.includes(definition.activationProbe.mode)
+      definition.activationProbe?.mode &&
+      !ACTIVATION_PROBE_MODES.includes(definition.activationProbe.mode)
         ? [definition.activationProbe.mode]
         : [],
     ]).filter(([, modes]) => modes.length > 0),
@@ -753,8 +750,12 @@ export function buildShortcutValidationInventory({
   }));
 
   const inventoryIssues = [];
-  keyboardListenerInventory.issues.forEach((issue) => inventoryIssues.push(issue));
-  modelPickerInventory.issues.forEach((issue) => inventoryIssues.push(issue));
+  keyboardListenerInventory.issues.forEach((issue) => {
+    inventoryIssues.push(issue);
+  });
+  modelPickerInventory.issues.forEach((issue) => {
+    inventoryIssues.push(issue);
+  });
   duplicateShortcutActionIds.forEach((actionId) => {
     inventoryIssues.push({
       type: 'duplicate-shortcut-metadata',

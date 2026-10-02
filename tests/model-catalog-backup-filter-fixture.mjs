@@ -61,7 +61,11 @@ assert.deepEqual(
 );
 for (const key of scrapedStateKeys) {
   assert.equal(key in cloudPayload, false, `${key} should stay out of Drive settings`);
-  assert.equal(key in fixture.data, false, `${key} should stay out of the exported settings fixture`);
+  assert.equal(
+    key in fixture.data,
+    false,
+    `${key} should stay out of the exported settings fixture`,
+  );
 }
 
 const popupDefaultsStart = popupSource.indexOf('const DEFAULT_PRESET_DATA = (() =>');
@@ -72,7 +76,10 @@ assert.ok(
 );
 const popupDefaultsSource = popupSource.slice(popupDefaultsStart, popupDefaultsEnd);
 const popupScrapeKeysStart = popupSource.indexOf('const MODEL_CATALOG_SCRAPE_STATE_KEYS');
-const popupScrapeKeysEnd = popupSource.indexOf('const AUTO_MANAGED_SYNC_KEYS', popupScrapeKeysStart);
+const popupScrapeKeysEnd = popupSource.indexOf(
+  'const AUTO_MANAGED_SYNC_KEYS',
+  popupScrapeKeysStart,
+);
 assert.ok(
   popupScrapeKeysStart >= 0 && popupScrapeKeysEnd > popupScrapeKeysStart,
   'popup scraped-state exclusion registry should exist',

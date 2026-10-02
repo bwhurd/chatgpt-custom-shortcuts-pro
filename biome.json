@@ -3,7 +3,7 @@
   "root": true,
   "files": {
     "includes": [
-      "**/*.{js,ts,jsx,tsx,json,css,html}",
+      "**/*.{js,mjs,ts,jsx,tsx,json,css,html}",
       "!_temp-files",
       "!dist",
       "!tools",
@@ -11,6 +11,14 @@
       "!.git",
       "!.playwright",
       "!test-results",
+      "!plans",
+      "!.vscode",
+      "!extension/.vscode",
+      "!netlify",
+      "!tests/bottom-bar-benchmark-summary.json",
+      "!tests/playwright/topbar-to-bottom-*.json",
+      "!tests/playwright/topbar-to-bottom-*.js",
+      "!tests/tampermonkey-dev-scrape/chatgpt-devscrape-wide.user.js",
       "!extension/vendor",
       "!extension/lib/*.min.js"
     ],

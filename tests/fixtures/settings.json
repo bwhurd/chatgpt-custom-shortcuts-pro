@@ -79,8 +79,40 @@
     "useControlForModelSwitcherRadio": false,
     "copyCodeUserSeparator": "\n\n--- --- ---\n\n",
     "modelPickerKeyCodes": ["Digit0", "Digit1", "KeyM", "", "", "", "KeyO", "Digit4", "Digit3", ""],
-    "modelPickerKeyCodesLatest": ["F1", "F2", "", "Digit1", "", "", "", "F3", "Digit2", "Digit3", "Digit4", "F4", "F5", "Digit6", "Digit0"],
-    "modelPickerKeyCodesLegacy": ["F1", "F2", "", "Digit1", "", "", "Digit4", "F3", "Digit2", "Digit3", "", "", "", "", ""],
+    "modelPickerKeyCodesLatest": [
+      "F1",
+      "F2",
+      "",
+      "Digit1",
+      "",
+      "",
+      "",
+      "F3",
+      "Digit2",
+      "Digit3",
+      "Digit4",
+      "F4",
+      "F5",
+      "Digit6",
+      "Digit0"
+    ],
+    "modelPickerKeyCodesLegacy": [
+      "F1",
+      "F2",
+      "",
+      "Digit1",
+      "",
+      "",
+      "Digit4",
+      "F3",
+      "Digit2",
+      "Digit3",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
     "modelPickerKeyCodeProfilesVersion": 1
   }
 }

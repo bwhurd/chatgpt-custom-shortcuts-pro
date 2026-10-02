@@ -16,15 +16,15 @@ const extractBetween = (startMarker, endMarker, name) => {
 };
 
 const outerSendButtonResolver = extractSource(
-  /  const getSendButton = \(\) =>[\s\S]*?;\n/,
+  / {2}const getSendButton = \(\) =>[\s\S]*?;\n/,
   'outer-IIFE send-button resolver',
 );
 const localSendButtonResolver = extractSource(
-  /    const getCtrlShortcutSendButton = \(\) => \{[\s\S]*?\n    \};/,
+  / {4}const getCtrlShortcutSendButton = \(\) => \{[\s\S]*?\n {4}\};/,
   'Control shortcut send-button resolver',
 );
 const keyFunctionMapping = extractSource(
-  /    const keyFunctionMappingCtrl = \{[\s\S]*?\n    \};/,
+  / {4}const keyFunctionMappingCtrl = \{[\s\S]*?\n {4}\};/,
   'Control shortcut mapping',
 );
 const ignoreShortcutEvent = extractBetween(
@@ -33,23 +33,23 @@ const ignoreShortcutEvent = extractBetween(
   'shortcut event guard',
 );
 const shortcutKeyIdentifier = extractSource(
-  /    const getShortcutKeyIdentifier = \(event\) =>[\s\S]*?;\n/,
+  / {4}const getShortcutKeyIdentifier = \(event\) =>[\s\S]*?;\n/,
   'shortcut key identifier',
 );
 const controlShortcutHandler = extractSource(
-  /    const handleCtrlShortcutEvent = \(event, keyIdentifier\) => \{[\s\S]*?\n    \};/,
+  / {4}const handleCtrlShortcutEvent = \(event, keyIdentifier\) => \{[\s\S]*?\n {4}\};/,
   'Control shortcut router',
 );
 const keydownListener = extractSource(
-  /    document\.addEventListener\(\n      'keydown',[\s\S]*?\n      \{ capture: true \},\n    \);/,
+  / {4}document\.addEventListener\(\n {6}'keydown',[\s\S]*?\n {6}\{ capture: true \},\n {4}\);/,
   'captured keydown listener',
 );
 const settingsGate = extractSource(
-  /    function isCtrlShortcutEnabled\(key\) \{[\s\S]*?\n    \}/,
+  / {4}function isCtrlShortcutEnabled\(key\) \{[\s\S]*?\n {4}\}/,
   'Control shortcut setting gate',
 );
 const shortcutUsageRecorder = extractSource(
-  /    function recordShortcutUsage\(_actionId\) \{\}/,
+  / {4}function recordShortcutUsage\(_actionId\) \{\}/,
   'shortcut usage recorder',
 );
 

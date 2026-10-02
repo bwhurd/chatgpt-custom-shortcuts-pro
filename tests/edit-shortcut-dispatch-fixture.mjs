@@ -13,24 +13,24 @@ const [contentSource, optionsStorageSource, popupSource, popupHtmlSource] = awai
 const extractBetween = (startMarker, endMarker, name) => {
   const start = contentSource.indexOf(startMarker);
   const end = contentSource.indexOf(endMarker, start);
-  assert.ok(start >= 0 && end > start, name + ' source markers should remain inspectable');
-  return contentSource.slice(start, end).replace(/^    /gm, '');
+  assert.ok(start >= 0 && end > start, `${name} source markers should remain inspectable`);
+  return contentSource.slice(start, end).replace(/^ {4}/gm, '');
 };
 
 const matchesShortcutKeySource = contentSource.match(
-  /    function matchesShortcutKey\(setting, event\) \{[\s\S]*?\n    \}/,
+  / {4}function matchesShortcutKey\(setting, event\) \{[\s\S]*?\n {4}\}/,
 )?.[0];
 const getEffectiveShortcutSettingSource = contentSource.match(
-  /    const getEffectiveShortcutSetting = \(storageKey\) => \{[\s\S]*?\n    \};/,
+  / {4}const getEffectiveShortcutSetting = \(storageKey\) => \{[\s\S]*?\n {4}\};/,
 )?.[0];
 const findMatchedAltShortcutActionKeySource = contentSource.match(
-  /    const findMatchedAltShortcutActionKey = \(event\) => \{[\s\S]*?\n    \};/,
+  / {4}const findMatchedAltShortcutActionKey = \(event\) => \{[\s\S]*?\n {4}\};/,
 )?.[0];
 const runAltShortcutActionSource = contentSource.match(
-  /    const runAltShortcutAction = \(storageKey, event, options = \{\}\) => \{[\s\S]*?\n    \};/,
+  / {4}const runAltShortcutAction = \(storageKey, event, options = \{\}\) => \{[\s\S]*?\n {4}\};/,
 )?.[0];
 const runMatchedAltShortcutSource = contentSource.match(
-  /    const runMatchedAltShortcut = \(event\) => \{[\s\S]*?\n    \};/,
+  / {4}const runMatchedAltShortcut = \(event\) => \{[\s\S]*?\n {4}\};/,
 )?.[0];
 const shouldIgnoreShortcutEventSource = extractBetween(
   '    const shouldIgnoreShortcutEvent =',
@@ -38,16 +38,16 @@ const shouldIgnoreShortcutEventSource = extractBetween(
   'shortcut event guard',
 );
 const getShortcutKeyIdentifierSource = contentSource.match(
-  /    const getShortcutKeyIdentifier = \(event\) =>[\s\S]*?;\n/,
+  / {4}const getShortcutKeyIdentifier = \(event\) =>[\s\S]*?;\n/,
 )?.[0];
 const hasUnexpectedAltShortcutModifierSource = contentSource.match(
-  /    const hasUnexpectedAltShortcutModifier = \(event\) =>[\s\S]*?;\n/,
+  / {4}const hasUnexpectedAltShortcutModifier = \(event\) =>[\s\S]*?;\n/,
 )?.[0];
 const handleAltShortcutEventSource = contentSource.match(
-  /    const handleAltShortcutEvent = \(event, keyIdentifier, isPrimaryControlPressed\) => \{[\s\S]*?\n    \};/,
+  / {4}const handleAltShortcutEvent = \(event, keyIdentifier, isPrimaryControlPressed\) => \{[\s\S]*?\n {4}\};/,
 )?.[0];
 const runEditMessageShortcutSource = contentSource.match(
-  /    function runEditMessageShortcut\(\) \{[\s\S]*?\n    \}/,
+  / {4}function runEditMessageShortcut\(\) \{[\s\S]*?\n {4}\}/,
 )?.[0];
 const altDispatcherStart = contentSource.indexOf(
   "    document.addEventListener(\n      'keydown',",
@@ -105,7 +105,9 @@ const createStoredSettings = (overrides) => {
   return { ...stored, ...overrides };
 };
 const migrateStoredSettings = (stored) => {
-  optionsConfig.migrations.forEach((migration) => migration(stored, optionsConfig.defaults));
+  optionsConfig.migrations.forEach((migration) => {
+    migration(stored, optionsConfig.defaults);
+  });
   return stored;
 };
 
@@ -147,9 +149,9 @@ const editActivationSource = extractBetween(
   '      const getScrollContainerMetrics',
   'Edit button activation',
 );
-const openEditSource = contentSource.match(
-  /      const openEditButton = \(button\) => \{[\s\S]*?\n      \};/,
-)?.[0]?.replace(/^      /gm, '');
+const openEditSource = contentSource
+  .match(/ {6}const openEditButton = \(button\) => \{[\s\S]*?\n {6}\};/)?.[0]
+  ?.replace(/^ {6}/gm, '');
 assert.ok(openEditSource, 'The Edit state opener should remain inspectable');
 
 class FixtureMouseEvent {
@@ -235,10 +237,10 @@ class FixtureEditButton {
 }
 
 const runtimeDependencies = [
-  "const CONVERSATION_TURN_SELECTOR = '[data-turn-key], [data-testid^=\"conversation-turn-\"]';",
+  'const CONVERSATION_TURN_SELECTOR = \'[data-turn-key], [data-testid^="conversation-turn-"]\';',
   'const escapeAttributeSelectorFragment = (value) => String(value);',
-  'const withPrefix = (selectors, prefix) => selectors.split(\',\').map((selector) => prefix + \' \' + selector.trim()).join(\', \');',
-  String.raw`const svgSelectorForTokens = (tokens) => tokens.map((token) => 'svg path[d^="' + token + '"], svg use[href*="' + token + '"]').join(', ');`,
+  "const withPrefix = (selectors, prefix) => selectors.split(',').map((selector) => prefix + ' ' + selector.trim()).join(', ');",
+  `const svgSelectorForTokens = (tokens) => tokens.map((token) => 'svg path[d^="' + token + '"], svg use[href*="' + token + '"]').join(', ');`,
   'const document = globalThis.document;',
   'const findOpenedEditField = (turn) => turn?.editField?.isConnected ? turn.editField : null;',
   'const handleOpenedEditField = () => { globalThis.openedEditFieldCallbackCalls += 1; };',
@@ -280,20 +282,20 @@ const fixtureRuntimeSource = [
   editTargetSource,
   editActivationSource,
   openEditSource,
-  'const hasUsableShortcutSetting = (value) => typeof value === \'string\';',
+  "const hasUsableShortcutSetting = (value) => typeof value === 'string';",
   `const shortcutDefaults = { shortcutKeyEdit: ${JSON.stringify(defaultEditCode)} };`,
   `const shortcuts = { shortcutKeyEdit: ${JSON.stringify(defaultEditCode)} };`,
-  matchesShortcutKeySource.replace(/^    /gm, ''),
-  getEffectiveShortcutSettingSource.replace(/^    /gm, ''),
+  matchesShortcutKeySource.replace(/^ {4}/gm, ''),
+  getEffectiveShortcutSettingSource.replace(/^ {4}/gm, ''),
   'const altShortcutActions = { shortcutKeyEdit: runEditMessageShortcut };',
   'const ALT_SHORTCUT_ACTION_KEYS = Object.keys(altShortcutActions);',
-  findMatchedAltShortcutActionKeySource.replace(/^    /gm, ''),
-  runAltShortcutActionSource.replace(/^    /gm, ''),
-  runMatchedAltShortcutSource.replace(/^    /gm, ''),
-  shouldIgnoreShortcutEventSource.replace(/^    /gm, ''),
-  getShortcutKeyIdentifierSource.replace(/^    /gm, ''),
-  hasUnexpectedAltShortcutModifierSource.replace(/^    /gm, ''),
-  handleAltShortcutEventSource.replace(/^    /gm, ''),
+  findMatchedAltShortcutActionKeySource.replace(/^ {4}/gm, ''),
+  runAltShortcutActionSource.replace(/^ {4}/gm, ''),
+  runMatchedAltShortcutSource.replace(/^ {4}/gm, ''),
+  shouldIgnoreShortcutEventSource.replace(/^ {4}/gm, ''),
+  getShortcutKeyIdentifierSource.replace(/^ {4}/gm, ''),
+  hasUnexpectedAltShortcutModifierSource.replace(/^ {4}/gm, ''),
+  handleAltShortcutEventSource.replace(/^ {4}/gm, ''),
   'const isMac = false;',
   'const isModelToggleShortcutEvent = () => false;',
   'const runModelPickerDigitShortcut = () => false;',
@@ -302,7 +304,7 @@ const fixtureRuntimeSource = [
   'const runPreviewThreadShortcut = () => false;',
   'const recordShortcutUsage = () => {};',
   'const handleCtrlShortcutEvent = () => false;',
-  runEditMessageShortcutSource.replace(/^    /gm, ''),
+  runEditMessageShortcutSource.replace(/^ {4}/gm, ''),
   altDispatcherSource,
   'globalThis.openEditButton = openEditButton;',
 ].join('\n');
@@ -319,7 +321,11 @@ context.EditMessageShortcut = {
 const keydownListener = document.listeners.find(
   ({ type, options }) => type === 'keydown' && options?.capture === true,
 )?.listener;
-assert.equal(typeof keydownListener, 'function', 'The capture-phase keydown handler should register');
+assert.equal(
+  typeof keydownListener,
+  'function',
+  'The capture-phase keydown handler should register',
+);
 
 const event = {
   type: 'keydown',

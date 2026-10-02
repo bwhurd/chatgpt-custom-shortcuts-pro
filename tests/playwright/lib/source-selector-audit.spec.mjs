@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -16,7 +16,11 @@ test('source-selector inventory parses a BOM-prefixed manifest', async () => {
       '\uFEFF{"content_scripts":[{"js":["content.js"]}]}',
       'utf8',
     );
-    await writeFile(path.join(repoRoot, 'extension/content.js'), "document.querySelector('.target');", 'utf8');
+    await writeFile(
+      path.join(repoRoot, 'extension/content.js'),
+      "document.querySelector('.target');",
+      'utf8',
+    );
 
     const inventory = await buildSourceSelectorInventory(repoRoot);
 

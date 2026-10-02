@@ -8,7 +8,8 @@
 // @grant        none
 // ==/UserScript==
 
-(function () {
+(() => {
+  // biome-ignore lint/suspicious/noRedundantUseStrict: This userscript executes as a classic script; strict mode is intentional.
   'use strict';
 
   const LOG_KEY = 'tm_csp_chatgpt_load_profiler_v1';
@@ -18,8 +19,7 @@
   const EXTENSION_SETTLE_AFTER_COMPLETE_MS = 4000;
   const MAX_WAIT_MS = 15000;
 
-  const roundMs = (value) =>
-    Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
+  const roundMs = (value) => (Number.isFinite(value) ? Math.round(value * 10) / 10 : null);
 
   const nowMs = () => roundMs(performance.now());
 
@@ -224,7 +224,10 @@
     'PerformanceObserver' in window
       ? new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            if (entry.name === 'first-contentful-paint' && record.timings.firstContentfulPaint == null) {
+            if (
+              entry.name === 'first-contentful-paint' &&
+              record.timings.firstContentfulPaint == null
+            ) {
               record.timings.firstContentfulPaint = roundMs(entry.startTime);
             }
           }

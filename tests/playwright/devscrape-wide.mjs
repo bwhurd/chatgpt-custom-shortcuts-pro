@@ -1,17 +1,11 @@
+import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 
 import { chromium } from 'playwright';
-import {
-  buildSourceSelectorInventory,
-  runSourceSelectorAudit,
-  writeSourceSelectorReport,
-} from './lib/source-selector-audit.mjs';
-
 import {
   buildCheckReport,
   buildCurrentShortcutInventory,
@@ -28,8 +22,8 @@ import {
   runLiveShortcutActivationProbes,
   runWideScrapeWithPlaywright,
   verifyExtensionRuntimeReachable,
-  waitForEndpointReady,
   waitForAuditOwnedFixtureContent,
+  waitForEndpointReady,
   waitForFixtureConversationReady,
   writeCheckReportFiles,
   writeInventoryOnlyShortcutAuditRun,
@@ -42,6 +36,11 @@ import {
   evaluateShortcutAuditExit,
   writeShortcutAuditArtifacts,
 } from './lib/shortcut-audit-artifacts.mjs';
+import {
+  buildSourceSelectorInventory,
+  runSourceSelectorAudit,
+  writeSourceSelectorReport,
+} from './lib/source-selector-audit.mjs';
 
 const args = process.argv.slice(2);
 
@@ -80,7 +79,12 @@ function getExtensionDir() {
 function getUserDataDirRoot() {
   const explicit = getArgValue('--user-data-dir-root', null);
   if (explicit) return explicit;
-  return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Google', 'Chrome', 'User Data');
+  return path.join(
+    process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+    'Google',
+    'Chrome',
+    'User Data',
+  );
 }
 
 function getProfileName() {
@@ -98,11 +102,7 @@ function getCdpEndpoint() {
 function getCandidateCdpEndpoints() {
   const explicit = getArgValue('--cdp-endpoint', null);
   if (explicit) return [explicit];
-  return [
-    'http://127.0.0.1:9333',
-    'http://127.0.0.1:9222',
-    'http://127.0.0.1:9223',
-  ];
+  return ['http://127.0.0.1:9333', 'http://127.0.0.1:9222', 'http://127.0.0.1:9223'];
 }
 
 function getAction() {
@@ -179,11 +179,7 @@ function describeFixtureError(error) {
 
 async function settleFixturePage(
   page,
-  {
-    fixtureUrl,
-    readyTimeout = 12000,
-    retryReadyTimeout = 30000,
-  } = {},
+  { fixtureUrl, readyTimeout = 12000, retryReadyTimeout = 30000 } = {},
 ) {
   await page.waitForLoadState('domcontentloaded');
   try {
@@ -296,7 +292,9 @@ async function launchSetupLogin() {
   console.log(`CDP endpoint: ${preferredEndpoint}`);
   console.log('Open ChatGPT manually in that Chrome window and log in there if needed.');
   if (shouldPauseForExtensionSetup()) {
-    console.log('Chrome was launched without extension override flags for manual Developer Mode setup.');
+    console.log(
+      'Chrome was launched without extension override flags for manual Developer Mode setup.',
+    );
   } else {
     console.log('The local unpacked extension is loaded for the validation-only topbar capture.');
   }
@@ -320,7 +318,9 @@ async function pauseForManualExtensionSetup({ cdpEndpoint, profileDir, extension
   console.log(`CDP endpoint: ${cdpEndpoint}`);
   console.log(`Chrome profile: ${profileDir}`);
   console.log(`Unpacked extension folder: ${extensionDir}`);
-  console.log('In the launched Chrome window, open chrome://extensions, enable Developer mode, and load or enable that unpacked extension folder.');
+  console.log(
+    'In the launched Chrome window, open chrome://extensions, enable Developer mode, and load or enable that unpacked extension folder.',
+  );
   console.log('After it is loaded and enabled, return here and press Enter to continue.');
 
   if (!process.stdin.isTTY) {
@@ -363,10 +363,7 @@ async function pauseForExtensionSetupIfNeeded(context, cdpEndpoint) {
   console.log(`Extension reachable after setup: ${result.extensionId}`);
 }
 
-async function launchChromeForCdp({
-  initialUrl = 'about:blank',
-  loadExtension = false,
-} = {}) {
+async function launchChromeForCdp({ initialUrl = 'about:blank', loadExtension = false } = {}) {
   const chromeBinary = getChromeBinary();
   const profileDir = getProfileDir();
   const preferredEndpoint = getCdpEndpoint();
@@ -481,7 +478,8 @@ async function scrapeWide({
     await refreshModelCatalogBeforeValidation(page, context, {
       required: requireExtensionCapture && phase !== 'global',
     });
-    const fixtureUrl = fixtureOwnership?.fixtureUrl || (await chooseAvailableFixtureUrl(page, exports));
+    const fixtureUrl =
+      fixtureOwnership?.fixtureUrl || (await chooseAvailableFixtureUrl(page, exports));
     if (fixtureOwnership) {
       if (page.url() !== fixtureUrl) {
         await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -556,7 +554,9 @@ async function scrapeWide({
             reason: error?.message || String(error) || 'Live probe execution failed.',
           }),
         };
-        console.error(`Live shortcut probes failed; preserving partial evidence: ${error?.message || error}`);
+        console.error(
+          `Live shortcut probes failed; preserving partial evidence: ${error?.message || error}`,
+        );
       }
       const liveProbePath = await writeLiveProbeReport(writeResult.folderPath, liveProbeReport);
       console.log(
@@ -613,7 +613,11 @@ async function validateWide() {
   });
   const { report, reportFiles } = await checkWideForFolder(writeResult.folderName);
   openLocalFile(reportFiles.htmlPath);
-  if (requireExtensionCapture && Array.isArray(report.missingArtifacts) && report.missingArtifacts.length > 0) {
+  if (
+    requireExtensionCapture &&
+    Array.isArray(report.missingArtifacts) &&
+    report.missingArtifacts.length > 0
+  ) {
     throw new Error(
       `Strict extension capture failed with ${report.missingArtifacts.length} failed artifact(s). See ${reportFiles.htmlPath}`,
     );
@@ -629,7 +633,9 @@ function getAuditFilters() {
   const modelSlotText = getArgValue('--model-slot', null);
   const modelSlot = modelSlotText === null ? null : Number.parseInt(modelSlotText, 10);
   if (modelSlotText !== null && (!Number.isInteger(modelSlot) || modelSlot < 0 || modelSlot > 14)) {
-    throw new Error(`Invalid --model-slot "${modelSlotText}". Use a zero-based slot from 0 through 14.`);
+    throw new Error(
+      `Invalid --model-slot "${modelSlotText}". Use a zero-based slot from 0 through 14.`,
+    );
   }
   return {
     onlyActionIds: getAuditActionIds(),
@@ -670,11 +676,7 @@ async function writeAuditArtifactsForRun({
     recoveryStatus: recoveryReport.status,
     ...filters,
   });
-  const artifactResult = await writeShortcutAuditArtifacts(
-    folderPath,
-    auditReport,
-    recoveryReport,
-  );
+  const artifactResult = await writeShortcutAuditArtifacts(folderPath, auditReport, recoveryReport);
   const checkReport = await buildCheckReport({ folderName });
   checkReport.auditArtifacts = Object.fromEntries(
     Object.entries(artifactResult.paths)
@@ -752,12 +754,14 @@ async function auditShortcuts() {
     const artifactFailures =
       (result.checkReport.missingArtifacts || []).length +
       (result.checkReport.missingExpectedFiles || []).length;
-    if (artifactFailures) decision.reasons.push(`${artifactFailures} required scrape artifact failure(s)`);
+    if (artifactFailures)
+      decision.reasons.push(`${artifactFailures} required scrape artifact failure(s)`);
     if (artifactFailures) decision.ok = false;
     if (!decision.ok) throw new Error(`Shortcut audit failed: ${decision.reasons.join('; ')}`);
     return result;
   } catch (error) {
-    const reason = error?.message || String(error) || 'Shortcut audit failed before artifacts were finalized.';
+    const reason =
+      error?.message || String(error) || 'Shortcut audit failed before artifacts were finalized.';
     if (scrapeResult?.folderName && scrapeResult?.folderPath) {
       try {
         const result = await writeAuditArtifactsForRun({
@@ -791,9 +795,13 @@ async function auditShortcuts() {
           runMode: 'environment-fail',
           filters,
         });
-        console.error(`Shortcut audit retained partial evidence in ${result.artifactPaths.jsonPath}`);
+        console.error(
+          `Shortcut audit retained partial evidence in ${result.artifactPaths.jsonPath}`,
+        );
       } catch (artifactError) {
-        console.error(`Could not finalize partial shortcut audit artifacts: ${artifactError?.message || artifactError}`);
+        console.error(
+          `Could not finalize partial shortcut audit artifacts: ${artifactError?.message || artifactError}`,
+        );
       }
     } else {
       try {
@@ -805,7 +813,9 @@ async function auditShortcuts() {
         });
         console.error(`Shortcut audit fallback evidence: ${fallback.artifactPaths.jsonPath}`);
       } catch (fallbackError) {
-        console.error(`Could not write fallback shortcut audit artifacts: ${fallbackError?.message || fallbackError}`);
+        console.error(
+          `Could not write fallback shortcut audit artifacts: ${fallbackError?.message || fallbackError}`,
+        );
       }
     }
     throw error;
@@ -873,16 +883,23 @@ async function checkWideForFolder(folderName) {
 async function auditSelectors() {
   const inventory = await buildSourceSelectorInventory(getRepoRoot());
   const { browser, context, launched } = await connectToAttachedBrowser({
-    autoLaunch: shouldAutoLaunchChrome(), initialUrl: 'https://chatgpt.com/',
+    autoLaunch: shouldAutoLaunchChrome(),
+    initialUrl: 'https://chatgpt.com/',
   });
   let page;
   try {
-    const conversation = context.pages().find((candidate) => /^https:\/\/chatgpt\.com\/c\/[^/?]+/.test(candidate.url()));
-    const fixtureUrl = conversation?.url() || (await loadDevScrapeWideContract()).exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
+    const conversation = context
+      .pages()
+      .find((candidate) => /^https:\/\/chatgpt\.com\/c\/[^/?]+/.test(candidate.url()));
+    const fixtureUrl =
+      conversation?.url() ||
+      (await loadDevScrapeWideContract()).exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
     page = await context.newPage();
     await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.locator('form[data-chatgpt-composer], form[data-type="unified-composer"]')
-      .first().waitFor({ state: 'visible', timeout: 15000 });
+    await page
+      .locator('form[data-chatgpt-composer], form[data-type="unified-composer"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
     const report = await runSourceSelectorAudit(page, inventory);
     const files = await writeSourceSelectorReport(report, getInspectorCapturesRoot());
     console.log(`Source selectors: ${JSON.stringify(report.summary)}`);
@@ -894,7 +911,9 @@ async function auditSelectors() {
     if (page) await page.close().catch(() => {});
     await browser.close().catch(() => {});
     if (launched?.child?.pid) {
-      try { launched.child.kill(); } catch {}
+      try {
+        launched.child.kill();
+      } catch {}
     }
   }
 }

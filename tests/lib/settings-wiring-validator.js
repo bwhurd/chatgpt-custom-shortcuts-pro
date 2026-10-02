@@ -17,7 +17,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'hideArrowButtonsCheckbox',
-    reason: 'Hidden popup-excluded default that should stay in sync defaults and schema exclusions.',
+    reason:
+      'Hidden popup-excluded default that should stay in sync defaults and schema exclusions.',
     checks: {
       optionsDefault: true,
       schemaExcludeDefaults: true,
@@ -25,7 +26,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'hideCornerButtonsCheckbox',
-    reason: 'Hidden popup-excluded default that should stay in sync defaults and schema exclusions.',
+    reason:
+      'Hidden popup-excluded default that should stay in sync defaults and schema exclusions.',
     checks: {
       optionsDefault: true,
       schemaExcludeDefaults: true,
@@ -33,7 +35,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'modelPickerKeyCodes',
-    reason: 'Legacy model picker migration data is out of scope for this validator, but export/default coverage should remain visible.',
+    reason:
+      'Legacy model picker migration data is out of scope for this validator, but export/default coverage should remain visible.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -65,14 +68,16 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'modelNames',
-    reason: 'Scraped model catalog data is nonportable and intentionally absent from export fixtures.',
+    reason:
+      'Scraped model catalog data is nonportable and intentionally absent from export fixtures.',
     checks: {
       optionsDefault: true,
     },
   },
   {
     key: 'shortcutKeyRegenerateMoreConcise',
-    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    reason:
+      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -81,7 +86,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'shortcutKeyRegenerateAddDetails',
-    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    reason:
+      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -90,7 +96,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'shortcutKeyStudy',
-    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    reason:
+      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -99,7 +106,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'shortcutKeyToggleCanvas',
-    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    reason:
+      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -108,7 +116,8 @@ const SUPPLEMENTAL_SETTINGS = [
   },
   {
     key: 'shortcutKeyThinkLonger',
-    reason: 'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
+    reason:
+      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
     checks: {
       optionsDefault: true,
       exportedFixture: true,
@@ -177,12 +186,16 @@ function loadValidationContext(repoRoot) {
 
   const optionsDefaults = loadOptionsDefaults(optionsStoragePath);
   const settingsSchema = loadSettingsSchema(settingsSchemaPath);
-  const popupExplicitOverrides = extractConstObjectLiteral(popupJsSource, 'EXPLICIT_PRESET_OVERRIDES', {
-    NBSP,
-    DEFAULT_MODEL_PICKER_KEY_CODES: [],
-    DEFAULT_MODEL_PICKER_KEY_CODES_LATEST: [],
-    DEFAULT_MODEL_PICKER_KEY_CODES_LEGACY: [],
-  });
+  const popupExplicitOverrides = extractConstObjectLiteral(
+    popupJsSource,
+    'EXPLICIT_PRESET_OVERRIDES',
+    {
+      NBSP,
+      DEFAULT_MODEL_PICKER_KEY_CODES: [],
+      DEFAULT_MODEL_PICKER_KEY_CODES_LATEST: [],
+      DEFAULT_MODEL_PICKER_KEY_CODES_LEGACY: [],
+    },
+  );
   const popupShortcutFallbacks = extractConstObjectLiteral(
     popupJsSource,
     'DEFAULT_SHORTCUT_CODE_FALLBACKS',
@@ -194,10 +207,13 @@ function loadValidationContext(repoRoot) {
     popupExplicitOverrides,
   );
   const popupInventory = extractPopupInventory(popupHtmlSource);
-  const fixtureKeys = new Set(
-    Object.keys(JSON.parse(readUtf8(fixturePath)).data || {}),
-  );
-  const localeIndex = loadLocaleIndex(path.join(repoRoot, 'extension', '_locales'));
+  const fixtureKeys = new Set(Object.keys(readJson(fixturePath).data || {}));
+  const manifestPath = path.join(repoRoot, 'extension', 'manifest.json');
+  const defaultLocale = readJson(manifestPath).default_locale;
+  if (typeof defaultLocale !== 'string' || !defaultLocale.trim()) {
+    throw new Error(`${manifestPath} must declare a default_locale`);
+  }
+  const localeIndex = loadLocaleIndex(path.join(repoRoot, 'extension', '_locales'), defaultLocale);
   const schemaIndex = indexSettingsSchema(settingsSchema);
 
   return {
@@ -217,6 +233,12 @@ function loadValidationContext(repoRoot) {
 }
 
 function validatePopupInventory(context, failures) {
+  if (!context.popupInventory.length) {
+    addFailure(failures, '(popup inventory)', 'popup.html contains no ordinary data-sync controls');
+  }
+  for (const issue of context.popupInventory.issues) {
+    addFailure(failures, '(popup inventory)', issue);
+  }
   for (const item of context.popupInventory) {
     validateCorePopupSetting(item, context, failures);
 
@@ -252,10 +274,7 @@ function validateCorePopupSetting(item, context, failures) {
   validateLocaleCoverage(item.key, item.tooltipI18nKey, 'popup tooltip', context, failures);
 
   const popupDefault = context.popupEffectiveDefaults[item.key];
-  if (
-    popupDefault === '__UNMAPPED_SHORTCUT_CHAR__' &&
-    item.controlKind === 'shortcut'
-  ) {
+  if (popupDefault === '__UNMAPPED_SHORTCUT_CHAR__' && item.controlKind === 'shortcut') {
     addFailure(
       failures,
       item.key,
@@ -288,7 +307,9 @@ function validateCorePopupSetting(item, context, failures) {
 
   if (item.controlKind === 'color' && typeof item.htmlDefault === 'string') {
     const actual = item.htmlDefault.trim().toLowerCase();
-    const expected = String(popupDefault || '').trim().toLowerCase();
+    const expected = String(popupDefault || '')
+      .trim()
+      .toLowerCase();
     if (actual && expected && actual !== expected) {
       addFailure(
         failures,
@@ -313,7 +334,11 @@ function validateSchemaBackedUiSetting(item, context, failures) {
   }
 
   if (item.controlKind === 'radio' && !inRadioGroups) {
-    addFailure(failures, item.key, 'radio input is missing from settings-schema.js popup.radioGroups');
+    addFailure(
+      failures,
+      item.key,
+      'radio input is missing from settings-schema.js popup.radioGroups',
+    );
   }
 }
 
@@ -399,7 +424,10 @@ function validateSpecialRules(item, context, failures) {
     addFailure(failures, item.key, 'missing from settings-schema.js content.visibilityDefaults');
   }
 
-  if (rule.requireSchemaDefaultCode && !hasOwn(context.schemaIndex.shortcutDefaultCodes, item.key)) {
+  if (
+    rule.requireSchemaDefaultCode &&
+    !hasOwn(context.schemaIndex.shortcutDefaultCodes, item.key)
+  ) {
     addFailure(failures, item.key, 'missing from settings-schema.js shortcuts.defaultCodeByKey');
   }
 
@@ -431,7 +459,11 @@ function validateSupplementalSettings(context, failures) {
     }
 
     if (entry.checks.optionsDefault && !hasOwn(context.optionsDefaults, entry.key)) {
-      addFailure(failures, entry.key, `supplemental coverage missing OPTIONS_DEFAULTS entry (${entry.reason})`);
+      addFailure(
+        failures,
+        entry.key,
+        `supplemental coverage missing OPTIONS_DEFAULTS entry (${entry.reason})`,
+      );
     }
 
     if (entry.checks.exportedFixture && !context.fixtureKeys.has(entry.key)) {
@@ -487,11 +519,14 @@ function validateFixtureCoverage(context, failures) {
 
 function renderValidationReport(context, failures) {
   if (!failures.size) {
+    const prototypeKeys = PROTOTYPE_KEYS.filter((key) => context.popupInventoryKeys.has(key));
     return [
       'Settings wiring validation passed.',
       `Validated ${context.popupInventory.length} popup-backed controls and ${SUPPLEMENTAL_SETTINGS.length} supplemental keys.`,
-      `Prototype checks passed: ${PROTOTYPE_KEYS.join(', ')}.`,
-    ].join('\n');
+      prototypeKeys.length ? `Prototype checks passed: ${prototypeKeys.join(', ')}.` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   const lines = ['Settings wiring validation failed.'];
@@ -518,7 +553,7 @@ function loadOptionsDefaults(filePath) {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox, { filename: filePath });
-  return sandbox.OPTIONS_DEFAULTS || sandbox.globalThis.OPTIONS_DEFAULTS || {};
+  return requireSourceObject(sandbox.OPTIONS_DEFAULTS, filePath, 'OPTIONS_DEFAULTS');
 }
 
 function loadSettingsSchema(filePath) {
@@ -530,7 +565,7 @@ function loadSettingsSchema(filePath) {
   sandbox.globalThis = sandbox.window;
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox, { filename: filePath });
-  return sandbox.window.CSP_SETTINGS_SCHEMA || {};
+  return requireSourceObject(sandbox.window.CSP_SETTINGS_SCHEMA, filePath, 'CSP_SETTINGS_SCHEMA');
 }
 
 function buildOptionsSyncStub() {
@@ -608,7 +643,7 @@ function findMatchingBraceIndex(source, braceStart) {
       continue;
     }
 
-    if (char === '"' || char === '\'' || char === '`') {
+    if (char === '"' || char === "'" || char === '`') {
       activeQuote = char;
       continue;
     }
@@ -632,7 +667,9 @@ function buildEffectivePopupDefaults(optionsDefaults, settingsSchema, popupExpli
     'modelNames',
     'hideArrowButtonsCheckbox',
     'hideCornerButtonsCheckbox',
-    ...(Array.isArray(settingsSchema.excludeDefaultsKeys) ? settingsSchema.excludeDefaultsKeys : []),
+    ...(Array.isArray(settingsSchema.excludeDefaultsKeys)
+      ? settingsSchema.excludeDefaultsKeys
+      : []),
   ]);
 
   const out = {};
@@ -704,7 +741,7 @@ function charToCode(char) {
     ']': 'BracketRight',
     '-': 'Minus',
     '=': 'Equal',
-    '\'': 'Quote',
+    "'": 'Quote',
     '\\': 'Backslash',
     '`': 'Backquote',
   };
@@ -717,12 +754,12 @@ function extractPopupInventory(htmlSource) {
   const inventory = [];
   const skippedModelPickerKeys = [];
   const seenKeys = new Set();
+  const seenIds = new Set();
+  const issues = [];
 
   $('[data-sync]').each((_, element) => {
     const $element = $(element);
     const key = String($element.attr('data-sync') || '').trim();
-    if (!key || seenKeys.has(key)) return;
-
     const id = String($element.attr('id') || '').trim();
     if (
       $element.hasClass('mp-input') ||
@@ -733,7 +770,19 @@ function extractPopupInventory(htmlSource) {
       return;
     }
 
+    if (!key) {
+      issues.push(`blank data-sync key on control ${id || '(missing id)'}`);
+      return;
+    }
+    if (!id) issues.push(`data-sync key "${key}" has no control id`);
+    if (id && seenIds.has(id)) issues.push(`duplicate control id "${id}"`);
+    if (seenKeys.has(key)) {
+      issues.push(`duplicate data-sync key "${key}" on control ${id || '(missing id)'}`);
+      return;
+    }
+
     seenKeys.add(key);
+    if (id) seenIds.add(id);
 
     const row = findInventoryRow($element);
 
@@ -750,6 +799,7 @@ function extractPopupInventory(htmlSource) {
   });
 
   inventory.skippedModelPickerKeys = skippedModelPickerKeys;
+  inventory.issues = issues;
   return inventory;
 }
 
@@ -817,17 +867,21 @@ function extractMessageKey(value) {
   return match ? match[1] : null;
 }
 
-function loadLocaleIndex(localeRoot) {
+function loadLocaleIndex(localeRoot, defaultLocale) {
   const locales = fs
     .readdirSync(localeRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
 
+  if (!locales.includes(defaultLocale)) {
+    throw new Error(`Default locale "${defaultLocale}" is missing from ${localeRoot}`);
+  }
+
   const messagesByLocale = new Map();
   locales.forEach((locale) => {
     const filePath = path.join(localeRoot, locale, 'messages.json');
-    messagesByLocale.set(locale, JSON.parse(readUtf8(filePath)));
+    messagesByLocale.set(locale, readJson(filePath));
   });
 
   return {
@@ -892,6 +946,22 @@ function hasOwn(object, key) {
 
 function readUtf8(filePath) {
   return fs.readFileSync(filePath, 'utf8');
+}
+
+function readJson(filePath) {
+  const text = readUtf8(filePath);
+  try {
+    return JSON.parse(text.replace(/^\uFEFF/, ''));
+  } catch (cause) {
+    throw new Error(`Invalid JSON in ${filePath}: ${cause.message}`, { cause });
+  }
+}
+
+function requireSourceObject(value, filePath, name) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length) {
+    throw new Error(`${filePath} must define a nonempty ${name} object`);
+  }
+  return value;
 }
 
 module.exports = {

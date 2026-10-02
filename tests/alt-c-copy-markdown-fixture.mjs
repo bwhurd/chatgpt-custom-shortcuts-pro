@@ -10,12 +10,17 @@ const sliceEnd = contentSource.indexOf('    // Runtime bridge: sanitizeCopiedTex
 assert.notEqual(sliceStart, -1, 'copy Markdown helper start marker is missing');
 assert.notEqual(sliceEnd, -1, 'copy Markdown helper end marker is missing');
 
-const helperSource = contentSource.slice(sliceStart, sliceEnd).replace(/^    /gm, '');
+const helperSource = contentSource.slice(sliceStart, sliceEnd).replace(/^ {4}/gm, '');
 const altCFormatterStart = contentSource.indexOf('    function formatAltCCopyText(text)');
-const altCFormatterEnd = contentSource.indexOf('    function buildSingleMessageClipboardPayload', altCFormatterStart);
+const altCFormatterEnd = contentSource.indexOf(
+  '    function buildSingleMessageClipboardPayload',
+  altCFormatterStart,
+);
 assert.notEqual(altCFormatterStart, -1, 'Alt+C formatter start marker is missing');
 assert.notEqual(altCFormatterEnd, -1, 'Alt+C formatter end marker is missing');
-const altCFormatterSource = contentSource.slice(altCFormatterStart, altCFormatterEnd).replace(/^    /gm, '');
+const altCFormatterSource = contentSource
+  .slice(altCFormatterStart, altCFormatterEnd)
+  .replace(/^ {4}/gm, '');
 const context = vm.createContext({});
 vm.runInContext(
   `const FENCE_RE = /^[ \\t]{0,3}([\`~]{3,})([^\\n\`~]*)?$/;\n${helperSource}\n${altCFormatterSource}\nglobalThis.testRemoveMarkdown = removeMarkdown;\nglobalThis.testStripMarkdownOutsideCodeblocks = stripMarkdownOutsideCodeblocks;\nglobalThis.testFormatAltCCopyText = formatAltCCopyText;`,
@@ -27,9 +32,7 @@ const removeMarkdown = context.testRemoveMarkdown;
 const stripMarkdownOutsideCodeblocks = context.testStripMarkdownOutsideCodeblocks;
 const formatAltCCopyText = context.testFormatAltCCopyText;
 
-const serializerStart = contentSource.indexOf(
-  '    const COPY_PLAIN_TEXT_BLOCK_TAGS = new Set([',
-);
+const serializerStart = contentSource.indexOf('    const COPY_PLAIN_TEXT_BLOCK_TAGS = new Set([');
 const serializerEnd = contentSource.indexOf(
   '    function buildPlainTextWithFences',
   serializerStart,
@@ -37,7 +40,7 @@ const serializerEnd = contentSource.indexOf(
 assert.notEqual(serializerStart, -1, 'structured copy serializer start marker is missing');
 assert.notEqual(serializerEnd, -1, 'structured copy serializer end marker is missing');
 
-const serializerSource = contentSource.slice(serializerStart, serializerEnd).replace(/^    /gm, '');
+const serializerSource = contentSource.slice(serializerStart, serializerEnd).replace(/^ {4}/gm, '');
 
 assert.equal(
   formatAltCCopyText('# Keep heading  \n### # Collapse heading   \nA — B — C  '),
@@ -78,8 +81,13 @@ assert.equal(
 );
 
 const plainWriterStart = contentSource.indexOf('    async function writeClipboardPlainText(text)');
-const plainWriterEnd = contentSource.indexOf('    async function copyClipboardPayload', plainWriterStart);
-const messageWriterStart = contentSource.indexOf('    async function copySingleMessagePayloadFromElements');
+const plainWriterEnd = contentSource.indexOf(
+  '    async function copyClipboardPayload',
+  plainWriterStart,
+);
+const messageWriterStart = contentSource.indexOf(
+  '    async function copySingleMessagePayloadFromElements',
+);
 const messageWriterEnd = contentSource.indexOf('    const ALT_C_CHECK_PATH', messageWriterStart);
 assert.ok(plainWriterStart >= 0 && plainWriterEnd > plainWriterStart);
 assert.ok(messageWriterStart >= 0 && messageWriterEnd > messageWriterStart);
@@ -121,7 +129,7 @@ const selectThenCopyContext = vm.createContext({
   },
 });
 vm.runInContext(
-  `${contentSource.slice(selectThenCopyStart, selectThenCopyEnd).replace(/^    /gm, '')}\nglobalThis.runSelectThenCopyShortcut = runSelectThenCopyShortcut;`,
+  `${contentSource.slice(selectThenCopyStart, selectThenCopyEnd).replace(/^ {4}/gm, '')}\nglobalThis.runSelectThenCopyShortcut = runSelectThenCopyShortcut;`,
   selectThenCopyContext,
 );
 selectThenCopyContext.runSelectThenCopyShortcut();
@@ -132,7 +140,7 @@ assert.equal(
 );
 assert.equal(selectedClipboardCalls[0].shouldCopy, true);
 
-const copyCodeSource = contentSource.match(/  function copyCode\(\) \{[\s\S]*?\n  \}/)?.[0];
+const copyCodeSource = contentSource.match(/ {2}function copyCode\(\) \{[\s\S]*?\n {2}\}/)?.[0];
 assert.ok(copyCodeSource, 'Copy-all-code-boxes action should remain inspectable');
 const codeBlockClipboardCalls = [];
 const copyCodeContext = vm.createContext({
@@ -167,9 +175,13 @@ assert.equal(
   'Alt+C should normalize bullet markers without dropping nested indentation',
 );
 
-const renderedNestedBullets = ['* first level bullet', '', '  * second level bullet', '', '    * Third level bullet'].join(
-  '\n',
-);
+const renderedNestedBullets = [
+  '* first level bullet',
+  '',
+  '  * second level bullet',
+  '',
+  '    * Third level bullet',
+].join('\n');
 assert.equal(
   removeMarkdown(renderedNestedBullets),
   ['- first level bullet', '    - second level bullet', '        - Third level bullet'].join('\n'),
@@ -220,9 +232,15 @@ assert.equal(
   'leading headers should not leave an empty line after the header',
 );
 
-const protectedCode = ['```markdown', '# keep heading', '* keep bullet', '', '', '    keep spaces', '```'].join(
-  '\n',
-);
+const protectedCode = [
+  '```markdown',
+  '# keep heading',
+  '* keep bullet',
+  '',
+  '',
+  '    keep spaces',
+  '```',
+].join('\n');
 const protectedInput = `Before\n\n${protectedCode}\n\n### Header\n\n**After**`;
 const protectedExpected = `Before\n\n${protectedCode}\n\nHeader\nAfter`;
 assert.equal(
@@ -254,12 +272,15 @@ try {
     </div>
   `);
 
-  const structuredText = await page.evaluate(({ source }) => {
-    const buildStructuredCopyPlainText = new Function(
-      `${source}\nreturn buildStructuredCopyPlainText;`,
-    )();
-    return buildStructuredCopyPlainText(document.querySelector('.prose'));
-  }, { source: serializerSource });
+  const structuredText = await page.evaluate(
+    ({ source }) => {
+      const buildStructuredCopyPlainText = new Function(
+        `${source}\nreturn buildStructuredCopyPlainText;`,
+      )();
+      return buildStructuredCopyPlainText(document.querySelector('.prose'));
+    },
+    { source: serializerSource },
+  );
 
   assert.equal(
     structuredText,
@@ -274,14 +295,17 @@ try {
     'rendered nested lists should copy as dash bullets with four spaces per level',
   );
 
-  const headingWithMarker = await page.evaluate(({ source }) => {
-    const buildStructuredCopyPlainText = new Function(
-      `${source}\nreturn buildStructuredCopyPlainText;`,
-    )();
-    return buildStructuredCopyPlainText(document.querySelector('.prose'), {
-      preserveHeadingMarker: true,
-    });
-  }, { source: serializerSource });
+  const headingWithMarker = await page.evaluate(
+    ({ source }) => {
+      const buildStructuredCopyPlainText = new Function(
+        `${source}\nreturn buildStructuredCopyPlainText;`,
+      )();
+      return buildStructuredCopyPlainText(document.querySelector('.prose'), {
+        preserveHeadingMarker: true,
+      });
+    },
+    { source: serializerSource },
+  );
   assert.equal(
     headingWithMarker,
     '# Test Header\n- first level bullet\n    - second level bullet\n        - Third level bullet\n\nTest body follows the header immediately.',
@@ -289,12 +313,15 @@ try {
   );
 
   await page.setContent('<div class="prose"><p>Intro</p><h3>Header</h3><p>Body</p></div>');
-  const structuredHeadingText = await page.evaluate(({ source }) => {
-    const buildStructuredCopyPlainText = new Function(
-      `${source}\nreturn buildStructuredCopyPlainText;`,
-    )();
-    return buildStructuredCopyPlainText(document.querySelector('.prose'));
-  }, { source: serializerSource });
+  const structuredHeadingText = await page.evaluate(
+    ({ source }) => {
+      const buildStructuredCopyPlainText = new Function(
+        `${source}\nreturn buildStructuredCopyPlainText;`,
+      )();
+      return buildStructuredCopyPlainText(document.querySelector('.prose'));
+    },
+    { source: serializerSource },
+  );
 
   assert.equal(
     structuredHeadingText,
@@ -303,19 +330,27 @@ try {
   );
 
   const feedbackStart = contentSource.indexOf('    const ALT_C_CHECK_PATH =');
-  const feedbackEnd = contentSource.indexOf('    function selectAndMaybeCopySingleMessage', feedbackStart);
+  const feedbackEnd = contentSource.indexOf(
+    '    function selectAndMaybeCopySingleMessage',
+    feedbackStart,
+  );
   assert.notEqual(feedbackStart, -1, 'Alt+C checkmark feedback is missing');
-  const feedbackSource = contentSource.slice(feedbackStart, feedbackEnd).replace(/^    /gm, '');
-  await page.setContent('<button aria-label="Copy response"><svg><path d="copy"></path></svg></button>');
-  const copiedState = await page.evaluate(({ source }) => {
-    const showFeedback = new Function(`${source}\nreturn showAltCCopyFeedback;`)();
-    const button = document.querySelector('button');
-    showFeedback(button);
-    return {
-      label: button.getAttribute('aria-label'),
-      path: button.querySelector('path')?.getAttribute('d'),
-    };
-  }, { source: feedbackSource });
+  const feedbackSource = contentSource.slice(feedbackStart, feedbackEnd).replace(/^ {4}/gm, '');
+  await page.setContent(
+    '<button aria-label="Copy response"><svg><path d="copy"></path></svg></button>',
+  );
+  const copiedState = await page.evaluate(
+    ({ source }) => {
+      const showFeedback = new Function(`${source}\nreturn showAltCCopyFeedback;`)();
+      const button = document.querySelector('button');
+      showFeedback(button);
+      return {
+        label: button.getAttribute('aria-label'),
+        path: button.querySelector('path')?.getAttribute('d'),
+      };
+    },
+    { source: feedbackSource },
+  );
   assert.equal(copiedState.label, 'Copied', 'Alt+C should announce copied status');
   assert.notEqual(copiedState.path, 'copy', 'Alt+C should show the copied checkmark');
   await page.waitForTimeout(2100);

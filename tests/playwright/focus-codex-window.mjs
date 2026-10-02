@@ -1,10 +1,10 @@
-import process from 'node:process';
 import { spawn } from 'node:child_process';
+import process from 'node:process';
 
 export async function focusCodexWindow() {
-    if (process.platform !== 'win32') return;
+  if (process.platform !== 'win32') return;
 
-    const script = `
+  const script = `
 try {
   $wshell = New-Object -ComObject WScript.Shell
   $titles = @('Codex', 'OpenAI Codex', 'ChatGPT Custom Shortcuts Pro')
@@ -17,13 +17,13 @@ try {
 }
 `;
 
-    await new Promise((resolve) => {
-        const child = spawn(
-            'powershell',
-            ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
-            { stdio: 'ignore' },
-        );
-        child.on('exit', () => resolve());
-        child.on('error', () => resolve());
-    });
+  await new Promise((resolve) => {
+    const child = spawn(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
+      { stdio: 'ignore' },
+    );
+    child.on('exit', () => resolve());
+    child.on('error', () => resolve());
+  });
 }

@@ -7,7 +7,7 @@
     "lib": "extension/lib"
   },
   "scripts": {
-    "test": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1",
+    "test": "node scripts/run-popup-tests.js",
     "lint": "biome lint .",
     "format": "biome format . --write",
     "format:text": "node scripts/check-text-format.js --write",
@@ -16,6 +16,7 @@
     "repair:text:staged": "node scripts/repair-staged-text-format.js",
     "install:hook:text": "node scripts/install-text-format-hook.js",
     "validate:keys": "node tests/validate-keys.js",
+    "test:validators": "node --test tests/settings-wiring-validator.test.js tests/check-text-format.test.js",
     "playwright:install": "playwright install chromium",
     "preview:popup": "node tests/playwright/preview-popup.mjs --headed --keep-open",
     "screenshot:popup": "node tests/playwright/preview-popup.mjs",
@@ -32,8 +33,8 @@
     "audit:selectors": "node tests/playwright/devscrape-wide.mjs --action audit-selectors",
     "playwright:chatgpt:benchmark": "node tests/playwright/chatgpt-scenario-benchmark.mjs",
     "playwright:chatgpt:wiggle-check": "node tests/playwright/chatgpt-wiggle-check.mjs",
-    "test:popup-visual": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1",
-    "test:popup-visual:update": "playwright test tests/playwright/popup-visual.spec.mjs --workers=1 --update-snapshots",
+    "test:popup-visual": "node scripts/run-popup-tests.js",
+    "test:popup-visual:update": "node scripts/run-popup-tests.js --update-snapshots",
     "zip": "node scripts/build-zip.js"
   },
   "keywords": [],

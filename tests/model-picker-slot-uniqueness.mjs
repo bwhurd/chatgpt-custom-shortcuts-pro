@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await readFile(new URL('../extension/shared/model-picker-labels.js', import.meta.url), 'utf8');
+const source = await readFile(
+  new URL('../extension/shared/model-picker-labels.js', import.meta.url),
+  'utf8',
+);
 const context = {
   window: {},
 };
@@ -149,7 +152,8 @@ const currentWorkGroups = ModelLabels.getPopupPresentationGroups(
   [],
   currentWorkCatalog,
 );
-const currentWorkConfigure = currentWorkGroups.find((group) => group.id === 'configure')?.actions || [];
+const currentWorkConfigure =
+  currentWorkGroups.find((group) => group.id === 'configure')?.actions || [];
 assert.deepEqual(
   Array.from(currentWorkConfigure, (action) => action.label),
   currentWorkModelLabels.slice(1),
@@ -166,7 +170,11 @@ assert.deepEqual(
   'dynamic Work catalog rows should retain their distinct shortcut slots',
 );
 const currentWorkCodes = ModelLabels.buildDefaultKeyCodesFromPresentationGroups(currentWorkGroups);
-assert.equal(currentWorkCodes[13], 'Digit6', 'Work speed should keep Alt+6 after the model list grows');
+assert.equal(
+  currentWorkCodes[13],
+  'Digit6',
+  'Work speed should keep Alt+6 after the model list grows',
+);
 assert.equal(currentWorkCodes[14], 'Digit7', 'Work reset should use Alt+7 after it is observed');
 
 const expandedOptions = Array.from({ length: 24 }, (_, index) => ({
@@ -185,18 +193,36 @@ const expandedGroups = ModelLabels.getPopupPresentationGroups(
   expandedCatalog,
 );
 const expandedModels = expandedGroups.find((group) => group.id === 'configure')?.actions || [];
-assert.equal(expandedModels.length, 24, 'catalog rows must not be capped at the historical slot count');
+assert.equal(
+  expandedModels.length,
+  24,
+  'catalog rows must not be capped at the historical slot count',
+);
 assert.equal(expandedModels.at(-1)?.slot, 38, 'catalog slots should retain values beyond slot 14');
 const expandedDefaults = ModelLabels.buildDefaultKeyCodesFromPresentationGroups(expandedGroups);
 assert.equal(expandedDefaults.length, 39, 'default key arrays should cover every catalog slot');
 const expandedInput = new Array(39).fill('');
 expandedInput[38] = 'KeyZ';
 const expandedNormalized = ModelLabels.normalizeProfileKeyCodes(expandedInput, expandedGroups);
-assert.equal(expandedNormalized.length, 39, 'key normalization must retain the full assigned range');
+assert.equal(
+  expandedNormalized.length,
+  39,
+  'key normalization must retain the full assigned range',
+);
 assert.equal(expandedNormalized[38], 'KeyZ', 'normalization must preserve a high-slot assignment');
-const expandedNames = ModelLabels.resolveActionableNames(expandedOptions.map((option) => option.label));
-assert.equal(expandedNames.length, 24, 'model-name hydration must preserve a catalog longer than defaults');
-assert.equal(expandedNames[23], 'GPT-6 Model 24', 'high catalog model names must survive hydration');
+const expandedNames = ModelLabels.resolveActionableNames(
+  expandedOptions.map((option) => option.label),
+);
+assert.equal(
+  expandedNames.length,
+  24,
+  'model-name hydration must preserve a catalog longer than defaults',
+);
+assert.equal(
+  expandedNames[23],
+  'GPT-6 Model 24',
+  'high catalog model names must survive hydration',
+);
 
 const dynamicSelfPrimaryCatalog = {
   configureOptions: [
@@ -380,14 +406,11 @@ assert.equal(
 );
 assert.equal(
   JSON.stringify(
-    noCatalogGroups.find((group) => group.id === 'configure')?.actions.map((action) => action.label),
+    noCatalogGroups
+      .find((group) => group.id === 'configure')
+      ?.actions.map((action) => action.label),
   ),
-  JSON.stringify([
-    'GPT-5.6 Sol',
-    'GPT-5.6 Terra',
-    'GPT-5.6 Luna',
-    'GPT-5.5',
-  ]),
+  JSON.stringify(['GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna', 'GPT-5.5']),
   'no-catalog popup fallback should keep the Work model row model-only',
 );
 assert.equal(

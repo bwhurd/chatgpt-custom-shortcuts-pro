@@ -6,18 +6,25 @@ const content = await readFile(new URL('../extension/content.js', import.meta.ur
 const start = content.indexOf('const runCurrentModelPickerAction = async (action) => {');
 const end = content.indexOf('\n      const ensureIntegratedSimplePicker = async', start);
 assert.ok(start >= 0 && end > start, 'current picker runtime action should be present');
-const source = content.slice(start, end)
+const source = content
+  .slice(start, end)
   .replace(/^const runCurrentModelPickerAction = /, '')
   .replace(/;\s*$/, '');
 const runnerStart = content.indexOf('const ModelPickerActionRunner = (() => {');
-const runnerEnd = content.indexOf('const executeModelAction = (action, options = {}) =>', runnerStart);
+const runnerEnd = content.indexOf(
+  'const executeModelAction = (action, options = {}) =>',
+  runnerStart,
+);
 const runnerSource = content.slice(runnerStart, runnerEnd);
 const currentDispatch = runnerSource.indexOf('runCurrentModelPickerAction(action)');
 const legacyDispatch = runnerSource.indexOf(
-  'if (dispatchIntegratedEffortAction(action, options, complete))', currentDispatch,
+  'if (dispatchIntegratedEffortAction(action, options, complete))',
+  currentDispatch,
 );
-assert.ok(currentDispatch >= 0 && legacyDispatch > currentDispatch,
-  'current picker dispatch should run before legacy surface routes');
+assert.ok(
+  currentDispatch >= 0 && legacyDispatch > currentDispatch,
+  'current picker dispatch should run before legacy surface routes',
+);
 
 class FakeElement {
   constructor(attributes = {}) {
@@ -26,9 +33,15 @@ class FakeElement {
     this.active = true;
   }
 
-  getAttribute(name) { return this.attributes.get(name) ?? null; }
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
-  hasAttribute(name) { return this.attributes.has(name); }
+  getAttribute(name) {
+    return this.attributes.get(name) ?? null;
+  }
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
   querySelector(selector) {
     if (selector === '[data-model-picker-view]') return this.view || null;
     if (selector === '[data-model-picker-view-toggle="true"]') return this.toggle || null;
@@ -52,12 +65,18 @@ const run = async ({ catalog, action, initialView, initialModel, initialEffort }
   const menu = new FakeElement();
   menu.view = view;
   const rows = catalog.configureOptions.map((option) => {
-    const row = new FakeElement({ role: 'menuitemradio', 'aria-checked': option.id === initialModel ? 'true' : 'false' });
+    const row = new FakeElement({
+      role: 'menuitemradio',
+      'aria-checked': option.id === initialModel ? 'true' : 'false',
+    });
     row.label = option.label;
     row.titleElement = { textContent: option.label };
     return row;
   });
-  const defaultRow = new FakeElement({ role: 'menuitemradio', 'aria-checked': initialModel === 'default' ? 'true' : 'false' });
+  const defaultRow = new FakeElement({
+    role: 'menuitemradio',
+    'aria-checked': initialModel === 'default' ? 'true' : 'false',
+  });
   defaultRow.label = 'Default';
   defaultRow.titleElement = { textContent: 'Default' };
   view.rows = [...rows, ...(catalog.surfaceMode === 'work' ? [defaultRow] : [])];
@@ -101,7 +120,9 @@ const run = async ({ catalog, action, initialView, initialModel, initialEffort }
       } else if (el === view.toggle) {
         view.setAttribute('data-model-picker-view', 'advanced');
       } else if (rows.includes(el)) {
-        rows.forEach((row) => row.setAttribute('aria-checked', row === el ? 'true' : 'false'));
+        rows.forEach((row) => {
+          row.setAttribute('aria-checked', row === el ? 'true' : 'false');
+        });
         view.setAttribute('data-model-picker-view', 'simple');
       }
       return true;
@@ -124,7 +145,10 @@ const profiles = [
     name: 'Chat',
     catalog: {
       surfaceMode: 'chat',
-      configureOptions: [{ id: 'configure-56', label: 'GPT-5.6 Sol' }, { id: 'configure-55', label: 'GPT-5.5' }],
+      configureOptions: [
+        { id: 'configure-56', label: 'GPT-5.6 Sol' },
+        { id: 'configure-55', label: 'GPT-5.5' },
+      ],
       frontendByConfig: { 'configure-56': [{ id: 'thinking', available: true, sliderValue: 1 }] },
     },
     model: { id: 'configure-56', actionKind: 'configure-option' },
@@ -135,7 +159,10 @@ const profiles = [
     name: 'Work',
     catalog: {
       surfaceMode: 'work',
-      configureOptions: [{ id: 'configure-astra', label: 'GPT-6 Astra' }, { id: 'configure-55', label: 'GPT-5.5' }],
+      configureOptions: [
+        { id: 'configure-astra', label: 'GPT-6 Astra' },
+        { id: 'configure-55', label: 'GPT-5.5' },
+      ],
       frontendByConfig: { 'configure-astra': [{ id: 'pro', available: true, sliderValue: 2 }] },
     },
     model: { id: 'configure-astra', actionKind: 'configure-option' },
@@ -153,11 +180,16 @@ for (const profile of profiles) {
     initialEffort: { min: 0, max: profile.max, value: 0 },
   });
   assert.equal(switched.result, true, `${profile.name} model shortcut should commit`);
-  assert.equal(switched.rows.find((row) => row.getAttribute('aria-checked') === 'true').label,
-    profile.catalog.configureOptions[0].label);
+  assert.equal(
+    switched.rows.find((row) => row.getAttribute('aria-checked') === 'true').label,
+    profile.catalog.configureOptions[0].label,
+  );
   assert.deepEqual(switched.persisted, [profile.model.id]);
-  assert.equal(switched.clicked.length, profile.name === 'Work' ? 1 : 2,
-    `${profile.name} should activate only the current Advanced row`);
+  assert.equal(
+    switched.clicked.length,
+    profile.name === 'Work' ? 1 : 2,
+    `${profile.name} should activate only the current Advanced row`,
+  );
 
   const effort = await run({
     catalog: profile.catalog,
@@ -166,7 +198,8 @@ for (const profile of profiles) {
     initialModel: profile.catalog.configureOptions[0].id,
     initialEffort: { min: 0, max: profile.max, value: 0 },
   });
-  const expected = profile.catalog.frontendByConfig[profile.catalog.configureOptions[0].id][0].sliderValue;
+  const expected =
+    profile.catalog.frontendByConfig[profile.catalog.configureOptions[0].id][0].sliderValue;
   assert.equal(effort.result, true, `${profile.name} effort shortcut should commit`);
   assert.equal(Number(effort.slider.getAttribute('aria-valuenow')), expected);
 }

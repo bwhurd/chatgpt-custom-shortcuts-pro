@@ -13,7 +13,7 @@ const sliceEnd = contentSource.indexOf('    function getThreadNavigationMessageI
 assert.notEqual(sliceStart, -1, 'thread-navigation helper start marker is missing');
 assert.notEqual(sliceEnd, -1, 'thread-navigation helper end marker is missing');
 
-const helperSource = contentSource.slice(sliceStart, sliceEnd).replace(/^    /gm, '');
+const helperSource = contentSource.slice(sliceStart, sliceEnd).replace(/^ {4}/gm, '');
 const browser = await chromium.launch({ headless: true });
 
 try {
@@ -62,28 +62,22 @@ try {
     const nextActionable = next.filter(isThreadNavigationButtonActionable);
 
     resetThreadNavigationPreviewState();
-    const initialPreviousChoice = chooseThreadNavigationPreviewTarget(
-      previous[2],
-      previous,
-      { direction: 'previous' },
-    );
+    const initialPreviousChoice = chooseThreadNavigationPreviewTarget(previous[2], previous, {
+      direction: 'previous',
+    });
     trackThreadNavigationPreviewTarget(previous[2]);
     const busyWhileScrolling = threadNavigationPreviewState.inFlight;
     completeThreadNavigationPreviewTarget(previous[2]);
     const idleAfterScroll = !threadNavigationPreviewState.inFlight;
-    const adjacentPreviousChoice = chooseThreadNavigationPreviewTarget(
-      previous[2],
-      previous,
-      { direction: 'previous' },
-    );
+    const adjacentPreviousChoice = chooseThreadNavigationPreviewTarget(previous[2], previous, {
+      direction: 'previous',
+    });
 
     trackThreadNavigationPreviewTarget(previous[0]);
     completeThreadNavigationPreviewTarget(previous[0]);
-    const previousEdgeChoice = chooseThreadNavigationPreviewTarget(
-      previous[0],
-      previous,
-      { direction: 'previous' },
-    );
+    const previousEdgeChoice = chooseThreadNavigationPreviewTarget(previous[0], previous, {
+      direction: 'previous',
+    });
 
     trackThreadNavigationPreviewTarget(next[2]);
     completeThreadNavigationPreviewTarget(next[2]);

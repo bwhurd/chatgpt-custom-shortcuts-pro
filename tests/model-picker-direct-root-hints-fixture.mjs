@@ -104,9 +104,10 @@ for (const fixture of fixtures) {
     ModelLabels.getModelNameActionForLabelInList(label, index, fixture.catalogLabels),
   );
   const catalog = {
-    configureOptions: fixture.profile === 'work'
-      ? catalogActions.slice(1).map(({ id, slot, label }) => ({ id, slot, label }))
-      : catalogActions.map(({ id, slot, label }) => ({ id, slot, label })),
+    configureOptions:
+      fixture.profile === 'work'
+        ? catalogActions.slice(1).map(({ id, slot, label }) => ({ id, slot, label }))
+        : catalogActions.map(({ id, slot, label }) => ({ id, slot, label })),
   };
   const actual = fixture.rows.map((label, index) => {
     const action = ModelLabels.getCatalogModelNameActionForLabel(label, index, catalog);
@@ -125,10 +126,7 @@ const declaration = (startMarker, endMarker, exportedName) => {
   assert.ok(start >= 0 && end > start, `${exportedName} source should be present`);
   const context = {};
   vm.createContext(context);
-  vm.runInContext(
-    `${contentSource.slice(start, end)}\nthis.exported = ${exportedName};`,
-    context,
-  );
+  vm.runInContext(`${contentSource.slice(start, end)}\nthis.exported = ${exportedName};`, context);
   return context.exported;
 };
 
@@ -153,8 +151,14 @@ assert.equal(
   true,
 );
 assert.equal(modelHintAction({ actionKind: 'pill-effort', group: 'primary', slot: 0 }), false);
-assert.equal(modelHintAction({ actionKind: 'configure-option', group: 'configure', slot: 13 }), false);
-assert.equal(modelHintAction({ actionKind: 'configure-option', group: 'configure', slot: 14 }), false);
+assert.equal(
+  modelHintAction({ actionKind: 'configure-option', group: 'configure', slot: 13 }),
+  false,
+);
+assert.equal(
+  modelHintAction({ actionKind: 'configure-option', group: 'configure', slot: 14 }),
+  false,
+);
 
 const directRootHintSource = contentSource.slice(
   contentSource.indexOf('function getOpenComposerModelRadioMenu()'),

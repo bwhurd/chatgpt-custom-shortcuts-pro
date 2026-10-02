@@ -14,7 +14,10 @@ assert.ok(
   'Search Chats should have a structural native-button resolver',
 );
 
-const expandedSearchButton = { id: 'expanded-search', matches: (selector) => selector === 'button' };
+const expandedSearchButton = {
+  id: 'expanded-search',
+  matches: (selector) => selector === 'button',
+};
 const closeSidebarButton = { previousElementSibling: expandedSearchButton };
 const expandedRoot = {
   querySelector(selector) {
@@ -25,7 +28,10 @@ const expandedRoot = {
   },
 };
 
-const collapsedSearchButton = { id: 'collapsed-search', matches: (selector) => selector === 'button' };
+const collapsedSearchButton = {
+  id: 'collapsed-search',
+  matches: (selector) => selector === 'button',
+};
 const collapsedSearchWrapper = {
   querySelector(selector) {
     return selector === 'button[data-sidebar-item="true"]' ? collapsedSearchButton : null;
@@ -72,7 +78,10 @@ const triggerStart = contentSource.indexOf('function triggerNativeSearchConversa
 const triggerEnd = contentSource.indexOf('function triggerDirectComposerActivation', triggerStart);
 const triggerSource = contentSource.slice(triggerStart, triggerEnd);
 const searchClickStart = contentSource.indexOf('function safeClickSearchConversationButton');
-const searchClickEnd = contentSource.indexOf('function waitForFirstVisibleElement', searchClickStart);
+const searchClickEnd = contentSource.indexOf(
+  'function waitForFirstVisibleElement',
+  searchClickStart,
+);
 const searchClickSource = contentSource.slice(searchClickStart, searchClickEnd);
 const narrowSearchStart = contentSource.indexOf(
   'async function triggerNativeSearchConversationFromNarrowPopover',
@@ -133,8 +142,7 @@ assert.ok(searchTarget, 'Search Chats should retain a runtime-selector validatio
 assert.ok(
   searchTarget.matchGroups.some(
     (group) =>
-      group.includes('id="sidebar-header"') &&
-      group.includes('data-testid="close-sidebar-button"'),
+      group.includes('id="sidebar-header"') && group.includes('data-testid="close-sidebar-button"'),
   ),
   'runtime validation should recognize the expanded structural Search control',
 );

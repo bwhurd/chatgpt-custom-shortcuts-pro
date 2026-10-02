@@ -36,9 +36,11 @@ class FakeElement {
   }
 
   matches(selector) {
-    return selector === '[role="menuitem"][data-model-picker-view-toggle="true"]' &&
+    return (
+      selector === '[role="menuitem"][data-model-picker-view-toggle="true"]' &&
       this.getAttribute('role') === 'menuitem' &&
-      this.getAttribute('data-model-picker-view-toggle') === 'true';
+      this.getAttribute('data-model-picker-view-toggle') === 'true'
+    );
   }
 
   closest(selector) {
@@ -56,7 +58,10 @@ class FakeElement {
     }
     if (selector === '[data-model-selection-view="true"] [role="menuitem"][data-interactive]') {
       for (let candidate = this; candidate; candidate = candidate.parentElement) {
-        if (candidate.getAttribute('role') !== 'menuitem' || !candidate.hasAttribute('data-interactive')) {
+        if (
+          candidate.getAttribute('role') !== 'menuitem' ||
+          !candidate.hasAttribute('data-interactive')
+        ) {
           continue;
         }
         for (let view = candidate.parentElement; view; view = view.parentElement) {
@@ -119,7 +124,11 @@ activePanel.append(firstModelRow, secondModelRow);
 modelView.append(activePanel, inactivePanel);
 
 const rows = selectors.getActiveModelPickerRows(modelView);
-assert.deepEqual(rows, [firstModelRow, secondModelRow], 'inactive/inert mounted rows must not enter the catalog');
+assert.deepEqual(
+  rows,
+  [firstModelRow, secondModelRow],
+  'inactive/inert mounted rows must not enter the catalog',
+);
 assert.equal(
   selectors.getModelPickerRowTitleElement(firstModelRow)?.textContent,
   'GPT-6 Astra',
@@ -140,8 +149,14 @@ assert.equal(
 );
 
 const interactionStart = contentSource.indexOf('function scheduleAfterMenuInteraction(event)');
-const interactionEnd = contentSource.indexOf('\n        function getOpenSelectListboxCount()', interactionStart);
-assert.ok(interactionStart >= 0 && interactionEnd > interactionStart, 'the menu interaction handler should exist');
+const interactionEnd = contentSource.indexOf(
+  '\n        function getOpenSelectListboxCount()',
+  interactionStart,
+);
+assert.ok(
+  interactionStart >= 0 && interactionEnd > interactionStart,
+  'the menu interaction handler should exist',
+);
 const interactionHandler = contentSource.slice(interactionStart, interactionEnd);
 assert.match(
   interactionHandler,
@@ -166,7 +181,11 @@ const workPickerTrigger = new FakeElement({ role: 'menuitem', 'data-interactive'
 const workPickerText = new FakeElement({}, { tagName: 'SPAN', textContent: 'GPT-6 Astra Medium' });
 workPickerTrigger.append(workPickerText);
 workPickerView.append(workPickerTrigger);
-assert.equal(workPickerTrigger.hasAttribute('aria-expanded'), false, 'Work omits aria-expanded on this trigger');
+assert.equal(
+  workPickerTrigger.hasAttribute('aria-expanded'),
+  false,
+  'Work omits aria-expanded on this trigger',
+);
 assert.equal(
   resolveIntegratedViewTriggerFromClick(workPickerText),
   workPickerTrigger,
@@ -195,7 +214,10 @@ assert.equal(selectors.isChatWorkSurfaceSelected(workButton), false);
 
 const scanStart = contentSource.indexOf('const scrapeCurrentModelPickerCatalogOnce');
 const scanEnd = contentSource.indexOf('const scrapeModelCatalogOnce', scanStart);
-assert.ok(scanStart >= 0 && scanEnd > scanStart, 'the current-picker scanner should be the single catalog scan');
+assert.ok(
+  scanStart >= 0 && scanEnd > scanStart,
+  'the current-picker scanner should be the single catalog scan',
+);
 const scanner = contentSource.slice(scanStart, scanEnd);
 assert.match(scanner, /aria-labelledby.*triggerId|triggerId.*aria-labelledby/s);
 assert.match(scanner, /data-model-picker-view-toggle="true"/);

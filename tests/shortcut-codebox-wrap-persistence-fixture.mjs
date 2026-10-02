@@ -30,11 +30,7 @@ const snapshot = (overrides = {}) => ({
   ...overrides,
 });
 
-const persistedProof = buildCodeboxWrapPersistenceProof(
-  enabledStorage,
-  enabledStorage,
-  snapshot(),
-);
+const persistedProof = buildCodeboxWrapPersistenceProof(enabledStorage, enabledStorage, snapshot());
 assert.equal(persistedProof.status, 'pass');
 assert.equal(persistedProof.codeboxWrapSatisfied, false);
 assert.equal(persistedProof.requiredWrapCount, 1);
@@ -104,4 +100,6 @@ const cssMismatchProof = buildCodeboxWrapPersistenceProof(
 );
 assert.equal(cssMismatchProof.status, 'fail');
 
-console.log('codebox wrap persistence proof accepts required wrapped lines and rejects missing state, wraps, CSS, or geometry');
+console.log(
+  'codebox wrap persistence proof accepts required wrapped lines and rejects missing state, wraps, CSS, or geometry',
+);

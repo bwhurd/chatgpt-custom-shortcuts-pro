@@ -11,10 +11,7 @@ const selectorsSource = await readFile(
   'utf8',
 );
 const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
-const optionsSource = await readFile(
-  new URL('../extension/options-storage.js', import.meta.url),
-  'utf8',
-);
+
 const popupCssSource = await readFile(new URL('../extension/popup.css', import.meta.url), 'utf8');
 const popupHtmlSource = await readFile(new URL('../extension/popup.html', import.meta.url), 'utf8');
 const popupJsSource = await readFile(new URL('../extension/popup.js', import.meta.url), 'utf8');
@@ -46,7 +43,11 @@ localeCodes.forEach((locale) => {
     localeMessages[locale].label_modelCatalogLatest.message,
     localeMessages[locale].label_modelCatalogLegacy.message,
   ];
-  assert.deepEqual(labels, expectedProfileLabels[locale], `${locale} profile labels should be translated`);
+  assert.deepEqual(
+    labels,
+    expectedProfileLabels[locale],
+    `${locale} profile labels should be translated`,
+  );
   labels.forEach((label) => {
     assert.ok(
       Array.from(label).length <= 15,
@@ -182,11 +183,7 @@ assert.equal(
 );
 
 const configureOptions = LIVE_PILL_MATRIX.map((entry, index) => {
-  const action = ModelLabels.getModelNameActionForLabelInList(
-    entry.model,
-    index,
-    modelLabels,
-  );
+  const action = ModelLabels.getModelNameActionForLabelInList(entry.model, index, modelLabels);
   return { id: action.id, slot: action.slot, label: entry.model };
 });
 const frontendByConfig = {};
@@ -424,10 +421,7 @@ labelsContext.overlayCfg = {
   ],
 };
 const overlayHelperStart = contentSource.indexOf('const getOverlayModelSlotCount');
-const overlayHelperEnd = contentSource.indexOf(
-  '// ---- 3) Build overlay HTML',
-  overlayHelperStart,
-);
+const overlayHelperEnd = contentSource.indexOf('// ---- 3) Build overlay HTML', overlayHelperStart);
 assert.ok(overlayHelperStart >= 0 && overlayHelperEnd > overlayHelperStart);
 vm.runInContext(
   `${contentSource.slice(overlayHelperStart, overlayHelperEnd)}
@@ -579,8 +573,13 @@ assert.match(currentScrapeSource, /getActiveModelPickerRows/);
 assert.match(currentScrapeSource, /data-model-picker-view-toggle="true"/);
 assert.match(currentScrapeSource, /persistScrapedModelCatalog\(catalog, \{ profile/);
 
-const currentActionStart = contentSource.indexOf('const runCurrentModelPickerAction = async (action) => {');
-const currentActionEnd = contentSource.indexOf('const ensureIntegratedSimplePicker = async', currentActionStart);
+const currentActionStart = contentSource.indexOf(
+  'const runCurrentModelPickerAction = async (action) => {',
+);
+const currentActionEnd = contentSource.indexOf(
+  'const ensureIntegratedSimplePicker = async',
+  currentActionStart,
+);
 assert.ok(currentActionStart >= 0 && currentActionEnd > currentActionStart);
 const currentActionSource = contentSource.slice(currentActionStart, currentActionEnd);
 assert.match(currentActionSource, /getActiveModelPickerRows/);
