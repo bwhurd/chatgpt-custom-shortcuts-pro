@@ -1,1 +1,1 @@
-
+// Intentionally empty compatibility script.
