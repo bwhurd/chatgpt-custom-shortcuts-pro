@@ -48,11 +48,10 @@ Use:
 
 - Open `PROJECT_SPEC.md` for repo-wide behavior, shared conventions, or cross-system validation/tooling rules.
 - Open `specs/0001-adding-new-settings-spec.md` for changes to storage-backed settings, popup controls, import/export, Drive sync, early bootstrap gates, or popup UI details (i18n keys, tooltips, shared labels).
-- Open `specs/0002-lazy-fast-mode-spec.md` only for historical Fast Mode cleanup context. The experimental feature was removed and has no shipped runtime.
 - Open `specs/0003-cloud-sync-and-settings-data-flow-spec.md` for Google login, Drive save/restore, or local settings import/export changes.
 - Open `specs/0004-model-picker-and-shortcuts-spec.md` for shortcut normalization, deduplication, model picker rendering, Ctrl+/ overlay, shortcut safeguards, model routing, or direct DOM replacement of ChatGPT shortcuts (sidebar, new chat, search, composer focus).
 - Open `specs/0005-popup-settings-validator-spec.md` for changes to `tests/validate-keys.js`, `tests/lib/settings-wiring-validator.js`, popup/settings wiring contract validation, or supplemental validator inventory rules.
-- Open `specs/0006-runtime-scrape-selector-validator-spec.md` for dev-only inspector dump collection, popup `DevScrapeWide` / `Check-Scrape` controls, runtime selector presence audits, or the dev report page.
+- Open `specs/0006-runtime-scrape-selector-validator-spec.md` for canonical fast shortcut validation, catalogue/report coverage, contributor/tray check workflow, dev-only inspector dump collection, popup `DevScrapeWide` / `Check-Scrape` controls, runtime selector presence audits, or the dev report page.
 - Open `specs/0007-anonymous-usage-analytics-spec.md` for anonymous usage analytics, local usage reporting, Aptabase wiring, analytics privacy boundaries, or the tray usage-report link.
 - If the right spec is unclear after routing, use `$spec-check`.
 - If multiple triggers match, open each relevant spec.
@@ -93,6 +92,7 @@ Use `LOCAL_TOOLS_ROOT` as a placeholder for the local tools checkout root when a
 
 ## Validate narrowly
 
+- For local versus GitHub Actions check ownership and reuse of passing results, read `PROJECT_SPEC.md` "Validation and tooling posture". Do not repeat a passing check for an unchanged revision solely for review or closeout.
 - For doc-only changes, reread the edited sections and verify routing targets, ownership, and stated scope.
 - Run `biome check` on changed files, fix only clear behavior-safe issues, suppress style-only items, and write a plan for any risky or complex issues.
 

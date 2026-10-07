@@ -2190,3 +2190,8 @@ span.dup-key {
 #model-picker-grid .mp-configure-item {
   cursor: pointer;
 }
+
+body[data-popup-shortcut-state="pending"] .shortcut-container,
+body[data-popup-shortcut-state="failed"] .shortcut-container {
+  visibility: hidden;
+}

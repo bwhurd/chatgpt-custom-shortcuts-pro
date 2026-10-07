@@ -362,9 +362,6 @@
   "label_search_web": {
     "message": "Búsqueda web"
   },
-  "label_think_longer": {
-    "message": "Pensar más"
-  },
   "label_study": {
     "message": "Estudiar y aprender"
   },
@@ -386,23 +383,11 @@
   "tt_use_Alt_for_picker": {
     "message": "Usa Alt+{{shortcut}} para cambiar de modelo. ——————————————————— Haz clic en el primer campo, luego pulsa Tab para recorrer y ver los nombres de los modelos. ——————————————————— Pulsa cualquier tecla para asignar un atajo, Backspace para borrar, Tab para saltar."
   },
-  "label_MoreConcise": {
-    "message": "Más breve"
-  },
-  "tt_MoreConcise": {
-    "message": "Acorta la respuesta anterior."
-  },
   "label_RegenerateAskToChangeResponse": {
     "message": "Pedir cambios"
   },
   "tt_RegenerateAskToChangeResponse": {
     "message": "Escribe cómo quieres cambiar o mejorar la respuesta anterior."
-  },
-  "label_RegenerateWithDifferentModel": {
-    "message": "No buscar en la web"
-  },
-  "tt_RegenerateWithDifferentModel": {
-    "message": "Regenera la respuesta sin usar búsqueda web."
   },
   "label_ReadAloud": {
     "message": "Leer en voz alta"
@@ -415,24 +400,6 @@
   },
   "tt_BranchInNewChat": {
     "message": "Copia el chat hasta aquí y abre una conversación nueva desde este punto, para explorar otra vía sin perder ninguna de las dos."
-  },
-  "label_AddDetails": {
-    "message": "Más detalles"
-  },
-  "tt_AddDetails": {
-    "message": "Amplía la respuesta anterior con más detalles."
-  },
-  "label_switchToThinkingExtended": {
-    "message": "Cambiar a Pensamiento Extendido"
-  },
-  "tt_switchToThinkingExtended": {
-    "message": "Cambiar directamente a GPT-5 Pensamiento Extendido; tarda más, pero resuelve problemas difíciles."
-  },
-  "label_switchToThinkingStandard": {
-    "message": "Cambiar a Pensamiento Estándar"
-  },
-  "tt_switchToThinkingStandard": {
-    "message": "Cambiar directamente a GPT-5 Pensamiento Estándar, que responde más rápido para la mayoría de tareas."
   },
   "label_switchToThinkingLight": {
     "message": "Cambiar a Pensamiento Ligero"

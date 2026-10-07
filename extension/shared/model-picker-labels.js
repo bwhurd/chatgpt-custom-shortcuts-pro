@@ -87,6 +87,7 @@
     labelI18nKey: 'label_toggleChatWork',
     actionKind: 'shortcut-setting',
     storageKey: 'shortcutKeyToggleChatWork',
+    defaultCode: 'Digit5',
   });
   const MODEL_NAME_ACTIONS = Object.freeze([
     Object.freeze({
@@ -335,7 +336,6 @@
   const THINKING_EFFORT_OPTIONS = Object.freeze([
     Object.freeze({
       id: 'thinking-standard',
-      storageKey: 'shortcutKeyThinkingStandard',
       label: 'Thinking Standard',
       optionLabel: 'Standard',
       iconToken: '#fec800',
@@ -344,7 +344,6 @@
     }),
     Object.freeze({
       id: 'thinking-extended',
-      storageKey: 'shortcutKeyThinkingExtended',
       label: 'Thinking Extended',
       optionLabel: 'Extended',
       iconToken: '#143e56',
@@ -377,7 +376,9 @@
     }, {}),
   );
   const THINKING_EFFORT_BY_STORAGE_KEY = Object.freeze(
-    THINKING_EFFORT_OPTIONS.reduce((acc, option) => {
+    THINKING_EFFORT_OPTIONS.filter(
+      (option) => typeof option.storageKey === 'string' && option.storageKey,
+    ).reduce((acc, option) => {
       acc[option.storageKey] = option;
       return acc;
     }, {}),
@@ -514,10 +515,13 @@
   const DEFAULT_RESET_MODEL_CODE = 'Digit7';
   const DEFAULT_GROUP_MODEL_CODES = Object.freeze({
     primary: Object.freeze(['F1', 'F2', 'F3', 'F4', 'F5']),
-    configure: DEFAULT_SEQUENTIAL_MODEL_CODES,
   });
 
-  const buildDefaultKeyCodesFromPresentationGroups = (groups) => {
+  const DEFAULT_MODEL_UTILITY_CODES = Object.freeze({
+    'toggle-speed': 'Digit6',
+    'reset-default': DEFAULT_RESET_MODEL_CODE,
+  });
+  const buildDefaultKeyCodesFromPresentationGroups = (groups, { reservedCodes = [] } = {}) => {
     const groupList = Array.isArray(groups) ? groups : [];
     const lastActionSlot = groupList
       .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
@@ -527,15 +531,44 @@
       }, -1);
     const out = new Array(Math.max(MAX_SLOTS, lastActionSlot + 1)).fill('');
     const seenSlots = new Set();
+    const externallyReservedCodes = new Set(
+      (Array.isArray(reservedCodes) ? reservedCodes : [])
+        .map(normalizeShortcutCollisionCode)
+        .filter(Boolean),
+    );
+    const claimedCodes = new Set(externallyReservedCodes);
+    const utilityCodeBySlot = new Map();
     let nextSequentialIndex = 0;
+
+    groupList.forEach((group) => {
+      (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
+        const shortcutDefault = normalizeShortcutCollisionCode(action?.defaultCode);
+        if (action?.actionKind === 'shortcut-setting' && shortcutDefault) {
+          claimedCodes.add(shortcutDefault);
+        }
+        const utilityCode = normalizeShortcutCollisionCode(DEFAULT_MODEL_UTILITY_CODES[action?.id]);
+        const slot = Number(action?.slot);
+        if (utilityCode && Number.isInteger(slot) && slot >= 0) {
+          utilityCodeBySlot.set(slot, utilityCode);
+          claimedCodes.add(utilityCode);
+        }
+      });
+    });
+
+    const nextSequentialModelCode = () => {
+      while (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
+        const code = DEFAULT_SEQUENTIAL_MODEL_CODES[nextSequentialIndex];
+        nextSequentialIndex += 1;
+        const normalizedCode = normalizeShortcutCollisionCode(code);
+        if (!claimedCodes.has(normalizedCode)) return code;
+      }
+      return '';
+    };
 
     groupList.forEach((group) => {
       const groupCodes = DEFAULT_GROUP_MODEL_CODES[group?.id] || [];
       (Array.isArray(group?.actions) ? group.actions : []).forEach((action, actionIndex) => {
         if (action?.actionKind === 'shortcut-setting' && action?.storageKey) {
-          if (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
-            nextSequentialIndex += 1;
-          }
           return;
         }
 
@@ -548,29 +581,26 @@
 
         seenSlots.add(slot);
 
-        if (base?.id === 'toggle-speed') {
-          // Utility shortcuts stay stable when a refreshed Work catalog adds
-          // more model rows ahead of them.
-          out[slot] = 'Digit6';
+        if (utilityCodeBySlot.has(slot)) {
+          const utilityCode = utilityCodeBySlot.get(slot);
+          if (!externallyReservedCodes.has(utilityCode)) out[slot] = utilityCode;
           return;
         }
 
-        if (base?.id === 'reset-default') {
-          out[slot] = DEFAULT_RESET_MODEL_CODE;
-          return;
-        }
-
-        if (groupCodes[actionIndex]) {
-          out[slot] = groupCodes[actionIndex];
-          if (group?.id === 'configure') {
-            nextSequentialIndex = Math.max(nextSequentialIndex, actionIndex + 1);
+        if (group?.id === 'configure') {
+          const code = nextSequentialModelCode();
+          if (code) {
+            out[slot] = code;
+            claimedCodes.add(normalizeShortcutCollisionCode(code));
           }
           return;
         }
 
-        if (nextSequentialIndex < DEFAULT_SEQUENTIAL_MODEL_CODES.length) {
-          out[slot] = DEFAULT_SEQUENTIAL_MODEL_CODES[nextSequentialIndex];
-          nextSequentialIndex += 1;
+        const code = groupCodes[actionIndex] || '';
+        const normalizedCode = normalizeShortcutCollisionCode(code);
+        if (code && !claimedCodes.has(normalizedCode)) {
+          out[slot] = code;
+          claimedCodes.add(normalizedCode);
         }
       });
     });
@@ -585,7 +615,7 @@
 
   const defaultKeyCodesForProfile = (
     profile = MODEL_PICKER_PROFILE_LATEST,
-    { catalog, names } = {},
+    { catalog, names, reservedCodes = [] } = {},
   ) => {
     const normalizedProfile = normalizeModelPickerProfile(profile);
     const isLegacy = normalizedProfile === MODEL_PICKER_PROFILE_LEGACY;
@@ -598,6 +628,7 @@
         : defaultNames();
     return buildDefaultKeyCodesFromPresentationGroups(
       getPopupPresentationGroups(DEFAULT_ACTIVE_CONFIG_ID, effectiveNames, effectiveCatalog),
+      { reservedCodes },
     );
   };
 
@@ -608,8 +639,30 @@
     const code = String(value || '').trim();
     if (!code || code === '\u00A0') return '';
     const numpadDigit = code.match(/^Numpad([0-9])$/);
-    return numpadDigit ? `Digit${numpadDigit[1]}` : code;
+    if (numpadDigit) return `Digit${numpadDigit[1]}`;
+    if (/^[a-z]$/i.test(code)) return `Key${code.toUpperCase()}`;
+    if (/^[0-9]$/.test(code)) return `Digit${code}`;
+    const legacyCodeByCharacter = {
+      '-': 'Minus',
+      '=': 'Equal',
+      '[': 'BracketLeft',
+      ']': 'BracketRight',
+      '\\': 'Backslash',
+      ';': 'Semicolon',
+      "'": 'Quote',
+      ',': 'Comma',
+      '.': 'Period',
+      '/': 'Slash',
+      '`': 'Backquote',
+      '↑': 'ArrowUp',
+      '↓': 'ArrowDown',
+      '←': 'ArrowLeft',
+      '→': 'ArrowRight',
+    };
+    return legacyCodeByCharacter[code] || code;
   };
+  const normalizeShortcutModifier = (value) =>
+    /^(?:ctrl|control|cmd|meta)/i.test(String(value || 'alt')) ? 'ctrl' : 'alt';
 
   const normalizeProfileKeyCodes = (codes, groups) => {
     const source = Array.isArray(codes) ? codes.slice() : [];
@@ -657,6 +710,130 @@
     [MODEL_PICKER_PROFILE_LATEST]: normalizeProfileKeyCodes(codes, latestGroups),
     [MODEL_PICKER_PROFILE_LEGACY]: normalizeProfileKeyCodes(codes, legacyGroups),
   });
+
+  /** Normalize scalar and per-profile assignments using stable owner precedence. */
+  const normalizeShortcutAssignments = ({
+    shortcuts = [],
+    modelModifier = 'alt',
+    profiles = {},
+    snapshot = {},
+  } = {}) => {
+    const normalizedModifier = normalizeShortcutModifier(modelModifier);
+    const clearedOwners = [];
+    const claimedShortcutCodes = new Map();
+    const sourceSnapshot =
+      snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) ? snapshot : {};
+    const normalizedSnapshot = { ...sourceSnapshot };
+    const patch = {};
+    const changedKeys = [];
+    const snapshotHasKey = (key) => Object.hasOwn(sourceSnapshot, key);
+    const recordSnapshotValue = (key, value, isArray = false) => {
+      if (!key || !snapshotHasKey(key)) return;
+      const currentValue = sourceSnapshot[key];
+      const isUnchanged = isArray
+        ? Array.isArray(currentValue) &&
+          currentValue.length === value.length &&
+          currentValue.every((item, index) => Object.is(item, value[index]))
+        : Object.is(currentValue, value);
+      if (isUnchanged) return;
+      normalizedSnapshot[key] = value;
+      patch[key] = value;
+      changedKeys.push(key);
+    };
+    const normalizedShortcuts = (Array.isArray(shortcuts) ? shortcuts : []).map((shortcut) => {
+      const value = typeof shortcut?.value === 'string' ? shortcut.value : '';
+      const code = normalizeShortcutCollisionCode(value);
+      const modifier = normalizeShortcutModifier(shortcut?.modifier);
+      if (!code) return { ...shortcut, value, modifier, code: '' };
+
+      const claimKey = `${modifier}:${code}`;
+      if (claimedShortcutCodes.has(claimKey)) {
+        clearedOwners.push({
+          type: 'shortcut',
+          storageKey: shortcut?.storageKey || '',
+          code,
+          keptStorageKey: claimedShortcutCodes.get(claimKey),
+        });
+        return { ...shortcut, value: '\u00A0', modifier, code: '' };
+      }
+
+      claimedShortcutCodes.set(claimKey, shortcut?.storageKey || '');
+      return { ...shortcut, value: code, modifier, code };
+    });
+    normalizedShortcuts.forEach((shortcut) => {
+      recordSnapshotValue(shortcut?.storageKey, shortcut?.value);
+    });
+
+    const normalizedProfiles = {};
+    Object.entries(profiles || {}).forEach(([profile, entry]) => {
+      const source = Array.isArray(entry?.codes) ? entry.codes : [];
+      const groups = Array.isArray(entry?.groups) ? entry.groups : [];
+      const maximumGroupSlot = groups
+        .flatMap((group) => (Array.isArray(group?.actions) ? group.actions : []))
+        .reduce((maximum, action) => {
+          const slot = Number(action?.slot);
+          return Number.isInteger(slot) && slot >= 0 ? Math.max(maximum, slot) : maximum;
+        }, -1);
+      const output = source.slice();
+      while (output.length < Math.max(MAX_SLOTS, maximumGroupSlot + 1)) output.push('');
+
+      const seenSlots = new Set();
+      const utilityActions = [];
+      const modelActionsBySlot = new Map();
+      groups.forEach((group) => {
+        (Array.isArray(group?.actions) ? group.actions : []).forEach((action) => {
+          if (action?.actionKind === 'shortcut-setting' && action?.storageKey) return;
+          const slot = Number(action?.slot);
+          if (!Number.isInteger(slot) || slot < 0 || seenSlots.has(slot)) return;
+          seenSlots.add(slot);
+          if (group?.id === 'model-toggles') utilityActions.push({ slot, action });
+          else modelActionsBySlot.set(slot, { slot, action });
+        });
+      });
+
+      const orderedActions = [
+        ...utilityActions,
+        ...Array.from(modelActionsBySlot.values()).sort((left, right) => left.slot - right.slot),
+      ];
+      for (let slot = 0; slot < output.length; slot += 1) {
+        if (!seenSlots.has(slot)) orderedActions.push({ slot, action: null });
+      }
+
+      const claimedCodes = new Set();
+      normalizedShortcuts.forEach((shortcut) => {
+        if (shortcut.code && shortcut.modifier === normalizedModifier) {
+          claimedCodes.add(shortcut.code);
+        }
+      });
+      const profileCleared = [];
+      orderedActions.forEach(({ slot, action }) => {
+        const value = typeof output[slot] === 'string' ? output[slot] : '';
+        const code = normalizeShortcutCollisionCode(value);
+        if (!code) return;
+        if (claimedCodes.has(code)) {
+          output[slot] = '';
+          const cleared = { type: 'model', profile, slot, code, actionId: action?.id || '' };
+          profileCleared.push(cleared);
+          clearedOwners.push(cleared);
+          return;
+        }
+        claimedCodes.add(code);
+        output[slot] = code;
+      });
+
+      normalizedProfiles[profile] = output;
+      recordSnapshotValue(entry?.storageKey, output, true);
+    });
+
+    return {
+      shortcuts: normalizedShortcuts,
+      profiles: normalizedProfiles,
+      clearedOwners,
+      changedKeys,
+      patch,
+      snapshot: normalizedSnapshot,
+    };
+  };
 
   const isDynamicModelNameActionId = (value) =>
     /^configure-dynamic-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
@@ -1275,6 +1452,42 @@
       },
     ];
   };
+  const filterProfileKeyCodesToCatalog = (codes, profile, catalog, names) => {
+    const normalizedProfile = normalizeModelPickerProfile(profile);
+    const effectiveCatalog =
+      catalog && typeof catalog === 'object'
+        ? catalog
+        : normalizedProfile === MODEL_PICKER_PROFILE_LEGACY
+          ? DEFAULT_LEGACY_MODEL_CATALOG
+          : DEFAULT_INTEGRATED_MODEL_CATALOG;
+    const effectiveNames = Array.isArray(names)
+      ? names
+      : normalizedProfile === MODEL_PICKER_PROFILE_LEGACY
+        ? defaultLegacyNames()
+        : defaultNames();
+    const configIds = new Set([
+      DEFAULT_ACTIVE_CONFIG_ID,
+      ...(Array.isArray(effectiveCatalog.configureOptions)
+        ? effectiveCatalog.configureOptions.map((option) => option?.id)
+        : []),
+      ...Object.keys(effectiveCatalog.frontendByConfig || {}),
+    ]);
+    const availableSlots = new Set();
+    for (const configId of configIds) {
+      for (const group of getPopupPresentationGroups(configId, effectiveNames, effectiveCatalog)) {
+        for (const action of group.actions || []) {
+          const slot = Number(action?.slot);
+          if (Number.isInteger(slot) && slot >= 0) availableSlots.add(slot);
+        }
+      }
+    }
+    const output = Array.isArray(codes) ? codes.slice() : [];
+    while (output.length < MAX_SLOTS) output.push('');
+    for (let slot = 0; slot < output.length; slot++) {
+      if (!availableSlots.has(slot)) output[slot] = '';
+    }
+    return output;
+  };
   const getPopupShortcutSlotForPosition = (
     groupId,
     groupIndex,
@@ -1417,11 +1630,13 @@
     getPresentationGroups,
     getPopupPrimaryActions,
     getPopupPresentationGroups,
+    filterProfileKeyCodesToCatalog,
     getPopupShortcutSlotForPosition,
     buildDefaultKeyCodesFromPresentationGroups,
     defaultKeyCodesForProfile,
     normalizeProfileKeyCodes,
     migrateSharedKeyCodesToProfiles,
+    normalizeShortcutAssignments,
     mapFrontendLabelToActionId,
     normalizeThinkingEffortId,
     normalizeThinkingEffortIconToken,

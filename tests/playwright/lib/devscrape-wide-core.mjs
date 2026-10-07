@@ -163,8 +163,6 @@ const STATELESS_LIVE_PROBE_SETUPS = Object.freeze([
 ]);
 const CONTROL_SHORTCUT_ACTION_IDS = Object.freeze([CLICK_SEND_ACTION_ID, CLICK_STOP_ACTION_ID]);
 const MODEL_EFFORT_ACTION_IDS = Object.freeze([
-  'shortcutKeyThinkingStandard',
-  'shortcutKeyThinkingExtended',
   'shortcutKeyThinkingLight',
   'shortcutKeyThinkingHeavy',
   'shortcutKeyProStandard',
@@ -3346,8 +3344,6 @@ function isModelPhaseShortcut(shortcut) {
     [
       'shortcutKeyToggleModelSelector',
       'shortcutKeyToggleChatWork',
-      'shortcutKeyThinkingExtended',
-      'shortcutKeyThinkingStandard',
       'shortcutKeyThinkingLight',
       'shortcutKeyThinkingHeavy',
       'shortcutKeyProStandard',
@@ -4162,7 +4158,6 @@ function evaluateLiveProbeSemantic(
         proof.reason = matched ? '' : 'Read Aloud did not start audio playback.';
         break;
       case 'shortcutKeyRegenerateTryAgain':
-      case 'shortcutKeyRegenerateWithDifferentModel':
         matched = responseChanged;
         proof.observed = `assistant messages ${before.assistantMessageCount} -> ${after.assistantMessageCount}; response hash changed=${before.lastAssistantHash !== after.lastAssistantHash}`;
         proof.reason = matched ? '' : 'Regeneration did not produce a new assistant response.';
@@ -6029,7 +6024,6 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           'shortcutKeyClickSendButton',
           'shortcutKeySendEdit',
           'shortcutKeyRegenerateTryAgain',
-          'shortcutKeyRegenerateWithDifferentModel',
         ].includes(shortcut.actionId);
         if (requiresCommittedResponse) {
           if (shortcut.actionId === 'shortcutKeyClickSendButton') {

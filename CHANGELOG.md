@@ -132,7 +132,6 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 #### 05.10.2026
 - Fixed: Message scrolling shortcuts land reliably again.
 - Fixed: Send Top Bar To Bottom hides the narrow sticky header.
-- Removed: Retired the inert experimental Fast Mode lazy-loading prototype before release.
 
 #### 05.08.2026
 - Fixed: Model refresh keeps new model shortcuts separate, including GPT-5.3 and GPT-5.4.

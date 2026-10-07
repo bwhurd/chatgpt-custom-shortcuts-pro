@@ -362,9 +362,6 @@
   "label_search_web": {
     "message": "Веб‑пошук"
   },
-  "label_think_longer": {
-    "message": "Подумати довше"
-  },
   "label_study": {
     "message": "Навчання"
   },
@@ -386,23 +383,11 @@
   "tt_use_Alt_for_picker": {
     "message": "Використовуйте Alt+{{shortcut}}, щоб перемикати моделі. ——————————————————— Клацніть перше поле, потім натисніть Tab, щоб перегортати й побачити назви моделей. ——————————————————— Натисніть будь-яку клавішу, щоб задати гарячу клавішу; Backspace — очистити, Tab — пропустити."
   },
-  "label_MoreConcise": {
-    "message": "Коротше"
-  },
-  "tt_MoreConcise": {
-    "message": "Скорочує попередню відповідь."
-  },
   "label_RegenerateAskToChangeResponse": {
     "message": "Запросити зміни"
   },
   "tt_RegenerateAskToChangeResponse": {
     "message": "Напишіть, як хочете змінити чи покращити попередню відповідь."
-  },
-  "label_RegenerateWithDifferentModel": {
-    "message": "Не шукати в інтернеті"
-  },
-  "tt_RegenerateWithDifferentModel": {
-    "message": "Повторно створює відповідь без вебпошуку."
   },
   "label_ReadAloud": {
     "message": "Озвучити"
@@ -415,24 +400,6 @@
   },
   "tt_BranchInNewChat": {
     "message": "Копіює чат до цього моменту й запускає нову розмову з цієї точки — можна спробувати інший шлях, нічого не втрачаючи."
-  },
-  "label_AddDetails": {
-    "message": "Докладніше"
-  },
-  "tt_AddDetails": {
-    "message": "Робить попередню відповідь довшою й докладнішою."
-  },
-  "label_switchToThinkingExtended": {
-    "message": "Перемкнути на Розширене мислення"
-  },
-  "tt_switchToThinkingExtended": {
-    "message": "Одразу перейти на GPT-5 Розширене мислення — займає більше часу, але підходить для складних завдань."
-  },
-  "label_switchToThinkingStandard": {
-    "message": "Перемкнути на Стандартне мислення"
-  },
-  "tt_switchToThinkingStandard": {
-    "message": "Одразу перейти на GPT-5 Стандартне мислення — для більшості завдань відповідає швидше."
   },
   "label_switchToThinkingLight": {
     "message": "Перемкнути на Легке мислення"

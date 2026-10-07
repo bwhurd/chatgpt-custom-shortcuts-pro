@@ -18,6 +18,10 @@
       "!tests/bottom-bar-benchmark-summary.json",
       "!tests/playwright/topbar-to-bottom-*.json",
       "!tests/playwright/topbar-to-bottom-*.js",
+      "!tests/playwright/shortcut-fast-conversations.local.json*",
+      "!tests/playwright/shortcut-fast-results.local.json*",
+      "!tests/playwright/shortcut-fast-catalogue.local.json*",
+      "!tests/playwright/shortcut-fast-live-results.local.json*",
       "!tests/tampermonkey-dev-scrape/chatgpt-devscrape-wide.user.js",
       "!extension/vendor",
       "!extension/lib/*.min.js"

@@ -33,26 +33,17 @@ const OPTIONS_DEFAULTS = {
   shortcutKeySearchWeb: 'q',
   shortcutKeyStudy: '',
   shortcutKeyCreateImage: '',
-  shortcutKeyToggleCanvas: '',
   shortcutKeyDeepResearch: '',
   shortcutKeyAddPhotosFiles: '',
-  shortcutKeyThinkLonger: '',
   copyAllUserSeparator: '\n\n--- --- ---\n\n',
   shortcutKeyCopyAllCodeBlocks: ']',
   copyCodeUserSeparator: '\n\n--- --- ---\n\n',
-  altPageUp: 'PageUp',
-  altPageDown: 'PageDown',
 
   // === Additional keys from 222s ===
   shortcutKeyRegenerateTryAgain: 'r',
-  shortcutKeyRegenerateMoreConcise: '',
-  shortcutKeyRegenerateAddDetails: '',
-  shortcutKeyRegenerateWithDifferentModel: '',
   shortcutKeyRegenerateAskToChangeResponse: '',
   shortcutKeyMoreDotsReadAloud: '',
   shortcutKeyMoreDotsBranchInNewChat: '',
-  shortcutKeyThinkingExtended: '',
-  shortcutKeyThinkingStandard: '',
   shortcutKeyThinkingLight: '',
   shortcutKeyThinkingHeavy: '',
   shortcutKeyProStandard: '',
@@ -166,7 +157,7 @@ const OPTIONS_DEFAULTS = {
     'F4',
     'F5',
     'Digit6',
-    'Digit0',
+    '',
   ],
   // Independent profile arrays. Matching default positions intentionally reuse
   // the same keys, but subsequent Chat and Work edits are never linked.
@@ -185,7 +176,7 @@ const OPTIONS_DEFAULTS = {
     'F4',
     'F5',
     'Digit6',
-    'Digit0',
+    '',
   ],
   modelPickerKeyCodesLegacy: [
     'F1',
@@ -293,13 +284,6 @@ if (typeof OptionsSync === 'undefined') {
         }
 
         delete stored.shortcutKeyShowShortcuts;
-      },
-
-      // 2.7) Retire the obsolete standalone Thinking Standard/Extended shortcuts.
-      // Keep the keys as blank legacy data so older synced assignments cannot reactivate.
-      (stored) => {
-        stored.shortcutKeyThinkingStandard = '\u00A0';
-        stored.shortcutKeyThinkingExtended = '\u00A0';
       },
 
       // Sanitize string arrays; 15 is minimum compatibility padding, not a cap.

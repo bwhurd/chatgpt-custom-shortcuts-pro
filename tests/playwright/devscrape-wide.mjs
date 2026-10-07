@@ -148,6 +148,9 @@ function printUsage() {
   node tests/playwright/devscrape-wide.mjs --action audit-selectors
 
 Options:
+  --fast                  Run admitted cheap keys without wide scraping/setup messages.
+  --provision-fixtures    Prepare the reusable private fixture registry (fast mode only).
+  --fixture-id <id>      Open a prepared direct-URL fixture; repeat for concurrent fast focus checks.
   --cdp-endpoint URL       Force one CDP endpoint instead of probing the usual candidates
   --profile-name NAME      Default: CodexCleanProfile
   --chrome-path PATH       Override the Chrome binary used by setup-login
@@ -699,6 +702,18 @@ async function writeAuditArtifactsForRun({
 }
 
 async function auditShortcuts() {
+  if (hasFlag('--provision-fixtures') && !hasFlag('--fast')) {
+    throw new Error('--provision-fixtures requires --fast');
+  }
+  if (hasFlag('--fixture-id') && !hasFlag('--fast')) {
+    throw new Error(
+      '--fixture-id requires --fast; prepared fixtures must not enter the wide setup path',
+    );
+  }
+  if (hasFlag('--fast')) {
+    const { runFastLive } = await import('./lib/shortcut-fast-cases.mjs');
+    return runFastLive(args);
+  }
   const phase = getAuditPhase();
   const filters = getAuditFilters();
   const inventoryOnly = hasFlag('--inventory-only');

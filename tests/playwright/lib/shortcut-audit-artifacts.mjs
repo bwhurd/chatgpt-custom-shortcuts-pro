@@ -23,8 +23,6 @@ const FAILURE_STATUSES = new Set([
 const MODEL_PHASE_ACTION_IDS = new Set([
   'shortcutKeyToggleModelSelector',
   'shortcutKeyToggleChatWork',
-  'shortcutKeyThinkingExtended',
-  'shortcutKeyThinkingStandard',
   'shortcutKeyThinkingLight',
   'shortcutKeyThinkingHeavy',
   'shortcutKeyProStandard',

@@ -160,8 +160,6 @@ If a feature is supposed to be fully inert when disabled, it is not enough to hi
 
 You must gate the earliest entry point that injects or installs the feature.
 
-The removed experimental Fast Mode setting used this pattern while it existed because it had both early page-world injection and content-world runtime paths.
-
 ## 4. Radio-group settings
 
 Use this when several storage keys are mutually exclusive.
@@ -241,6 +239,8 @@ compatibility/pristine-seed input and is not maintained by live edits. The
 generic popup default seeder must skip this profile state so it cannot race and
 overwrite a completed migration.
 
+During profile-array hydration, retain only slots present in that profile's stored/default catalog across its model options. Preserve array positions and supported dynamic slots; clear bindings for unavailable actions before using them for duplicate-conflict checks or shortcut display.
+
 ### Cloud sync
 
 Cloud sync uses `OPTIONS_DEFAULTS` as the allowlist through `storage.js`.
@@ -290,13 +290,6 @@ Usually caused by:
 Usually caused by:
 - only gating later UI
 - forgetting an earlier bootstrap or page-world entry point
-
-## Removed worked example: `lazyFastModeEnabled`
-
-The experimental Fast Mode setting and its lazy-loading runtime were removed from shipped code after shipping inert.
-
-- Do not use `lazyFastModeEnabled`, `lazy-fast-bootstrap.js`, or `lazy-fast-bridge.js` as templates for new settings.
-- For a future risky opt-in feature, follow the early bootstrap checklist above and add a dedicated live spec only while the feature exists.
 
 ## Validation checklist
 

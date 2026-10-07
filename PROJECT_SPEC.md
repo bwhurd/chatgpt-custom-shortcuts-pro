@@ -30,10 +30,6 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 - `extension/content.js`
   - main content-world runtime for shortcuts, DOM automation, overlays, copy helpers, UI tweaks, and model actions
 
-### Retired experiments
-
-- Experimental Fast Mode / lazy-loading code was removed after shipping inert. There is no live setting, manifest entry, bootstrap script, page bridge, or content runtime for it.
-
 ### Popup and shared settings surface
 
 - `extension/popup.html`, `extension/popup.js`, `extension/popup.css`
@@ -73,18 +69,21 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 
 - Run `npm test` for popup changes. For other UI or overlay work, use Playwright only when the user explicitly asks for it or smaller local/manual checks cannot prove the change.
 - If Playwright is explicitly requested, first-time local setup in this repo is `npm ci` followed by `npm run playwright:install`; keep the install project-local so the scripted commands in `package.json` stay the source of truth.
-- Reload the unpacked extension from `extension/` in `chrome://extensions` before trusting manual or Playwright checks after shipped `extension/**` changes.
+- Reload the unpacked extension from `extension/` in `chrome://extensions` before trusting manual or live installed-extension checks after shipped `extension/**` changes. Controlled fast fixtures extract current source and require no installed-extension reload.
 - If Playwright is explicitly requested, prefer the narrowest command that can fail on the change: popup preview/screenshot for quick inspection, `npm run test:popup-visual` for popup regressions, and `npm run playwright:chatgpt:*` only for live ChatGPT-page flows.
 - `npm run playwright:install` installs browsers before the first Playwright run on a machine.
+- `npm run test:shortcuts:fast` is the canonical controlled shortcut regression command; it discovers current coverage and uses isolated fixture bindings automatically. Setup, filters, final warnings and proof boundaries are owned by [spec 0006](specs/0006-runtime-scrape-selector-validator-spec.md#canonical-fast-shortcut-check). `npm run shortcuts:catalog` is its optional browser-free listing. Reuse passing evidence while relevant inputs are unchanged; filtered proof retains its recorded scope.
 - `package.json` owns the authoritative local scripts for popup preview, popup screenshots, popup visual tests, and ChatGPT extension scenarios.
 - `npm run preview:popup` and `npm run screenshot:popup` are the quick popup inspection paths.
 - `npm run test:popup-visual` is an alias for the popup regression suite; `npm run test:popup-visual:update` is only for intentional popup baseline updates.
 - `npm run playwright:chatgpt:*` covers ChatGPT-page extension flows.
 - `npm test` runs three isolated Chromium checks: the approved expanded-popup image, unmodified 784x580 layout/scrolling plus one toggle's sync-storage save/reopen round trip, and rejection of deliberately clipped content. It checks unexpected page errors and console warnings/errors. It does not prove every setting, shortcut execution, or live ChatGPT selectors. The existing image baseline is Windows-specific; no login is required.
-- For contributor reviews, run `npm run check` and `npm run test:validators` for maintained code/tool changes; use `npm run check:text` for doc-only changes. `check` combines Biome with the text checker; `test:validators` tests static-validator success/failure cases in isolated fixtures. Run `npm run validate:keys` for changes to popup controls, settings defaults/schema, locale keys, or settings fixtures; it checks real-project static settings wiring.
+- `.github/workflows/validate.yml` owns Fast validation: one Linux/Node 24 job runs `npm run check`, `npm run test:validators`, and `npm run validate:keys` on PRs and main pushes affecting extension, scripts, tests, package/lockfile, Biome, ignore/attributes, or workflow files; manual dispatch is also available. It caches npm downloads, cancels superseded runs, and installs no browsers. Do not make this path-filtered workflow a required check for every PR: documentation-only PRs skip it.
+- Reuse passing Actions results for the reviewed revision; do not repeat them solely for review or closeout. Before CI or when it is unavailable, use local checks for fast feedback: `npm run check` for maintained code/tool changes, `npm run test:validators` for validator/text-checker implementation or fixture changes, and `npm run validate:keys` for popup controls, settings defaults/schema, locale keys, or settings fixtures. Run `npm run check:text` for docs-only changes. Reuse local passing results while relevant inputs stay unchanged; rerun affected checks after further edits or failures.
+- `check` combines Biome with the text checker; `test:validators` tests static-validator success/failure cases in isolated fixtures; `validate:keys` checks real-project static settings wiring. These provide distinct evidence. Windows popup regressions remain local for popup changes; live ChatGPT checks stay scoped to runtime behavior, and ZIP builds stay release-only.
 - Biome includes maintained `.mjs` source and excludes generated outputs, captured benchmarks, personal editor settings, deployment-owned Netlify files, and plan evidence. The text checker covers eligible tracked and nonignored untracked files, preserves empty modules, and ignores generated/vendor/minified/personal inputs. `--write` repairs that same candidate set only when explicitly requested; contributor review commands stay read-only.
 - Popup test aliases use `scripts/run-popup-tests.js` to avoid conflicting color environment flags while preserving warning reporting, CLI arguments, and failure exit status. Tests wait for observable hydration and fonts, use fresh temporary profiles, and leave shipped runtime and approved baselines unchanged.
-- `specs/0006-runtime-scrape-selector-validator-spec.md` owns the dev-only runtime selector scrape/check workflow. Its dumps belong under `_temp-files/inspector-captures/` and its popup/report assets must stay out of shipped release zips.
+- `specs/0006-runtime-scrape-selector-validator-spec.md` owns the canonical fast shortcut check and optional dev-only runtime selector diagnostics. Scrape dumps belong under `_temp-files/inspector-captures/` and dev popup/report assets must stay out of shipped release zips.
 
 ## Documentation posture
 

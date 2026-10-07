@@ -73,9 +73,15 @@ const expectedListenerIds = getExpectedKeyboardListenerContracts().map(
   (contractRow) => contractRow.contractId,
 );
 assert.deepEqual(
-  inventory.keyboardListeners.map((listener) => listener.contractId),
+  inventory.keyboardListeners
+    .filter((listener) => listener.classification !== 'presentation-lifecycle')
+    .map((listener) => listener.contractId),
   expectedListenerIds,
-  'all content keyboard listeners should have explicit fixed-contract classifications',
+  'all shortcut key listeners should have explicit fixed-contract classifications',
+);
+assert.deepEqual(
+  inventory.presentationLifecycleListeners.map((listener) => listener.lifecycleId),
+  ['slim-sidebar-interaction-refresh'],
 );
 assert.ok(
   inventory.fixedKeyboardContracts.every((contractRow) => contractRow.status === 'present'),
@@ -96,8 +102,16 @@ const profileNames = ['legacy', 'latest'];
 const expectedSlots = Array.from({ length: inventory.modelPickerSlotCount }, (_, slot) => slot);
 assert.equal(
   inventory.modelPickerSlotRows.length,
-  inventory.modelPickerSlotCount * profileNames.length,
-  'both independent model-picker profiles should expose every sparse slot',
+  inventory.modelPickerSlotCount * profileNames.length - 1,
+  'only actionable positions appear; a genuinely empty hole is omitted',
+);
+assert.ok(!inventory.modelPickerSlotRows.some((row) => row.rowId === 'model:legacy:10:empty'));
+assert.equal(inventory.modelPickerProfiles.legacy.emptyCount, 1);
+assert.equal(inventory.modelPickerProfiles.legacy.rows.length, inventory.modelPickerSlotCount);
+assert.equal(inventory.presentationLifecycleListeners.length, 1);
+assert.equal(
+  inventory.presentationLifecycleListeners[0].owner,
+  'extension/content.js slim-sidebar presentation lifecycle',
 );
 for (const profile of profileNames) {
   const rows = inventory.modelPickerProfiles[profile]?.rows || [];
@@ -121,8 +135,8 @@ for (const profile of profileNames) {
     `${profile} should have at least one currently presented model action`,
   );
   assert.ok(
-    rows.some((row) => row.availability === 'unavailable' || row.availability === 'empty'),
-    `${profile} should preserve non-presented or empty slots for audit coverage`,
+    rows.some((row) => row.availability === 'unavailable'),
+    `${profile} should preserve assigned/canonical but non-presented slots for audit coverage`,
   );
 }
 

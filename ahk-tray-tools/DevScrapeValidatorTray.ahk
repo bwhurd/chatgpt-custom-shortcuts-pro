@@ -20,6 +20,7 @@ pushGitPid := 0
 pushGitLastStatus := ""
 pushGitInProgress := 0
 buildZipPy := A_ScriptDir "\RunBuildZipWithVersionBump.py"
+fastShortcutCheckPs := A_ScriptDir "\RunShortcutFastCheck.ps1"
 launcherTitle := "CGCSP DevScrape Validator"
 trayIconPath := A_ScriptDir "\ChatGPT Custom Shortcuts Pro.ico"
 
@@ -50,6 +51,7 @@ Menu, Tray, Add, Open Latest Report, OpenLatestReport
 Menu, Tray, Add, Open Usage Report, OpenUsageReport
 Menu, Tray, Add, Open Aggregate Usage Report, OpenAggregateUsageReport
 Menu, Tray, Add, Run build-zip.js, RunBuildZip
+Menu, Tray, Add, Fast Shortcut Check, RunShortcutFastCheck
 Menu, Tray, Add, Git push settings..., ConfigureGitPush
 Menu, Tray, Add, Push local to git, PushLocalToGit
 Menu, Tray, Add, Push with change note..., PushGitWithNote
@@ -69,6 +71,8 @@ if !FileExist(openUsageReportPs)
     Menu, Tray, Disable, Open Usage Report
 if !FileExist(openAggregateUsageReportPs)
     Menu, Tray, Disable, Open Aggregate Usage Report
+if !FileExist(fastShortcutCheckPs)
+    Menu, Tray, Disable, Fast Shortcut Check
 Menu, Tray, Tip, DevScrape Validator: checking status...
 if FileExist(trayIconPath)
     Menu, Tray, Icon, %trayIconPath%
@@ -144,6 +148,14 @@ RunBuildZip:
         ShowToast("CGCSP Build Zip", output)
     }
     Gosub, UpdateState
+return
+
+RunShortcutFastCheck:
+    if !FileExist(fastShortcutCheckPs) {
+        ShowError("Could not find RunShortcutFastCheck.ps1 in " . A_ScriptDir . ".")
+        return
+    }
+    RunVisiblePowerShellHelper(fastShortcutCheckPs, "-PauseOnComplete", 0)
 return
 
 PushLocalToGit:
@@ -318,9 +330,10 @@ RunPowerShellHelper(scriptPath, ByRef output) {
     return exitCode
 }
 
-RunVisiblePowerShellHelper(scriptPath) {
+RunVisiblePowerShellHelper(scriptPath, scriptArguments := "", keepPowerShellOpen := 1) {
     global psExe, projectRoot
-    Run, "%psExe%" -NoProfile -ExecutionPolicy Bypass -NoExit -File "%scriptPath%", %projectRoot%, UseErrorLevel
+    noExitArgument := keepPowerShellOpen ? "-NoExit" : ""
+    Run, "%psExe%" -NoProfile -ExecutionPolicy Bypass %noExitArgument% -File "%scriptPath%" %scriptArguments%, %projectRoot%, UseErrorLevel
     if (ErrorLevel) {
         ToastMessage("Could not start the requested PowerShell helper.", 8000)
     }

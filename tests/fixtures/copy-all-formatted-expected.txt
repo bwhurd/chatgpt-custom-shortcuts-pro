@@ -1,0 +1,40 @@
+You said:
+Explain the release checklist.
+
+ChatGPT said:
+Release checklist
+Prepare these items:
+
+- Review changes
+    - Check behavior
+        - Confirm keyboard targets
+    - Check formatting
+- Save evidence
+
+Execution order
+1. Build the fixture
+    1. Prepare messages
+    2. Record the expected output
+2. Trigger Copy all
+
+You said:
+Add a code example and a final numbered checklist.
+
+ChatGPT said:
+Code example
+Preserve indentation and punctuation:
+
+```javascript
+const ready = true;
+if (ready) {
+  console.log("Copy all");
+}
+```
+
+Final verification
+3. Compare the full payload
+    - Keep nested indentation
+    - Keep code unchanged
+4. Restore the original scroll position
+
+Done.

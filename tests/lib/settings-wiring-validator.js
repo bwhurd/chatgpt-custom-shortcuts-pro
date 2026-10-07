@@ -74,56 +74,6 @@ const SUPPLEMENTAL_SETTINGS = [
       optionsDefault: true,
     },
   },
-  {
-    key: 'shortcutKeyRegenerateMoreConcise',
-    reason:
-      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
-    checks: {
-      optionsDefault: true,
-      exportedFixture: true,
-      schemaDeprecatedShortcut: true,
-    },
-  },
-  {
-    key: 'shortcutKeyRegenerateAddDetails',
-    reason:
-      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
-    checks: {
-      optionsDefault: true,
-      exportedFixture: true,
-      schemaDeprecatedShortcut: true,
-    },
-  },
-  {
-    key: 'shortcutKeyStudy',
-    reason:
-      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
-    checks: {
-      optionsDefault: true,
-      exportedFixture: true,
-      schemaDeprecatedShortcut: true,
-    },
-  },
-  {
-    key: 'shortcutKeyToggleCanvas',
-    reason:
-      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
-    checks: {
-      optionsDefault: true,
-      exportedFixture: true,
-      schemaDeprecatedShortcut: true,
-    },
-  },
-  {
-    key: 'shortcutKeyThinkLonger',
-    reason:
-      'Deprecated legacy shortcut key remains in export/default data and should stay marked deprecated in schema.',
-    checks: {
-      optionsDefault: true,
-      exportedFixture: true,
-      schemaDeprecatedShortcut: true,
-    },
-  },
 ];
 
 const SPECIAL_RULES = {

@@ -1,6 +1,10 @@
 # Developer tray Git push
 
-The `DevScrapeValidatorTray.ahk` tray menu adds **Git push settings...**, **Push local to git**, and **Push with change note...**. Settings and push actions are disabled while a push worker is active. Reload Tray is also disabled during that worker.
+The `DevScrapeValidatorTray.ahk` tray menu adds **Fast Shortcut Check**, **Git push settings...**, **Push local to git**, and **Push with change note...**. Settings and push actions are disabled while a push worker is active. Reload Tray is also disabled during that worker.
+
+The **Fast Shortcut Check** menu item opens a visible PowerShell window and runs the repository's `npm run test:shortcuts:fast` command from the repository root through `RunShortcutFastCheck.ps1`. The command's standard output, standard error, and exit code are preserved; the final exit-code summary remains visible until Enter is pressed. A mutex prevents duplicate shortcut-check launches. Contributors can run the same npm command directly.
+
+The tray also requires the local `StartDevScrapeValidator.ps1` and `StopDevScrapeValidator.ps1` controller files beside it, plus Windows PowerShell at its standard system path. These are existing tray startup prerequisites; the shortcut check can be run directly through npm without the tray.
 
 ## Settings and API key
 

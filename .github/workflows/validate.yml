@@ -1,0 +1,57 @@
+name: Fast validation
+
+on:
+  pull_request:
+    paths:
+      - 'extension/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'biome.json'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'biome.json'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Code and settings checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Code and text checks
+        run: npm run check
+      - name: Validator regression tests
+        run: npm run test:validators
+      - name: Settings wiring
+        run: npm run validate:keys

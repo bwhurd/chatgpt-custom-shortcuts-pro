@@ -605,8 +605,9 @@
     byIconToken('composer-web-search-action', 'M12 2c5.522', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
-    byIconToken('composer-study-action', '#1fa93b', {
-      uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
+    byIconToken('composer-study-action', '#book-open-light-16', {
+      uiStateRefs: ['composer-add-files-and-more-menu'],
+      notes: 'Study appears in the plus menu after typing "study" in the composer search.',
     }),
     byIconToken('composer-create-image-action', 'M7 21.005', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
@@ -1149,18 +1150,6 @@
         notes: 'Capture-phase observer prevents the native regenerate action after target click.',
       }),
     }),
-    notApplicable('shortcutKeyRegenerateMoreConcise', {
-      requiresHandler: false,
-      notes: 'Deprecated/inert legacy default with no active handler.',
-    }),
-    notApplicable('shortcutKeyRegenerateAddDetails', {
-      requiresHandler: false,
-      notes: 'Deprecated/inert legacy default with no active handler.',
-    }),
-    notApplicable('shortcutKeyRegenerateWithDifferentModel', {
-      notes:
-        'The current regenerate menu has no different-model action; the runtime handler intentionally no-ops until a live target exists.',
-    }),
     defineShortcutAction({
       actionId: 'shortcutKeyRegenerateAskToChangeResponse',
       targetRefs: ['assistant-web-regenerate-trigger', 'assistant-web-regenerate-input'],
@@ -1196,14 +1185,6 @@
         notes: 'Capture-phase observer prevents branch navigation after target click.',
       }),
     }),
-    notApplicable('altPageUp', {
-      requiresHandler: false,
-      notes: 'Legacy default with no active handler mapping in the current runtime.',
-    }),
-    notApplicable('altPageDown', {
-      requiresHandler: false,
-      notes: 'Legacy default with no active handler mapping in the current runtime.',
-    }),
     defineShortcutAction({
       actionId: 'shortcutKeyTemporaryChat',
       targetRefs: ['temporary-chat-button'],
@@ -1214,8 +1195,15 @@
         notes: 'Temporary Chat is only exposed on a blank new conversation.',
       }),
     }),
-    notApplicable('shortcutKeyStudy', {
-      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
+    defineShortcutAction({
+      actionId: 'shortcutKeyStudy',
+      targetRefs: ['composer-plus-button', 'composer-study-action'],
+      uiStateRefs: targetStateRefs('composer-plus-button', 'composer-study-action'),
+      activationProbe: directMenuTargetProbe('composer-study-action', {
+        setup: 'composer-plus-menu-search-study',
+        uiStateRefs: ['composer-add-files-and-more-menu'],
+        notes: 'Type "study" in the open plus menu, then click the visible Study icon target.',
+      }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyCreateImage',
@@ -1226,9 +1214,6 @@
         uiStateRefs: ['composer-add-files-and-more-menu'],
         notes: 'No-token direct menu target click used when no shortcut key is assigned.',
       }),
-    }),
-    notApplicable('shortcutKeyToggleCanvas', {
-      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyDeepResearch',
@@ -1282,9 +1267,6 @@
         notes: 'Uses a temporary validation-only key when no user/default key is assigned.',
       }),
     }),
-    notApplicable('shortcutKeyThinkLonger', {
-      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
-    }),
     defineShortcutAction({
       actionId: 'shortcutKeyAddPhotosFiles',
       targetRefs: ['composer-plus-button', 'composer-add-photos-files-action'],
@@ -1307,12 +1289,6 @@
         notes: 'Validates that the shortcut writes conversation text to the clipboard.',
       }),
       notes: 'Clipboard selection helper verified by clipboard contents.',
-    }),
-    notApplicable('shortcutKeyThinkingExtended', {
-      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
-    }),
-    notApplicable('shortcutKeyThinkingStandard', {
-      notes: 'Removed from ChatGPT; runtime handler is intentionally inert.',
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProStandard',

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Copy-all formatted reference conversation</title>
+<body><input id="search" aria-label="Unrelated search">
+<section data-testid="conversation-turn-0" data-turn="user"><div data-message-author-role="user"><div class="whitespace-pre-wrap">Explain the release checklist.</div></div></section>
+<section data-testid="conversation-turn-1" data-turn="assistant"><div data-message-author-role="assistant"><div class="markdown">
+<h2>Release checklist</h2><p>Prepare these items:</p>
+<ul><li>Review changes<ul><li>Check behavior<ul><li>Confirm keyboard targets</li></ul></li><li>Check formatting</li></ul></li><li>Save evidence</li></ul>
+<h3>Execution order</h3><ol><li>Build the fixture<ol><li>Prepare messages</li><li>Record the expected output</li></ol></li><li>Trigger Copy all</li></ol>
+</div></div></section>
+<section data-testid="conversation-turn-2" data-turn="user"><div data-message-author-role="user"><div class="whitespace-pre-wrap">Add a code example and a final numbered checklist.</div></div></section>
+<section data-testid="conversation-turn-3" data-turn="assistant"><div data-message-author-role="assistant"><div class="markdown">
+<h2>Code example</h2><p>Preserve indentation and punctuation:</p>
+<pre><code class="language-javascript">const ready = true;
+if (ready) {
+  console.log("Copy all");
+}</code></pre>
+<h3>Final verification</h3><ol start="3"><li>Compare the full payload<ul><li>Keep nested indentation</li><li>Keep code unchanged</li></ul></li><li>Restore the original scroll position</li></ol><p>Done.</p>
+</div></div></section>
+<div id="thread-bottom" style="position:fixed;top:650px"></div></body></html>

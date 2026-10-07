@@ -4,6 +4,8 @@
 
 (() => {
   const STYLE_ID = 'csp-inline-code-copy-style';
+  const INLINE_CODE_SELECTOR = 'code, [data-markdown-copy="inline-code"]';
+  const CODE_BLOCK_CONTENT_SELECTOR = 'pre code, pre [data-markdown-copy="inline-code"]';
   let styleEl = null;
   let listening = false;
 
@@ -11,7 +13,10 @@
     if (styleEl) return;
     styleEl = document.createElement('style');
     styleEl.id = STYLE_ID;
-    styleEl.textContent = 'pre code{cursor:auto} code{cursor:pointer}';
+    styleEl.textContent = `
+      ${INLINE_CODE_SELECTOR} { cursor: pointer; }
+      ${CODE_BLOCK_CONTENT_SELECTOR} { cursor: auto; }
+    `;
     document.head.appendChild(styleEl);
   };
 
@@ -21,7 +26,7 @@
   };
 
   const onClick = (e) => {
-    const el = e.target.closest('code');
+    const el = e.target.closest(INLINE_CODE_SELECTOR);
     if (!el || el.closest('pre')) return;
 
     const txt = el.textContent.trim();

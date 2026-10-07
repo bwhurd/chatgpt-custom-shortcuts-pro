@@ -5,7 +5,18 @@ import vm from 'node:vm';
 const readExtensionFile = (path) =>
   readFile(new URL(`../extension/${path}`, import.meta.url), 'utf8');
 
-const [contentSource, metadataSource, optionsSource, popupHtmlSource, popupJsSource, schemaSource] =
+const retiredKeys = [
+  'shortcutKeyRegenerateWithDifferentModel',
+  'altPageDown',
+  'altPageUp',
+  'shortcutKeyRegenerateAddDetails',
+  'shortcutKeyRegenerateMoreConcise',
+  'shortcutKeyThinkingExtended',
+  'shortcutKeyThinkingStandard',
+  'shortcutKeyThinkLonger',
+  'shortcutKeyToggleCanvas',
+];
+const [content, metadata, options, popupHtml, popupJs, schema, modelLabels, analytics] =
   await Promise.all([
     readExtensionFile('content.js'),
     readExtensionFile('shared/shortcut-action-metadata.js'),
@@ -13,57 +24,122 @@ const [contentSource, metadataSource, optionsSource, popupHtmlSource, popupJsSou
     readExtensionFile('popup.html'),
     readExtensionFile('popup.js'),
     readExtensionFile('settings-schema.js'),
+    readExtensionFile('shared/model-picker-labels.js'),
+    readExtensionFile('analytics.js'),
   ]);
 
-const retiredKeys = ['shortcutKeyThinkingStandard', 'shortcutKeyThinkingExtended'];
+for (const key of retiredKeys) {
+  const keyPattern = new RegExp(key);
+  for (const [name, source] of Object.entries({
+    content,
+    metadata,
+    options,
+    popupHtml,
+    popupJs,
+    schema,
+    modelLabels,
+    analytics,
+  })) {
+    assert.doesNotMatch(source, keyPattern, `${key} remains in ${name}`);
+  }
+}
 
-retiredKeys.forEach((key) => {
-  assert.doesNotMatch(popupHtmlSource, new RegExp(`id=["']${key}["']`));
+const modelLabelsContext = vm.createContext({ window: {} });
+vm.runInContext(modelLabels, modelLabelsContext, {
+  filename: 'extension/shared/model-picker-labels.js',
 });
-assert.doesNotMatch(popupJsSource, /MANUAL_REFRESH_THINKING_SHORTCUT_DEFAULTS/);
-assert.doesNotMatch(popupJsSource, /cspThinkingShortcutsManualSeededV1/);
+const modelLabelsApi = modelLabelsContext.window.ModelLabels;
+for (const [effortId, label, proShortcutKey] of [
+  ['thinking-standard', 'Standard', 'shortcutKeyProStandard'],
+  ['thinking-extended', 'Extended', 'shortcutKeyProExtended'],
+]) {
+  const option = modelLabelsApi.getThinkingEffortOptionById(effortId);
+  assert.equal(option?.id, effortId, `${label} remains a model effort option`);
+  assert.equal(
+    Object.hasOwn(option, 'storageKey'),
+    false,
+    `${label} has no retired global shortcut key`,
+  );
+  assert.equal(modelLabelsApi.normalizeThinkingEffortId(label), effortId);
 
-const overlaySource = contentSource.slice(
-  contentSource.indexOf('const EFFORT_SHORTCUT_LAYOUT'),
-  contentSource.indexOf('// ---- 5) Read settings and open overlay'),
+  const proShortcut = modelLabelsApi.getProThinkingShortcutByStorageKey(proShortcutKey);
+  assert.equal(proShortcut?.optionId, effortId, `${label} remains linked to its Pro shortcut`);
+}
+for (const retiredKey of ['shortcutKeyThinkingStandard', 'shortcutKeyThinkingExtended']) {
+  assert.equal(
+    modelLabelsApi.getThinkingShortcutByStorageKey(retiredKey),
+    null,
+    `${retiredKey} is not a live global shortcut setting`,
+  );
+}
+
+const metadataContext = vm.createContext({});
+vm.runInContext(metadata, metadataContext, {
+  filename: 'extension/shared/shortcut-action-metadata.js',
+});
+const shortcutActionIds = new Set(
+  metadataContext.CSPShortcutActionMetadata.SHORTCUT_ACTIONS.map((action) => action.actionId),
 );
-retiredKeys.forEach((key) => {
-  assert.doesNotMatch(overlaySource, new RegExp(key));
-  assert.match(metadataSource, new RegExp(`notApplicable\\(['"]${key}['"]`));
-});
+for (const proShortcutKey of ['shortcutKeyProStandard', 'shortcutKeyProExtended']) {
+  assert.ok(shortcutActionIds.has(proShortcutKey), `${proShortcutKey} remains in active metadata`);
+}
+for (const retiredKey of ['shortcutKeyThinkingStandard', 'shortcutKeyThinkingExtended']) {
+  assert.ok(!shortcutActionIds.has(retiredKey), `${retiredKey} has no active shortcut metadata`);
+}
 
 const schemaContext = { window: {} };
 schemaContext.globalThis = schemaContext.window;
 vm.createContext(schemaContext);
-vm.runInContext(schemaSource, schemaContext, { filename: 'extension/settings-schema.js' });
+vm.runInContext(schema, schemaContext, { filename: 'extension/settings-schema.js' });
 const shortcutSchema = schemaContext.window.CSP_SETTINGS_SCHEMA.shortcuts;
-const overlayKeys = shortcutSchema.overlaySections.flatMap((section) => section.keys || []);
-retiredKeys.forEach((key) => {
-  assert.ok(shortcutSchema.deprecatedShortcutKeys.includes(key));
-  assert.ok(!Object.hasOwn(shortcutSchema.labelI18nByKey, key));
-  assert.ok(!overlayKeys.includes(key));
-});
+assert.ok(!shortcutSchema.deprecatedShortcutKeys.includes('shortcutKeyStudy'));
+assert.equal(shortcutSchema.labelI18nByKey.shortcutKeyStudy, 'label_study');
+assert.ok(
+  shortcutSchema.overlaySections.some((section) => section.keys.includes('shortcutKeyStudy')),
+);
+assert.match(popupHtml, /id="shortcutKeyStudy" data-sync="shortcutKeyStudy"/);
+assert.doesNotMatch(metadata, /notApplicable\(['"]shortcutKeyStudy['"]/);
+assert.match(content, /shortcutKeyStudy:\s*runStudyShortcut/);
 
 let optionsConfig;
+const removeUnused = (stored, defaults) => {
+  for (const key of Object.keys(stored)) {
+    if (!Object.hasOwn(defaults, key)) delete stored[key];
+  }
+};
 function OptionsSync(config) {
   optionsConfig = config;
 }
-OptionsSync.migrations = { removeUnused() {} };
+OptionsSync.migrations = { removeUnused };
 const optionsContext = { console, OptionsSync };
 optionsContext.globalThis = optionsContext;
 vm.createContext(optionsContext);
-vm.runInContext(optionsSource, optionsContext, { filename: 'extension/options-storage.js' });
+vm.runInContext(options, optionsContext, { filename: 'extension/options-storage.js' });
+
+for (const key of retiredKeys) {
+  assert.ok(!Object.hasOwn(optionsConfig.defaults, key), `${key} remains in stored defaults`);
+}
+assert.equal(optionsConfig.migrations.at(-1), removeUnused);
+assert.equal(optionsConfig.defaults.shortcutKeyStudy, '');
 
 const stored = {
   ...optionsConfig.defaults,
-  shortcutKeyThinkingStandard: 'Digit8',
-  shortcutKeyThinkingExtended: 'Digit9',
+  ...Object.fromEntries(retiredKeys.map((key) => [key, 'KeyA'])),
+  shortcutKeyStudy: 'KeyU',
+  shortcutKeySearchWeb: 'KeyQ',
+  shortcutKeyProStandard: 'KeyP',
+  modelPickerKeyCodesLegacy: ['F1', 'Digit2'],
+  removeMarkdownOnCopyCheckbox: true,
 };
-optionsConfig.migrations.forEach((migration) => {
-  migration(stored, optionsConfig.defaults);
-});
-retiredKeys.forEach((key) => {
-  assert.equal(stored[key], '\u00A0', `${key} should migrate to the cleared NBSP value`);
-});
+for (const migration of optionsConfig.migrations) migration(stored, optionsConfig.defaults);
 
-console.log('retired standalone Thinking shortcuts stay hidden, inert, and cleared');
+for (const key of retiredKeys) {
+  assert.ok(!Object.hasOwn(stored, key), `${key} survived the remove-unused migration`);
+}
+assert.equal(stored.shortcutKeyStudy, 'KeyU');
+assert.equal(stored.shortcutKeySearchWeb, 'KeyQ');
+assert.equal(stored.shortcutKeyProStandard, 'KeyP');
+assert.deepEqual(Array.from(stored.modelPickerKeyCodesLegacy), ['F1', 'Digit2']);
+assert.equal(stored.removeMarkdownOnCopyCheckbox, true);
+
+console.log('nine obsolete shortcut settings are removed safely and Study remains active');

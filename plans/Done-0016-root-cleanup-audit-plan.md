@@ -34,10 +34,7 @@
 - `icon16.png`
 - `icon32.png`
 - `icon48.png`
-- `lazy-fast-bootstrap.js`
-- `lazy-fast-bridge.js`
 - `lib/`
-- `manifest-with-lazy-fast-loaded.json`
 - `manifest.json`
 - `netlify/`
 - `netlify.toml`
@@ -77,8 +74,6 @@
 - `shared/`
 - `background.js`
 - `content.js`
-- `lazy-fast-bootstrap.js`
-- `lazy-fast-bridge.js`
 - `popup.js`
 - `popup.html`
 - `popup.css`
@@ -114,8 +109,6 @@
 - `icon16.png` - ships in the release zip.
 - `icon32.png` - ships in the release zip.
 - `icon48.png` - ships in the release zip.
-- `lazy-fast-bootstrap.js` - ships in the release zip.
-- `lazy-fast-bridge.js` - ships in the release zip.
 - `lib/` - ships in the release zip.
 - `manifest.json` - ships in the release zip.
 - `netlify/` - referenced by `netlify.toml`; do not inspect or move without a Netlify-specific pass.
@@ -150,7 +143,6 @@
 - [x] `based-on-this.html` -> `_temp-files/cleanup-root-of-project/based-on-this.html`
 - [x] `Clean-CSS-Interactive.ps1` -> `_temp-files/cleanup-root-of-project/Clean-CSS-Interactive.ps1`
 - [x] `css-cleanup/` -> `_temp-files/cleanup-root-of-project/css-cleanup/`
-- [x] `manifest-with-lazy-fast-loaded.json` -> `_temp-files/cleanup-root-of-project/manifest-with-lazy-fast-loaded.json`
 - [x] `scrub-this-css.css` -> `_temp-files/cleanup-root-of-project/scrub-this-css.css`
 - [x] `Setup-And-Clean-CSSv2.ps1` -> `_temp-files/cleanup-root-of-project/Setup-And-Clean-CSSv2.ps1`
 - [x] `test-results/` -> `_temp-files/cleanup-root-of-project/test-results/`

@@ -22,6 +22,16 @@ This is the durable architecture reference for the shared shortcut and model-pic
 - `settings-schema.js`
   - overlay labels/sections and popup radio-group metadata
 
+## Fast keyboard audit
+
+The canonical command is `npm run test:shortcuts:fast`; setup, filters, coverage warnings, reporting and optional live diagnostics are owned by [spec 0006](0006-runtime-scrape-selector-validator-spec.md#canonical-fast-shortcut-check). `npm run shortcuts:catalog` is the optional browser-free listing. Unknown filters and missing coverage warn at the end while available cases continue; observed behavioral or environment failures remain failures.
+
+Controlled fixtures use the real extracted listeners/actions and recorded structural DOM states. They cover overlay hydration/dismissal, response/GPT menus, clipboard payloads (including a deterministic 24-message lazy-loading reference), media-control routing, upload-menu activation, composer focus/tools, Send/Stop gates, edit/response navigation, sidebar/mode state, wrap and scrolling. Shipped GSAP/ScrollTo and shared mode selectors are loaded where relevant. IME/AltGraph probes are explicitly synthetic; Mac modifier permutations and current live site compatibility are not implied.
+
+Composer `+` shortcuts share the runtime helper that opens the matching tool menu or removes only that tool pill while preserving draft text. Add Photos invokes file selection without a persistent pill. Native clipboard, audio, upload completion and account generation remain external. Model fixtures preserve profile-specific positional slots, supply blank bindings only in isolated storage, and record unavailable actions as negative/inert proof. The truly empty legacy slot is a positional diagnostic; the slim-sidebar keydown refresh observer is presentation lifecycle rather than a keyboard action.
+
+Historical measurements and accumulated targeted proof are retained in [Done-0090](../plans/Done-0090-shortcut-deferred-coverage-plan.md) and [Done-0098](../plans/Done-0098-retired-shortcut-cleanup-and-study-restore-plan.md). Historical report assembly does not imply a new combined execution.
+
 ## Shortcut normalization invariants
 
 `ShortcutUtils` is the shared normalization layer.
@@ -58,6 +68,8 @@ The model picker has two separate but related state shapes:
 - `modelCatalogSelectedProfile`
   - sync-backed popup view preference storing internal `legacy` (Chat) or `latest` (Work)
   - defaults to Chat when absent; changing it never mutates either catalog or launches a scrape
+
+When building shortcut groups for an explicit profile catalog, that catalog is authoritative: omit slots it does not present and never recover a missing slot from the global compatibility action table. On popup hydration, clear saved bindings for slots absent from every model/configuration in that profile's catalog, keeping array positions and bindings for actions present in another profile or dynamic model rows. The current defaults leave legacy slot 10 and latest reset slot 14 blank; legacy `o3` and latest effort/speed entries remain when their own profile catalogs expose them.
 - `modelCatalog.configureOptions`
   - refreshed Configure Models entries must persist their canonical `slot`
   - dynamic configure entries must never reuse a slot, even when ChatGPT inserts a new model between existing rows
@@ -163,7 +175,7 @@ The current app shell's sidebar toggle exposes `data-app-shell-sidebar-trigger="
 
 Search Chats now prioritizes the current titlebar button's language-independent SVG path prefix `M7.32849 1.91016`, followed by the older `data-testid="search-conversation-button"` locator. Structural routes (the button before `close-sidebar-button` in `#sidebar-header`, or the `data-sidebar-item` after `create-new-chat-button` in the collapsed or narrow sidebar), legacy sprite fragments, and narrow-popover opening remain fallbacks where present. Keep selectors language-agnostic and ground fallback changes in a current DOM capture.
 
-The ChatGPT app-shell changed several message-action labels, test IDs, and SVG targets after the earlier observations. Use the [live shortcut-target catalog](chatgpt-shortcut-target-catalog-2026-09-27.md) as the current comparison snapshot; it distinguishes confirmed mismatches from targets that require a different UI state. Do not copy a prior localized label or icon fragment into a new handler without current DOM evidence. Keep runtime selectors language-agnostic.
+The ChatGPT app-shell changed several message-action labels, test IDs, and SVG targets after the earlier observations. Use the [live shortcut-target catalog](chatgpt-shortcut-target-catalog-2026-09-27.md) as a dated September 2026 comparison snapshot, not current runtime authority; it distinguishes confirmed mismatches from targets that require a different UI state. Do not copy a prior localized label or icon fragment into a new handler without current DOM evidence. Keep runtime selectors language-agnostic.
 
 For dev-only runtime selector validation, the deterministic shortcut inventory should derive from:
 - `extension/shared/shortcut-action-metadata.js` for explicit shortcut validation metadata
@@ -204,7 +216,7 @@ For a reload-works/navigation-fails report, compare the visible and hidden conve
 
 If a report shows a shortcut as static `PARTIAL` but the same action has a passing live probe, treat that as a resolved state-specific target rather than a broken shortcut. The Dashboard and Top Follow-Up sections should be used for routine repair priority; the Details tab preserves static scrape diagnostics for deeper investigation.
 
-Removed ChatGPT features should stay inert for existing installs while disappearing from user-facing shortcut grids. `shortcutKeyStudy`, `shortcutKeyToggleCanvas`, `shortcutKeyThinkLonger`, `shortcutKeyThinkingStandard`, and `shortcutKeyThinkingExtended` are legacy storage/default keys only; keep them explicit as `not-applicable` metadata and do not show them in `popup.html` or overlay schema unless ChatGPT restores those features. The retired standalone Thinking Standard/Extended keys are cleared to NBSP by the options migration so updates cannot retain an active assignment.
+The nine retired shortcut actions are removed from shipped settings and shortcut surfaces; the existing remove-unused migration clears their stale stored assignments. `shortcutKeyStudy` is active and configurable with a blank default. It opens the composer `+` menu, appends the `study` query without replacing the draft, and selects the live Study target by its verified icon. The retired standalone Thinking Standard/Extended shortcut keys are removed while the separate model-effort and Pro actions remain.
 
 ## Runtime model switching
 
@@ -273,8 +285,9 @@ If duplicate prompts feel inconsistent, inspect the active modifier mode first.
 - A model edit checks only the selected profile plus same-modifier global shortcuts. A global shortcut edit checks both profiles because that command is available in either mode.
 - The same canonical code may appear once in Chat and once in Work. Matching defaults are allowed; cross-profile reuse must not trigger a duplicate prompt or clear either assignment.
 - Within one profile, assigning an already-used canonical code transfers ownership deterministically as one user edit: clear the old owner, then write the exact requested slot. Never renumber, autofill, mirror, or reorder other assignments.
-- Explicit import/restore and the one-time v0-to-v1 migration may clear a later canonical duplicate within a profile. They must preserve all nonduplicate customizations, including values in slots not present in the current catalog.
-- Catalog scrape, catalog hydration, popup open, and profile switching never repair or reseed shortcut assignments.
+- Popup startup waits for default seeding and one-time profile migration/filtering, then repairs duplicates in a full sync snapshot using the effective model modifier and both profile registries. Scalar losers are cleared to NBSP and model losers to an empty string; supported profile positions and cross-profile reuse remain intact. It verifies the persisted patch before hydrating controls. Pending or failed repair keeps shortcut controls hidden, with existing error feedback on failure.
+- Startup filtering prunes model codes only from slots absent from every configuration in their profile. Catalog refresh and profile switching do not otherwise reseed supported assignments.
+- Import, local persistence after Drive restore, export and clear/reset boundaries use the same deterministic full-snapshot normalizer as startup, preserving nonduplicate supported customizations and existing confirmations. Focused popup fixtures prove these boundaries. Runtime propagation and live acceptance retain separate unfinished gates in [active 0099](../plans/0099-popup-shortcut-duplicate-scrub-plan.md).
 
 ## Tab-targeting invariant
 

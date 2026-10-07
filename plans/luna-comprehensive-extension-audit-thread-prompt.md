@@ -36,7 +36,7 @@ Ordered batches:
 5. Popup and other user interfaces.
 6. Cross-component verification and final report.
 
-The plan is authoritative for exact scope, prerequisites, commands, proof, and acceptance for each batch. Existing plan 0076 and other active plans are evidence pointers only; their code-edit, agent, live-action, or repair permissions do not transfer to this task.
+The plan is authoritative for exact scope, prerequisites, commands, proof, and acceptance for each batch. Completed plans Done-0076 and Done-0090 are controlled-fixture evidence; Done-0098 records one separate current-source live Study check. For a current controlled shortcut regression, use `npm run test:shortcuts:fast` as documented in [spec 0006](../specs/0006-runtime-scrape-selector-validator-spec.md#canonical-fast-shortcut-check). These records do not replace the audit's current live selector, lifecycle, or external-integration gates. No old plan's code-edit, delegation, live-action, or repair permissions transfer to this task.
 
 ## Artifact and evidence contract
 
@@ -49,7 +49,9 @@ Durable writes are limited to the plan (including its final `Done-0087-comprehen
 
 Use stable `CSP-AUD-001` onward finding IDs. Each finding includes classification, severity, confidence, owning batch, file/line/symbol, evidence, trigger/reproduction, expected and observed behavior, user impact, smallest reasonable fix, verification status/method, fingerprints, relevant citations, and uncertainty. Keep confirmed defects, potential risks, and optional improvements distinguishable. Do not pad the report with style preferences.
 
-Coverage must distinguish static source proof, isolated test proof, and actual browser behavior. `npm run validate:keys` proves static wiring, not live behavior. The popup screenshot harness adjusts layout and cannot alone prove the native popup's dimensions, close/reopen lifecycle, focus, or persistence. Existing command definitions and executable wrappers were found during planning; no command pass or usable browser/account has been established.
+Coverage must distinguish static source proof, isolated test proof, and actual browser behavior. `npm run validate:keys` proves static wiring, not live behavior. The popup screenshot harness adjusts layout and cannot alone prove the native popup's dimensions, close/reopen lifecycle, focus, or persistence. Passing focused checks for Batches 01–03 and the disposable-profile popup close/reopen result are recorded in the plan. Done-0098 also records action-specific live Study activation/toggle proof. None establishes live Drive/auth or broad live shortcut behavior, or guarantees a usable ChatGPT browser/account for the remaining gates.
+
+For a current controlled shortcut regression, use `npm run test:shortcuts:fast` and follow [spec 0006](../specs/0006-runtime-scrape-selector-validator-spec.md#canonical-fast-shortcut-check) for setup, filtering and report interpretation. Its fixture proves controlled dispatch/target/effect only; it does not establish current live ChatGPT selectors, browser-native activation, OS integrations, or account outcomes.
 
 Run the plan's focused checks only when they add necessary proof. Read existing harness setup/output effects first; use the specified output redirection for popup visual checks, never baseline updates. No dependency/browser installation. No ignored captures, vendor/minified bodies, or release archive inspection outside AGENTS.md's scope rules. `npm run zip` is outside this audit's write scope. Do not invent CLI flags or use an automatic repair mode.
 

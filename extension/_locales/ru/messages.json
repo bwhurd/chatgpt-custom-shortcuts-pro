@@ -362,9 +362,6 @@
   "label_search_web": {
     "message": "Веб-поиск"
   },
-  "label_think_longer": {
-    "message": "Подумать подольше"
-  },
   "label_study": {
     "message": "Учиться"
   },
@@ -386,23 +383,11 @@
   "tt_use_Alt_for_picker": {
     "message": "Используйте Alt+{{shortcut}}, чтобы переключать модели. ——————————————————— Кликните по первому полю, затем нажмите Tab, чтобы пролистать и увидеть названия моделей. ——————————————————— Нажмите любую клавишу, чтобы задать сочетание; Backspace — очистить, Tab — пропустить."
   },
-  "label_MoreConcise": {
-    "message": "Короче"
-  },
-  "tt_MoreConcise": {
-    "message": "Делает предыдущий ответ короче."
-  },
   "label_RegenerateAskToChangeResponse": {
     "message": "Запросить правки"
   },
   "tt_RegenerateAskToChangeResponse": {
     "message": "Напишите, что вы хотите изменить или улучшить в предыдущем ответе."
-  },
-  "label_RegenerateWithDifferentModel": {
-    "message": "Не искать в интернете"
-  },
-  "tt_RegenerateWithDifferentModel": {
-    "message": "Повторно создаёт ответ без веб-поиска."
   },
   "label_ReadAloud": {
     "message": "Озвучить"
@@ -415,24 +400,6 @@
   },
   "tt_BranchInNewChat": {
     "message": "Копирует чат до текущего места и начинает новую беседу с этой точки — можно попробовать другой путь, не теряя ни одну из веток."
-  },
-  "label_AddDetails": {
-    "message": "Подробнее"
-  },
-  "tt_AddDetails": {
-    "message": "Делает предыдущий ответ длиннее и подробнее."
-  },
-  "label_switchToThinkingExtended": {
-    "message": "Переключить на Расширенное мышление"
-  },
-  "tt_switchToThinkingExtended": {
-    "message": "Сразу перейти на GPT-5 Расширенное мышление — работает дольше, но подходит для сложных задач."
-  },
-  "label_switchToThinkingStandard": {
-    "message": "Переключить на Стандартное мышление"
-  },
-  "tt_switchToThinkingStandard": {
-    "message": "Сразу перейти на GPT-5 Стандартное мышление — быстрее для большинства задач."
   },
   "label_switchToThinkingLight": {
     "message": "Переключить на Лёгкое мышление"

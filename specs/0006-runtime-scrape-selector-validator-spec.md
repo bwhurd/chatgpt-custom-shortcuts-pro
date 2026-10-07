@@ -298,6 +298,28 @@ The report should pin likely broken shortcuts near the top by deriving them from
 
 ## Validation Posture
 
+### Canonical fast shortcut check
+
+`npm run test:shortcuts:fast` owns fresh source-based catalogue discovery, automatic isolated bindings, trusted keyboard dispatch, target/effect assertions and final reporting. From a fresh clone run `npm ci`, then `npm run playwright:install` once; Linux hosts needing system dependencies can use `npm run playwright:install -- --with-deps`. No login, extension reload, CDP, manual F-keys, saved conversations, private reports or live settings are prerequisites.
+
+- Develop with `npm run test:shortcuts:fast -- --shortcut-action-id shortcutKeyEdit` or `-- --type scroll-message`; repeated filters are supported. Intentionally unselected implemented cases remain not-run and are not missing coverage. Unknown requested IDs/types warn while available selected cases continue. A zero-case selection explicitly reports that no checks ran.
+- `npm run shortcuts:catalog` optionally lists global actions, fixed contracts, sparse model profiles, declared browser commands and first-party listener boundaries without opening a browser. Counts follow current inputs and are not acceptance constants. Chrome Alt+U/`_execute_action` has static popup-target wiring proof; browser-native activation remains external and unexercised.
+- Missing metadata, adapter or case coverage is collected and printed in a warning section at the end. Warning-only runs exit successfully with warnings and partial coverage; untested rows never claim a pass. Exercised missing targets, wrong effects, runtime errors, attempted environment failures, broken serial barriers or unsafe scheduling fail after final reporting. Unrecoverable startup/source errors identify blocked scope and say no checks ran.
+- One headless Chromium browser uses fresh fixture state and a rolling pool of at most ten independent tabs. Shared-state cases run serially after the pool settles. External network is blocked and owned pages are closed. Blank bindings and sparse profile positions are preserved; fixture-only assignments and actual tested chords are recorded without changing live storage.
+- Proof covers extension dispatch and effects against recorded structural DOM states. Derived contracts require explicit matching keyboard assertions in the same run. Negative unavailable-model proof establishes inert handling, not a working target. Native clipboard permissions, OS behavior, audio/transcription, upload completion, account/network outcomes and current live ChatGPT selector availability remain outside controlled proof.
+- During construction run focused browser-free inventory/report fixtures first, then only affected cases when needed. Reserve one normal fast command for final source acceptance. After failures, rerun only invalidated actions/types and preserve prior evidence scope; do not manufacture a full-current pass from historical hashes. Timings are diagnostic rather than machine-speed acceptance thresholds.
+- `tests/playwright/shortcut-fast-fixture.mjs` and `tests/playwright/lib/shortcut-fast-cases.mjs` own execution/reporting; existing inventory builders own source reconciliation. Ignored `shortcut-fast-*.local.json` outputs are optional evidence, never fresh-clone inputs. `node tests/shortcut-fast-acceptance-fixture.mjs` is an opt-in saved historical proof checker with source/catalogue/case/fixture fingerprints; it is not a required second command.
+- The Windows tray **Fast Shortcut Check** action delegates to the same npm command through `ahk-tray-tools/RunShortcutFastCheck.ps1`. It adds a duplicate-launch guard and displays command output/exit status; npm remains the portable contributor entry point.
+- Static settings wiring stays in spec 0005. Fast validation Actions remains browser-free. Reuse passing static and keyboard proof while its relevant inputs are unchanged. Completed evidence and past measurements belong to [Done-0090](../plans/Done-0090-shortcut-deferred-coverage-plan.md) and [Done-0098](../plans/Done-0098-retired-shortcut-cleanup-and-study-restore-plan.md), not fixed present-day totals.
+
+### Optional live and selector diagnostics
+
+Use targeted selector audits, `probe-shortcuts --shortcut-action-id <actionId>`, or existing narrow live checks only when reported drift needs current DOM evidence. They have separate account/extension/environment prerequisites and do not expand fast fixture proof.
+
+The opt-in `npm run playwright:chatgpt:audit-shortcuts -- --fast` attaches to standard Chrome/CDP and currently admits only focus. Optional `--fixture-id` selections reuse audit-owned direct conversation URLs in ignored `tests/playwright/shortcut-fast-conversations.local.json`; the schema is `{ "schemaVersion": 1, "fixtures": { "id": { "url": "https://chatgpt.com/c/ID", "conversationId": "ID", "auditOwned": true } } }`. Missing state is an environment gap. This diagnostic does not prove response/code semantics. Unsupported fixed/model/action filters reject instead of silently substituting focus.
+
+Default fast validation must not provision conversations, send messages, prompt for login/CDP, restart wide scrapes or recover native audio/upload. Optional diagnostics preserve user tabs/drafts/settings, close only runner-created pages and detach sessions. A refused CDP connection is not live product proof. Existing scrape/check tools below remain available for their distinct capture and selector scope.
+
 Prefer narrow validation:
 - syntax-check the new Playwright runner and helper modules
 - run the real `scrape-wide` command only against the required fixture

@@ -45,6 +45,7 @@ Thumbs.db
 !/ahk-tray-tools/PushLocalToGit.ps1
 !/ahk-tray-tools/GitPushSupport.ps1
 !/ahk-tray-tools/ConfigureGitPush.ps1
+!/ahk-tray-tools/RunShortcutFastCheck.ps1
 !/tests/tray-git-sync.test.ps1
 
 # Tray Git push credentials and local configuration
@@ -75,6 +76,11 @@ dist/*
 /tests/tampermonkey-dev-scrape/
 
 # Playwright
+# Private reusable fixture URLs and bounded fast-run evidence.
+tests/playwright/shortcut-fast-conversations.local.json*
+tests/playwright/shortcut-fast-results.local.json*
+tests/playwright/shortcut-fast-catalogue.local.json*
+tests/playwright/shortcut-fast-live-results.local.json*
 .playwright/
 playwright-report/
 test-results/

@@ -16,6 +16,7 @@ function fixture(t) {
   const defaults = {
     featureEnabled: true,
     shortcutKeyExample: 'KeyA',
+    shortcutKeyStudy: '',
     rememberSidebarScrollPositionCheckbox: false,
     hideArrowButtonsCheckbox: false,
     hideCornerButtonsCheckbox: false,
@@ -24,26 +25,18 @@ function fixture(t) {
     modelPickerKeyCodesLegacy: [],
     modelPickerKeyCodeProfilesVersion: 1,
     modelNames: {},
-    shortcutKeyRegenerateMoreConcise: '',
-    shortcutKeyRegenerateAddDetails: '',
-    shortcutKeyStudy: '',
-    shortcutKeyToggleCanvas: '',
-    shortcutKeyThinkLonger: '',
   };
   const schema = {
     excludeDefaultsKeys: ['hideArrowButtonsCheckbox', 'hideCornerButtonsCheckbox'],
     content: { visibilityDefaults: { featureEnabled: true } },
     shortcuts: {
       defaultCodeByKey: { shortcutKeyExample: 'KeyA' },
-      labelI18nByKey: { shortcutKeyExample: 'shortcutLabel' },
-      overlaySections: [{ keys: ['shortcutKeyExample'] }],
-      deprecatedShortcutKeys: [
-        'shortcutKeyRegenerateMoreConcise',
-        'shortcutKeyRegenerateAddDetails',
-        'shortcutKeyStudy',
-        'shortcutKeyToggleCanvas',
-        'shortcutKeyThinkLonger',
-      ],
+      labelI18nByKey: {
+        shortcutKeyExample: 'shortcutLabel',
+        shortcutKeyStudy: 'shortcutStudy',
+      },
+      overlaySections: [{ keys: ['shortcutKeyExample', 'shortcutKeyStudy'] }],
+      deprecatedShortcutKeys: [],
     },
   };
   const html = `<div class="shortcut-item">
@@ -52,6 +45,9 @@ function fixture(t) {
   </div><div class="shortcut-item">
     <span class="i18n" data-i18n="shortcutLabel"></span>
     <input id="shortcutKeyExample" class="key-input" data-sync="shortcutKeyExample" value="a">
+  </div><div class="shortcut-item">
+    <span class="i18n" data-i18n="shortcutStudy"></span>
+    <input id="shortcutKeyStudy" class="key-input" data-sync="shortcutKeyStudy" value="">
   </div>`;
   const files = {
     'extension/manifest.json': JSON.stringify({ default_locale: 'en' }),
@@ -65,10 +61,12 @@ function fixture(t) {
     'extension/_locales/en/messages.json': JSON.stringify({
       featureLabel: { message: 'Feature' },
       shortcutLabel: { message: 'Shortcut' },
+      shortcutStudy: { message: 'Study' },
     }),
     'extension/_locales/fr/messages.json': JSON.stringify({
       featureLabel: { message: 'Fonction' },
       shortcutLabel: { message: 'Raccourci' },
+      shortcutStudy: { message: 'Étude' },
     }),
   };
   const read = (relative) => fs.readFileSync(path.join(repoRoot, relative), 'utf8');

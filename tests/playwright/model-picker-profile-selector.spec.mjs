@@ -70,9 +70,9 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
       '',
       'Digit1',
       '',
-      'KeyH',
       '',
-      'F3',
+      '',
+      'KeyH',
       'Digit2',
       'Digit3',
       'KeyL',
@@ -343,7 +343,7 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
         serviceWorker.evaluate(async () => {
           const work = (await chrome.storage.sync.get('modelPickerKeyCodesLatest'))
             .modelPickerKeyCodesLatest;
-          return [work[5], work[8]];
+          return [work[7], work[8]];
         }),
       )
       .toEqual(['', 'KeyH']);
@@ -419,14 +419,14 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
       '',
       '',
       '',
-      'F3',
+      '',
       'KeyC',
       '',
       'Digit3',
       'F4',
       'F5',
       'Digit6',
-      'Digit0',
+      '',
     ]);
     expect(finalStoredProfiles.chat).toEqual([
       'F1',

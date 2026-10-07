@@ -3,7 +3,7 @@
 ## Goal and approval gate
 
 - [x] Inspect Chat first, then Work, including every explicit model's available effort range; record structural targets and native order in [the live catalog](../specs/model-picker-live-catalog-2026-09-25.md).
-- [x] Implementation approved. User authorized growing slot arrays and retiring historical refresh formats; keep shortcut dispatch and the separate full audit in `0076-full-keyboard-shortcut-audit-plan.md` out of scope unless a shared target change is required.
+- [x] Implementation approved. User authorized growing slot arrays and retiring historical refresh formats; keep shortcut dispatch and the historical audit in `Done-0076-full-keyboard-shortcut-audit-plan.md` out of scope unless a shared target change is required.
 - [x] Replace popup refresh with one current-picker scan. Live acceptance remains a separate closeout gate.
 
 ## Evidence and owning files

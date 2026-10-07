@@ -362,9 +362,6 @@
   "label_search_web": {
     "message": "Web Search Tool"
   },
-  "label_think_longer": {
-    "message": "Think Longer Tool"
-  },
   "label_study": {
     "message": "Study and Learn Tool"
   },
@@ -386,23 +383,11 @@
   "tt_use_Alt_for_picker": {
     "message": "Use Alt+{{shortcut}} to switch models. ——————————————————— Click the first slot, then press Tab to cycle through and reveal model names. ——————————————————— Press any key to set a shortcut, Backspace to clear, Tab to skip."
   },
-  "label_MoreConcise": {
-    "message": "More Concise"
-  },
-  "tt_MoreConcise": {
-    "message": "Makes the previous response shorter."
-  },
   "label_RegenerateAskToChangeResponse": {
     "message": "Ask to Change Response"
   },
   "tt_RegenerateAskToChangeResponse": {
     "message": "Type how you want the previous response changed or improved."
-  },
-  "label_RegenerateWithDifferentModel": {
-    "message": "Don't Search the Web"
-  },
-  "tt_RegenerateWithDifferentModel": {
-    "message": "Regenerates the response without using web search."
   },
   "label_ReadAloud": {
     "message": "Read Aloud"
@@ -415,24 +400,6 @@
   },
   "tt_BranchInNewChat": {
     "message": "Copies the chat so far and starts a new conversation from this point—so you can explore a new path without losing either thread."
-  },
-  "label_AddDetails": {
-    "message": "Add Details"
-  },
-  "tt_AddDetails": {
-    "message": "Makes the previous response longer with more details."
-  },
-  "label_switchToThinkingExtended": {
-    "message": "Switch model to Thinking Extended"
-  },
-  "tt_switchToThinkingExtended": {
-    "message": "Switch directly to GPT-5 Extended Thinking, which takes more time to handle harder problems."
-  },
-  "label_switchToThinkingStandard": {
-    "message": "Switch model to Thinking Standard"
-  },
-  "tt_switchToThinkingStandard": {
-    "message": "Switch directly to GPT-5 Standard Thinking, which answers faster for most tasks."
   },
   "label_switchToThinkingLight": {
     "message": "Switch model to Thinking Light"

@@ -41,12 +41,6 @@ const EXPECTED_KEYBOARD_LISTENER_CONTRACTS = Object.freeze([
     classification: 'model-picker-slot-dispatch',
   }),
   Object.freeze({
-    contractId: 'model-picker-refresh-support',
-    owner: 'document',
-    handlerRef: 'scheduleInteractionRefresh',
-    classification: 'model-picker-refresh-support',
-  }),
-  Object.freeze({
     contractId: 'shortcut-overlay-dismissal',
     owner: 'document',
     handlerRef: 'onEsc',
@@ -134,8 +128,6 @@ function humanizeActionId(actionId) {
     .replace(/^shortcutKey/, '')
     .replace(/^selectThenCopy$/, 'Select Then Copy')
     .replace(/^selectThenCopyAllMessages$/, 'Select Then Copy All Messages')
-    .replace(/^altPageUp$/, 'Alt Page Up')
-    .replace(/^altPageDown$/, 'Alt Page Down')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replaceAll('_', ' ')
     .trim();
@@ -198,6 +190,16 @@ function getLineNumber(source, index) {
 
 function classifyKeyboardListener(source, match) {
   const tail = source.slice(match.index, match.index + 700);
+  if (tail.includes('scheduleInteractionRefresh')) {
+    return {
+      contractId: 'lifecycle-slim-sidebar-interaction-refresh',
+      owner: 'document',
+      handlerRef: 'scheduleInteractionRefresh',
+      classification: 'presentation-lifecycle',
+      line: getLineNumber(source, match.index),
+      sourceExcerpt: tail.split('\n').slice(0, 8).join('\n').trim(),
+    };
+  }
   const expected = EXPECTED_KEYBOARD_LISTENER_CONTRACTS.find(
     (contract) => contract.owner === match[1] && tail.includes(contract.handlerRef),
   );
@@ -418,6 +420,11 @@ export function buildModelPickerSlotInventory({
         : canonicalAction || hasAssignment
           ? 'unavailable'
           : 'empty';
+      const catalogAvailability = actionIds.length
+        ? 'presented'
+        : canonicalAction
+          ? 'unavailable'
+          : 'empty';
       const row = {
         rowId: `model:${profile}:${slot}:${actionIds.join('+') || 'empty'}`,
         profile,
@@ -433,7 +440,7 @@ export function buildModelPickerSlotInventory({
         canonicalActionId: canonicalAction?.id || '',
       };
       profileRows.push(row);
-      rows.push(row);
+      if (catalogAvailability !== 'empty') rows.push({ ...row, availability: catalogAvailability });
     }
     profiles[profile] = {
       profile,
@@ -603,6 +610,16 @@ export function buildShortcutValidationInventory({
     namesByProfile: modelPickerNames,
     activeConfigId: activeModelConfigId,
   });
+  const presentationLifecycleListeners = keyboardListenerInventory.listeners
+    .filter((listener) => listener.classification === 'presentation-lifecycle')
+    .map((listener) => ({
+      lifecycleId: 'slim-sidebar-interaction-refresh',
+      owner: 'extension/content.js slim-sidebar presentation lifecycle',
+      event: 'keydown',
+      handlerRef: listener.handlerRef,
+      line: listener.line,
+      sourceExcerpt: listener.sourceExcerpt,
+    }));
 
   const shortcutDefinitionById = Object.fromEntries(
     SHORTCUT_ACTIONS.map((definition) => [definition.actionId, definition]),
@@ -889,6 +906,7 @@ export function buildShortcutValidationInventory({
     modelPickerSlotRows: modelPickerInventory.rows,
     modelPickerProfiles: modelPickerInventory.profiles,
     modelPickerSlotCount: modelPickerInventory.slotCount,
+    presentationLifecycleListeners,
     shortcuts,
     targets,
     inventoryIssues,

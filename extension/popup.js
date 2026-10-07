@@ -156,6 +156,7 @@ const buildDefaultModelPickerCodes = ({
   catalog,
   activeConfigId = DEFAULT_ACTIVE_MODEL_CONFIG_ID,
   incomingNames,
+  reservedCodes = [],
 } = {}) => {
   const normalizedProfile = normalizeModelCatalogProfile(profile);
   const profileCatalog =
@@ -174,7 +175,9 @@ const buildDefaultModelPickerCodes = ({
       Array.isArray(incomingNames) ? incomingNames : profileNames,
       catalog === undefined ? profileCatalog : catalog,
     );
-    const next = window.ModelLabels.buildDefaultKeyCodesFromPresentationGroups(groups);
+    const next = window.ModelLabels.buildDefaultKeyCodesFromPresentationGroups(groups, {
+      reservedCodes,
+    });
     if (Array.isArray(next) && next.length) {
       const out = next.slice();
       while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
@@ -184,7 +187,7 @@ const buildDefaultModelPickerCodes = ({
 
   if (typeof window.ModelLabels?.defaultKeyCodesForProfile === 'function') {
     const out = window.ModelLabels
-      .defaultKeyCodesForProfile(normalizedProfile)
+      .defaultKeyCodesForProfile(normalizedProfile, { reservedCodes })
       .slice();
     while (out.length < MODEL_PICKER_MAX_SLOTS) out.push('');
     return out;
@@ -1540,28 +1543,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const getMigrationGroups = (profile) =>
-    getPopupModelPresentationGroups(
+  const getModelCatalogFromSnapshot = (snapshot, profile) => {
+    const suffix = profile === MODEL_CATALOG_PROFILE_LATEST ? 'Latest' : 'Legacy';
+    const explicitCatalog = snapshot?.[`modelCatalog${suffix}`];
+    if (explicitCatalog) return explicitCatalog;
+    if (
+      snapshot?.modelCatalog &&
+      getModelCatalogProfileForCatalog(snapshot.modelCatalog) === profile
+    ) {
+      return snapshot.modelCatalog;
+    }
+    return getDefaultModelCatalogForProfile(profile);
+  };
+  const getModelNamesFromSnapshot = (snapshot, profile) => {
+    const suffix = profile === MODEL_CATALOG_PROFILE_LATEST ? 'Latest' : 'Legacy';
+    const explicitNames = snapshot?.[`modelNames${suffix}`];
+    if (Array.isArray(explicitNames)) return explicitNames;
+    if (
+      snapshot?.modelCatalog &&
+      getModelCatalogProfileForCatalog(snapshot.modelCatalog) === profile &&
+      Array.isArray(snapshot.modelNames)
+    ) {
+      return snapshot.modelNames;
+    }
+    return getDefaultModelNamesForProfile(profile);
+  };
+  const getAllModelPickerGroupsForProfile = (profile, snapshot) => {
+    const catalog = getModelCatalogFromSnapshot(snapshot, profile);
+    const names = getModelNamesFromSnapshot(snapshot, profile);
+    const configIds = new Set([
       DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-      window.__modelNamesProfiles?.[profile] || getDefaultModelNamesForProfile(profile),
-      window.__modelCatalogProfiles?.[profile] || getDefaultModelCatalogForProfile(profile),
+      ...(Array.isArray(catalog?.configureOptions)
+        ? catalog.configureOptions.map((option) => option?.id)
+        : []),
+      ...Object.keys(catalog?.frontendByConfig || {}),
+    ]);
+    return Array.from(configIds).flatMap((configId) =>
+      getPopupModelPresentationGroups(configId, names, catalog),
     );
+  };
+
+  const filterModelPickerCodesForProfile = (codes, profile, catalog, names) =>
+    typeof window.ModelLabels?.filterProfileKeyCodesToCatalog === 'function'
+      ? window.ModelLabels.filterProfileKeyCodesToCatalog(
+          codes,
+          profile,
+          catalog || getDefaultModelCatalogForProfile(profile),
+          names || window.__modelNamesProfiles?.[profile] || getDefaultModelNamesForProfile(profile),
+        )
+      : codes;
 
   /** Hydrate both profile caches and migrate the old shared array exactly once. */
+  let modelPickerHydratingPromise = null;
   function initModelPickerCodesCache() {
-    if (window.__modelPickerHydrating) return window.__modelPickerHydrating;
+    if (modelPickerHydratingPromise) return modelPickerHydratingPromise;
 
     const latestKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST];
     const legacyKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY];
-    window.__modelPickerHydrating = new Promise((resolve) => {
-      chrome.storage.sync.get(
+    modelPickerHydratingPromise = new Promise((resolve, reject) => {
+      try {
+        chrome.storage.sync.get(
         [
           'modelPickerKeyCodes',
           latestKey,
           legacyKey,
           MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
+          'modelCatalogLatest',
+          'modelCatalogLegacy',
+          'modelNamesLatest',
+          'modelNamesLegacy',
         ],
         (stored = {}) => {
+          const readError = chrome.runtime?.lastError;
+          if (readError) {
+            reject(new Error(`Could not read model shortcut settings: ${readError.message}`));
+            return;
+          }
           let latestCodes = normalizeModelPickerCodes(
             stored[latestKey],
             MODEL_CATALOG_PROFILE_LATEST,
@@ -1581,22 +1638,8 @@ document.addEventListener('DOMContentLoaded', () => {
               : buildDefaultModelPickerCodes({
                   profile: MODEL_CATALOG_PROFILE_LATEST,
                 });
-            const migrated =
-              typeof window.ModelLabels?.migrateSharedKeyCodesToProfiles === 'function'
-                ? window.ModelLabels.migrateSharedKeyCodesToProfiles({
-                    codes: sharedCodes,
-                    latestGroups: getMigrationGroups(MODEL_CATALOG_PROFILE_LATEST),
-                    legacyGroups: getMigrationGroups(MODEL_CATALOG_PROFILE_LEGACY),
-                  })
-                : null;
-            latestCodes = normalizeModelPickerCodes(
-              migrated?.[MODEL_CATALOG_PROFILE_LATEST],
-              MODEL_CATALOG_PROFILE_LATEST,
-            );
-            legacyCodes = normalizeModelPickerCodes(
-              migrated?.[MODEL_CATALOG_PROFILE_LEGACY],
-              MODEL_CATALOG_PROFILE_LEGACY,
-            );
+            latestCodes = normalizeModelPickerCodes(sharedCodes, MODEL_CATALOG_PROFILE_LATEST);
+            legacyCodes = normalizeModelPickerCodes(sharedCodes, MODEL_CATALOG_PROFILE_LEGACY);
             patch[latestKey] = latestCodes;
             patch[legacyKey] = legacyCodes;
             patch[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
@@ -1616,11 +1659,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }
 
-          setModelPickerCodesCache(MODEL_CATALOG_PROFILE_LATEST, latestCodes);
-          setModelPickerCodesCache(MODEL_CATALOG_PROFILE_LEGACY, legacyCodes);
+          const filteredLatestCodes = filterModelPickerCodesForProfile(
+            latestCodes,
+            MODEL_CATALOG_PROFILE_LATEST,
+            getModelCatalogFromSnapshot(stored, MODEL_CATALOG_PROFILE_LATEST),
+            getModelNamesFromSnapshot(stored, MODEL_CATALOG_PROFILE_LATEST),
+          );
+          const filteredLegacyCodes = filterModelPickerCodesForProfile(
+            legacyCodes,
+            MODEL_CATALOG_PROFILE_LEGACY,
+            getModelCatalogFromSnapshot(stored, MODEL_CATALOG_PROFILE_LEGACY),
+            getModelNamesFromSnapshot(stored, MODEL_CATALOG_PROFILE_LEGACY),
+          );
+          if (filteredLatestCodes.some((code, index) => code !== latestCodes[index])) {
+            latestCodes = filteredLatestCodes;
+            patch[latestKey] = latestCodes;
+          }
+          if (filteredLegacyCodes.some((code, index) => code !== legacyCodes[index])) {
+            legacyCodes = filteredLegacyCodes;
+            patch[legacyKey] = legacyCodes;
+          }
 
           const done = () => {
-            document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
+            const writeError = chrome.runtime?.lastError;
+            if (writeError) {
+              reject(
+                new Error(`Could not initialize model shortcut settings: ${writeError.message}`),
+              );
+              return;
+            }
+            setModelPickerCodesCache(MODEL_CATALOG_PROFILE_LATEST, latestCodes);
+            setModelPickerCodesCache(MODEL_CATALOG_PROFILE_LEGACY, legacyCodes);
             resolve({
               [MODEL_CATALOG_PROFILE_LATEST]: latestCodes,
               [MODEL_CATALOG_PROFILE_LEGACY]: legacyCodes,
@@ -1630,11 +1699,14 @@ document.addEventListener('DOMContentLoaded', () => {
           if (Object.keys(patch).length) chrome.storage.sync.set(patch, done);
           else done();
         },
-      );
+        );
+      } catch (error) {
+        reject(error);
+      }
     });
-    return window.__modelPickerHydrating;
+    window.__modelPickerHydrating = modelPickerHydratingPromise;
+    return modelPickerHydratingPromise;
   }
-  initModelPickerCodesCache();
 
   // expose for 333
   window.saveModelPickerKeyCodes = saveModelPickerKeyCodes;
@@ -2911,26 +2983,19 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyShowOverlay: 'Period',
     shortcutKeyToggleCodeboxWrap: NBSP,
     shortcutKeyRegenerateTryAgain: 'KeyR',
-    shortcutKeyRegenerateMoreConcise: NBSP,
-    shortcutKeyRegenerateAddDetails: NBSP,
-    shortcutKeyRegenerateWithDifferentModel: NBSP,
     shortcutKeyRegenerateAskToChangeResponse: NBSP,
     shortcutKeyMoreDotsReadAloud: NBSP,
     shortcutKeyMoreDotsBranchInNewChat: NBSP,
     shortcutKeyTemporaryChat: 'KeyP',
     shortcutKeyStudy: NBSP,
     shortcutKeyCreateImage: NBSP,
-    shortcutKeyToggleCanvas: NBSP,
     shortcutKeyDeepResearch: NBSP,
     shortcutKeyToggleDictate: 'KeyY',
     shortcutKeyStopAndTranscribeDictation: NBSP,
     shortcutKeyCancelDictation: NBSP,
     shortcutKeyShare: NBSP,
-    shortcutKeyThinkLonger: NBSP,
     shortcutKeyAddPhotosFiles: NBSP,
     selectThenCopyAllMessages: 'BracketLeft',
-    shortcutKeyThinkingExtended: NBSP,
-    shortcutKeyThinkingStandard: NBSP,
     shortcutKeyThinkingLight: NBSP,
     shortcutKeyThinkingHeavy: NBSP,
     shortcutKeyProStandard: NBSP,
@@ -3059,66 +3124,62 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })();
 
-    chrome.storage.sync.get(null, (fullData) => {
-      const data = Object.fromEntries(allKeys.map((key) => [key, fullData?.[key]]));
-      const patch = {};
-      const isPristineInstall = isPristineUserSettingsSnapshot(fullData);
-      const freshModelPickerDefaults = buildDefaultModelPickerCodes();
-      const modelPickerProfileKeys = new Set([
-        ...Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE),
-        MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
-      ]);
-
-      allKeys.forEach((key) => {
-        // initModelPickerCodesCache owns the atomic legacy split. Letting the
-        // generic first-run seeder write these keys in parallel can overwrite a
-        // just-migrated profile with pristine defaults.
-        if (modelPickerProfileKeys.has(key)) return;
-        if (data[key] === undefined) {
-          patch[key] =
-            key === 'modelPickerKeyCodes' && isPristineInstall
-              ? freshModelPickerDefaults.slice()
-              : DEFAULT_PRESET_DATA[key];
-        }
-      });
-
-      if (Object.keys(patch).length > 0) {
-        chrome.storage.sync.set(patch, () => {
-          if (typeof window.refreshShortcutInputsFromStorage === 'function') {
-            window.refreshShortcutInputsFromStorage();
+    window.__popupDefaultsSeeding = new Promise((resolve, reject) => {
+      try {
+        chrome.storage.sync.get(null, (fullData = {}) => {
+          const readError = chrome.runtime?.lastError;
+          if (readError) {
+            reject(new Error(`Could not read popup settings: ${readError.message}`));
+            return;
           }
-          ['copyCodeUserSeparator'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            if (patch[id] !== undefined) {
-              el.value = sep_storageToUI(patch[id]);
+
+          const data = Object.fromEntries(allKeys.map((key) => [key, fullData?.[key]]));
+          const patch = {};
+          const isPristineInstall = isPristineUserSettingsSnapshot(fullData);
+          const freshModelPickerDefaults = buildDefaultModelPickerCodes();
+          const modelPickerProfileKeys = new Set([
+            ...Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE),
+            MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
+          ]);
+
+          allKeys.forEach((key) => {
+            // initModelPickerCodesCache owns the atomic legacy split. Letting the
+            // generic first-run seeder write these keys in parallel can overwrite a
+            // just-migrated profile with pristine defaults.
+            if (modelPickerProfileKeys.has(key)) return;
+            if (data[key] === undefined) {
+              patch[key] =
+                key === 'modelPickerKeyCodes' && isPristineInstall
+                  ? freshModelPickerDefaults.slice()
+                  : DEFAULT_PRESET_DATA[key];
             }
           });
-        });
-      }
 
-      // Always reflect current storage into UI
-      allKeys.forEach((key) => {
-        const el = document.getElementById(key);
-        if (!el) return;
+          const hydrateNonShortcutSettings = () => {
+            allKeys.forEach((key) => {
+              if (
+                key.startsWith('shortcutKey') ||
+                key === 'selectThenCopy' ||
+                key === 'selectThenCopyAllMessages'
+              ) {
+                return;
+              }
+              const el = document.getElementById(key);
+              if (!el) return;
 
-        if (el.type === 'checkbox' || el.type === 'radio') {
-          el.checked = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
-          return;
-        }
+              if (el.type === 'checkbox' || el.type === 'radio') {
+                el.checked = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
+                return;
+              }
 
-        if (typeof DEFAULT_PRESET_DATA[key] === 'string') {
-          const raw = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
-          if (key === 'copyCodeUserSeparator') {
-            el.value = sep_storageToUI(raw);
-          } else {
-            el.value = raw;
-          }
-        }
-      });
+              if (typeof DEFAULT_PRESET_DATA[key] === 'string') {
+                const raw = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
+                el.value = key === 'copyCodeUserSeparator' ? sep_storageToUI(raw) : raw;
+              }
+            });
 
-      // hydrate segmented "Use Alt / Use Control" pill from the radios we just set
-      (function syncModelSwitcherPillFromRadios() {
+            // hydrate segmented "Use Alt / Use Control" pill from the radios we just set
+            (function syncModelSwitcherPillFromRadios() {
         const altRadio = document.getElementById('useAltForModelSwitcherRadio');
         const ctrlRadio = document.getElementById('useControlForModelSwitcherRadio');
         const altSeg = document.querySelector(
@@ -3148,9 +3209,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // default: favor control segment if radios are missing
         ctrlSeg?.classList.add('active');
         altSeg?.classList.remove('active');
-      })();
+            })();
+            resolve(fullData);
+          };
+
+          if (Object.keys(patch).length > 0) {
+            try {
+              chrome.storage.sync.set(patch, () => {
+                const writeError = chrome.runtime?.lastError;
+                if (writeError) {
+                  reject(new Error(`Could not seed popup settings: ${writeError.message}`));
+                  return;
+                }
+                hydrateNonShortcutSettings();
+              });
+            } catch (error) {
+              reject(error);
+            }
+            return;
+          }
+          hydrateNonShortcutSettings();
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
   })();
+
+  window.__modelPickerHydrating = window.__popupDefaultsSeeding.then(() =>
+    initModelPickerCodesCache(),
+  );
 
   /**
    * Handles checkbox or radio button state changes by saving to Chrome storage and showing a toast.
@@ -3466,53 +3554,340 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyShowOverlay: 'Period',
   };
 
-  // Reusable: hydrate all shortcut inputs from storage (or HTML defaults) into value + dataset.keyCode
-  function refreshShortcutInputsFromStorage() {
-    chrome.storage.sync.get(shortcutKeys, (data) => {
-      // Clear old cache
-      Object.keys(shortcutKeyValues).forEach((k) => {
-        delete shortcutKeyValues[k];
-      });
-
-      shortcutKeys.forEach((id) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-
-        const stored = data[id];
-        const defaultValue = (el.getAttribute('value') || '').trim();
-        const fallbackCode = DEFAULT_SHORTCUT_CODE_FALLBACKS[id] || '';
-
-        if (typeof stored === 'string' && stored !== '\u00A0' && stored.trim()) {
-          el.dataset.keyCode = stored;
-          el.value = codeToDisplayChar(stored);
-          shortcutKeyValues[id] = el.value;
-        } else if (stored === '\u00A0') {
-          el.dataset.keyCode = '';
-          el.value = '';
-          shortcutKeyValues[id] = '';
-        } else if (defaultValue) {
-          const code = (window.ShortcutUtils?.charToCode || charToCode)(defaultValue) || '';
-          el.dataset.keyCode = code;
-          el.value = code ? codeToDisplayChar(code) : defaultValue;
-          shortcutKeyValues[id] = el.value;
-        } else if (fallbackCode) {
-          el.dataset.keyCode = fallbackCode;
-          el.value = codeToDisplayChar(fallbackCode);
-          shortcutKeyValues[id] = el.value;
-        } else {
-          el.dataset.keyCode = '';
-          el.value = '';
-          shortcutKeyValues[id] = '';
-        }
-      });
+  const hydrateShortcutInputsFromSnapshot = (data = {}) => {
+    Object.keys(shortcutKeyValues).forEach((key) => {
+      delete shortcutKeyValues[key];
     });
+    shortcutKeys.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const stored = data[id];
+      const defaultValue = (el.getAttribute('value') || '').trim();
+      const fallbackCode = DEFAULT_SHORTCUT_CODE_FALLBACKS[id] || '';
+      if (typeof stored === 'string' && stored !== '\u00A0' && stored.trim()) {
+        el.dataset.keyCode = stored;
+        el.value = codeToDisplayChar(stored);
+      } else if (stored === '\u00A0') {
+        el.dataset.keyCode = '';
+        el.value = '';
+      } else if (defaultValue) {
+        const code = (window.ShortcutUtils?.charToCode || charToCode)(defaultValue) || '';
+        el.dataset.keyCode = code;
+        el.value = code ? codeToDisplayChar(code) : defaultValue;
+      } else if (fallbackCode) {
+        el.dataset.keyCode = fallbackCode;
+        el.value = codeToDisplayChar(fallbackCode);
+      } else {
+        el.dataset.keyCode = '';
+        el.value = '';
+      }
+      shortcutKeyValues[id] = el.value;
+    });
+  };
+
+  const readPopupSyncStorage = (keys = null) =>
+    new Promise((resolve, reject) => {
+      try {
+        chrome.storage.sync.get(keys, (data = {}) => {
+          const error = chrome.runtime?.lastError;
+          if (error) {
+            reject(new Error(`Could not read shortcut settings: ${error.message}`));
+            return;
+          }
+          resolve(data);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+  const writePopupSyncStorage = (patch) =>
+    new Promise((resolve, reject) => {
+      try {
+        chrome.storage.sync.set(patch, () => {
+          const error = chrome.runtime?.lastError;
+          if (error) {
+            reject(new Error(`Could not save repaired shortcut settings: ${error.message}`));
+            return;
+          }
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+  const normalizePopupShortcutValue = (value) => {
+    if (value == null) return '\u00A0';
+    const code = String(value).trim();
+    if (!code || code === '\u00A0') return '\u00A0';
+    const validCode =
+      /^(?:Key[A-Z]|Digit[0-9]|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|F(?:[1-9]|1[0-9]|2[0-4])|Backspace|Enter|Escape|Tab|Space|Minus|Equal|Bracket(?:Left|Right)|Semicolon|Quote|Comma|Period|Slash|Backslash|Backquote|Delete|Insert|Home|End|Page(?:Up|Down)|CapsLock|NumLock|ScrollLock|PrintScreen|Pause|ContextMenu|Numpad(?:Divide|Multiply|Subtract|Add|Decimal|Enter|Equal)|Volume(?:Mute|Down|Up)|Media(?:PlayPause|TrackNext|TrackPrevious)|Meta(?:Left|Right)|Alt(?:Left|Right)|Control(?:Left|Right)|Shift(?:Left|Right)|Fn)$/;
+    if (validCode.test(code)) return code;
+    const toCode = window.ShortcutUtils?.charToCode || charToCode;
+    return (toCode ? toCode(code) : '') || '\u00A0';
+  };
+
+  const normalizePopupModelPickerCodes = (codes) => {
+    const source = Array.isArray(codes) ? codes : [];
+    return source.map((value) => {
+      const normalized = normalizePopupShortcutValue(value);
+      return normalized === '\u00A0' ? '' : normalized;
+    });
+  };
+
+  const normalizePopupShortcutSnapshot = (snapshot) => {
+    if (typeof window.ModelLabels?.normalizeShortcutAssignments !== 'function') {
+      throw new Error('Shortcut assignment repair is unavailable.');
+    }
+    const profiles = {};
+    [MODEL_CATALOG_PROFILE_LATEST, MODEL_CATALOG_PROFILE_LEGACY].forEach((profile) => {
+      const storageKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[profile];
+      const catalog = getModelCatalogFromSnapshot(snapshot, profile);
+      const names = getModelNamesFromSnapshot(snapshot, profile);
+      profiles[profile] = {
+        storageKey,
+        codes: filterModelPickerCodesForProfile(
+          Array.isArray(snapshot[storageKey]) ? snapshot[storageKey] : [],
+          profile,
+          catalog,
+          names,
+        ),
+        groups: getAllModelPickerGroupsForProfile(profile, snapshot),
+      };
+    });
+    return window.ModelLabels.normalizeShortcutAssignments({
+      shortcuts: shortcutKeys.map((storageKey) => ({
+        storageKey,
+        value: typeof snapshot[storageKey] === 'string' ? snapshot[storageKey] : '',
+        modifier: getPopupShortcutModifier(storageKey),
+      })),
+      modelModifier: snapshot.useControlForModelSwitcherRadio ? 'ctrl' : 'alt',
+      profiles,
+      snapshot,
+    });
+  };
+
+  const preparePopupShortcutAssignmentWrite = (snapshot, requestedPatch) => {
+    const input = { ...(requestedPatch || {}) };
+    const profileKeys = Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE);
+    delete input[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY];
+
+    shortcutKeys.forEach((key) => {
+      if (Object.hasOwn(input, key)) input[key] = normalizePopupShortcutValue(input[key]);
+    });
+
+    profileKeys.forEach((key) => {
+      if (!Object.hasOwn(input, key)) return;
+      if (!Array.isArray(input[key])) {
+        delete input[key];
+        return;
+      }
+      input[key] = normalizePopupModelPickerCodes(input[key]);
+    });
+
+    if (Object.hasOwn(input, 'modelPickerKeyCodes')) {
+      if (!Array.isArray(input.modelPickerKeyCodes)) {
+        delete input.modelPickerKeyCodes;
+      } else {
+        input.modelPickerKeyCodes = normalizePopupModelPickerCodes(input.modelPickerKeyCodes);
+        profileKeys.forEach((key) => {
+          if (!Object.hasOwn(input, key)) input[key] = input.modelPickerKeyCodes.slice();
+        });
+      }
+    }
+
+    const profileRequested = profileKeys.some((key) => Object.hasOwn(input, key));
+    if (profileRequested) {
+      input[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
+        MODEL_PICKER_KEY_CODE_PROFILES_VERSION;
+    }
+
+    const candidate = { ...snapshot, ...input };
+    const normalized = normalizePopupShortcutSnapshot(candidate);
+    const profileAffected =
+      profileRequested ||
+      profileKeys.some((key) => normalized.changedKeys.includes(key));
+    const patch = { ...input, ...normalized.patch };
+    const committedSnapshot = { ...candidate, ...normalized.patch };
+
+    if (profileAffected) {
+      const legacyKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY];
+      const legacyCodes = (normalized.profiles[MODEL_CATALOG_PROFILE_LEGACY] || []).slice();
+      patch[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
+        MODEL_PICKER_KEY_CODE_PROFILES_VERSION;
+      patch.modelPickerKeyCodes = legacyCodes;
+      committedSnapshot[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
+        MODEL_PICKER_KEY_CODE_PROFILES_VERSION;
+      committedSnapshot.modelPickerKeyCodes = legacyCodes;
+      // Keep the compatibility field aligned with Chat; it is not a third live owner.
+      if (!Object.hasOwn(patch, legacyKey)) patch[legacyKey] = legacyCodes;
+    }
+
+    return { patch, snapshot: committedSnapshot };
+  };
+
+  const persistNormalizedPopupShortcutPatch = async (
+    requestedPatch,
+    persist = writePopupSyncStorage,
+  ) => {
+    await window.__popupShortcutAssignmentsReady;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await readStablePopupSyncSnapshot();
+      const prepared = preparePopupShortcutAssignmentWrite(current.snapshot, requestedPatch);
+      if (current.revision !== shortcutRepairStorageRevision) continue;
+      if (Object.keys(prepared.patch).length) await persist(prepared.patch);
+
+      const confirmed = await readStablePopupSyncSnapshot();
+      const remaining = normalizePopupShortcutSnapshot(confirmed.snapshot);
+      if (
+        !remaining.changedKeys.length &&
+        confirmed.revision === shortcutRepairStorageRevision
+      ) {
+        return confirmed.snapshot;
+      }
+      if (remaining.changedKeys.length) return repairPopupShortcutStorage();
+    }
+    throw new Error('Shortcut settings changed while the popup was saving them.');
+  };
+
+  const shortcutRepairRelevantKeys = new Set([
+    ...shortcutKeys,
+    ...Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE),
+    MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
+    MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY,
+    'useControlForModelSwitcherRadio',
+    'useAltForModelSwitcherRadio',
+    'modelCatalog',
+    'modelNames',
+    'modelCatalogLatest',
+    'modelNamesLatest',
+    'modelCatalogLegacy',
+    'modelNamesLegacy',
+  ]);
+  let shortcutRepairStorageRevision = 0;
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (
+        area === 'sync' &&
+        Object.keys(changes).some((key) => shortcutRepairRelevantKeys.has(key))
+      ) {
+        shortcutRepairStorageRevision += 1;
+      }
+    });
+  } catch {}
+
+  const readStablePopupSyncSnapshot = async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const revision = shortcutRepairStorageRevision;
+      const snapshot = await readPopupSyncStorage();
+      if (revision === shortcutRepairStorageRevision) return { snapshot, revision };
+    }
+    throw new Error('Shortcut settings changed repeatedly during popup hydration.');
+  };
+
+  const repairPopupShortcutStorage = async () => {
+    let current = await readStablePopupSyncSnapshot();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let normalized = normalizePopupShortcutSnapshot(current.snapshot);
+      if (!normalized.changedKeys.length) {
+        if (current.revision === shortcutRepairStorageRevision) return current.snapshot;
+        current = await readStablePopupSyncSnapshot();
+        continue;
+      }
+
+      // Re-read the full snapshot and recompute immediately before each write.
+      current = await readStablePopupSyncSnapshot();
+      normalized = normalizePopupShortcutSnapshot(current.snapshot);
+      if (!normalized.changedKeys.length) continue;
+      if (current.revision !== shortcutRepairStorageRevision) continue;
+
+      await writePopupSyncStorage(normalized.patch);
+      current = await readStablePopupSyncSnapshot();
+      normalized = normalizePopupShortcutSnapshot(current.snapshot);
+      if (
+        !normalized.changedKeys.length &&
+        current.revision === shortcutRepairStorageRevision
+      ) {
+        return current.snapshot;
+      }
+    }
+    throw new Error('Shortcut settings did not stabilize while the popup was opening.');
+  };
+
+  const applyPopupShortcutSnapshot = (snapshot) => {
+    [MODEL_CATALOG_PROFILE_LATEST, MODEL_CATALOG_PROFILE_LEGACY].forEach((profile) => {
+      const storageKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[profile];
+      setModelPickerCodesCache(profile, snapshot[storageKey]);
+      window.__modelCatalogProfiles[profile] = normalizeModelCatalog(
+        getModelCatalogFromSnapshot(snapshot, profile),
+      );
+      window.__modelNamesProfiles[profile] = normalizeModelNamesForProfile(
+        getModelNamesFromSnapshot(snapshot, profile),
+        profile,
+      );
+    });
+    window.__modelCatalogProfile = normalizeModelCatalogProfile(
+      snapshot[MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY],
+    );
+    applySelectedModelCatalogProfile('popup:shortcut-hydration');
+
+    const useControl = snapshot.useControlForModelSwitcherRadio === true;
+    const controlRadio = document.getElementById('useControlForModelSwitcherRadio');
+    const altRadio = document.getElementById('useAltForModelSwitcherRadio');
+    if (controlRadio) controlRadio.checked = useControl;
+    if (altRadio) altRadio.checked = !useControl;
+    document
+      .querySelector('#mp-model-switcher-modifier-selector a[data-target="useAltForModelSwitcherRadio"]')
+      ?.classList.toggle('active', !useControl);
+    document
+      .querySelector('#mp-model-switcher-modifier-selector a[data-target="useControlForModelSwitcherRadio"]')
+      ?.classList.toggle('active', useControl);
+
+    window.__popupShortcutAssignmentsSnapshot = snapshot;
+    hydrateShortcutInputsFromSnapshot(snapshot);
+  };
+
+  window.__popupShortcutAssignmentsApi = Object.freeze({
+    apply: applyPopupShortcutSnapshot,
+    persist: persistNormalizedPopupShortcutPatch,
+  });
+
+  window.__popupShortcutAssignmentsReady = Promise.all([
+    window.__popupDefaultsSeeding,
+    window.__modelPickerHydrating,
+  ])
+    .then(repairPopupShortcutStorage)
+    .then((snapshot) => {
+      applyPopupShortcutSnapshot(snapshot);
+      return snapshot;
+    })
+    .catch((error) => {
+      document.body.dataset.popupShortcutState = 'failed';
+      window.__popupShortcutAssignmentsError = String(error?.message || error);
+      console.error('[popup shortcut hydration] repair failed:', error);
+      showToast('Shortcut settings could not be verified. Reopen the popup after storage is available.');
+      throw error;
+    });
+  window.__popupShortcutAssignmentsReady.catch(() => {});
+
+  // Reusable for import and restore flows after the startup repair has committed.
+  function refreshShortcutInputsFromStorage() {
+    return window.__popupShortcutAssignmentsReady
+      .then(() => readPopupSyncStorage(shortcutKeys))
+      .then((data) => {
+        hydrateShortcutInputsFromSnapshot(data);
+        return true;
+      })
+      .catch((error) => {
+        console.error('[refreshShortcutInputsFromStorage] read failed:', error);
+        showToast('Shortcut settings could not be loaded.');
+        return false;
+      });
   }
 
-  // Expose for import code to reuse
   window.refreshShortcutInputsFromStorage = refreshShortcutInputsFromStorage;
-
-  // Initial hydrate on popup open
-  refreshShortcutInputsFromStorage();
 
   // Wire up robust key capture: supports arrows, function keys, media keys, labels, and guards input vs keydown
   shortcutKeys.forEach((id) => {
@@ -3957,27 +4332,10 @@ document.addEventListener('DOMContentLoaded', () => {
      * 3. Returns NBSP for empty/invalid input.
      */
     function normalizeShortcutVal(v) {
-      // ── empty / placeholder handling ───────────────────────────────────
-      if (v == null) return '\u00A0';
-      const s = String(v).trim();
-      if (s === '' || s === '\u00A0') return '\u00A0';
-
-      // ── fast-path: value is already a valid `KeyboardEvent.code` ───────
-      //    Added `Slash` and other punctuation codes that were missing.
-      // Full-string match for every valid KeyboardEvent.code
-      const CODE_RE =
-        /^(?:Key[A-Z]|Digit[0-9]|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|F(?:[1-9]|1[0-9]|2[0-4])|Backspace|Enter|Escape|Tab|Space|Minus|Equal|Bracket(?:Left|Right)|Semicolon|Quote|Comma|Period|Slash|Backslash|Backquote|Delete|Insert|Home|End|Page(?:Up|Down)|CapsLock|NumLock|ScrollLock|PrintScreen|Pause|ContextMenu|Numpad(?:Divide|Multiply|Subtract|Add|Decimal|Enter|Equal)|Volume(?:Mute|Down|Up)|Media(?:PlayPause|TrackNext|TrackPrevious)|Meta(?:Left|Right)|Alt(?:Left|Right)|Control(?:Left|Right)|Shift(?:Left|Right)|Fn)$/;
-
-      if (CODE_RE.test(s)) return s;
-
-      // ── fallback: convert single printable char to code ────────────────
-      const toCode = window.ShortcutUtils?.charToCode || charToCode;
-      const converted = toCode ? toCode(s) : '';
-
-      return converted || '\u00A0';
+      return normalizePopupShortcutValue(v);
     }
 
-    function exportSettingsToFile() {
+    async function exportSettingsToFile() {
       const keySet = getExportKeySet();
 
       // Build reverse label map on demand to translate visible labels (↑, Enter, Mute) back to codes
@@ -4187,7 +4545,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return fallback || '\u00A0';
       }
 
-      chrome.storage.sync.get(null, (all) => {
+      try {
+        const all = await repairPopupShortcutStorage();
         const out = {};
 
         // Include all known keys present in storage (options, toggles, etc.)
@@ -4248,150 +4607,84 @@ document.addEventListener('DOMContentLoaded', () => {
         URL.revokeObjectURL(a.href);
 
         showToast(t('toast_export_success'));
-      });
+      } catch (error) {
+        console.error('Export error:', error);
+        showToast(`Export failed: ${error?.message || 'Storage error'}`);
+      }
     }
 
-    function importSettingsObj(src) {
-      // Scraped catalog snapshots are nonportable; ignore any provided in older files.
-      if (src && typeof src === 'object') {
-        MODEL_CATALOG_SCRAPE_STATE_KEYS.forEach((key) => {
-          delete src[key];
-        });
-      }
-
+    async function importSettingsObj(src, { skipBrowserConfirm = false } = {}) {
       const keySet = getExportKeySet();
       const next = {};
 
       Object.keys(src || {}).forEach((k) => {
-        if (!keySet.has(k)) return;
+        if (
+          !keySet.has(k) ||
+          MODEL_CATALOG_SCRAPE_STATE_KEYS.has(k) ||
+          k === MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY
+        ) {
+          return;
+        }
         let v = src[k];
         if (shortcutKeys.includes(k) || legacyShortcutKeys.includes(k)) {
           v = normalizeShortcutVal(v);
         }
-        next[k] = v;
+        next[k] = Array.isArray(v) ? v.slice() : v;
       });
 
-      const normalizeImportedProfileCodes = (codes, profile) => {
-        const normalizedProfile = normalizeModelCatalogProfile(profile);
-        const padded = Array.isArray(codes)
-          ? codes.slice().map((value) => {
-              const normalized = normalizeShortcutVal(value);
-              return normalized === '\u00A0' ? '' : normalized;
-            })
-          : buildDefaultModelPickerCodes({ profile: normalizedProfile });
-        while (padded.length < MODEL_PICKER_MAX_SLOTS) padded.push('');
-        const groups = getPopupModelPresentationGroups(
-          DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-          window.__modelNamesProfiles?.[normalizedProfile] ||
-            getDefaultModelNamesForProfile(normalizedProfile),
-          window.__modelCatalogProfiles?.[normalizedProfile] ||
-            getDefaultModelCatalogForProfile(normalizedProfile),
-        );
-        return typeof window.ModelLabels?.normalizeProfileKeyCodes === 'function'
-          ? window.ModelLabels.normalizeProfileKeyCodes(padded, groups)
-          : padded;
-      };
       const latestKey =
         MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST];
       const legacyKey =
         MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY];
-      const sharedImport = Array.isArray(next.modelPickerKeyCodes)
-        ? next.modelPickerKeyCodes
-        : null;
-      if (Array.isArray(next[latestKey]) || sharedImport) {
-        next[latestKey] = normalizeImportedProfileCodes(
-          Array.isArray(next[latestKey]) ? next[latestKey] : sharedImport,
-          MODEL_CATALOG_PROFILE_LATEST,
-        );
-      }
-      if (Array.isArray(next[legacyKey]) || sharedImport) {
-        next[legacyKey] = normalizeImportedProfileCodes(
-          Array.isArray(next[legacyKey]) ? next[legacyKey] : sharedImport,
-          MODEL_CATALOG_PROFILE_LEGACY,
-        );
-      }
-      if (next[latestKey] || next[legacyKey]) {
-        next[MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY] =
-          MODEL_PICKER_KEY_CODE_PROFILES_VERSION;
-      }
+      [latestKey, legacyKey, 'modelPickerKeyCodes'].forEach((key) => {
+        if (Object.hasOwn(next, key) && !Array.isArray(next[key])) delete next[key];
+      });
 
       // If nothing recognized
       if (Object.keys(next).length === 0) {
         showToast(t('toast_import_no_compatible'));
-        return;
+        return false;
       }
 
       // Confirm overwrite
-      const proceed = window.confirm(t('confirm_import_overwrite'));
-      if (!proceed) return;
+      if (!skipBrowserConfirm && !window.confirm(t('confirm_import_overwrite'))) return false;
 
-      // Apply to storage
-      // Apply to storage
-      chrome.storage.sync.get(null, (curr) => {
-        const merged = { ...curr, ...next };
+      try {
+        const committed = await persistNormalizedPopupShortcutPatch(next);
+        applyPopupShortcutSnapshot(committed);
 
-        chrome.storage.sync.set(merged, () => {
-          if (chrome.runtime.lastError) {
-            console.error('Import error:', chrome.runtime.lastError);
-            showToast(t('toast_import_failed', chrome.runtime.lastError.message));
+        const reflectOption = (key, val) => {
+          const el = document.getElementById(key);
+          if (!el) return;
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            el.checked = !!val;
             return;
           }
-
-          // Rehydrate all shortcut inputs from storage so tricky defaults (e.g., Slash) render correctly
-          if (typeof refreshShortcutInputsFromStorage === 'function') {
-            refreshShortcutInputsFromStorage();
+          if (typeof val === 'string' || typeof val === 'number') {
+            el.value = key === 'copyCodeUserSeparator' ? sep_storageToUI(val) : val;
           }
-
-          // Reflect options/radios provided by the file
-          const reflectOption = (key, val) => {
-            const el = document.getElementById(key);
-            if (!el) return;
-
-            if (el.type === 'checkbox' || el.type === 'radio') {
-              el.checked = !!val;
-              return;
-            }
-
-            if (typeof val === 'string' || typeof val === 'number') {
-              if (key === 'copyCodeUserSeparator') {
-                el.value = sep_storageToUI(val);
-              } else {
-                el.value = val;
-              }
-            }
-          };
-          Object.keys(next).forEach((k) => {
-            if (shortcutKeys.includes(k)) return; // shortcuts already handled by refresh
-            reflectOption(k, next[k]);
-          });
-
-          // Refresh both independent profile caches immediately.
-          if (Array.isArray(next[latestKey]) || Array.isArray(next[legacyKey])) {
-            try {
-              if (Array.isArray(next[latestKey])) {
-                window.__setModelPickerCodesCache?.(
-                  MODEL_CATALOG_PROFILE_LATEST,
-                  next[latestKey],
-                );
-              }
-              if (Array.isArray(next[legacyKey])) {
-                window.__setModelPickerCodesCache?.(
-                  MODEL_CATALOG_PROFILE_LEGACY,
-                  next[legacyKey],
-                );
-              }
-              document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-              if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
-              if (typeof window.modelPickerInputsRender === 'function')
-                window.modelPickerInputsRender();
-            } catch (_) {}
+        };
+        Object.keys(next).forEach((key) => {
+          if (
+            shortcutKeys.includes(key) ||
+            legacyShortcutKeys.includes(key) ||
+            key === 'modelPickerKeyCodes' ||
+            key === latestKey ||
+            key === legacyKey ||
+            key === MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY
+          ) {
+            return;
           }
-
-          // modelNames are intentionally ignored on import to preserve local names and migrations.
-
-          showToast(t('toast_import_complete'));
+          reflectOption(key, next[key]);
         });
-      });
+
+        showToast(t('toast_import_complete'));
+        return true;
+      } catch (error) {
+        console.error('Import error:', error);
+        showToast(t('toast_import_failed', error?.message || 'Storage error'));
+        return false;
+      }
     }
 
     function importSettingsFromFile() {
@@ -4663,52 +4956,7 @@ document.addEventListener('DOMContentLoaded', () => {
   (function shortcutsPresetsInit() {
     // --- constants ---
     const NBSP = '\u00A0';
-    const EMPTY_MODEL_PICKER = Array(MODEL_PICKER_MAX_SLOTS).fill('');
-    const getDefaultModelPickerProfiles = () => ({
-      [MODEL_CATALOG_PROFILE_LATEST]: buildDefaultModelPickerCodes({
-        profile: MODEL_CATALOG_PROFILE_LATEST,
-      }),
-      [MODEL_CATALOG_PROFILE_LEGACY]: buildDefaultModelPickerCodes({
-        profile: MODEL_CATALOG_PROFILE_LEGACY,
-      }),
-    });
-
     const DEFAULT_PRESET_DATA = window.DEFAULT_PRESET_DATA;
-
-    // Persist both profile arrays in one atomic storage update.
-    function applyModelPickerCodeProfiles(codesByProfile, toastMsg) {
-      const latest = (codesByProfile?.[MODEL_CATALOG_PROFILE_LATEST] || []).slice();
-      const legacy = (codesByProfile?.[MODEL_CATALOG_PROFILE_LEGACY] || []).slice();
-      while (latest.length < MODEL_PICKER_MAX_SLOTS) latest.push('');
-      while (legacy.length < MODEL_PICKER_MAX_SLOTS) legacy.push('');
-
-      const finish = () => {
-        try {
-          window.__setModelPickerCodesCache?.(MODEL_CATALOG_PROFILE_LATEST, latest);
-          window.__setModelPickerCodesCache?.(MODEL_CATALOG_PROFILE_LEGACY, legacy);
-          document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-          if (typeof window.modelPickerInputsRender === 'function') {
-            window.modelPickerInputsRender();
-          }
-        } catch (_) {}
-        window.toast?.show?.(toastMsg || 'Model picker updated. Reload page to apply changes.');
-      };
-
-      chrome.storage.sync.set({
-        [MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST]]:
-          latest,
-        [MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY]]:
-          legacy,
-        [MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY]:
-          MODEL_PICKER_KEY_CODE_PROFILES_VERSION,
-      }, () => {
-        if (chrome.runtime?.lastError) {
-          window.toast?.show?.('Model shortcut update failed. Please reopen the popup.');
-        } else {
-          finish();
-        }
-      });
-    }
 
     // --- Button event handlers ---
     const clearBtn = document.getElementById('btnClearAllShortcuts');
@@ -4721,29 +4969,21 @@ document.addEventListener('DOMContentLoaded', () => {
           async (yes) => {
             if (!yes) return;
 
-            // 1) Persist NBSP for all single‑key shortcuts in one write
-            const clearedShortcuts = Object.fromEntries(shortcutKeys.map((k) => [k, NBSP]));
             try {
-              await chrome.storage.sync.set(clearedShortcuts);
-            } catch (e) {
-              console.error('clear all: failed to set shortcuts', e);
+              const emptyCodes = Array(MODEL_PICKER_MAX_SLOTS).fill('');
+              const committed = await persistNormalizedPopupShortcutPatch({
+                ...Object.fromEntries(shortcutKeys.map((key) => [key, NBSP])),
+                [MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST]]:
+                  emptyCodes.slice(),
+                [MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY]]:
+                  emptyCodes.slice(),
+              });
+              applyPopupShortcutSnapshot(committed);
+              window.toast?.show?.('All shortcuts cleared.');
+            } catch (error) {
+              console.error('clear all: failed to save shortcuts', error);
+              window.toast?.show?.('Shortcut clearing failed. Please reopen the popup.');
             }
-
-            // 1b) Immediately refresh visible shortcut inputs to reflect the cleared state
-            if (typeof window.refreshShortcutInputsFromStorage === 'function') {
-              try {
-                window.refreshShortcutInputsFromStorage();
-              } catch (_) {}
-            }
-
-            // 2) Persistently clear both independent model-picker profiles.
-            applyModelPickerCodeProfiles(
-              {
-                [MODEL_CATALOG_PROFILE_LATEST]: EMPTY_MODEL_PICKER,
-                [MODEL_CATALOG_PROFILE_LEGACY]: EMPTY_MODEL_PICKER,
-              },
-              'All model shortcuts cleared. Reload page to apply changes.',
-            );
           },
           { proceedText: 'Clear all shortcuts?', simple: true, allowHTML: true },
         );
@@ -4754,19 +4994,13 @@ document.addEventListener('DOMContentLoaded', () => {
       resetBtn.addEventListener('click', () => {
         window.showDuplicateModal(
           `This will <strong style="color:#c00;font-weight:700;">restore the default values</strong> for all extension options and shortcut keys.`,
-          (yes) => {
+          async (yes) => {
             if (!yes) return;
 
             // 1) Restore all options/shortcuts from your defaults object
             if (typeof window.importSettingsObj === 'function') {
-              window.importSettingsObj(DEFAULT_PRESET_DATA, { skipBrowserConfirm: true });
+              await window.importSettingsObj(DEFAULT_PRESET_DATA, { skipBrowserConfirm: true });
             }
-
-            // 2) Repopulate both profiles with their independent defaults.
-            applyModelPickerCodeProfiles(
-              getDefaultModelPickerProfiles(),
-              'Model shortcuts restored to defaults.',
-            );
           },
           { proceedText: 'Reset all to defaults?', simple: true, allowHTML: true },
         );
@@ -4879,7 +5113,11 @@ enableEditableOpacity(
       typeof window.ShortcutUtils?.getModelPickerCodesCache === 'function' &&
       typeof window.saveModelPickerKeyCodes === 'function';
     if (ok) return cb();
-    if (tries++ > 120) return; // ~2s max
+    if (tries++ > 120) {
+      document.body.dataset.popupShortcutState = 'failed';
+      showToast('Shortcut controls could not be initialized. Reopen the popup to try again.');
+      return;
+    }
     setTimeout(() => waitForDeps(cb), 16);
   }
 
@@ -5443,6 +5681,12 @@ enableEditableOpacity(
   // Live mode cache ('alt' | 'ctrl'); kept in sync with storage
   let mpModeCache = 'alt';
   function initModelModeFromStorage() {
+    const startupSnapshot = window.__popupShortcutAssignmentsSnapshot;
+    if (startupSnapshot) {
+      mpModeCache = startupSnapshot.useControlForModelSwitcherRadio ? 'ctrl' : 'alt';
+      syncModifierText();
+      return;
+    }
     try {
       chrome.storage.sync.get(
         ['useControlForModelSwitcherRadio', 'useAltForModelSwitcherRadio'],
@@ -5932,11 +6176,17 @@ enableEditableOpacity(
         if (!yes) return;
         const profile = getSelectedModelCatalogProfile();
         const defaults = buildDefaultModelPickerCodes({ profile }).slice();
-        window.saveModelPickerKeyCodes(defaults, () => {
-          // Toast on reset
-          window.toast.show('Model keys reset to defaults.');
-          renderInputs();
-        }, profile);
+        const storageKey = MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[profile];
+        persistNormalizedPopupShortcutPatch({ [storageKey]: defaults })
+          .then((committed) => {
+            applyPopupShortcutSnapshot(committed);
+            window.toast.show('Model keys reset to defaults.');
+            renderInputs();
+          })
+          .catch((error) => {
+            console.error('Model key reset failed:', error);
+            window.toast.show('Model shortcut update failed. Please reopen the popup.');
+          });
       };
       el.style.cursor = 'pointer';
       el.addEventListener('click', doReset);
@@ -6068,26 +6318,28 @@ enableEditableOpacity(
     }
   };
 
-  onReady(() =>
-    waitForDeps(() => {
-      buildGridSection();
-      initModelModeFromStorage(); // ← initialize mode cache from storage
-      wireInputsAndReset();
-      wireModelNameGridActions();
-      wireReactivity();
-      wireManualRefreshButton();
-      // Render after codes hydrate so names/codes are aligned on first paint
-      if (window.__modelPickerHydrating?.then) {
-        window.__modelPickerHydrating.then(() => {
-          renderAll();
-          primeManualCatalogRefreshPrompt();
-        });
-      } else {
+  onReady(() => {
+    window.__popupShortcutAssignmentsReady
+      .then(() =>
+        waitForDeps(() => {
+          buildGridSection();
+          initModelModeFromStorage();
+          wireInputsAndReset();
+          wireModelNameGridActions();
+          wireReactivity();
+          wireManualRefreshButton();
+          document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
         renderAll();
+          document.body.dataset.popupShortcutState = 'ready';
         primeManualCatalogRefreshPrompt();
-      }
-    }),
-  );
+        }),
+      )
+      .catch((error) => {
+        document.body.dataset.popupShortcutState = 'failed';
+        console.error('[model picker startup] initialization failed:', error);
+        showToast('Shortcut controls could not be initialized. Reopen the popup to try again.');
+      });
+  });
 
   // Expose renderer for external triggers
   window.modelPickerInputsRender = renderAll;
@@ -6246,11 +6498,32 @@ enableEditableOpacity(
       input.blur();
     });
 
-    // Focus the input when bar is injected
+    // Wait until startup has made the shortcut container visible before focusing.
     setTimeout(() => {
-      input.focus();
-      // Optionally select all text if needed:
-      // input.select();
+      const focusWhenReady = () => {
+        const state = document.body.dataset.popupShortcutState;
+        if (state === 'ready') {
+          if (input.isConnected) input.focus();
+          return;
+        }
+        if (state === 'failed') return;
+
+        const stateObserver = new MutationObserver(() => {
+          const nextState = document.body.dataset.popupShortcutState;
+          if (nextState === 'ready') {
+            stateObserver.disconnect();
+            if (input.isConnected) input.focus();
+          } else if (nextState === 'failed') {
+            stateObserver.disconnect();
+          }
+        });
+        stateObserver.observe(document.body, {
+          attributes: true,
+          attributeFilter: ['data-popup-shortcut-state'],
+        });
+      };
+
+      focusWhenReady();
     }, 0);
   };
 
@@ -6493,113 +6766,36 @@ enableEditableOpacity(
     if (btnRestore && !btnRestore.dataset.wired) {
       btnRestore.dataset.wired = '1';
 
-      const rehydrateSettingsUI = async (settings) => {
-        try {
-          if (typeof window.refreshShortcutInputsFromStorage === 'function') {
-            try {
-              window.refreshShortcutInputsFromStorage();
-            } catch (_) {}
-          }
-          const sep_storageToUI = window.sep_storageToUI || ((s) => s);
-          const reflectOption = (key, val) => {
-            const el = document.getElementById(key);
-            if (!el) return;
-            if (el.type === 'checkbox' || el.type === 'radio') {
-              el.checked = !!val;
-              return;
-            }
-            if (typeof val === 'string' || typeof val === 'number')
-              el.value = key === 'copyCodeUserSeparator' ? sep_storageToUI(val) : val;
-          };
-          Object.keys(settings || {}).forEach((k) => {
-            if (!/^shortcutKey/.test(k)) reflectOption(k, settings[k]);
-          });
-          const latestKey =
-            MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST];
-          const legacyKey =
-            MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LEGACY];
-          const sharedCodes = Array.isArray(settings?.modelPickerKeyCodes)
-            ? settings.modelPickerKeyCodes
-            : null;
-          const hasModelPickerCodes =
-            Array.isArray(settings?.[latestKey]) ||
-            Array.isArray(settings?.[legacyKey]) ||
-            !!sharedCodes;
-          if (hasModelPickerCodes) {
-            try {
-              const getGroups = (profile) =>
-                getPopupModelPresentationGroups(
-                  DEFAULT_ACTIVE_MODEL_CONFIG_ID,
-                  window.__modelNamesProfiles?.[profile] ||
-                    getDefaultModelNamesForProfile(profile),
-                  window.__modelCatalogProfiles?.[profile] ||
-                    getDefaultModelCatalogForProfile(profile),
-                );
-              const migrateShared =
-                sharedCodes &&
-                typeof window.ModelLabels?.migrateSharedKeyCodesToProfiles === 'function'
-                  ? window.ModelLabels.migrateSharedKeyCodesToProfiles({
-                      codes: sharedCodes,
-                      latestGroups: getGroups(MODEL_CATALOG_PROFILE_LATEST),
-                      legacyGroups: getGroups(MODEL_CATALOG_PROFILE_LEGACY),
-                    })
-                  : null;
-              const normalizeProfile = (profile, codes) => {
-                const padded = Array.isArray(codes)
-                  ? codes.slice()
-                  : buildDefaultModelPickerCodes({ profile });
-                while (padded.length < MODEL_PICKER_MAX_SLOTS) padded.push('');
-                return typeof window.ModelLabels?.normalizeProfileKeyCodes === 'function'
-                  ? window.ModelLabels.normalizeProfileKeyCodes(padded, getGroups(profile))
-                  : padded;
-              };
-              const latest = normalizeProfile(
-                MODEL_CATALOG_PROFILE_LATEST,
-                settings?.[latestKey] || migrateShared?.[MODEL_CATALOG_PROFILE_LATEST],
-              );
-              const legacy = normalizeProfile(
-                MODEL_CATALOG_PROFILE_LEGACY,
-                settings?.[legacyKey] || migrateShared?.[MODEL_CATALOG_PROFILE_LEGACY],
-              );
-              window.__setModelPickerCodesCache?.(MODEL_CATALOG_PROFILE_LATEST, latest);
-              window.__setModelPickerCodesCache?.(MODEL_CATALOG_PROFILE_LEGACY, legacy);
-              chrome.storage.sync.set({
-                [latestKey]: latest,
-                [legacyKey]: legacy,
-                [MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY]:
-                  MODEL_PICKER_KEY_CODE_PROFILES_VERSION,
-              });
-              document.dispatchEvent(new CustomEvent('modelPickerHydrated'));
-              if (typeof window.modelPickerRender === 'function') window.modelPickerRender();
-              if (typeof window.modelPickerInputsRender === 'function')
-                window.modelPickerInputsRender();
-            } catch (_) {}
-          }
-          if (typeof settings?.activeModelConfigId === 'string') {
-            setActiveModelConfigIdCache(settings.activeModelConfigId, 'cloud-restore');
-          }
-          if (Array.isArray(settings?.modelNames) && settings.modelNames.length >= 5) {
-            window.MODEL_NAMES = resolveModelActionableNames(settings.modelNames);
-            if (typeof window.modelPickerRender === 'function') {
-              try {
-                window.modelPickerRender();
-              } catch (_) {}
-            }
-            window.dispatchEvent(
-              new CustomEvent('model-names-updated', { detail: { source: 'cloud-restore' } }),
-            );
-          }
-          if (typeof window.initTooltips === 'function')
-            try {
-              window.initTooltips();
-            } catch (_) {}
-          if (typeof window.balanceWrappedLabels === 'function')
-            try {
-              window.balanceWrappedLabels();
-            } catch (_) {}
-        } catch (e) {
-          console.warn('rehydrateSettingsUI failed:', e);
+      const rehydrateSettingsUI = async (settings, committedSnapshot) => {
+        const shortcutAssignments = window.__popupShortcutAssignmentsApi;
+        if (typeof shortcutAssignments?.apply !== 'function') {
+          throw new Error('Shortcut assignment UI is unavailable.');
         }
+        shortcutAssignments.apply(committedSnapshot);
+        const reflectOption = (key, val) => {
+          const el = document.getElementById(key);
+          if (!el) return;
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            el.checked = !!val;
+            return;
+          }
+          if (typeof val === 'string' || typeof val === 'number') {
+            const sep_storageToUI = window.sep_storageToUI || ((value) => value);
+            el.value = key === 'copyCodeUserSeparator' ? sep_storageToUI(val) : val;
+          }
+        };
+        Object.keys(settings || {}).forEach((key) => {
+          if (!/^shortcutKey/.test(key) && !key.startsWith('modelPickerKeyCodes')) {
+            reflectOption(key, settings[key]);
+          }
+        });
+        if (typeof settings?.activeModelConfigId === 'string') {
+          setActiveModelConfigIdCache(settings.activeModelConfigId, 'cloud-restore');
+        }
+        try {
+          if (typeof window.initTooltips === 'function') window.initTooltips();
+          if (typeof window.balanceWrappedLabels === 'function') window.balanceWrappedLabels();
+        } catch (_) {}
       };
 
       btnRestore.addEventListener('click', async () => {
@@ -6625,8 +6821,19 @@ enableEditableOpacity(
             setStatus(chrome.i18n.getMessage('status_no_backup') || 'No backup found.', 'error');
             return;
           }
-          await store.saveLocalSettings(remote);
-          await rehydrateSettingsUI(remote);
+          const portableRemote = { ...remote };
+          MODEL_CATALOG_SCRAPE_STATE_KEYS.forEach((key) => {
+            delete portableRemote[key];
+          });
+          const persistShortcutPatch = window.__popupShortcutAssignmentsApi?.persist;
+          if (typeof persistShortcutPatch !== 'function') {
+            throw new Error('Shortcut assignment storage is unavailable.');
+          }
+          const committed = await persistShortcutPatch(
+            portableRemote,
+            (patch) => store.saveLocalSettings(patch),
+          );
+          await rehydrateSettingsUI(portableRemote, committed);
           setStatus(chrome.i18n.getMessage('status_restored') || 'Restored.', 'success');
         } catch (e) {
           console.error(e);

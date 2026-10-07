@@ -3148,6 +3148,41 @@ const clickElementLikeUser = (el) => {
     smartClick(item);
   };
 
+  function findSelectedComposerToolPill(composer, iconTokens) {
+    if (!composer) return null;
+    const tokens = Array.isArray(iconTokens) ? iconTokens : [iconTokens];
+    return (
+      Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).find((pill) =>
+        tokens.some((token) => {
+          const value = String(token || '');
+          const selector = value.startsWith('img:')
+            ? `img[src*="${escapeAttributeSelectorFragment(value.slice(4))}"]`
+            : buildIconSelector(value);
+          return selector && (pill.matches(selector) || pill.querySelector(selector));
+        }),
+      ) || null
+    );
+  }
+
+  const runComposerToolShortcutByIcon = async (iconTokens, delays = DELAYS) => {
+    const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
+    if (!composer) return;
+
+    const selectedPill = findSelectedComposerToolPill(composer, iconTokens);
+    if (selectedPill) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNode(selectedPill);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand('delete');
+      return;
+    }
+
+    await runActionByIcon(iconTokens, delays);
+  };
+  window.__cspRunComposerToolShortcutByIcon = runComposerToolShortcutByIcon;
+
   // ==== End Buried Button Shared helpers ================
   // ======================================================
 
@@ -4296,28 +4331,19 @@ const clickElementLikeUser = (el) => {
     shortcutKeyToggleModelSelector: 'Slash',
     shortcutKeyShowOverlay: getSchemaShortcutDefaultCode('shortcutKeyShowOverlay', 'Period'),
     shortcutKeyRegenerateTryAgain: 'KeyR',
-    shortcutKeyRegenerateMoreConcise: '',
-    shortcutKeyRegenerateAddDetails: '',
-    shortcutKeyRegenerateWithDifferentModel: '',
     shortcutKeyRegenerateAskToChangeResponse: '',
     shortcutKeyMoreDotsReadAloud: '',
     shortcutKeyMoreDotsBranchInNewChat: '',
-    altPageUp: 'PageUp',
-    altPageDown: 'PageDown',
     shortcutKeyTemporaryChat: 'KeyP',
     shortcutKeyStudy: '',
     shortcutKeyCreateImage: '',
-    shortcutKeyToggleCanvas: '',
     shortcutKeyDeepResearch: '',
     shortcutKeyToggleDictate: 'KeyY',
     shortcutKeyStopAndTranscribeDictation: '',
     shortcutKeyCancelDictation: '',
     shortcutKeyShare: '',
-    shortcutKeyThinkLonger: '',
     shortcutKeyAddPhotosFiles: '',
     selectThenCopyAllMessages: 'BracketLeft',
-    shortcutKeyThinkingExtended: '',
-    shortcutKeyThinkingStandard: '',
     shortcutKeyThinkingLight: '',
     shortcutKeyThinkingHeavy: '',
     shortcutKeyProStandard: '',
@@ -7309,6 +7335,7 @@ const clickElementLikeUser = (el) => {
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
       regenerateMenuButton: ['M14.0219 8.22363'],
       searchWeb: ['M12 2c5.522'],
+      study: ['#book-open-light-20', '#book-open-light-16'],
       thinkingMenuButton: ['#127a53', '#c9d737'],
     };
 
@@ -7467,11 +7494,6 @@ const clickElementLikeUser = (el) => {
       );
     }
 
-    function runRegenerateWithDifferentModelShortcut() {
-      // The current regenerate menu has no different-model action; keep this shortcut inert.
-      return false;
-    }
-
     function runRegenerateAskToChangeResponseShortcut() {
       runRadixMenuActionFocusInputByName(
         SHORTCUT_ICON_TOKENS.regenerateMenuButton,
@@ -7485,7 +7507,51 @@ const clickElementLikeUser = (el) => {
     }
 
     async function runIconToolbarShortcut(iconTokenKey) {
-      await runActionByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);
+      await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);
+    }
+
+    async function runStudyShortcut() {
+      const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
+      if (!composer) return;
+
+      let item = findComposerToolItemByIcon(SHORTCUT_ICON_TOKENS.study);
+      if (findSelectedComposerToolPill(composer, SHORTCUT_ICON_TOKENS.study)) {
+        await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS.study);
+        return;
+      }
+      let queryText = '';
+      let previousHtml = '';
+      if (!item) {
+        const menuOpener = findComposerToolMenuOpener();
+        if (!menuOpener) return;
+
+        if (!findComposerToolItemByIcon(COMPOSER_TOOL_MENU_CUE_TOKENS)) smartClick(menuOpener);
+
+        const selection = window.getSelection();
+        composer.focus();
+        const range = document.createRange();
+        range.selectNodeContents(composer);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        queryText = composer.innerText.trim() ? ' study' : 'study';
+        const previousText = composer.innerText;
+        previousHtml = composer.innerHTML;
+        document.execCommand('insertText', false, queryText);
+        if (composer.innerText === previousText) return;
+
+        item = await waitFor(() => findComposerToolItemByIcon(SHORTCUT_ICON_TOKENS.study), {
+          timeout: Math.min(DELAYS.waitActionItem, 300),
+        });
+        if (!item) {
+          composer.innerHTML = previousHtml;
+          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }));
+          return;
+        }
+      }
+
+      await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS.study);
     }
 
     function runLegacyThinkingEffortShortcut(optionId) {
@@ -7744,28 +7810,16 @@ const clickElementLikeUser = (el) => {
         window.toggleModelSelector();
       },
       shortcutKeyRegenerateTryAgain: runRegenerateTryAgainShortcut,
-      shortcutKeyRegenerateWithDifferentModel: runRegenerateWithDifferentModelShortcut,
       shortcutKeyRegenerateAskToChangeResponse: runRegenerateAskToChangeResponseShortcut,
       shortcutKeyMoreDotsReadAloud: runReadAloudShortcut,
       shortcutKeyMoreDotsBranchInNewChat: runBranchInNewChatShortcut,
-      shortcutKeyThinkingExtended: async () => {
-        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
-      },
-      shortcutKeyThinkingStandard: async () => {
-        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
-      },
       shortcutKeyThinkingLight: () => runLegacyThinkingEffortShortcut('thinking-light'),
       shortcutKeyThinkingHeavy: () => runLegacyThinkingEffortShortcut('thinking-heavy'),
       shortcutKeyProStandard: () => runProThinkingEffortShortcut('thinking-standard'),
       shortcutKeyProExtended: () => runProThinkingEffortShortcut('thinking-extended'),
       shortcutKeyTemporaryChat: runTemporaryChatShortcut,
-      shortcutKeyStudy: async () => {
-        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
-      },
+      shortcutKeyStudy: runStudyShortcut,
       shortcutKeyCreateImage: () => runIconToolbarShortcut('createImage'),
-      shortcutKeyToggleCanvas: async () => {
-        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
-      },
       shortcutKeyDeepResearch: () => runIconToolbarShortcut('deepResearch'),
       shortcutKeyAddPhotosFiles: () => runIconToolbarShortcut('addPhotosFiles'),
       shortcutKeyToggleDictate: DictationShortcut.runToggle,
@@ -7778,9 +7832,6 @@ const clickElementLikeUser = (el) => {
           '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
           { immediate: true },
         );
-      },
-      shortcutKeyThinkLonger: async () => {
-        // Removed from ChatGPT; keep the legacy storage key inert for existing installs.
       },
       shortcutKeyNewGptConversation: runNewGptConversationShortcut,
       selectThenCopyAllMessages: runSelectThenCopyAllMessagesShortcut,
@@ -10750,6 +10801,11 @@ form.w-full[data-type="unified-composer"] {
       (action) => Number(action?.slot) === Number(slot),
     );
     if (presentedAction) return presentedAction;
+    // An explicit Chat/Work catalog owns its slot list. Do not resurrect a
+    // removed legacy action from the global compatibility table when the
+    // selected profile does not present that slot.
+    if (window.__modelCatalog && typeof window.ModelLabels?.getPopupPresentationGroups === 'function')
+      return null;
     return typeof window.ModelLabels?.getActionBySlot === 'function'
       ? window.ModelLabels.getActionBySlot(slot)
       : null;
@@ -17248,7 +17304,6 @@ ${groupMarkup.join('')}
           header: 'Regenerate Response',
           keys: [
             'shortcutKeyRegenerateTryAgain',
-            'shortcutKeyRegenerateWithDifferentModel',
             'shortcutKeyRegenerateAskToChangeResponse',
           ],
         },
@@ -17260,7 +17315,6 @@ ${groupMarkup.join('')}
             'shortcutKeyCreateImage',
             'shortcutKeyDeepResearch',
             'shortcutKeyAddPhotosFiles',
-            'shortcutKeyThinkLonger',
           ],
         },
       ];

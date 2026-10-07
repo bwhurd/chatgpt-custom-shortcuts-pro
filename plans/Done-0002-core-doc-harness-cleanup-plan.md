@@ -18,7 +18,7 @@
 - [x] Add `_temp-files/README.md` and update ignore rules so scratch artifacts have a standard home.
 - [x] Move `PLAN/reference-scripts/**` to `_temp-files/reference-scripts/**`, then remove the empty singular `PLAN/` folder.
 - [x] Move inspector captures and copied support artifacts out of `plans/` into `_temp-files/inspector-captures/`.
-- [x] Rename the active Fast Mode plan to the active numbered protocol.
+- [x] Rename the active workstream plan to follow the numbered protocol.
 - [x] Rename completed archive/history plans to `Done-...` protocol names.
 - [x] Rename incomplete or ambiguous workstream plans to `Deferred-...` protocol names unless they are clearly active.
 - [x] Move root `AGENT-PLANNING.md` into `plans/` under a deferred protocol name so live or unresolved checklist material is no longer in the root.

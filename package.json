@@ -30,6 +30,8 @@
     "playwright:chatgpt:check-scrape": "node tests/playwright/devscrape-wide.mjs --action check-wide",
     "playwright:chatgpt:validate-scrape": "node tests/playwright/devscrape-wide.mjs --action validate-wide",
     "playwright:chatgpt:audit-shortcuts": "node tests/playwright/devscrape-wide.mjs --action audit-shortcuts",
+    "shortcuts:catalog": "node tests/playwright/shortcut-fast-fixture.mjs --catalog-only",
+    "test:shortcuts:fast": "node tests/playwright/shortcut-fast-fixture.mjs",
     "audit:selectors": "node tests/playwright/devscrape-wide.mjs --action audit-selectors",
     "playwright:chatgpt:benchmark": "node tests/playwright/chatgpt-scenario-benchmark.mjs",
     "playwright:chatgpt:wiggle-check": "node tests/playwright/chatgpt-wiggle-check.mjs",

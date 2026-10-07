@@ -66,14 +66,7 @@
     deprecatedShortcutKeys: [
       'shortcutKeyRegenerate',
       'shortcutKeyCopyAllResponses',
-      'shortcutKeyRegenerateMoreConcise',
-      'shortcutKeyRegenerateAddDetails',
       'shortcutKeyShowShortcuts',
-      'shortcutKeyStudy',
-      'shortcutKeyToggleCanvas',
-      'shortcutKeyThinkLonger',
-      'shortcutKeyThinkingStandard',
-      'shortcutKeyThinkingExtended',
     ],
     // Popup shortcut keys that use Ctrl/Cmd instead of Alt.
     // Used for modifier-aware duplicate detection in popup.js.
@@ -128,10 +121,10 @@
       shortcutKeyMoreDotsReadAloud: 'label_ReadAloud',
 
       shortcutKeyRegenerateTryAgain: 'label_regenerate',
-      shortcutKeyRegenerateWithDifferentModel: 'label_RegenerateWithDifferentModel',
       shortcutKeyRegenerateAskToChangeResponse: 'label_RegenerateAskToChangeResponse',
 
       shortcutKeySearchWeb: 'label_search_web',
+      shortcutKeyStudy: 'label_study',
       shortcutKeyCreateImage: 'label_toggle_create_image',
       shortcutKeyDeepResearch: 'label_deep_research',
       shortcutKeyAddPhotosFiles: 'label_add_photos_files',
@@ -213,17 +206,14 @@
       {
         headerI18nKey: 'section_regenerate',
         header: 'Regenerate Response',
-        keys: [
-          'shortcutKeyRegenerateTryAgain',
-          'shortcutKeyRegenerateWithDifferentModel',
-          'shortcutKeyRegenerateAskToChangeResponse',
-        ],
+        keys: ['shortcutKeyRegenerateTryAgain', 'shortcutKeyRegenerateAskToChangeResponse'],
       },
       {
         headerI18nKey: 'section_message_tools',
         header: 'Message Tools',
         keys: [
           'shortcutKeySearchWeb',
+          'shortcutKeyStudy',
           'shortcutKeyCreateImage',
           'shortcutKeyDeepResearch',
           'shortcutKeyAddPhotosFiles',
