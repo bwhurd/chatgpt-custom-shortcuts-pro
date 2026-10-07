@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   static:
-    name: Code and settings checks
+    name: Code, settings and shortcut contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -55,3 +55,11 @@ jobs:
         run: npm run test:validators
       - name: Settings wiring
         run: npm run validate:keys
+      - name: Shortcut report and inventory contracts
+        run: |
+          node tests/shortcut-fast-report-fixture.mjs
+          node tests/shortcut-audit-inventory-fixture.mjs
+          node tests/shortcut-unassigned-inventory-fixture.mjs
+          node tests/shortcut-tab-pool-fixture.mjs
+      - name: Shortcut catalogue and coverage warnings
+        run: npm run shortcuts:catalog
