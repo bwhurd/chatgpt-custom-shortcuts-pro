@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   static:
-    name: Code, settings and controlled shortcuts
+    name: Code, settings and fixture regressions
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -48,9 +48,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Install and run all fast checks
+      - name: Install and run code and fixture checks
         run: npm run checks -- --ci
-      - name: Upload current shortcut report
+      - name: Upload fixture regression report (live page unverified)
         if: always()
         uses: actions/upload-artifact@v7
         with:

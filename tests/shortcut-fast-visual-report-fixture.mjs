@@ -252,6 +252,53 @@ try {
   assert.equal(startupDocument.visualSummary.checks, 'No checks ran');
   assert.ok(!startupDocument.failures[0].reason.includes('shortcutKeyUnsafeFailure'));
 
+  const fixtureOnly = await writeFastVisualReport(
+    { rows: [], observations: [] },
+    { outputDirectory },
+  );
+  const fixtureOnlyDocument = JSON.parse(await readFile(fixtureOnly.json, 'utf8'));
+  assert.equal(fixtureOnlyDocument.currentPageValidation.status, 'unverified');
+  assert.match(
+    await readFile(fixtureOnly.markdown, 'utf8'),
+    /Current ChatGPT page:\*\* UNVERIFIED/,
+  );
+  const unsupportedPass = await writeFastVisualReport(
+    {
+      rows: [],
+      currentPageValidation: { status: 'passed', reason: 'Trust me' },
+    },
+    { outputDirectory },
+  );
+  assert.equal(
+    JSON.parse(await readFile(unsupportedPass.json, 'utf8')).currentPageValidation.status,
+    'unverified',
+  );
+  const liveFailure = await writeFastVisualReport(
+    {
+      scope: 'current-page',
+      rows: [],
+      currentPageValidation: {
+        status: 'failed',
+        reason: 'A live target is absent.',
+        failures: [
+          {
+            targetId: 'composer',
+            actionId: 'shortcutKeyFocus',
+            reason: '<script>missing</script>',
+          },
+        ],
+      },
+    },
+    { outputDirectory },
+  );
+  const liveFailureDocument = JSON.parse(await readFile(liveFailure.json, 'utf8'));
+  assert.equal(liveFailure.exitCode, 1);
+  assert.equal(liveFailure.status, 'FAIL');
+  assert.equal(liveFailureDocument.fixList[0].actionId, 'shortcutKeyFocus');
+  assert.equal(liveFailureDocument.fixList[0].fixKind, 'current-page-failure');
+  assert.match(await readFile(liveFailure.html, 'utf8'), /&lt;script&gt;missing&lt;\/script&gt;/);
+  assert.match(await readFile(liveFailure.html, 'utf8'), /Current ChatGPT page validation/);
+
   console.log(
     'Fast visual report fixture passed: attribution, scope separation, escaping, and startup failure.',
   );

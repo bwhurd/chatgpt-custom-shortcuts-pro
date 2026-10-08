@@ -10,6 +10,8 @@ const outputDirectory = path.join(root, 'test-results', 'shortcuts-fast');
 const npmCli = process.env.npm_execpath;
 const args = process.argv.slice(2);
 const ci = args.includes('--ci');
+const live = args.includes('--live');
+const probeShortcuts = args.includes('--probe-shortcuts');
 const results = [];
 
 function run(name, npmArgs) {
@@ -20,16 +22,38 @@ function run(name, npmArgs) {
     stdio: 'inherit',
     env: process.env,
   });
-  const status = result.status === 0 && !result.error ? 'pass' : 'fail';
-  results.push({ name, status, seconds: ((performance.now() - started) / 1000).toFixed(1) });
+  const status =
+    result.status === 0 && !result.error
+      ? 'pass'
+      : npmArgs[1] === 'check:current-page' && result.status === 2 && !result.error
+        ? 'unverified'
+        : 'fail';
+  results.push({
+    name,
+    status,
+    seconds: ((performance.now() - started) / 1000).toFixed(1),
+    ...(status === 'unverified'
+      ? {
+          reason:
+            'Live evidence is partial or unavailable. See the separate local current-page report.',
+        }
+      : {}),
+  });
   if (result.error) console.error(result.error.message);
   if (ci) console.log('::endgroup::');
   return status === 'pass';
 }
 
 async function main() {
-  if (!npmCli || args.some((arg) => arg !== '--ci'))
-    throw new Error('Run npm run checks, or npm run checks -- --ci on a Linux CI worker.');
+  if (
+    !npmCli ||
+    args.some((arg) => !['--ci', '--live', '--probe-shortcuts'].includes(arg)) ||
+    (ci && live) ||
+    (probeShortcuts && !live)
+  )
+    throw new Error(
+      'Use npm run checks, checks:live [-- --probe-shortcuts], or checks -- --ci. Authenticated checks are local only.',
+    );
   const lockContents = readFileSync(path.join(root, 'package-lock.json'));
   const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
@@ -68,9 +92,15 @@ async function main() {
     ['Validator regression', 'test:validators'],
     ['Settings wiring', 'validate:keys'],
     ['Shortcut report and inventory contracts', 'test:shortcuts:contracts'],
-    ['Controlled shortcut keyboard and target checks', 'test:shortcuts:fast'],
+    ['Shortcut regressions on prepared fixture pages', 'test:shortcuts:fast'],
   ])
     run(name, ['run', script]);
+  if (live)
+    run('Fresh authenticated current-page check (local)', [
+      'run',
+      'check:current-page',
+      ...(probeShortcuts ? ['--', '--probe-shortcuts'] : []),
+    ]);
 }
 
 (async () => {
@@ -89,7 +119,7 @@ async function main() {
       throw new Error('The shortcut process produced no complete report; inspect the check log.');
   } catch (error) {
     console.error(error.message);
-    results.push({ name: error.message, status: 'fail', seconds: '0' });
+    results.push({ name: error.message, status: 'fail', seconds: '0', reason: error.message });
     const { writeFastVisualReport } = await import(
       '../tests/playwright/lib/shortcut-fast-visual-report.mjs'
     );
@@ -117,7 +147,7 @@ async function main() {
     '| --- | --- | ---: |',
     ...results.map(
       (result) =>
-        `| ${result.name.replaceAll('|', '\\|').replaceAll('\n', ' ')} | ${result.status === 'pass' ? '✅ pass' : '❌ fail'} | ${result.seconds} |`,
+        `| ${result.name.replaceAll('|', '\\|').replaceAll('\n', ' ')} | ${result.status === 'pass' ? '✅ pass' : result.status === 'unverified' ? '⚠️ unverified / partial' : '❌ fail'} | ${result.seconds} |`,
     ),
     '',
   ].join('\n');
@@ -131,7 +161,15 @@ async function main() {
     );
   }
   console.log(`Shortcut report: ${path.join(outputDirectory, 'report.html')}`);
-  process.exitCode = results.some((result) => result.status === 'fail') ? 1 : 0;
+  if (live)
+    console.log(
+      `Current-page report: ${path.join(root, 'test-results', 'shortcuts-live', 'report.html')}`,
+    );
+  process.exitCode = results.some((result) => result.status === 'fail')
+    ? 1
+    : results.some((result) => result.status === 'unverified')
+      ? 2
+      : 0;
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

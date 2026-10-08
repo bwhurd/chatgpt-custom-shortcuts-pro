@@ -72,7 +72,7 @@ async function writeSyntheticReport() {
 
 async function main() {
   if (process.env.FAKE_NPM_FAIL_STAGE === stage) {
-    process.exitCode = 23;
+    process.exitCode = Number(process.env.FAKE_NPM_EXIT_CODE || 23);
     return;
   }
   if (stage === 'ci') installDependencies();
@@ -160,8 +160,8 @@ function writeLock(root, manifest, { integrity = 'sha512-synthetic' } = {}) {
   });
 }
 
-function runRunner(fixture, environment = {}) {
-  return spawnSync(process.execPath, [fixture.runnerPath], {
+function runRunner(fixture, environment = {}, args = []) {
+  return spawnSync(process.execPath, [fixture.runnerPath, ...args], {
     cwd: fixture.root,
     encoding: 'utf8',
     timeout: 20_000,
@@ -176,6 +176,33 @@ function runRunner(fixture, environment = {}) {
     },
   });
 }
+
+test('preserves partial live evidence as unverified rather than an observed failure', (t) => {
+  const fixture = createFixture(t);
+  const result = runRunner(
+    fixture,
+    { FAKE_NPM_FAIL_STAGE: 'check:current-page', FAKE_NPM_EXIT_CODE: '2' },
+    ['--live'],
+  );
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  const report = readReport(fixture);
+  assert.equal(report.checkResults.at(-1).status, 'unverified');
+  assert.equal(report.checkFailures.length, 0);
+  assert.equal(report.fixList.length, 0);
+  assert.ok(report.visualSummary.warnings > 0);
+  assert.match(
+    fs.readFileSync(path.join(fixture.outputDirectory, 'checks.md'), 'utf8'),
+    /unverified \/ partial/,
+  );
+});
+
+test('rejects authenticated CI requests before any dependency or browser stage', (t) => {
+  const fixture = createFixture(t);
+  const result = runRunner(fixture, {}, ['--ci', '--live']);
+  assert.equal(result.status, 1);
+  assert.deepEqual(callStages(fixture), []);
+  assert.match(readReport(fixture).checkFailures[0].reason, /Authenticated checks are local only/);
+});
 
 function readCalls(fixture) {
   if (!fs.existsSync(fixture.logPath)) return [];

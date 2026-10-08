@@ -42,6 +42,7 @@ Thumbs.db
 *.crx
 *.pem
 *.ps1
+!/scripts/check-live-chrome-profile.ps1
 !/ahk-tray-tools/PushLocalToGit.ps1
 !/ahk-tray-tools/GitPushSupport.ps1
 !/ahk-tray-tools/ConfigureGitPush.ps1

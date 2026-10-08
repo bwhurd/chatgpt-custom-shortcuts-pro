@@ -167,6 +167,42 @@ function scopeDescription(report, selectedIds, totalRows) {
 }
 
 function analyzeReport(report) {
+  const currentPageValidation = {
+    ...(report.currentPageValidation || {
+      status: 'unverified',
+      reason:
+        'Fresh authenticated ChatGPT target validation has not run. Fixture results cannot establish the current page state.',
+    }),
+  };
+  if (!['passed', 'failed', 'partial', 'unverified'].includes(currentPageValidation.status)) {
+    currentPageValidation.status = 'unverified';
+    currentPageValidation.reason = 'The current-page evidence has no recognized validation status.';
+  }
+  if (
+    currentPageValidation.status === 'passed' &&
+    (!Number.isFinite(Date.parse(currentPageValidation.checkedAt)) ||
+      !/^https:\/\/chatgpt\.com\/c\/[^/?#]+$/.test(currentPageValidation.pageUrl || '') ||
+      currentPageValidation.targetSummary?.status !== 'passed' ||
+      currentPageValidation.probeSummary?.status !== 'passed')
+  ) {
+    currentPageValidation.status = 'unverified';
+    currentPageValidation.reason =
+      'A passed label without current-page provenance and complete target/probe evidence is unverified.';
+  }
+  const currentPageFailures = asArray(currentPageValidation.failures).map((item) => ({
+    ...item,
+    label: item.actionId || item.targetId || 'Current-page validation',
+    status: 'fail',
+    targetRefs: item.targetId ? [item.targetId] : [],
+    fixKind: 'current-page-failure',
+  }));
+  if (currentPageValidation.status === 'failed' && !currentPageFailures.length)
+    currentPageFailures.push({
+      label: 'Current-page validation',
+      reason: currentPageValidation.reason,
+      status: 'fail',
+      fixKind: 'current-page-failure',
+    });
   const rows = asArray(report.rows);
   const targetById = new Map(asArray(report.targets).map((target) => [target.targetId, target]));
   const selection = report.selection || {};
@@ -390,7 +426,7 @@ function analyzeReport(report) {
       seconds: result.seconds,
     }));
   const checkWarnings = checkResults.filter((result) =>
-    ['warn', 'warning'].includes(result.status),
+    ['warn', 'warning', 'partial', 'unverified'].includes(result.status),
   );
   const reportSaysFailure =
     report.status === 'failure' ||
@@ -435,13 +471,14 @@ function analyzeReport(report) {
   }
 
   const outcomeStatus =
-    failures.length || checkFailures.length
+    failures.length || checkFailures.length || currentPageFailures.length
       ? 'FAIL'
       : coverageGaps.length ||
           scopeLimitations.length ||
           unselectedRows.length ||
           rawWarnings.length ||
           checkWarnings.length ||
+          currentPageValidation.status !== 'passed' ||
           report.outcome?.status === 'success-with-warnings' ||
           report.outcome?.coverage === 'partial'
         ? 'WARN'
@@ -449,7 +486,9 @@ function analyzeReport(report) {
               (item) => item.attempted || item.status === 'pass' || item.status === 'fail',
             )
           ? 'PASS'
-          : 'WARN';
+          : currentPageValidation.status === 'passed'
+            ? 'PASS'
+            : 'WARN';
   const attempted = observations.filter(
     (item) => item.attempted || ['pass', 'fail'].includes(item.status),
   ).length;
@@ -472,10 +511,11 @@ function analyzeReport(report) {
     ...failures.map((item) => ({ ...item, fixKind: 'failure' })),
     ...checkFailures.map((item) => ({ ...item, fixKind: 'failed-check-stage' })),
     ...coverageGaps.map((item) => ({ ...item, fixKind: 'coverage-gap' })),
+    ...currentPageFailures,
   ];
   return {
     status: outcomeStatus,
-    exitCode: failures.length || checkFailures.length ? 1 : 0,
+    exitCode: failures.length || checkFailures.length || currentPageFailures.length ? 1 : 0,
     scope,
     summary: {
       status: outcomeStatus,
@@ -506,6 +546,12 @@ function analyzeReport(report) {
     passRows,
     warnings: rawWarnings,
     fixList,
+    currentPageValidation,
+    currentPageFailures,
+    title:
+      report.scope === 'current-page'
+        ? 'Current ChatGPT page validation'
+        : 'Shortcut fixture regressions',
   };
 }
 
@@ -515,7 +561,8 @@ function markdownList(items, describe) {
 }
 
 function markdownTargets(item) {
-  if (!item.targets.length) return item.targetRefs.map(escapeMarkdown).join(', ') || '—';
+  if (!asArray(item.targets).length)
+    return asArray(item.targetRefs).map(escapeMarkdown).join(', ') || '—';
   return item.targets
     .map((target) => {
       const values = [target.targetRef, target.identifier, ...target.selectors].filter(Boolean);
@@ -526,12 +573,18 @@ function markdownTargets(item) {
 
 function renderMarkdown(analysis, generatedAt) {
   const lines = [
-    '# Fast shortcut check',
+    `# ${analysis.title}`,
     '',
     `**Status:** ${analysis.status}  `,
     `**Scope:** ${escapeMarkdown(analysis.scope.label)}  `,
     `**Generated:** ${escapeMarkdown(generatedAt)}  `,
     `**Checks:** ${escapeMarkdown(analysis.summary.checks)}`,
+    '',
+    `**Current ChatGPT page:** ${escapeMarkdown(analysis.currentPageValidation.status.toUpperCase())}`,
+    escapeMarkdown(analysis.currentPageValidation.reason || ''),
+    `**Checked:** ${escapeMarkdown(analysis.currentPageValidation.checkedAt || 'Not checked')}`,
+    `**Captured live page:** ${escapeMarkdown(analysis.currentPageValidation.pageUrl || 'Unavailable')} · **Configured profile:** ${escapeMarkdown(analysis.currentPageValidation.profileDirectory || 'Unavailable')}`,
+    `**Live target presence:** ${escapeMarkdown(analysis.currentPageValidation.targetSummary?.status || 'unverified')} · **Live activations:** ${escapeMarkdown(analysis.currentPageValidation.probeSummary?.status || 'unverified')}`,
     '',
     '| Passed actions | Failed shortcuts | Failed check stages | Coverage gaps | Scope limitations | Unselected | Warnings |',
     '| ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
@@ -560,7 +613,21 @@ function renderMarkdown(analysis, generatedAt) {
         `| ${escapeMarkdown(item.actionId || item.label)} | ${escapeMarkdown(item.status)} | ${escapeMarkdown(item.chord || '—')} | ${markdownTargets(item)} | ${escapeMarkdown([item.source, item.owner].filter(Boolean).join(' / ') || '—')} | ${escapeMarkdown(item.reason || '—')} |`,
       );
     }
-  } else lines.push('_No failed shortcut actions or fatal startup issues._');
+  } else
+    lines.push(
+      analysis.scope.kind === 'current-page'
+        ? '_See the current-page status and fix list._'
+        : '_No failures found in the prepared fixture pages. This is not current-page target validation._',
+    );
+  lines.push(
+    '',
+    '## Current-page coverage',
+    '',
+    markdownList(asArray(analysis.currentPageValidation.scopeLimitations), (item) =>
+      escapeMarkdown(item.reason || item),
+    ),
+    '',
+  );
   lines.push('', '## Coverage gaps', '');
   if (analysis.coverageGaps.length) {
     lines.push('| Shortcut / contract | Owner | Missing proof or coverage | Next step |');
@@ -594,6 +661,11 @@ function renderMarkdown(analysis, generatedAt) {
     }),
     '',
   );
+  if (!analysis.fixList.length && analysis.currentPageValidation.status !== 'passed')
+    lines.push(
+      'Complete current-page validation has not passed. See the live target and activation status above.',
+      '',
+    );
   if (analysis.warnings.length) {
     lines.push(
       '## Run warnings',
@@ -676,7 +748,7 @@ function renderHtml(analysis, generatedAt, outputDirectory) {
             `<li><strong>${escapeHtml(item.actionId || item.label)}</strong> <span class="pill ${item.fixKind === 'coverage-gap' ? 'warn' : 'bad'}">${escapeHtml(item.fixKind)}</span><p>${escapeHtml(item.reason || 'Review this row.')}${item.chord ? ` Chord: ${escapeHtml(item.chord)}.` : ''}${item.targetRefs?.length ? ` Targets: ${escapeHtml(item.targetRefs.join(', '))}.` : ''}${item.owner ? ` Owner: ${escapeHtml(item.owner)}.` : ''}</p></li>`,
         )
         .join('')}</ol>`
-    : '<p class="empty">No actionable fixes identified.</p>';
+    : '<p class="empty">No observed failures in this report. Current-page status and coverage are shown above.</p>';
   const allWarnings = [
     ...analysis.warnings,
     ...analysis.checkWarnings.map((item) => ({ reason: `${item.name}: ${item.reason}` })),
@@ -710,7 +782,7 @@ function renderHtml(analysis, generatedAt, outputDirectory) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fast shortcut check — ${escapeHtml(analysis.status)}</title>
+  <title>${escapeHtml(analysis.title)} — ${escapeHtml(analysis.status)}</title>
   <style>
     :root { color-scheme: light; font: 15px/1.5 system-ui, sans-serif; background: #f5f7fb; color: #172033; }
     body { margin: 0; padding: 28px; }
@@ -750,7 +822,13 @@ function renderHtml(analysis, generatedAt, outputDirectory) {
 </head>
 <body>
   <main>
-    <h1>Fast shortcut check</h1>
+    <h1>${escapeHtml(analysis.title)}</h1>
+    <section class="card neutral" aria-label="Current ChatGPT validation"><strong>Current ChatGPT page: ${escapeHtml(analysis.currentPageValidation.status.toUpperCase())}</strong><p>${escapeHtml(analysis.currentPageValidation.reason || '')}</p><p>Checked: ${escapeHtml(analysis.currentPageValidation.checkedAt || 'Not checked')} · Live target presence: ${escapeHtml(analysis.currentPageValidation.targetSummary?.status || 'unverified')} · Live activations: ${escapeHtml(analysis.currentPageValidation.probeSummary?.status || 'unverified')}</p><ul>${asArray(
+      analysis.currentPageValidation.scopeLimitations,
+    )
+      .map((item) => `<li>${escapeHtml(item.reason || item)}</li>`)
+      .join('')}</ul></section>
+    <p class="meta">Captured live page: ${escapeHtml(analysis.currentPageValidation.pageUrl || 'Unavailable')} · Configured profile: ${escapeHtml(analysis.currentPageValidation.profileDirectory || 'Unavailable')}</p>
     <div class="status-line"><span class="pill ${statusClass(analysis.status.toLowerCase())}">${escapeHtml(analysis.status)}</span><span>${escapeHtml(analysis.scope.label)}</span></div>
     <p class="meta">Generated ${escapeHtml(generatedAt)} · ${escapeHtml(analysis.summary.checks)}</p>
     <section class="cards" aria-label="Run summary">${summaryCards}<div class="card neutral"><span>Fix items</span><strong>${analysis.fixList.length}</strong></div></section>
@@ -794,6 +872,7 @@ export async function writeFastVisualReport(
     passRows: analysis.passRows,
     visualWarnings: analysis.warnings,
     fixList: analysis.fixList,
+    currentPageValidation: analysis.currentPageValidation,
   };
   const jsonPath = resolve(directory, 'report.json');
   const markdownPath = resolve(directory, 'report.md');

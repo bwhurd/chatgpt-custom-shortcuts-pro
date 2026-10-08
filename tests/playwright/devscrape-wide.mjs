@@ -615,7 +615,7 @@ async function validateWide() {
     probeShortcuts: shouldProbeShortcuts(),
   });
   const { report, reportFiles } = await checkWideForFolder(writeResult.folderName);
-  openLocalFile(reportFiles.htmlPath);
+  if (!hasFlag('--no-open-report')) openLocalFile(reportFiles.htmlPath);
   if (
     requireExtensionCapture &&
     Array.isArray(report.missingArtifacts) &&
