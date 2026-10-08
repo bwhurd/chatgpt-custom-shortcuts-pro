@@ -40,7 +40,7 @@ Rules that must stay true:
 - stored shortcut values are `KeyboardEvent.code`
 - cleared shortcut values persist as NBSP (`\u00A0`)
 - digits treat `DigitX` and `NumpadX` as equivalent
-- duplicate detection must compare canonical codes, not raw visible text
+- duplicate detection must compare canonical codes, not raw visible text; `Digit5` and `Numpad5` are equivalent
 
 If popup display and runtime behavior disagree, start by checking normalization before changing handlers.
 
@@ -125,7 +125,7 @@ Model actions and hidden scrape model switches must choose the route from the cu
 
 Visible model-picker shortcut actions are serialized until the current picker closes. A missing effort row (for example Max on GPT-5.5) is a valid unavailable action: it must not change the model and must leave the picker closed. Hidden scrape actions remain independent of the visible-action queue.
 
-Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Popup hydration and profile-change events follow the same rule.
+Catalog refresh owns catalogs and names only. It must not read, rewrite, normalize, reseed, or repair either model-picker shortcut array. Profile-change events only switch the active profile cache and never alter stored assignments. Popup startup has a separate repair boundary: after defaults, one-time profile migration, and catalog-based unavailable-slot pruning, it normalizes one stable sync snapshot before exposing shortcut controls, as defined by the duplicate-shortcut safeguard below.
 
 `Toggle Chat / Work` uses the same native New Conversation helper as the configurable new-chat shortcut. On a nonblank conversation it starts a blank conversation, waits 500 ms for the native two-radio surface selector, then selects the unchecked radio. On an already blank conversation it toggles directly. Runtime detection uses structural radio order and reciprocal checked state, never localized labels.
 
@@ -285,9 +285,9 @@ If duplicate prompts feel inconsistent, inspect the active modifier mode first.
 - A model edit checks only the selected profile plus same-modifier global shortcuts. A global shortcut edit checks both profiles because that command is available in either mode.
 - The same canonical code may appear once in Chat and once in Work. Matching defaults are allowed; cross-profile reuse must not trigger a duplicate prompt or clear either assignment.
 - Within one profile, assigning an already-used canonical code transfers ownership deterministically as one user edit: clear the old owner, then write the exact requested slot. Never renumber, autofill, mirror, or reorder other assignments.
-- Popup startup waits for default seeding and one-time profile migration/filtering, then repairs duplicates in a full sync snapshot using the effective model modifier and both profile registries. Scalar losers are cleared to NBSP and model losers to an empty string; supported profile positions and cross-profile reuse remain intact. It verifies the persisted patch before hydrating controls. Pending or failed repair keeps shortcut controls hidden, with existing error feedback on failure.
+- Popup startup waits for default seeding and one-time profile migration/filtering, then repairs duplicates in a stable full sync snapshot using the effective model modifier and both profile registries. Canonical scalar shortcut owners claim matching-modifier keys before model slots; within each profile, utility actions claim before supported model slots in ascending slot order. Scalar losers are cleared to NBSP and model losers to an empty string; supported profile positions and cross-profile reuse remain intact. When present, the `modelPickerKeyCodes` compatibility snapshot is aligned to normalized Chat so it cannot retain stale duplicate values. Startup verifies the persisted patch before hydrating controls. Pending or failed repair keeps shortcut controls hidden, with existing error feedback on failure.
 - Startup filtering prunes model codes only from slots absent from every configuration in their profile. Catalog refresh and profile switching do not otherwise reseed supported assignments.
-- Import, local persistence after Drive restore, export and clear/reset boundaries use the same deterministic full-snapshot normalizer as startup, preserving nonduplicate supported customizations and existing confirmations. Focused popup fixtures prove these boundaries. Runtime propagation and live acceptance retain separate unfinished gates in [active 0099](../plans/0099-popup-shortcut-duplicate-scrub-plan.md).
+- Import, local persistence after Drive restore, export and clear/reset boundaries use the same deterministic full-snapshot normalizer as startup, preserving nonduplicate supported customizations and existing confirmations. Profile arrays remain independent; the compatibility field is aligned to Chat after normalized profile writes. Focused popup fixtures prove these boundaries. Runtime storage propagation is covered by a controlled fixture; the available live Chrome/CDP acceptance remains in [active 0099](../plans/0099-popup-shortcut-duplicate-scrub-plan.md).
 
 ## Tab-targeting invariant
 

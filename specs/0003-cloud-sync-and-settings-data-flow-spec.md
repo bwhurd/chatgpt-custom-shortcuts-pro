@@ -62,8 +62,9 @@ Popup path:
 Important data rules:
 - downloaded Drive JSON is filtered back through the same known-key allowlist
 - every scraped model-catalog/name snapshot and timestamp is excluded again on restore
-- `saveLocalSettings()` writes only filtered keys back to sync storage
+- `saveLocalSettings()` merges over current settings, normalizes shortcut assignments, and writes only filtered keys back to sync storage
 - `rehydrateSettingsUI()` refreshes popup state, shortcut inputs, and both independent model-picker profile arrays
+- duplicate cleanup completes before the restored shortcut controls are rehydrated; failed repair keeps them gated and reports the existing popup error
 
 Retry behavior:
 - `CloudStorage` clears stale token/file-id state on `401` / `403` style failures and retries through the helper path
@@ -80,9 +81,10 @@ Important data rules:
 - allowlist is built from `DEFAULT_PRESET_DATA` plus `shortcutKeys`
 - snapshot source is the full `chrome.storage.sync` object
 - only allowlisted keys are serialized
+- shortcut repair is verified before export reads its canonical snapshot
 - every shortcut is normalized through `effectiveShortcutCode()`
-- `modelPickerKeyCodesLatest` and `modelPickerKeyCodesLegacy` are normalized independently to the full picker slot count
-- the legacy `modelPickerKeyCodes` field seeds both profiles only for old imports; it is not live shared state
+- `modelPickerKeyCodesLatest` and `modelPickerKeyCodesLegacy` are normalized independently, padded to the 15-slot base, and retain supported catalog-backed dynamic slots beyond it
+- the legacy `modelPickerKeyCodes` field is a Chat-aligned compatibility snapshot, not live shared state; export writes it from the normalized Chat array
 - every scraped model-catalog/name snapshot and timestamp is explicitly removed
 - file shape is `{ __meta, data }`
 
@@ -97,8 +99,9 @@ Important data rules:
 - every scraped model-catalog/name snapshot and timestamp is dropped before merge
 - imported keys are filtered against the same popup allowlist
 - shortcut values are normalized back to `KeyboardEvent.code` / NBSP
-- each 15-slot model-picker shortcut profile is normalized independently; the same canonical key may appear once in Chat and once in Work, while only later duplicates inside the same profile are cleared
-- nonduplicate customized and currently hidden slots are preserved
+- each profile array is normalized independently, with the 15-slot base plus supported dynamic catalog slots; the same canonical key may appear once in Chat and once in Work, while later conflicts inside a profile are cleared
+- nonduplicate supported customizations, including supported but currently hidden slots, are preserved; slots absent from every catalog configuration are pruned before conflict checks
+- old `modelPickerKeyCodes`-only imports seed profiles for migration; the compatibility snapshot is then aligned to Chat
 - imported values merge over the current sync snapshot before save
 - popup UI is rehydrated after save
 

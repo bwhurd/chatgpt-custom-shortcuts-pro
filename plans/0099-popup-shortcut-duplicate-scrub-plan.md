@@ -2,8 +2,8 @@
 
 ## Goal and status
 
-- [~] On each `popup.html` activation, repair conflicting shortcut assignments in `chrome.storage.sync` before publishing hydrated shortcut inputs, model chips, or editable controls. Batches 01–02 are implemented; import/restore boundaries, runtime propagation, and final docs/live checks remain.
-- [ ] Keep one deterministic owner per modifier/code in each executable Chat or Work profile. Preserve legal reuse between profiles and between different modifiers.
+- [~] On each `popup.html` activation, repair conflicting shortcut assignments in `chrome.storage.sync` before publishing hydrated shortcut inputs, model chips, or editable controls. Batches 01–04, owning docs, and automated checks are complete; live target-profile storage/UI/runtime proof remains.
+- [x] Keep one deterministic owner per modifier/code in each executable Chat or Work profile. Preserve legal reuse between profiles and between different modifiers.
 
 ## Investigation findings
 
@@ -13,34 +13,36 @@
 - [x] `ModelLabels.normalizeProfileKeyCodes` ignores `shortcut-setting` actions and checks only one array. In the probe it retains the model's `Digit5` alongside the shared toggle, and clears Speed rather than the model's `Digit6` because models precede utilities in presentation order. Migration, file import, and Drive rehydration use this incomplete domain.
 - [x] `ShortcutUtils.buildConflictsForCode` handles interactive edits with modifier/profile awareness, but reads popup DOM/cache state and is not a storage-wide activation validator. Model reset and default generation can also bypass that edit check.
 - [x] Unavailable-slot filtering has runtime value: `content.js:isModelPickerAssignedShortcutEvent` checks every stored code in the active profile to suppress optional dynamic-effort handlers, even when the catalog has no action for that slot. A dead stored code can therefore block another shortcut while invoking no model action. Filtering the union of actions across the profile's catalogs clears that inert blocker while preserving supported dynamic slots and array positions.
-- [x] Spec 0001 and spec 0004's model-data section require unavailable-slot cleanup on hydration. Spec 0004's duplicate-safeguard section conflicts by saying unsupported slot values must be preserved and popup open never repairs. Batch 05 must reconcile those statements, distinguishing catalog pruning from the new duplicate scrub.
-- [x] On 2026-10-07, the browser inventory exposed three Chrome extension-connected profiles, none containing the supplied conversation URL or a custom CDP browser. The repo's candidate endpoints `127.0.0.1:9333`, `:9222`, and `:9223` were unavailable; Chrome command-line inspection found no running remote-debugging instance. No live storage was read or modified.
+- [x] Spec 0001 and spec 0004's model-data section require unavailable-slot cleanup on hydration. Spec 0004's duplicate-safeguard section conflicted by saying unsupported slot values must be preserved and popup open never repairs. Batch 05 reconciled those statements, distinguishing catalog pruning from the new duplicate scrub.
+- [x] Following this repo's CDP setup spec, launched the documented `CodexCleanProfile` on `127.0.0.1:9333`. Its `Secure Preferences` identify the unpacked repo extension as `dnnmjopemocomdffpcamjleolhjnocfm`; the popup opened. That profile's Chat/Work shortcut is `Digit2`, so it is not the profile for the reported `Alt+5` collision. Popup activation wrote only the stale `modelPickerKeyCodes` compatibility snapshot, aligning it to normalized `modelPickerKeyCodesLegacy`; it left the profile arrays and Chat/Work value unchanged. This profile-local cleanup is not target-profile acceptance.
+- [x] The exact conversation URL remains in attached Chrome profile `Brian` (tab `1353727706`). Its connector exposes only page-origin CDP. Opening the extension popup URL in that profile was rejected by the browser security policy, which permits only HTTP(S) navigation there and forbids reaching the same extension page through CDP, browser commands, or another surface. Ports `9222` and `9223` remain closed; port `9333` belongs to the separate `CodexCleanProfile`. The target profile's sync storage and post-popup UI/runtime state are still unread and unchanged.
 - [x] Chrome's [storage documentation](https://developer.chrome.com/docs/extensions/reference/api/storage) describes asynchronous reads/writes and `onChanged`; the [upstream concurrency discussion](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/y5hxPcavRfU) identifies the absence of storage transactions. One batched patch is not a transaction across competing writers.
 
 ## Repair policy
 
-- [ ] Use this proposed precedence for automatic repair: active scalar/global shortcuts first in stable schema/input order, then available model utilities in stable action order, then model/effort slots in ascending persisted slot order. Preserve existing Toggle Chat/Work and Toggle Speed assignments; clear the colliding GPT-6.1 Sol and GPT-6 Astra bindings in the reported example. Interactive confirmed edits still transfer ownership to the user's requested action.
-- [ ] Compare canonical `KeyboardEvent.code`, including `DigitX`/`NumpadX` equivalence and legacy character normalization. Partition by the stored effective model modifier, not partially hydrated radios. A Control model binding may coexist with an Alt global binding.
-- [ ] Deduplicate each profile independently, using global owners applicable to that profile plus every supported action across all its model configurations. Collapse repeated presentations of the same owner by storage key or profile/slot; never treat a model self-row and its Configure Models alias as two owners.
-- [ ] Preserve nonconflicting bindings, dynamic slots beyond 15, array positions/length, other settings, and catalog/name snapshots. Clear model codes only when their slot is absent from every configuration in that profile, because the runtime still treats any stored code as an owner; do not prune according to only the selected configuration. Retired/inactive settings are not active owners.
-- [ ] Persist cleared scalar shortcuts as NBSP (`\u00A0`) and cleared model-array entries as `''`, matching current writers. Never delete the key, truncate/reorder arrays, refill cleared bindings, or restart migration; removing a key can revive a default.
+- [x] Use this precedence for automatic repair: active scalar/global shortcuts first in stable schema/input order, then available model utilities in stable action order, then model/effort slots in ascending persisted slot order. Preserve existing Toggle Chat/Work and Toggle Speed assignments; clear the colliding GPT-6.1 Sol and GPT-6 Astra bindings in the reported example. Interactive confirmed edits still transfer ownership to the user's requested action.
+- [x] Compare canonical `KeyboardEvent.code`, including `DigitX`/`NumpadX` equivalence and legacy character normalization. Partition by the stored effective model modifier, not partially hydrated radios. A Control model binding may coexist with an Alt global binding.
+- [x] Deduplicate each profile independently, using global owners applicable to that profile plus every supported action across all its model configurations. Collapse repeated presentations of the same owner by storage key or profile/slot; never treat a model self-row and its Configure Models alias as two owners.
+- [x] Preserve nonconflicting bindings, dynamic slots beyond 15, array positions/length, other settings, and catalog/name snapshots. Clear model codes only when their slot is absent from every configuration in that profile, because the runtime still treats any stored code as an owner; do not prune according to only the selected configuration. Retired/inactive settings are not active owners.
+- [x] Persist cleared scalar shortcuts as NBSP (`\u00A0`) and cleared model-array entries as `''`, matching current writers. Never delete the key, truncate/reorder arrays, refill cleared bindings, or restart migration; removing a key can revive a default.
 
 ## Scope and non-goals
 
-- [ ] Change shortcut assignment behavior only at popup hydration, default/reset generation, and the import/restore persistence boundaries needed to keep repaired values from returning.
-- [ ] Do not renumber or auto-fill existing nonduplicate shortcuts; do not conflate Chat and Work profile arrays; do not alter shortcut dispatch/selectors, Chrome permissions, existing user files, or remote Drive state automatically.
-- [ ] A popup-open repair must be idempotent and storage-local. It must not contact Drive or scrape ChatGPT.
+- [x] Change shortcut assignment behavior only at popup hydration, default/reset generation, and the import/restore persistence boundaries needed to keep repaired values from returning.
+- [x] Do not renumber or auto-fill existing nonduplicate shortcuts; do not conflate Chat and Work profile arrays; do not alter shortcut dispatch/selectors, Chrome permissions, existing user files, or remote Drive state automatically.
+- [x] A popup-open repair must be idempotent and storage-local. It must not contact Drive or scrape ChatGPT.
 
 ## Acceptance matrix
 
 | Requirement | Batch | Proof |
 | --- | --- | --- |
-| Canonical, deterministic conflict ownership while preserving distinct modifiers and Chat/Work reuse | 01 | Pure fixture asserts exact owners and survivors |
-| Defaults and resets never assign a reserved key to a model row | 01 | Default-generation fixture and slot uniqueness check |
-| Popup repairs persisted values before rendering/enabling controls; second open makes no write | 02 | Popup browser test inspects raw sync storage, UI, and write count |
-| Import, restore, export, and reset cannot revive conflicting assignments | 03 | Local persistence-flow fixtures; no Drive call |
-| Runtime consumers observe repaired values for either profile | 04 | Focused runtime/listener fixture and profile switch test |
-| User-facing and data-flow contracts match the implementation | 05 | Owning specs reviewed; full focused regression and optional live CDP proof |
+| Canonical, deterministic conflict ownership while preserving distinct modifiers and Chat/Work reuse | 01 | [x] Pure fixture asserts exact owners and survivors |
+| Defaults and resets never assign a reserved key to a model row | 01 | [x] Default-generation fixture and slot uniqueness check |
+| Popup repairs persisted values before rendering/enabling controls; second open makes no write | 02 | [x] Popup browser test inspects raw storage, UI, and write count |
+| Import, restore, export, and reset cannot revive conflicting assignments | 03 | [x] Local persistence-flow fixtures; no Drive call |
+| Runtime consumers observe repaired values for either profile | 04 | [x] Focused runtime/listener fixture and profile switch test |
+| User-facing and data-flow contracts match the implementation | 05 | [x] Owning specs reviewed; repository checks pass |
+| Reloaded live target profile shows scrubbed storage/UI and runtime behavior | 05 | [ ] Requires an extension-capable CDP target for the exact conversation/profile |
 
 ## Luna Batch 01 — Deterministic normalizer and defaults
 
@@ -68,19 +70,19 @@
 
 ## Luna Batch 04 — Runtime propagation
 
-- [ ] **Objective and prerequisite:** Verify live shortcut consumers follow committed scalar/profile storage after popup repair. Depends on Batch 02.
-- [ ] **Likely files and symbols:** `extension/content.js` model-profile and scalar `chrome.storage.onChanged` handlers, runtime/hint caches, overlay hydration; the focused shortcut/profile fixtures under `tests/`.
-- [ ] **Implementation:** Trace the actual repair patch through storage listeners for the selected and inactive profiles. Add only the missing invalidation/cache synchronization needed for runtime dispatch, overlay, or shortcut hints to observe cleared keys. Preserve current action routing and DOM selectors.
-- [ ] **Validation:** Extend or add a focused fixture that applies the scrub patch, switches Chat/Work, and confirms cleared owners no longer dispatch or appear as assigned hints while preserved owners still do. Run the named focused fixture; do not pass the unsupported `model-picker` type to `test:shortcuts:fast` (the existing fast fixture accepts only registered case types and action ids).
-- [ ] **Acceptance and result:** Popup, runtime action lookup, and overlay agree for both profiles after a storage change without reload-dependent stale assignments. Record exact fixture commands, outcomes, and any limitation.
+- [x] **Objective and prerequisite:** Verify shortcut consumers follow committed scalar/profile storage after popup repair. Depends on Batch 02.
+- [x] **Likely files and symbols:** Content-script model-profile storage listener and overlay hydration; `tests/playwright/lib/shortcut-model-controls-fixture.mjs`, `tests/playwright/lib/shortcut-model-slots-fixture.mjs`, and the focused runtime propagation spec.
+- [x] **Implementation:** The read-only trace found existing invalidation is sufficient: scalar blanks/NBSP remain explicit, profile writes refresh both caches and the active key table, open-menu hints are rescheduled, and the overlay hydrates fresh arrays on open. No production runtime change was needed. Added a controlled fixture that applies the reported slot 15/16 scrub patch through `chrome.storage.onChanged`, switches Chat/Work, proves the cleared GPT-6.1 Sol binding is inert, and proves preserved Toggle Speed and Chat bindings still dispatch. The overlay fixture checks the repaired arrays in both profile tabs.
+- [x] **Validation:** `npx playwright test tests/playwright/model-picker-runtime-storage-propagation.spec.mjs --workers=1 --reporter=line --output test-results/popup-shortcut-duplicate-scrub-b04-final` passed 2/2. `npm run test:shortcuts:fast` passed 74/74 with zero failures or environment failures; its 14 warnings describe native/browser/account boundaries outside controlled fixtures. `npx biome check` on the three changed JavaScript files, `node --check` on all three, and `git diff --check` passed. The test uses the popup scrub test's dynamic catalog shape and actual reported Digit5/Digit6 owners; it does not claim live-account validation.
+- [x] **Acceptance and result:** After the storage event, cleared model owners are absent from the active runtime table and overlay; pressing the former binding causes no model effect. Preserved Toggle Speed and Chat assignments still dispatch after profile changes, and the overlay displays only assigned hints for each profile. Controlled runtime propagation is complete; the separate live Chrome/CDP acceptance remains for Batch 05.
 
 ## Luna Batch 05 — Integrated proof, documentation, and closure
 
-- [ ] **Objective and prerequisite:** Close every acceptance row after Batches 01–04, update owning contracts, and perform available live proof.
-- [ ] **Likely files:** `specs/0001-adding-new-settings-spec.md`, `specs/0003-cloud-sync-and-settings-data-flow-spec.md`, `specs/0004-model-picker-and-shortcuts-spec.md`, any focused test/spec files changed in prior batches, and this plan.
-- [ ] **Implementation:** Replace spec 0004's “popup open ... never repair” statement with the narrow, verified startup-repair rule. Document precedence, storage clear values, readiness/failure behavior, import/restore/export handling, and retained profile invariants. Review all diff hunks for scope and update this batch with actual proof; do not mark a gate complete without evidence.
-- [ ] **Validation:** Run the focused fixtures, `npm test`, `npx playwright test tests/playwright/model-picker-profile-selector.spec.mjs`, `npm run validate:keys`, `npm run check`, and `npm run check:text` as relevant to changed files. On an available user-supplied CDP profile, identify the tab by the exact conversation URL, inspect only the relevant shortcut/catalog/modifier state, reload the unpacked extension after code changes, and verify open/reopen storage plus UI and runtime propagation. The prior session did not expose this profile; report that gate as unavailable if still absent. No publish, deployment, zip build, or remote backup is in scope.
-- [ ] **Acceptance and result:** Every acceptance-matrix row has proof; both toggles survive the reported scenario; second open causes no write; imports/resets cannot recreate the collision; relevant docs match the current code. Record skipped/unavailable proof and residual risk. Rename this file to `Done-0099-popup-shortcut-duplicate-scrub-plan.md` only when all required gates pass. If live CDP remains unavailable, keep the live-proof gate explicitly incomplete and do not call the plan complete.
+- [~] **Objective and prerequisite:** Close every acceptance row after Batches 01–04, update owning contracts, and perform available live proof. The live target-profile row remains open.
+- [x] **Likely files:** `specs/0001-adding-new-settings-spec.md`, `specs/0003-cloud-sync-and-settings-data-flow-spec.md`, `specs/0004-model-picker-and-shortcuts-spec.md`, focused test/spec files changed in prior batches, and this plan.
+- [x] **Implementation:** Replaced spec 0004's conflicting startup rule and documented precedence, storage clear values, readiness/failure behavior, import/restore/export handling, compatibility-array alignment, and retained profile invariants. Reviewed the complete diff for scope.
+- [~] **Validation:** Focused popup/profile/runtime Playwright fixtures passed 12/12; `npm test` passed 3/3; `npm run validate:keys`, `npm run check`, and `npm run check:text` passed. Per spec 0006, the popup ran on `CodexCleanProfile` at port 9333 and aligned only that profile's stale compatibility snapshot. The exact user-supplied conversation tab is in Chrome profile `Brian`, but the browser security policy rejected direct navigation to its extension popup and prohibits equivalent CDP/browser-command workarounds. The target profile's `chrome.storage.sync`, popup display after repair, reopen write count, and runtime dispatch therefore remain unverified. No publish, deployment, zip build, or remote backup is in scope.
+- [~] **Acceptance and result:** Automated proofs establish that both toggles survive the reported conflicts; reopen causes no repair write; imports/resets cannot recreate the collisions; runtime fixtures observe the repaired profiles; and owning specs match the implementation. The separate `CodexCleanProfile` popup run is verified but does not represent the target conversation profile. Keep this plan active and do not rename it until the target profile's final live row is proven through an allowed extension-capable surface.
 
 ## Rollback and overall completion
 
@@ -89,6 +91,6 @@
 
 ## Related specs
 
-- [ ] `specs/0001-adding-new-settings-spec.md`
-- [ ] `specs/0003-cloud-sync-and-settings-data-flow-spec.md`
-- [ ] `specs/0004-model-picker-and-shortcuts-spec.md`
+- [x] `specs/0001-adding-new-settings-spec.md`
+- [x] `specs/0003-cloud-sync-and-settings-data-flow-spec.md`
+- [x] `specs/0004-model-picker-and-shortcuts-spec.md`

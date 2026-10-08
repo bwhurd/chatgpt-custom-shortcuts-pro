@@ -231,15 +231,29 @@ That means a new setting should be visible to import/export if:
 
 The model picker is a deliberate special case: `modelPickerKeyCodesLatest` and
 `modelPickerKeyCodesLegacy` are independent profile arrays, while
-`modelPickerKeyCodes` is a legacy compatibility field only.
+`modelPickerKeyCodes` is a Chat-aligned compatibility snapshot, not a third
+live owner. Old migrations/imports may read it; normalized profile writes keep
+it aligned to Chat.
 `modelPickerKeyCodeProfilesVersion` gates the one-time split. The dedicated
 profile initializer exclusively owns first-run/migration writes for the Work
 array, Chat array, and version marker. The legacy shared array remains a
-compatibility/pristine-seed input and is not maintained by live edits. The
-generic popup default seeder must skip this profile state so it cannot race and
-overwrite a completed migration.
+compatibility/pristine-seed input. The generic popup default seeder must skip
+profile state so it cannot race and overwrite a completed migration.
 
 During profile-array hydration, retain only slots present in that profile's stored/default catalog across its model options. Preserve array positions and supported dynamic slots; clear bindings for unavailable actions before using them for duplicate-conflict checks or shortcut display.
+
+After defaults, one-time migration, and catalog filtering complete, popup
+startup normalizes the full sync snapshot before exposing shortcut controls.
+It compares canonical `KeyboardEvent.code` values using the current model
+modifier: same-modifier scalar shortcuts claim keys before model slots, and
+model utility actions claim keys before supported model slots in ascending
+slot order. Chat and Work are normalized independently, so one key may remain
+assigned once in each profile. Scalar conflicts are stored as NBSP
+(`\u00A0`); cleared model slots are stored as `''`. If the compatibility
+snapshot exists, it is aligned to the normalized Chat array. The popup verifies
+the repaired snapshot before hydration; while repair is pending or if its
+storage write fails, shortcut controls stay hidden and the existing error
+feedback is shown.
 
 ### Cloud sync
 

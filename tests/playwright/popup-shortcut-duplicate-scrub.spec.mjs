@@ -74,6 +74,7 @@ async function seedReportedConflict(serviceWorker, { splitProfiles = true } = {}
     modelPickerKeyCodeProfilesVersion: 1,
     modelPickerKeyCodesLatest: latestCodes,
     modelPickerKeyCodesLegacy: legacyCodes,
+    modelPickerKeyCodes: latestCodes.slice(),
   };
   if (!splitProfiles) {
     delete values.modelPickerKeyCodesLatest;
@@ -213,10 +214,16 @@ test('popup gates shortcut UI, scrubs both storage and Work inputs, then reopens
     expect(stored.modelPickerKeyCodesLatest[8]).toBe('');
     expect(stored.modelPickerKeyCodesLatest[3]).toBe('KeyH');
     expect(stored.modelPickerKeyCodesLegacy[3]).toBe('KeyH');
+    expect(stored.modelPickerKeyCodes).toEqual(stored.modelPickerKeyCodesLegacy);
+    expect(stored.modelPickerKeyCodes[15]).toBe('');
+    expect(stored.modelPickerKeyCodes[16]).toBe('');
 
     const firstOpenWrites = await page.evaluate(() => window.__popupStorageProbe.writes);
     expect(
-      firstOpenWrites.some((keys) => keys.length === 1 && keys[0] === 'modelPickerKeyCodesLatest'),
+      firstOpenWrites.some(
+        (keys) =>
+          keys.includes('modelPickerKeyCodesLatest') && keys.includes('modelPickerKeyCodes'),
+      ),
     ).toBe(true);
 
     const reopened = await openPopup(context, extensionId);
@@ -232,6 +239,7 @@ test('popup gates shortcut UI, scrubs both storage and Work inputs, then reopens
             'shortcutKeyToggleChatWork',
             'modelPickerKeyCodesLatest',
             'modelPickerKeyCodesLegacy',
+            'modelPickerKeyCodes',
           ].includes(key),
         ),
       ),

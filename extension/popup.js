@@ -3657,7 +3657,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groups: getAllModelPickerGroupsForProfile(profile, snapshot),
       };
     });
-    return window.ModelLabels.normalizeShortcutAssignments({
+    const normalized = window.ModelLabels.normalizeShortcutAssignments({
       shortcuts: shortcutKeys.map((storageKey) => ({
         storageKey,
         value: typeof snapshot[storageKey] === 'string' ? snapshot[storageKey] : '',
@@ -3667,6 +3667,24 @@ document.addEventListener('DOMContentLoaded', () => {
       profiles,
       snapshot,
     });
+    if (!Object.hasOwn(snapshot, 'modelPickerKeyCodes')) return normalized;
+
+    const chatCodes = normalized.profiles[MODEL_CATALOG_PROFILE_LEGACY] || [];
+    const compatibilityCodes = normalizePopupModelPickerCodes(snapshot.modelPickerKeyCodes);
+    const compatibilityMatchesChat =
+      compatibilityCodes.length === chatCodes.length &&
+      compatibilityCodes.every((code, index) => code === chatCodes[index]);
+    if (compatibilityMatchesChat) return normalized;
+
+    const alignedChatCodes = chatCodes.slice();
+    return {
+      ...normalized,
+      changedKeys: normalized.changedKeys.includes('modelPickerKeyCodes')
+        ? normalized.changedKeys
+        : [...normalized.changedKeys, 'modelPickerKeyCodes'],
+      patch: { ...normalized.patch, modelPickerKeyCodes: alignedChatCodes },
+      snapshot: { ...normalized.snapshot, modelPickerKeyCodes: alignedChatCodes },
+    };
   };
 
   const preparePopupShortcutAssignmentWrite = (snapshot, requestedPatch) => {
@@ -3755,6 +3773,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const shortcutRepairRelevantKeys = new Set([
     ...shortcutKeys,
     ...Object.values(MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE),
+    'modelPickerKeyCodes',
     MODEL_PICKER_KEY_CODE_PROFILES_VERSION_KEY,
     MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY,
     'useControlForModelSwitcherRadio',

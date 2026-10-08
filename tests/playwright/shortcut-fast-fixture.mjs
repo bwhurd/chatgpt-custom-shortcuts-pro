@@ -12,6 +12,7 @@ import {
   selectFastCases,
   summarizeFastReport,
 } from './lib/shortcut-fast-cases.mjs';
+import { writeFastVisualReport } from './lib/shortcut-fast-visual-report.mjs';
 import { runMediaCase } from './lib/shortcut-media-fixture.mjs';
 import {
   extractModelPickerSource,
@@ -31,6 +32,19 @@ let catalogue;
 try {
   catalogue = await loadFastCatalogue();
 } catch (error) {
+  if (!args.includes('--catalog-only'))
+    await writeFastVisualReport({
+      rows: [],
+      observations: [],
+      summary: {},
+      outcome: {
+        status: 'failure',
+        coverage: 'blocked-startup',
+        checks: 'No checks ran',
+        errors: [{ message: error.message }],
+        warnings: [],
+      },
+    });
   console.error(
     JSON.stringify({
       status: 'failure',
@@ -1139,6 +1153,10 @@ const reportingStarted = performance.now();
 await saveFastReport(report, args.includes('--catalog-only') ? CATALOGUE_RESULT_PATH : undefined);
 report.timings.reportingMs = performance.now() - reportingStarted;
 report.timings.totalMs = performance.now() - started;
+if (!report.catalogueOnly) {
+  const files = await writeFastVisualReport(report);
+  console.log(`Visual shortcut report: ${files.html}`);
+}
 if (args.includes('--catalog-only'))
   for (const row of report.rows)
     console.log(`${row.rowId}\t${row.status}\t${(row.targetRefs || []).join(',')}`);

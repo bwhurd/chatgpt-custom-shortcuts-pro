@@ -1,5 +1,7 @@
 # Retired shortcut cleanup and Study restoration
 
+- Historical command note (2026-10-07): the standalone `shortcut-model-controls-proof.mjs` and `shortcut-model-unassigned-proof.mjs` wrappers were retired in plan 0102 after their executable coverage moved into the canonical runner. The unassigned wrapper already derived empty slots from inventory before retirement; the hardcoded-slot description below records the earlier investigation. Past command results below remain historical evidence. Current commands are `npm run test:shortcuts:fast -- --type model-control` and `npm run test:shortcuts:fast -- --type model-unassigned`; their shared fixture modules remain active.
+
 - Implementation complete: all three batches and twelve acceptance rows are proven. The user cleared the temporary Study=F12 assignment; the final popup regression passed 3/3. No deployment or release was requested.
 - Outcome: remove the nine obsolete settings/actions completely, restore Study through the existing Web Search activation path, resolve the sidebar observer according to actual consumers, and remove the empty model position from actionable inventory without shifting persisted slots.
 - Three batches fit the settings/runtime boundary, the Study behavior, and final inventory/regression closure. No release, deployment, version bump, or ZIP build is requested.

@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   static:
-    name: Code, settings and shortcut contracts
+    name: Code, settings and controlled shortcuts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -48,18 +48,13 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci --no-audit --no-fund
-      - name: Code and text checks
-        run: npm run check
-      - name: Validator regression tests
-        run: npm run test:validators
-      - name: Settings wiring
-        run: npm run validate:keys
-      - name: Shortcut report and inventory contracts
-        run: |
-          node tests/shortcut-fast-report-fixture.mjs
-          node tests/shortcut-audit-inventory-fixture.mjs
-          node tests/shortcut-unassigned-inventory-fixture.mjs
-          node tests/shortcut-tab-pool-fixture.mjs
-      - name: Shortcut catalogue and coverage warnings
-        run: npm run shortcuts:catalog
+      - name: Install and run all fast checks
+        run: npm run checks -- --ci
+      - name: Upload current shortcut report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shortcut-check-report
+          path: test-results/shortcuts-fast/
+          if-no-files-found: warn
+          retention-days: 7

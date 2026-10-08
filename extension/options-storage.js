@@ -140,8 +140,8 @@ const OPTIONS_DEFAULTS = {
   // Copy behavior
   disableCopyAfterSelectCheckbox: false,
 
-  // Legacy shared model-picker array. Retained only as the source for one-time
-  // migration and backward-compatible imports.
+  // Legacy compatibility snapshot, not a live owner. One-time migration and
+  // old imports may read it; normalized profile writes keep it aligned to Chat.
   modelPickerKeyCodes: [
     'F1',
     'F2',

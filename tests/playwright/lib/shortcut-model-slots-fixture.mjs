@@ -36,7 +36,13 @@ async function defaultCatalogs() {
 
 // Site event handlers model native picker state only. Real profile lookup,
 // presentation filtering, trusted window listener and queue are unmodified.
-export async function runSlotCase(context, content, item, started = performance.now()) {
+export async function runSlotCase(
+  context,
+  content,
+  item,
+  started = performance.now(),
+  lifecycle = {},
+) {
   const begin = performance.now();
   const row = {
     actionId: item.actionId || item.rowId,
@@ -51,9 +57,10 @@ export async function runSlotCase(context, content, item, started = performance.
   };
   const page = await context.newPage();
   const errors = [];
+  let postUpdateObservation = null;
   page.on('pageerror', (error) => errors.push(error.message));
   try {
-    const catalog = structuredClone((await defaultCatalogs())[item.profile]);
+    const catalog = structuredClone(item.catalog || (await defaultCatalogs())[item.profile]);
     const code = item.fixtureCode || item.code;
     assert.ok(code?.trim(), 'Slot proof requires configured or explicitly fixture-only key');
     const slot = Number(item.slot);
@@ -140,9 +147,11 @@ export async function runSlotCase(context, content, item, started = performance.
       },
       { catalog, selected, effort },
     );
-    const codes = Array(15).fill('');
+    const codes = Array.isArray(item.initialCodes) ? item.initialCodes.slice() : Array(15).fill('');
+    while (codes.length <= slot) codes.push('');
     codes[slot] = code;
     const storage = {
+      ...item.storage,
       activeModelConfigId: selected,
       [item.profile === 'latest' ? 'modelCatalogLatest' : 'modelCatalogLegacy']: catalog,
       [item.profile === 'latest' ? 'modelPickerKeyCodesLatest' : 'modelPickerKeyCodesLegacy']:
@@ -164,9 +173,32 @@ export async function runSlotCase(context, content, item, started = performance.
     );
     assert.equal(binding.assignedCode, code);
     assert.equal(binding.presentedSlots.includes(slot), !unavailable);
+    await lifecycle.beforeDispatch?.(page, binding);
     await page.locator('#composer').focus();
     await page.keyboard.press(`Alt+${code}`);
-    if (unavailable) {
+    if (lifecycle.expectInertAfterUpdate) {
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      const afterUpdate = await page.evaluate(
+        (slot) => ({
+          activeProfile: window.__activeModelPickerShortcutProfile,
+          activeCode: window.__modelPickerKeyCodes[slot],
+          profileCode:
+            window.__modelPickerKeyCodesProfiles[window.__activeModelPickerShortcutProfile][slot],
+          effect: window.fixtureEffect,
+        }),
+        slot,
+      );
+      assert.equal(afterUpdate.activeProfile, lifecycle.expectedProfile || item.profile);
+      assert.equal(afterUpdate.activeCode, '');
+      assert.equal(afterUpdate.profileCode, '');
+      assert.deepEqual(afterUpdate.effect.clicks, []);
+      assert.equal(afterUpdate.effect.selected, selected);
+      assert.equal(afterUpdate.effect.effort, effort === 0 ? 1 : 0);
+      assert.equal(afterUpdate.effect.speed, false);
+      postUpdateObservation = afterUpdate;
+    } else if (unavailable) {
       // The presentation omits this assigned utility. It must remain inert.
       await page.evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
@@ -201,14 +233,23 @@ export async function runSlotCase(context, content, item, started = performance.
     }));
     assert.equal(observed.profile, item.profile);
     assert.deepEqual(observed.effect.trusted, [code]);
-    if (model) assert.deepEqual(observed.effect.clicks, ['open', actionId]);
+    if (model && !lifecycle.expectInertAfterUpdate)
+      assert.deepEqual(observed.effect.clicks, ['open', actionId]);
     Object.assign(row, {
       status: 'pass',
       chord: `Alt+${code}`,
-      targetStatus: unavailable ? 'unavailable' : 'present',
+      targetStatus: lifecycle.expectInertAfterUpdate
+        ? 'present-before-update'
+        : unavailable
+          ? 'unavailable'
+          : 'present',
       dispatchStatus: 'pass',
-      effectStatus: unavailable ? 'inert' : 'pass',
-      observed: { ...observed, ...binding },
+      effectStatus: lifecycle.expectInertAfterUpdate
+        ? 'inert-after-update'
+        : unavailable
+          ? 'inert'
+          : 'pass',
+      observed: { ...observed, ...binding, ...postUpdateObservation },
       unavailable,
     });
   } catch (error) {

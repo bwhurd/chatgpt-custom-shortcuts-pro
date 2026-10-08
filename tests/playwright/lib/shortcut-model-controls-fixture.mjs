@@ -118,7 +118,11 @@ export async function installModelPickerFixture(page, content, { storage = {} } 
     const listeners = [];
     window.fixtureStorage = data;
     window.chrome = {
-      runtime: { id: 'isolated-model-fixture' },
+      runtime: {
+        id: 'isolated-model-fixture',
+        getURL: (path) => `https://shortcut-fixture.invalid/${path}`,
+      },
+      i18n: { getMessage: () => '' },
       storage: {
         sync: {
           get(keys, callback) {
