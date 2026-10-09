@@ -2976,8 +2976,6 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutKeyActivateInput: 'KeyW',
     shortcutKeySearchWeb: 'KeyQ',
     shortcutKeyScrollToTop: 'KeyT',
-    shortcutKeyPreviousThread: 'KeyJ',
-    shortcutKeyNextThread: 'Semicolon',
     selectThenCopy: 'KeyX',
     shortcutKeyToggleModelSelector: 'Slash',
     shortcutKeyShowOverlay: 'Period',

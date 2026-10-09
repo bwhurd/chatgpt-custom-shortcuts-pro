@@ -10,6 +10,7 @@ const invocation = {
   profileDirectory:
     'C:\\Users\\tester\\AppData\\Local\\Google\\Chrome\\User Data\\CodexCleanProfile',
 };
+const REMOVED_OPTIONAL_TOPBAR_FILE = '1c_TopbarToBottomEnabled_ThreadBottom.txt';
 
 function createReport() {
   const fixtureUrl = invocation.fixtureUrl;
@@ -44,8 +45,12 @@ function createReport() {
         identifier: 'modelSwitcherButton',
         status: 'pass',
         statusReason: 'Target matched an expected dump.',
-        expectedFiles: ['2m_ModelSwitcher_Menu.txt'],
-        matchedExpectedFiles: ['2m_ModelSwitcher_Menu.txt'],
+        expectedFiles: [
+          '2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt',
+        ],
+        matchedExpectedFiles: [
+          '2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt',
+        ],
         missingExpectedFiles: [],
         usedByActionIds: ['shortcutKeyToggleModelSelector'],
       },
@@ -90,6 +95,19 @@ function createReport() {
       },
     },
   };
+}
+
+function addNotApplicableCapabilityTarget(report, overrides = {}) {
+  report.targetRows.push({
+    targetId: 'pro-effort-standard',
+    status: 'not-applicable',
+    statusReason: 'Required capability is unavailable: proEffort.',
+    expectedFiles: ['2d2_ModelSwitcher_ProThinkingEffort_Submenu.txt'],
+    matchedExpectedFiles: [],
+    missingExpectedFiles: ['2d2_ModelSwitcher_ProThinkingEffort_Submenu.txt'],
+    requiredCapabilities: ['proEffort'],
+    ...overrides,
+  });
 }
 
 test('absent evidence is unverified', async () => {
@@ -142,6 +160,91 @@ test('a fresh complete target and probe report passes in the declared scope', as
   assert.match(result.scopeLimitations[0].reason, /does not attest account identity/);
 });
 
+test('unavailable tagged target capability is counted out of scope', async () => {
+  const { classifyCurrentPageValidation } = await classifierModule;
+  const { unknownCapabilities } = await import('./playwright/lib/shortcut-capabilities.mjs');
+  const report = createReport();
+  report.capabilities = { ...unknownCapabilities(), proEffort: 'unavailable' };
+  addNotApplicableCapabilityTarget(report);
+
+  const result = classifyCurrentPageValidation(report, invocation);
+  assert.equal(result.status, 'passed');
+  assert.equal(result.targetSummary.status, 'passed');
+  assert.equal(result.targetSummary.outOfScope, 1);
+  assert.ok(
+    result.scopeLimitations.some((item) =>
+      /pro-effort-standard.*required capability/i.test(item.reason),
+    ),
+  );
+});
+
+test('target not-applicable status requires valid unavailable capability evidence', async () => {
+  const { classifyCurrentPageValidation } = await classifierModule;
+  const { unknownCapabilities } = await import('./playwright/lib/shortcut-capabilities.mjs');
+  const cases = [
+    {
+      report: createReport(),
+      reason: /capability metadata without capability evidence/i,
+    },
+    {
+      report: Object.assign(createReport(), {
+        capabilities: unknownCapabilities(),
+      }),
+      reason: /without an unavailable required capability/i,
+    },
+    {
+      report: Object.assign(createReport(), {
+        capabilities: { ...unknownCapabilities(), proEffort: 'available' },
+      }),
+      reason: /without an unavailable required capability/i,
+    },
+    {
+      report: Object.assign(createReport(), {
+        capabilities: { ...unknownCapabilities(), source: 'untrusted' },
+      }),
+      reason: /malformed capability evidence/i,
+    },
+  ];
+  for (const item of cases) {
+    addNotApplicableCapabilityTarget(item.report);
+    const result = classifyCurrentPageValidation(item.report, invocation);
+    assert.equal(result.status, 'unverified');
+    assert.match(result.reason, item.reason);
+  }
+
+  const untagged = createReport();
+  untagged.capabilities = { ...unknownCapabilities(), proEffort: 'unavailable' };
+  addNotApplicableCapabilityTarget(untagged, { requiredCapabilities: undefined });
+  const untaggedResult = classifyCurrentPageValidation(untagged, invocation);
+  assert.equal(untaggedResult.status, 'unverified');
+  assert.match(untaggedResult.reason, /without an unavailable required capability/i);
+
+  const taggedWithoutMarker = createReport();
+  taggedWithoutMarker.targetRows[0].requiredCapabilities = ['proEffort'];
+  const taggedResult = classifyCurrentPageValidation(taggedWithoutMarker, invocation);
+  assert.equal(taggedResult.status, 'unverified');
+  assert.match(taggedResult.reason, /capability metadata without capability evidence/i);
+});
+
+test('target capability evidence cannot suppress target metadata errors', async () => {
+  const { classifyCurrentPageValidation } = await classifierModule;
+  const { unknownCapabilities } = await import('./playwright/lib/shortcut-capabilities.mjs');
+  for (const metadata of [
+    { unknownUiStateRefs: ['retired-state'] },
+    { missingMatchGroups: true },
+  ]) {
+    const report = createReport();
+    report.capabilities = { ...unknownCapabilities(), configureRoute: 'unavailable' };
+    addNotApplicableCapabilityTarget(report, {
+      requiredCapabilities: ['configureRoute'],
+      ...metadata,
+    });
+    const result = classifyCurrentPageValidation(report, invocation);
+    assert.equal(result.status, 'unverified');
+    assert.match(result.reason, /metadata errors.*cannot be suppressed/i);
+  }
+});
+
 test('missing target presence evidence is partial', async () => {
   const { classifyCurrentPageValidation } = await classifierModule;
   const report = createReport();
@@ -181,12 +284,15 @@ test('missing expected capture keeps propagated shortcut failure partial', async
   const { classifyCurrentPageValidation } = await classifierModule;
   const report = createReport();
   report.targetRows[0].status = 'fail';
-  report.targetRows[0].statusReason = 'Expected dump files were missing: 2m_ModelSwitcher_Menu.txt';
+  report.targetRows[0].statusReason =
+    'Expected dump files were missing: 2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt';
   report.targetRows[0].matchedExpectedFiles = [];
-  report.targetRows[0].missingExpectedFiles = ['2m_ModelSwitcher_Menu.txt'];
+  report.targetRows[0].missingExpectedFiles = [
+    '2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt',
+  ];
   report.shortcutRows[0].status = 'fail';
   report.shortcutRows[0].statusReason =
-    'model-switcher-button: Expected dump files were missing: 2m_ModelSwitcher_Menu.txt';
+    'model-switcher-button: Expected dump files were missing: 2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt';
   const result = classifyCurrentPageValidation(report, invocation);
   assert.equal(result.status, 'partial');
   assert.equal(result.targetSummary.status, 'partial');
@@ -198,20 +304,62 @@ test('missing expected capture keeps propagated shortcut failure partial', async
   );
 });
 
-test('missing files and deferred artifacts are partial evidence', async () => {
+test('removed optional captures are absent while required target proof stays complete', async () => {
   const { classifyCurrentPageValidation } = await classifierModule;
   const report = createReport();
-  report.missingArtifacts.push({ filename: '1c_Topbar.txt', reason: 'Deferred by profile setup.' });
+  assert.equal(
+    report.runManifest.artifacts.some(
+      (artifact) => artifact.filename === REMOVED_OPTIONAL_TOPBAR_FILE,
+    ),
+    false,
+  );
+  assert.equal(
+    report.targetRows.some((target) => target.expectedFiles.includes(REMOVED_OPTIONAL_TOPBAR_FILE)),
+    false,
+  );
+  const result = classifyCurrentPageValidation(report, invocation);
+  assert.equal(result.status, 'passed');
+  assert.equal(result.failures.length, 0);
+  assert.equal(result.checkedAt, invocation.completedAt);
+  assert.equal(result.pageUrl, invocation.fixtureUrl);
+  assert.equal(result.cdpEndpoint, invocation.cdpEndpoint);
+  assert.equal(result.profileDirectory, invocation.profileDirectory);
+  assert.equal(result.targetSummary.status, 'passed');
+  assert.equal(result.targetSummary.passed, 1);
+  assert.equal(result.targetSummary.failed, 0);
+  assert.equal(result.targetSummary.partial, 0);
+  assert.equal(result.probeSummary.status, 'passed');
+});
+
+test('deferred artifacts required by a current target keep validation partial', async () => {
+  const { classifyCurrentPageValidation } = await classifierModule;
+  const report = createReport();
   report.runManifest.deferredCount = 1;
-  report.runManifest.artifacts.push({ filename: '1c_Topbar.txt', status: 'deferred' });
+  report.runManifest.artifacts.push({
+    filename: '2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt',
+    status: 'deferred',
+  });
   const result = classifyCurrentPageValidation(report, invocation);
   assert.equal(result.status, 'partial');
   assert.equal(result.failures.length, 0);
+  assert.equal(result.targetSummary.status, 'passed');
+  assert.equal(result.probeSummary.status, 'passed');
+  assert.ok(
+    result.scopeLimitations.some((limitation) =>
+      /deferred required scrape artifact/i.test(limitation.reason),
+    ),
+  );
 });
 
 test('probe failures fail the validation', async () => {
   const { classifyCurrentPageValidation } = await classifierModule;
   const report = createReport();
+  assert.equal(
+    report.runManifest.artifacts.some(
+      (artifact) => artifact.filename === REMOVED_OPTIONAL_TOPBAR_FILE,
+    ),
+    false,
+  );
   report.liveProbeRows[0].status = 'fail';
   report.liveProbeRows[0].reason = 'The shortcut did not open the model menu.';
   report.summary.liveProbes.passed = 0;

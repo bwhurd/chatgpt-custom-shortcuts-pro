@@ -50,11 +50,13 @@ jobs:
           cache: npm
       - name: Install and run code and fixture checks
         run: npm run checks -- --ci
-      - name: Upload fixture regression report (live page unverified)
+      - name: Upload safe check summaries (live page unverified)
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: shortcut-check-report
-          path: test-results/shortcuts-fast/
+          name: shortcut-check-summary
+          path: |
+            test-results/shortcuts-fast/checks.md
+            test-results/shortcuts-fast/live-snapshot.md
           if-no-files-found: warn
           retention-days: 7

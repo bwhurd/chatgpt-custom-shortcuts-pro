@@ -250,9 +250,10 @@ assert.equal(fastReportOutcome(failedReport).exitCode, 1);
 
 // Derived contracts require all declared actions with controlled fixture proof.
 const contractReport = makeReport();
-const contractId = 'response-navigation-preview';
+const contractId = 'alt-modifier-isolation';
 const contractRow = contractReport.rows.find((item) => item.contractId === contractId);
 assert.ok(contractRow, `Expected derived contract ${contractId}`);
+
 contractReport.selection = {
   actionIds: contractRow.requiredActions,
   filtered: false,
@@ -268,7 +269,7 @@ assert.match(missingContractWarning.reason, /fixture-keyboard proof is missing/)
 const filteredContractReport = makeReport();
 const filteredContract = filteredContractReport.rows.find((item) => item.contractId === contractId);
 filteredContractReport.selection = {
-  actionIds: [filteredContract.requiredActions[0]],
+  actionIds: ['shortcutKeyCopyLowest'],
   filtered: true,
 };
 assert.ok(
@@ -278,36 +279,27 @@ assert.ok(
   'A filtered run must not warn for a contract whose required action was not selected',
 );
 
-contractReport.observations.push(
-  {
-    actionId: 'shortcutKeyPreviousThread',
-    proofScope: 'fixture-keyboard',
-    attempted: true,
-    status: 'pass',
-    contractProofs: [contractId],
-  },
-  {
-    actionId: 'shortcutKeyNextThread',
-    proofScope: 'live-keyboard',
-    attempted: true,
-    status: 'pass',
-    contractProofs: [contractId],
-  },
-);
+contractReport.observations.push({
+  actionId: 'shortcutKeyActivateInput',
+  proofScope: 'live-keyboard',
+  attempted: true,
+  status: 'pass',
+  contractProofs: [contractId],
+});
 summarizeFastReport(contractReport);
 assert.equal(contractRow.status, 'not-run', 'Live proof cannot establish a fixture contract');
 contractReport.observations.at(-1).proofScope = 'fixture-keyboard';
 summary = summarizeFastReport(contractReport);
 assert.equal(contractRow.status, 'pass');
-assert.deepEqual(contractRow.derivedFrom, ['shortcutKeyPreviousThread', 'shortcutKeyNextThread']);
+assert.deepEqual(contractRow.derivedFrom, ['shortcutKeyActivateInput']);
 assert.equal(summary.admitted, summary.admittedActions + summary.admittedContracts);
-assert.equal(summary.passedRows, 3, 'Action and derived contract rows are distinct');
+assert.equal(summary.passedRows, 2, 'Action and derived contract rows are distinct');
 contractReport.observations.push({
-  actionId: 'shortcutKeyNextThread',
+  actionId: 'shortcutKeyActivateInput',
   proofScope: 'fixture-keyboard',
   attempted: true,
   status: 'fail',
-  reason: 'The second controlled fixture used the wrong navigator.',
+  reason: 'The second controlled fixture focused the wrong input.',
 });
 summarizeFastReport(contractReport);
 assert.equal(contractRow.status, 'fail', 'A duplicate failed proof cannot hide behind a pass');

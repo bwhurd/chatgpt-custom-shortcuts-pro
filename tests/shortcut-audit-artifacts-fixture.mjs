@@ -63,6 +63,8 @@ try {
   assert.match(csv, /"Observed, \| text"/);
   assert.match(backlog, /Failure \\| needs targeted rerun/);
   assert.match(backlog, /Status: `product-fail`/i);
+  assert.match(backlog, /affected shortcut produces its expected observable outcome/i);
+  assert.doesNotMatch(backlog, /passes twice|storage recovery is clean/i);
   assert.deepEqual(
     evaluateShortcutAuditExit(audit, recovery),
     {
@@ -105,19 +107,15 @@ try {
         inventoryIssues: [],
         rows: [],
         checkpoint: {
-          status: 'completed',
-          fixtureRestored: true,
+          status: 'recovery-blocked',
+          fixtureRestored: false,
           clipboardRecoveryStatus: 'partial',
         },
       },
-      { status: 'clean' },
+      { status: 'conflict' },
     ),
-    {
-      ok: false,
-      exitCode: 1,
-      reasons: ['clipboard recovery partial'],
-    },
-    'live audit exit policy must block when the original clipboard state was not fully restored',
+    { ok: true, exitCode: 0, reasons: [] },
+    'recovery and checkpoint labels alone do not veto an otherwise passing audit',
   );
   const semanticAudit = buildShortcutAuditReport({
     inventory: {

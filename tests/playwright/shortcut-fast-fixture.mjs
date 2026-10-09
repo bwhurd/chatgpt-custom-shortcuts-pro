@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
+import {
+  cleanupShareToastObserver,
+  installShareToastObserver,
+  readShareClipboardToastEvidence,
+  waitForShareClipboardToast,
+} from './lib/devscrape-wide-core.mjs';
 import { runClipboardCase } from './lib/shortcut-clipboard-fixture.mjs';
 import {
   CATALOGUE_RESULT_PATH,
@@ -131,8 +137,18 @@ if (!args.includes('--catalog-only') && selected.length) {
         startedMs: caseStarted - started,
       };
       const pageErrors = [];
+      let fileChooserObserved = false;
+      const onFileChooser = (chooser) => {
+        fileChooserObserved = true;
+        void Promise.resolve()
+          .then(() => chooser.setFiles([], { timeout: 1200 }))
+          .catch(() => {
+            pageErrors.push('File chooser input could not be cleared without uploading files.');
+          });
+      };
       const onPageError = (error) => pageErrors.push(error.message);
       page.on('pageerror', onPageError);
+      if (item.actionId === 'shortcutKeyAddPhotosFiles') page.on('filechooser', onFileChooser);
       try {
         const runtime = extracted.get(item.actionId);
         if (item.type === 'new-tab') {
@@ -153,8 +169,28 @@ if (!args.includes('--catalog-only') && selected.length) {
           );
           await page.goto('https://shortcut-fixture.invalid/');
         }
+        const isNewConversation = item.type === 'new-conversation';
+        if (isNewConversation) {
+          await page.route('https://shortcut-fixture.invalid/**', (route) =>
+            route.fulfill({
+              contentType: 'text/html',
+              body: '<!doctype html><html><body></body></html>',
+            }),
+          );
+          await page.goto('https://shortcut-fixture.invalid/c/audit-owned-existing');
+        }
+        const existingTurns = isNewConversation
+          ? Array.from({ length: 8 }, (_, index) => {
+              const role = index % 2 === 0 ? 'user' : 'assistant';
+              return `<article data-testid="conversation-turn-${index + 1}" data-turn="${role}"><p>Existing ${role} message ${index + 1}</p></article>`;
+            }).join('')
+          : '';
+        const composerMarkup =
+          item.type === 'control-gate'
+            ? '<form id="native-composer"><div id="composer" class="ProseMirror" contenteditable="true" role="textbox">Draft</div></form>'
+            : `<form data-thread-find-composer="true"><div hidden class="ProseMirror" contenteditable="true" role="textbox">Hidden distractor</div><div id="composer" class="ProseMirror" contenteditable="true" role="textbox"${isNewConversation ? ' style="min-height: 1em"' : ''}>${isNewConversation ? '' : 'Draft'}</div></form>`;
         await page.setContent(
-          '<input id="search" role="textbox"><div contenteditable="true" role="textbox" id="edit">Edit distractor</div><form data-thread-find-composer="true"><div hidden class="ProseMirror" contenteditable="true" role="textbox">Hidden distractor</div><div id="composer" class="ProseMirror" contenteditable="true" role="textbox">Draft</div></form>',
+          `<input id="search" role="textbox"><div contenteditable="true" role="textbox" id="edit">Edit distractor</div>${isNewConversation ? `<main id="thread-turns">${existingTurns}</main>` : ''}${composerMarkup}`,
         );
         if (item.type === 'new-tab') {
           await page.evaluate(() => {
@@ -185,17 +221,51 @@ if (!args.includes('--catalog-only') && selected.length) {
           await page.evaluate(() => {
             document.body.insertAdjacentHTML(
               'beforeend',
-              '<button type="button" id="share-distractor"><svg><path d="M13.3337" /></svg>Unrelated</button><div data-testid="app-shell-header-context-menu-surface"><div data-app-shell-header-obstacle="true"><button type="button" id="share-target"><svg><path d="M13.3337" /></svg>Share</button></div></div>',
+              '<button type="button" id="share-distractor"><svg><use href="#arrow-up-open-base-light-16"></use></svg>Unrelated</button><div data-testid="app-shell-header-context-menu-surface"><div data-app-shell-header-obstacle="true"><button type="button" id="share-target"><svg><use href="#arrow-up-open-base-light-16"></use></svg>Share</button></div></div>',
             );
             window.fixtureClicks = [];
+            window.fixtureClipboard = '';
+            window.fixtureClipboardWrites = [];
+            Object.defineProperty(navigator, 'clipboard', {
+              configurable: true,
+              value: {
+                readText: async () => window.fixtureClipboard,
+                writeText: async (text) => {
+                  window.fixtureClipboardWrites.push(String(text));
+                  window.fixtureClipboard = String(text);
+                },
+              },
+            });
             for (const button of document.querySelectorAll('[id^="share-"]'))
               button.onclick = () => {
                 window.fixtureClicks.push(button.id);
-                if (button.id === 'share-target') document.body.dataset.shareDialog = 'open';
+                if (button.id === 'share-target') {
+                  void (async () => {
+                    await navigator.clipboard.writeText(
+                      'https://chatgpt.com/share/fixture-owned-shortcut-id',
+                    );
+                    const notification = document.createElement('div');
+                    const title = document.createElement('div');
+                    const message = document.createElement('div');
+                    notification.setAttribute('data-content', '');
+                    title.setAttribute('data-title', '');
+                    message.textContent = 'Public link copied';
+                    title.append(message);
+                    notification.append(title);
+                    document.body.append(notification);
+                  })();
+                }
               };
           });
+          await installShareToastObserver(page);
+          row.shareBeforeProof = await readShareClipboardToastEvidence(page);
+          assert.deepEqual(row.shareBeforeProof, {
+            validShareLink: false,
+            clipboardReadSucceeded: true,
+            toastObserved: false,
+          });
           row.pathScope =
-            'immediate native Share control activation; sharing publication remains outside fixture';
+            'Extracted Share shortcut must click the scoped header control; an owned synthetic callback writes a fixture-only canonical share URL and adds a fresh native-shaped notification.';
         }
         if (item.type === 'blank-mode') {
           await page.addScriptTag({
@@ -222,6 +292,46 @@ if (!args.includes('--catalog-only') && selected.length) {
           });
           row.pathScope =
             'blank route with mounted native radios; existing-chat navigation and model slot effects remain deferred';
+        }
+        if (item.type === 'new-conversation') {
+          await page.evaluate(() => {
+            document.body.dataset.conversationState = 'existing';
+            document.body.insertAdjacentHTML(
+              'afterbegin',
+              '<div data-app-shell-titlebar><button type="button" data-testid="create-new-chat-button" aria-label="New chat"><svg width="16" height="16"><path d="M6.33325 1.80763" /></svg></button></div>',
+            );
+            window.fixtureClicks = [];
+            document
+              .querySelector('[data-app-shell-titlebar] button')
+              .addEventListener('click', () => {
+                window.fixtureClicks.push('new-chat-target');
+                window.history.pushState({ fixture: 'blank-conversation' }, '', '/');
+                document.querySelector('#thread-turns').replaceChildren();
+                document.querySelector('#composer').replaceChildren();
+                document.body.dataset.conversationState = 'blank-root';
+              });
+          });
+          row.pathScope =
+            'Synthetic eight-turn existing conversation with the source-recognized titlebar new-chat target; the extracted shortcut must transition it to the root with an empty visible composer.';
+          row.newConversationSetupProof = await page.evaluate(() => ({
+            route: window.location.pathname,
+            turnCount: document.querySelectorAll(
+              '#thread-turns [data-testid^="conversation-turn-"]',
+            ).length,
+            userTurns: document.querySelectorAll('#thread-turns [data-turn="user"]').length,
+            assistantTurns: document.querySelectorAll('#thread-turns [data-turn="assistant"]')
+              .length,
+            composerVisible: document.querySelector('#composer').getBoundingClientRect().height > 0,
+            composerEmpty: document.querySelector('#composer').innerText.trim() === '',
+          }));
+          assert.deepEqual(row.newConversationSetupProof, {
+            route: '/c/audit-owned-existing',
+            turnCount: 8,
+            userTurns: 4,
+            assistantTurns: 4,
+            composerVisible: true,
+            composerEmpty: true,
+          });
         }
         if (item.type === 'direct-control') {
           await page.evaluate((newChat) => {
@@ -265,7 +375,7 @@ if (!args.includes('--catalog-only') && selected.length) {
           await page.evaluate(() => {
             document.body.insertAdjacentHTML(
               'beforeend',
-              '<div id="conversation-header-actions"><button id="temporary-target" aria-label="Temporary chat" aria-pressed="false">Temporary</button></div>',
+              '<div id="conversation-header-actions"><button id="temporary-target" aria-label="Temporary chat" aria-pressed="false"><svg><use href="#chat-bubble-dashed-light-20" /></svg>Temporary</button></div>',
             );
             window.fixtureClicks = [];
             document.querySelector('#temporary-target').onclick = (event) => {
@@ -275,14 +385,30 @@ if (!args.includes('--catalog-only') && selected.length) {
           });
         }
         if (item.type === 'control-gate') {
+          row.pathScope =
+            'Observed submit and Stop glyphs inside an untagged composer form; matching must ignore identical controls outside that form and pass through after the active glyph changes.';
           await page.evaluate((stop) => {
+            const composerButton = stop
+              ? '<button type="button" id="native-stop"><svg><path d="M4.5 5.75C4.5 5.05964" /></svg></button>'
+              : '<button type="submit" id="native-send"><svg><path d="M9.33467 16.6663" /></svg></button>';
+            document
+              .querySelector('#native-composer')
+              .insertAdjacentHTML('beforeend', composerButton);
             document.body.insertAdjacentHTML(
               'beforeend',
-              `<button id="composer-submit-button" data-testid="${stop ? 'stop' : 'send'}-button">Control</button><button hidden data-testid="stop-button" id="hidden-stop">Hidden Stop</button>`,
+              '<form id="unrelated-form"><button type="submit" id="decoy-send"><svg><path d="M9.33467 16.6663" /></svg></button></form><button type="button" id="decoy-stop"><svg><path d="M4.5 5.75C4.5 5.05964" /></svg></button><button hidden data-testid="stop-button" id="hidden-stop">Hidden Stop</button>',
             );
             window.fixtureClicks = [];
-            document.querySelector('#composer-submit-button').onclick = () =>
+            document.querySelector(stop ? '#native-stop' : '#native-send').onclick = (event) => {
+              event.preventDefault();
               window.fixtureClicks.push(stop ? 'stop-target' : 'send-target');
+            };
+            document.querySelector('#decoy-send').onclick = (event) => {
+              event.preventDefault();
+              window.fixtureClicks.push('decoy-send');
+            };
+            document.querySelector('#decoy-stop').onclick = () =>
+              window.fixtureClicks.push('decoy-stop');
             document.querySelector('#hidden-stop').onclick = () =>
               window.fixtureClicks.push('hidden-stop');
           }, item.actionId === 'shortcutKeyClickStopButton');
@@ -292,9 +418,13 @@ if (!args.includes('--catalog-only') && selected.length) {
             row.pathScope =
               'Real Tools menu routing and upload action activation only; native chooser and upload completion require external integration proof.';
           const study = item.actionId === 'shortcutKeyStudy';
+          const addPhotosFiles = item.actionId === 'shortcutKeyAddPhotosFiles';
           const persistentTool = item.actionId !== 'shortcutKeyAddPhotosFiles';
+          if (study)
+            row.pathScope =
+              'Plus opens before the owned Study query is typed; extracted shortcut selects the scoped Study pill, and a second trusted press removes it from the empty composer.';
           await page.evaluate(
-            ({ icon, study, persistentTool }) => {
+            ({ icon, study, addPhotosFiles, persistentTool, query }) => {
               document
                 .querySelector('form')
                 .insertAdjacentHTML(
@@ -303,17 +433,26 @@ if (!args.includes('--catalog-only') && selected.length) {
                 );
               const composer = document.querySelector('#composer');
               window.studyTargetAvailable = true;
+              if (study) {
+                composer.replaceChildren();
+                window.studyOwnedQuery = query;
+              }
               document.body.insertAdjacentHTML(
                 'beforeend',
                 `<div hidden role="menuitem" id="hidden-tool">${icon}Hidden</div>`,
               );
-              if (study) composer.textContent = 'Draft answer';
               window.fixtureClicks = [];
               document.querySelector('#tool-opener').onclick = () => {
                 window.fixtureClicks.push('tool-opener');
+                const targetMarkup = addPhotosFiles
+                  ? `<button type="button" data-list-navigation-item="true" role="menuitem" id="tool-target" ${study ? 'hidden' : ''}>${icon}Intended tool</button>`
+                  : `<div role="menuitem" tabindex="0" id="tool-target" ${study ? 'hidden' : ''}>${icon}Intended tool</div>`;
+                const ambiguousMarkup = addPhotosFiles
+                  ? `<button type="button" data-list-navigation-item="true" role="menuitem" id="tool-ambiguous-distractor">${icon}Ambiguous tool</button>`
+                  : '';
                 document.body.insertAdjacentHTML(
                   'beforeend',
-                  `<div role="menu"><div role="menuitem" tabindex="0" id="tool-target" ${study ? 'hidden' : ''}>${icon}Intended tool</div><div role="menuitem" id="tool-distractor"><svg><path d="M0 0" /></svg>Unrelated tool</div></div>`,
+                  `<div role="menu">${targetMarkup}${ambiguousMarkup}<div role="menuitem" id="tool-distractor"><svg><path d="M0 0" /></svg>Unrelated tool</div></div>`,
                 );
                 if (study) {
                   composer.addEventListener('input', () => {
@@ -321,7 +460,7 @@ if (!args.includes('--catalog-only') && selected.length) {
                     if (target)
                       target.hidden =
                         !window.studyTargetAvailable ||
-                        !composer.innerText.toLowerCase().endsWith('study');
+                        !composer.innerText.toLowerCase().endsWith(query);
                   });
                 }
                 document.querySelector('#tool-target').onclick = () => {
@@ -329,8 +468,10 @@ if (!args.includes('--catalog-only') && selected.length) {
                   composer.dataset.toolEnabled = 'true';
                   if (persistentTool) {
                     const pill = `<span data-inline-selection-pill ${study ? 'data-system-hint-type="tatertot"' : ''} contenteditable="false">${icon}<span>${study ? 'Study' : 'Web search'}</span></span>`;
-                    if (study) composer.innerHTML = `${pill}Draft answer`;
-                    else composer.insertAdjacentHTML('afterbegin', pill);
+                    if (study) {
+                      composer.innerHTML = pill;
+                      window.studyOwnedQuery = null;
+                    } else composer.insertAdjacentHTML('afterbegin', pill);
                   }
                   composer.addEventListener('input', () => {
                     if (!composer.querySelector('[data-inline-selection-pill]')) {
@@ -348,8 +489,50 @@ if (!args.includes('--catalog-only') && selected.length) {
                   window.fixtureClicks.push('tool-distractor');
               };
             },
-            { icon: item.fixtureIcon, study, persistentTool },
+            {
+              icon: item.fixtureIcon,
+              study,
+              addPhotosFiles,
+              persistentTool,
+              query: item.fixtureQuery,
+            },
           );
+          if (study) {
+            await page.locator('#tool-opener').click();
+            await page.locator('#composer').click();
+            await page.keyboard.type(item.fixtureQuery);
+            await page.waitForFunction(
+              () => {
+                const target = document.querySelector('#tool-target');
+                return target && !target.hidden;
+              },
+              null,
+              { timeout: 1000 },
+            );
+            assert.deepEqual(
+              await page.evaluate(() => window.fixtureClicks),
+              ['tool-opener'],
+              'Study setup opens Plus before typing its owned query',
+            );
+            assert.equal(
+              await page.locator('#composer').innerText(),
+              item.fixtureQuery,
+              'Only the owned Study query should be present before shortcut dispatch',
+            );
+            assert.equal(
+              await page.locator(`#tool-target svg use[href="#${item.fixturePillIconId}"]`).count(),
+              1,
+              'The visible menu target must expose the verified Study icon',
+            );
+            row.studySetupProof = {
+              plusOpened: true,
+              ownedQueryTypedBeforeDispatch: item.fixtureQuery,
+              targetIconId: item.fixturePillIconId,
+            };
+            await page.evaluate(() => {
+              window.fixtureClicks = [];
+            });
+          }
         }
         if (item.type.startsWith('scroll-')) {
           for (const filename of ['gsap.min.js', 'ScrollToPlugin.min.js'])
@@ -418,34 +601,6 @@ if (!args.includes('--catalog-only') && selected.length) {
           assert.ok(
             row.beforeWrap.scrollWidth > row.beforeWrap.width,
             'Fixture must require actual line wrapping',
-          );
-        }
-        if (item.type === 'multiple-response') {
-          await page.evaluate(
-            (direction) => {
-              document.body.insertAdjacentHTML(
-                'beforeend',
-                '<button id="thinking"><span>Worked for</span><div class="tabular-nums">42s</div><span>more</span></button>' +
-                  [0, 1, 2]
-                    .map(
-                      (index) =>
-                        `<section data-testid="conversation-turn-${index}" style="margin-top:15px"><div><button id="previous-${index}" ${direction === 'previous' && index === 2 ? 'disabled' : ''}>Previous</button><div class="tabular-nums">${direction === 'previous' ? '2/2' : '1/2'}</div><button id="next-${index}" ${direction === 'next' && index === 2 ? 'disabled' : ''}>Next</button></div></section>`,
-                    )
-                    .join(''),
-              );
-              window.fixtureClicks = [];
-              for (const button of document.querySelectorAll('[id^="previous-"], [id^="next-"]'))
-                button.onclick = () => {
-                  window.fixtureClicks.push(button.id);
-                  const counter = button.id.startsWith('previous-')
-                    ? button.nextElementSibling
-                    : button.previousElementSibling;
-                  counter.textContent = button.id.startsWith('previous-') ? '1/2' : '2/2';
-                };
-              document.querySelector('#thinking').onclick = () =>
-                window.fixtureClicks.push('thinking');
-            },
-            item.actionId === 'shortcutKeyPreviousThread' ? 'previous' : 'next',
           );
         }
         assert.deepEqual(pageErrors, [], 'Runtime fixture must initialize without page errors');
@@ -558,13 +713,14 @@ if (!args.includes('--catalog-only') && selected.length) {
             [target],
             'Enabled Control key must activate exactly the intended control',
           );
-          await page
-            .locator('#composer-submit-button')
-            .evaluate(
-              (element, stop) =>
-                element.setAttribute('data-testid', stop ? 'send-button' : 'stop-button'),
-              stop,
-            );
+          await page.locator(stop ? '#native-stop' : '#native-send').evaluate((element, stop) => {
+            element.removeAttribute('data-testid');
+            element.removeAttribute('data-test-id');
+            element.setAttribute('type', stop ? 'submit' : 'button');
+            element.innerHTML = stop
+              ? '<svg><path d="M9.33467 16.6663" /></svg>'
+              : '<svg><path d="M4.5 5.75C4.5 5.05964" /></svg>';
+          }, stop);
           await page.keyboard.press(`Control+${code}`);
           assert.deepEqual(
             await page.evaluate(() => window.fixtureClicks),
@@ -596,6 +752,18 @@ if (!args.includes('--catalog-only') && selected.length) {
         } else {
           const wrongModifier = 'Alt+Shift';
           const pagesBeforeWrongModifier = context.pages().length;
+          const newConversationBeforeWrongModifier =
+            item.type === 'new-conversation'
+              ? await page.evaluate(() => ({
+                  url: window.location.href,
+                  turnTexts: Array.from(
+                    document.querySelectorAll('#thread-turns [data-testid^="conversation-turn-"]'),
+                    (turn) => turn.innerText,
+                  ),
+                  composerText: document.querySelector('#composer').innerText,
+                  conversationState: document.body.dataset.conversationState,
+                }))
+              : null;
           await page.keyboard.press(`${wrongModifier}+${code}`);
           assert.equal(
             await page.evaluate(() => document.activeElement.id),
@@ -608,6 +776,60 @@ if (!args.includes('--catalog-only') && selected.length) {
               [],
               'Wrong modifier must not activate target',
             );
+          if (item.actionId === 'shortcutKeyShare') {
+            const wrongModifierEvidence = await readShareClipboardToastEvidence(page);
+            assert.deepEqual(await page.evaluate(() => window.fixtureClipboardWrites), []);
+            assert.deepEqual(wrongModifierEvidence, {
+              validShareLink: false,
+              clipboardReadSucceeded: true,
+              toastObserved: false,
+            });
+            const wrongKey = await page.evaluate(
+              (code) =>
+                window.fastKeys.find(
+                  (event) => event.code === code && event.alt && event.shift && event.trusted,
+                ),
+              code,
+            );
+            assert.ok(wrongKey, 'Wrong-modifier chord must be delivered as trusted input');
+            assert.equal(wrongKey.prevented, false);
+            row.shareWrongModifierProof = {
+              trusted: wrongKey.trusted,
+              passedThrough: !wrongKey.prevented,
+              clipboardUnchanged: true,
+              freshToastAbsent: true,
+            };
+          }
+          if (newConversationBeforeWrongModifier) {
+            const afterWrongModifier = await page.evaluate(() => ({
+              url: window.location.href,
+              turnTexts: Array.from(
+                document.querySelectorAll('#thread-turns [data-testid^="conversation-turn-"]'),
+                (turn) => turn.innerText,
+              ),
+              composerText: document.querySelector('#composer').innerText,
+              conversationState: document.body.dataset.conversationState,
+            }));
+            assert.deepEqual(
+              afterWrongModifier,
+              newConversationBeforeWrongModifier,
+              'Wrong modifier must preserve the existing conversation route, turns, and composer',
+            );
+            const wrongKey = await page.evaluate(
+              (code) =>
+                window.fastKeys.find(
+                  (event) => event.code === code && event.alt && event.shift && event.trusted,
+                ),
+              code,
+            );
+            assert.ok(wrongKey, 'Wrong-modifier chord must be delivered as trusted input');
+            assert.equal(wrongKey.prevented, false);
+            row.newConversationWrongModifierProof = {
+              trusted: wrongKey.trusted,
+              passedThrough: !wrongKey.prevented,
+              routeAndTurnsPreserved: true,
+            };
+          }
           if (item.type === 'new-tab')
             assert.equal(
               context.pages().length,
@@ -682,14 +904,24 @@ if (!args.includes('--catalog-only') && selected.length) {
             await page.locator('#tool-opener').evaluate((element) => {
               element.hidden = true;
             });
+            await page.locator('#tool-target').evaluate((element) => {
+              element.hidden = true;
+            });
             await page.keyboard.press(`Alt+${code}`);
             assert.deepEqual(
               await page.evaluate(() => window.fixtureClicks),
               [],
-              'Unavailable composer menu opener must be a no-op',
+              'A hidden menu target and unavailable opener must be a no-op',
             );
-            assert.equal(await page.locator('#composer').innerText(), 'Draft answer');
+            assert.equal(
+              await page.locator('#composer').innerText(),
+              item.fixtureQuery,
+              'A no-op must preserve the owned query for cleanup',
+            );
             await page.locator('#tool-opener').evaluate((element) => {
+              element.hidden = false;
+            });
+            await page.locator('#tool-target').evaluate((element) => {
               element.hidden = false;
             });
           }
@@ -727,14 +959,61 @@ if (!args.includes('--catalog-only') && selected.length) {
               'Edited fixture message',
             );
           } else if (item.type === 'header-share') {
+            await page.waitForFunction(() => window.fixtureClicks.includes('share-target'), null, {
+              timeout: 2000,
+            });
+            const shareEvidence = await waitForShareClipboardToast(page, { timeoutMs: 2000 });
+            assert.deepEqual(shareEvidence, {
+              clipboardReadSucceeded: true,
+              validShareLink: true,
+              toastObserved: true,
+            });
+            assert.deepEqual(
+              await page.evaluate(() => window.fixtureClipboardWrites),
+              ['https://chatgpt.com/share/fixture-owned-shortcut-id'],
+              'The trusted shortcut must produce one owned canonical clipboard write',
+            );
+            const correctKey = await page.evaluate(
+              (code) =>
+                window.fastKeys.find(
+                  (event) =>
+                    event.code === code &&
+                    event.alt &&
+                    !event.shift &&
+                    !event.control &&
+                    !event.meta &&
+                    event.trusted,
+                ),
+              code,
+            );
+            assert.ok(correctKey, 'Share must follow a trusted Alt shortcut');
+            row.shareCopyToastProof = {
+              trustedShortcut: correctKey.trusted,
+              scopedTargetClicked: true,
+              ownedClipboardWriteCount: 1,
+              validShareLink: shareEvidence.validShareLink,
+              freshToast: shareEvidence.toastObserved,
+            };
             assert.deepEqual(await page.evaluate(() => window.fixtureClicks), ['share-target']);
-            assert.equal(await page.locator('body').getAttribute('data-share-dialog'), 'open');
+            const toastCountBeforeMissingTarget = await page
+              .locator('[data-content] [data-title]')
+              .count();
             await page.locator('#share-target').evaluate((element) => element.remove());
             await page.keyboard.press(`Alt+${code}`);
             assert.deepEqual(
               await page.evaluate(() => window.fixtureClicks),
               ['share-target'],
               'Missing scoped Share control must not activate the matching outside control',
+            );
+            assert.deepEqual(
+              await page.evaluate(() => window.fixtureClipboardWrites),
+              ['https://chatgpt.com/share/fixture-owned-shortcut-id'],
+              'Missing scoped Share control must not write the clipboard again',
+            );
+            assert.equal(
+              await page.locator('[data-content] [data-title]').count(),
+              toastCountBeforeMissingTarget,
+              'Missing scoped Share control must not add another notification',
             );
           } else if (item.type === 'blank-mode') {
             await page.waitForFunction(() => window.__cspChatWorkSurfaceMode === 'work', null, {
@@ -767,6 +1046,56 @@ if (!args.includes('--catalog-only') && selected.length) {
                 ? 'blank-conversation'
                 : 'search-dialog',
             );
+          } else if (item.type === 'new-conversation') {
+            await page.waitForFunction(
+              () =>
+                window.location.pathname === '/' &&
+                document.querySelectorAll('#thread-turns [data-testid^="conversation-turn-"]')
+                  .length === 0 &&
+                document.querySelector('#composer').getBoundingClientRect().height > 0 &&
+                document.querySelector('#composer').innerText.trim() === '',
+              null,
+              { timeout: 2000 },
+            );
+            assert.deepEqual(
+              await page.evaluate(() => window.fixtureClicks),
+              ['new-chat-target'],
+              'The extracted shortcut must activate the source-recognized titlebar target',
+            );
+            assert.equal(await page.url(), 'https://shortcut-fixture.invalid/');
+            assert.equal(
+              await page.locator('#thread-turns [data-testid^="conversation-turn-"]').count(),
+              0,
+              'New Conversation must clear the existing turns',
+            );
+            assert.equal(await page.locator('#composer').isVisible(), true);
+            assert.equal((await page.locator('#composer').innerText()).trim(), '');
+            assert.equal(
+              await page.locator('body').getAttribute('data-conversation-state'),
+              'blank-root',
+            );
+            const correctKey = await page.evaluate(
+              (code) =>
+                window.fastKeys.find(
+                  (event) =>
+                    event.code === code &&
+                    event.alt &&
+                    !event.shift &&
+                    !event.control &&
+                    !event.meta &&
+                    event.trusted,
+                ),
+              code,
+            );
+            assert.ok(correctKey, 'The correct shortcut must be delivered as trusted input');
+            row.newConversationResetProof = {
+              trustedShortcut: correctKey.trusted,
+              nativeTargetActivated: true,
+              route: await page.evaluate(() => window.location.pathname),
+              remainingTurns: 0,
+              composerVisible: true,
+              composerEmpty: true,
+            };
           } else if (item.type.startsWith('scroll-')) {
             await page.waitForFunction(
               ({ bottom, expected }) => {
@@ -848,59 +1177,33 @@ if (!args.includes('--catalog-only') && selected.length) {
               [{ codeboxWrapEnabled: true }, { codeboxWrapEnabled: false }],
               'Persistence requests must reflect both state transitions in memory only',
             );
-          } else if (item.type === 'multiple-response') {
-            await page.waitForFunction(() => window.fixtureClicks.length === 1, null, {
-              timeout: 2000,
-            });
-            assert.deepEqual(
-              await page.evaluate(() => window.fixtureClicks),
-              [item.actionId === 'shortcutKeyPreviousThread' ? 'previous-1' : 'next-1'],
-              'Lowest actionable response must activate, excluding disabled lowest and thinking counter',
-            );
-            assert.equal(
-              await page.locator('#previous-1 + div').textContent(),
-              item.actionId === 'shortcutKeyPreviousThread' ? '1/2' : '2/2',
-            );
-            if (item.actionId === 'shortcutKeyPreviousThread') {
-              await page.keyboard.press(`Alt+Control+${code}`);
-              await page.waitForFunction(
-                () =>
-                  window.fastThreadState().targetKey === 'conversation-turn-2' &&
-                  !window.fastThreadState().inFlight,
-                null,
-                { timeout: 1000 },
-              );
-              await page.keyboard.press(`Alt+Control+${code}`);
-              await page.waitForFunction(
-                () =>
-                  window.fastThreadState().targetKey === 'conversation-turn-1' &&
-                  !window.fastThreadState().inFlight,
-                null,
-                { timeout: 1000 },
-              );
-              assert.deepEqual(
-                await page.evaluate(() => window.fixtureClicks),
-                ['previous-1'],
-                'Compound preview selects adjacent navigator without activating a response',
-              );
-            } else {
-              await page.keyboard.press(`Alt+Control+${code}`);
-              await page.waitForFunction(
-                () =>
-                  window.fastThreadState().targetKey === 'conversation-turn-2' &&
-                  !window.fastThreadState().inFlight,
-                null,
-                { timeout: 1000 },
-              );
-              assert.deepEqual(
-                await page.evaluate(() => window.fixtureClicks),
-                ['next-1'],
-                'Next compound preview must include a disabled navigator without changing a response',
-              );
-            }
-            row.previewProof = await page.evaluate(() => window.fastThreadState());
-            row.contractProofs = ['response-navigation-preview'];
           } else if (item.type === 'menu-cascade') {
+            if (item.actionId === 'shortcutKeyAddPhotosFiles') {
+              await page.waitForFunction(() => window.fixtureClicks.includes('tool-opener'), null, {
+                timeout: 2000,
+              });
+              await page.waitForTimeout(2600);
+              assert.deepEqual(
+                await page.evaluate(() => window.fixtureClicks),
+                ['tool-opener'],
+                'Ambiguous Add Photos/Files list-navigation targets must not activate either row',
+              );
+              assert.equal(
+                await page.locator('#composer').getAttribute('data-tool-enabled'),
+                null,
+                'Ambiguous target matches must not trigger a tool action',
+              );
+              await page
+                .locator('#tool-ambiguous-distractor')
+                .evaluate((element) => element.remove());
+              await page.keyboard.press(`Alt+${code}`);
+              assert.equal(
+                fileChooserObserved,
+                false,
+                'The fixture must not open a native file chooser',
+              );
+              row.ambiguityRejectionProof = true;
+            }
             await page.waitForFunction(
               () => document.querySelector('#composer').dataset.toolEnabled === 'true',
               null,
@@ -908,17 +1211,48 @@ if (!args.includes('--catalog-only') && selected.length) {
             );
             assert.deepEqual(
               await page.evaluate(() => window.fixtureClicks),
-              ['tool-opener', 'tool-target'],
+              item.actionId === 'shortcutKeyStudy'
+                ? ['tool-target']
+                : ['tool-opener', 'tool-target'],
               'Menu cascade must open Tools then activate only the intended visible item',
             );
             if (item.actionId === 'shortcutKeyStudy') {
               const composer = page.locator('#composer');
-              assert.equal(await composer.getAttribute('data-study-enabled'), 'true');
-              assert.equal(await composer.getAttribute('data-system-hint-type'), 'tatertot');
-              assert.match(
-                await composer.innerText(),
-                /Draft answer/,
-                'Study selection preserves the draft',
+              assert.equal(
+                await composer
+                  .locator(
+                    `span[data-inline-selection-pill] svg use[href="#${item.fixturePillIconId}"]`,
+                  )
+                  .count(),
+                1,
+                'The first trusted shortcut press must add the verified Study pill inside the composer',
+              );
+              assert.equal(
+                await page.locator('body [data-inline-selection-pill]').count(),
+                1,
+                'Only the composer-owned Study pill should be present',
+              );
+              assert.equal(
+                await composer.evaluate((element) =>
+                  Array.from(element.childNodes)
+                    .filter(
+                      (node) =>
+                        !(
+                          node.nodeType === Node.ELEMENT_NODE &&
+                          node.matches('[data-inline-selection-pill]')
+                        ),
+                    )
+                    .map((node) => node.textContent)
+                    .join('')
+                    .trim(),
+                ),
+                '',
+                'Selecting Study must consume only its owned search query',
+              );
+              assert.equal(
+                await page.evaluate(() => window.studyOwnedQuery),
+                null,
+                'Study selection must release ownership of its search query',
               );
             }
             if (item.actionId !== 'shortcutKeyAddPhotosFiles') {
@@ -935,12 +1269,16 @@ if (!args.includes('--catalog-only') && selected.length) {
               );
               assert.equal(
                 await page.locator('#composer').innerText(),
-                item.actionId === 'shortcutKeyStudy' ? 'Draft answer' : 'Draft',
-                'Toggling the tool off must preserve any draft text',
+                item.actionId === 'shortcutKeyStudy' ? '' : 'Draft',
+                item.actionId === 'shortcutKeyStudy'
+                  ? 'The second Study press must leave the originally empty composer empty'
+                  : 'Toggling the tool off must preserve any draft text',
               );
               assert.deepEqual(
                 await page.evaluate(() => window.fixtureClicks),
-                ['tool-opener', 'tool-target'],
+                item.actionId === 'shortcutKeyStudy'
+                  ? ['tool-target']
+                  : ['tool-opener', 'tool-target'],
                 'Toggling an active pill must not reopen the menu or click a second action',
               );
             }
@@ -1000,20 +1338,6 @@ if (!args.includes('--catalog-only') && selected.length) {
               'Wrong-modifier chords must pass through',
             );
           }
-          if (item.type === 'multiple-response')
-            assert.equal(
-              observed.keys.filter(
-                (event) =>
-                  event.code === code &&
-                  event.alt &&
-                  event.control &&
-                  !event.shift &&
-                  event.trusted &&
-                  event.prevented,
-              ).length,
-              item.actionId === 'shortcutKeyPreviousThread' ? 2 : 1,
-              'Compound preview chords must be trusted and intercepted',
-            );
           assert.ok(
             observed.keys.some(
               (event) =>
@@ -1052,6 +1376,9 @@ if (!args.includes('--catalog-only') && selected.length) {
           .catch(() => null);
       } finally {
         page.off('pageerror', onPageError);
+        if (item.actionId === 'shortcutKeyAddPhotosFiles') page.off('filechooser', onFileChooser);
+        if (item.actionId === 'shortcutKeyShare')
+          await cleanupShareToastObserver(page).catch(() => {});
         const cleanup = await Promise.allSettled([
           page.close(),
           ...(spawnedPage ? [spawnedPage.close()] : []),

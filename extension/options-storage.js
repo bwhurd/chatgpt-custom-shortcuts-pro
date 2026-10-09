@@ -18,8 +18,6 @@ const OPTIONS_DEFAULTS = {
   shortcutKeyToggleChatWork: 'Digit5',
   shortcutKeyActivateInput: 'w',
   shortcutKeyToggleSidebar: 's',
-  shortcutKeyPreviousThread: 'j',
-  shortcutKeyNextThread: ';',
   shortcutKeyEdit: 'e',
   shortcutKeySendEdit: 'd',
   shortcutKeySearchConversationHistory: ',',
@@ -469,6 +467,8 @@ if (typeof OptionsSync === 'undefined') {
         delete stored.shortcutKeyRegenerate;
         delete stored.shortcutKeyCopyAllResponses;
         delete stored.shortcutKeyShowShortcuts;
+        delete stored.shortcutKeyPreviousThread;
+        delete stored.shortcutKeyNextThread;
       },
 
       // 9) Remove anything truly unused (keep it last)

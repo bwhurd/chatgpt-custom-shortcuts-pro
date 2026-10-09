@@ -71,6 +71,10 @@ async function writeSyntheticReport() {
 }
 
 async function main() {
+  if (stage === 'check:live-snapshot')
+    process.stdout.write(
+      'Live snapshot: ' + (process.env.FAKE_SNAPSHOT_STATUS || 'UNVERIFIED — snapshot-missing') + '\n',
+    );
   if (process.env.FAKE_NPM_FAIL_STAGE === stage) {
     process.exitCode = Number(process.env.FAKE_NPM_EXIT_CODE || 23);
     return;
@@ -100,6 +104,7 @@ function createFixture(t) {
   const root = path.join(temporaryRoot, 'repo');
   const npmCli = path.join(temporaryRoot, 'fake-npm.js');
   const logPath = path.join(temporaryRoot, 'fake-npm.jsonl');
+  const githubSummaryPath = path.join(temporaryRoot, 'github-summary.md');
   fs.mkdirSync(root, { recursive: true });
 
   const manifest = {
@@ -129,6 +134,7 @@ function createFixture(t) {
     root,
     npmCli,
     logPath,
+    githubSummaryPath,
     outputDirectory,
     manifest,
     lockPath: path.join(root, 'package-lock.json'),
@@ -299,6 +305,48 @@ test('continues through the shortcut result and preserves failed checks in a fre
   assert.match(
     fs.readFileSync(path.join(fixture.outputDirectory, 'report.html'), 'utf8'),
     /Code and text/,
+  );
+});
+
+test('runs snapshot replay and publishes only its allowlisted unverified summary without failing CI', (t) => {
+  const fixture = createFixture(t);
+  const result = runRunner(fixture, {
+    FAKE_SNAPSHOT_STATUS: 'UNVERIFIED — snapshot-missing',
+    GITHUB_STEP_SUMMARY: fixture.githubSummaryPath,
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const stages = callStages(fixture);
+  const snapshotIndex = stages.indexOf('check:live-snapshot');
+  const fastIndex = stages.indexOf('test:shortcuts:fast');
+  assert.ok(snapshotIndex >= 0 && fastIndex > snapshotIndex, stages.join(', '));
+  assert.equal(countStage(fixture, 'check:live-snapshot'), 1);
+  assert.match(result.stdout, /Live snapshot: UNVERIFIED — snapshot-missing/);
+
+  const artifact = fs.readFileSync(path.join(fixture.outputDirectory, 'live-snapshot.md'), 'utf8');
+  assert.match(artifact, /Live snapshot: UNVERIFIED — snapshot-missing/);
+  assert.doesNotMatch(artifact, /Synthetic fresh shortcut result/);
+  const githubSummary = fs.readFileSync(fixture.githubSummaryPath, 'utf8');
+  assert.match(githubSummary, /Live snapshot: UNVERIFIED — snapshot-missing/);
+  assert.doesNotMatch(githubSummary, /Synthetic fresh shortcut result/);
+});
+
+test('keeps invalid snapshot replay as a hard CI failure', (t) => {
+  const fixture = createFixture(t);
+  const result = runRunner(fixture, {
+    FAKE_SNAPSHOT_STATUS: 'INVALID — forbidden private detail',
+    FAKE_NPM_FAIL_STAGE: 'check:live-snapshot',
+    FAKE_NPM_EXIT_CODE: '1',
+  });
+
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(
+    fs.readFileSync(path.join(fixture.outputDirectory, 'live-snapshot.md'), 'utf8'),
+    /Live snapshot: INVALID — check rejected the snapshot or evaluator contract\./,
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(fixture.outputDirectory, 'live-snapshot.md'), 'utf8'),
+    /forbidden private detail/,
   );
 });
 

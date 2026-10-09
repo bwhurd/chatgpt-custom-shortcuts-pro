@@ -1,3 +1,5 @@
+import { assertCapabilities, getUnavailableCapabilities } from './shortcut-capabilities.mjs';
+
 const CHECK_REPORT_SCHEMA_VERSION = 3;
 const RUN_MANIFEST_SCHEMA_VERSION = 1;
 const EXECUTABLE_PROBE_MODES = new Set([
@@ -9,7 +11,13 @@ const EXECUTABLE_PROBE_MODES = new Set([
   'clipboard-text',
   'dom-state',
 ]);
-const TARGET_STATUSES = new Set(['pass', 'fail', 'no-scrape-coverage', 'not-run']);
+const TARGET_STATUSES = new Set([
+  'pass',
+  'fail',
+  'no-scrape-coverage',
+  'not-run',
+  'not-applicable',
+]);
 const SHORTCUT_STATUSES = new Set(['pass', 'fail', 'partial', 'manual', 'not-applicable']);
 const PROBE_STATUSES = new Set([
   'pass',
@@ -151,6 +159,14 @@ function invalidEvidenceReason(report, options) {
   ) {
     return 'The check report is missing target, probe, or artifact evidence.';
   }
+  const hasCapabilities = Object.hasOwn(report, 'capabilities');
+  if (hasCapabilities) {
+    try {
+      assertCapabilities(report.capabilities);
+    } catch {
+      return 'The check report contains malformed capability evidence.';
+    }
+  }
   if (
     !report.missingArtifacts.every(
       (artifact) => isRecord(artifact) && typeof artifact.filename === 'string',
@@ -227,6 +243,34 @@ function invalidEvidenceReason(report, options) {
       !isStringArray(row.missingExpectedFiles)
     ) {
       return 'The target rows contain malformed or unsupported evidence.';
+    }
+    if (row.status === 'not-applicable' || row.requiredCapabilities !== undefined) {
+      if (
+        row.status === 'not-applicable' &&
+        ((row.unknownUiStateRefs !== undefined &&
+          (!isStringArray(row.unknownUiStateRefs) || row.unknownUiStateRefs.length > 0)) ||
+          row.missingMatchGroups === true)
+      ) {
+        return `Target ${row.targetId} has metadata errors that cannot be suppressed by capability evidence.`;
+      }
+      if (!hasCapabilities) {
+        return `Target ${row.targetId} has capability metadata without capability evidence.`;
+      }
+      let unavailableCapabilities;
+      try {
+        unavailableCapabilities = getUnavailableCapabilities(
+          row.requiredCapabilities,
+          report.capabilities,
+        );
+      } catch {
+        return `Target ${row.targetId} has malformed required capability metadata.`;
+      }
+      if (
+        row.status === 'not-applicable' &&
+        (!Array.isArray(row.requiredCapabilities) || unavailableCapabilities.length === 0)
+      ) {
+        return `Target ${row.targetId} is not applicable without an unavailable required capability.`;
+      }
     }
     if (
       row.matchedExpectedFiles.some((filename) => !row.expectedFiles.includes(filename)) ||
@@ -363,7 +407,12 @@ function summarizeTargets(report, partialReasons, failures, scopeLimitations) {
   };
 
   for (const target of report.targetRows) {
-    if (target.status === 'pass') {
+    if (target.status === 'not-applicable') {
+      summary.outOfScope += 1;
+      scopeLimitations.push({
+        reason: `Target ${target.targetId} is not applicable because a required capability is unavailable.`,
+      });
+    } else if (target.status === 'pass') {
       const matchedFiles = Array.isArray(target.matchedExpectedFiles)
         ? target.matchedExpectedFiles
         : [];
@@ -574,6 +623,58 @@ function summarizeProbes(report, partialReasons, failures, scopeLimitations) {
   return summary;
 }
 
+function summarizeArtifactGaps(report, partialReasons, scopeLimitations) {
+  const targetExpectedFiles = new Set(report.targetRows.flatMap((target) => target.expectedFiles));
+  const isRequiredByTarget = (artifact) => targetExpectedFiles.has(artifact.filename);
+  const missingArtifacts = report.missingArtifacts;
+  const failedArtifacts = report.runManifest.artifacts.filter(
+    (artifact) => artifact.status === 'failed',
+  );
+  const deferredArtifacts = report.runManifest.artifacts.filter(
+    (artifact) => artifact.status === 'deferred',
+  );
+  const requiredMissingArtifacts = missingArtifacts.filter(isRequiredByTarget);
+
+  if (requiredMissingArtifacts.length > 0) {
+    partialReasons.push(
+      `${requiredMissingArtifacts.length} required scrape artifact(s) are missing or failed.`,
+    );
+  }
+  if (report.runManifest.failedCount !== failedArtifacts.length) {
+    partialReasons.push(
+      'The capture manifest failed-artifact count does not match its artifact entries.',
+    );
+  }
+  if (failedArtifacts.some(isRequiredByTarget)) {
+    partialReasons.push('The capture manifest records failed required scrape artifacts.');
+  }
+  if (report.runManifest.deferredCount !== deferredArtifacts.length) {
+    partialReasons.push(
+      'The capture manifest deferred-artifact count does not match its artifact entries.',
+    );
+  }
+  if (deferredArtifacts.some(isRequiredByTarget)) {
+    partialReasons.push('The capture manifest records deferred required scrape artifacts.');
+  }
+
+  const optionalArtifactNames = new Set([
+    ...missingArtifacts
+      .filter((artifact) => !isRequiredByTarget(artifact))
+      .map((item) => item.filename),
+    ...failedArtifacts
+      .filter((artifact) => !isRequiredByTarget(artifact))
+      .map((item) => item.filename),
+    ...deferredArtifacts
+      .filter((artifact) => !isRequiredByTarget(artifact))
+      .map((item) => item.filename),
+  ]);
+  if (optionalArtifactNames.size > 0) {
+    scopeLimitations.push({
+      reason: `${optionalArtifactNames.size} optional scrape artifact(s) have missing, failed, or deferred evidence and are not required by any current target.`,
+    });
+  }
+}
+
 export function classifyCurrentPageValidation(report, options = {}) {
   const checkedAtTimestamp = parseTimestamp(options.completedAt);
   const result = {
@@ -640,26 +741,10 @@ export function classifyCurrentPageValidation(report, options = {}) {
       });
     }
   }
-  if (report.missingArtifacts.length > 0) {
-    partialReasons.push(
-      `${report.missingArtifacts.length} scrape artifact(s) are missing or failed.`,
-    );
-  }
   if (report.missingExpectedFiles.length > 0) {
     partialReasons.push(`${report.missingExpectedFiles.length} expected dump file(s) are missing.`);
   }
-  const failedArtifacts = report.runManifest.artifacts.filter(
-    (artifact) => artifact.status === 'failed',
-  );
-  const deferredArtifacts = report.runManifest.artifacts.filter(
-    (artifact) => artifact.status === 'deferred',
-  );
-  if (report.runManifest.failedCount > failedArtifacts.length || failedArtifacts.length > 0) {
-    partialReasons.push('The capture manifest records failed scrape artifacts.');
-  }
-  if (report.runManifest.deferredCount > deferredArtifacts.length || deferredArtifacts.length > 0) {
-    partialReasons.push('The capture manifest records deferred scrape artifacts.');
-  }
+  summarizeArtifactGaps(report, partialReasons, result.scopeLimitations);
   for (const shortcut of report.shortcutRows) {
     if (shortcut.status === 'partial') {
       partialReasons.push(`Shortcut ${shortcut.actionId} has partial target coverage.`);

@@ -14,7 +14,6 @@ const HANDLE_KEY = 'inspectorCapturesRootHandle';
 const CAPTURE_ROOT_DIR_NAME = 'inspector-captures';
 const RUN_FOLDER_SUFFIX = 'devscrapewide_c-69ea4723';
 const RUN_MANIFEST_NAME = 'run-manifest.json';
-const DEFERRED_FILENAME = '1c_TopbarToBottomEnabled_ThreadBottom.txt';
 
 const DEV_SCRAPE_WIDE_ALLOWED_FIXTURE_URLS = Object.freeze([
   DEV_SCRAPE_WIDE_FIXTURE_URL,
@@ -38,6 +37,12 @@ const MODEL_CONFIGURE_MENU_ITEM_SELECTOR =
 const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
   MODEL_PICKER_SELECTORS.MODEL_THINKING_EFFORT_ACTION_SELECTOR ||
   '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
+const SEARCH_CONVERSATION_BUTTON_SELECTORS = Object.freeze([
+  'button:has(svg path[d^="M7.32849 1.91016"])',
+  'button[data-testid="search-conversation-button"]',
+]);
+const SEARCH_DIALOG_SELECTOR = '[role="dialog"]';
+const SHORTCUT_OVERLAY_SELECTOR = '#csp-shortcut-overlay';
 const DEV_SCRAPE_MIN_STEP_DELAY_MS = 250;
 
 const DUMP_REGISTRY = Object.freeze([
@@ -170,6 +175,7 @@ const DUMP_REGISTRY = Object.freeze([
     filename: '2d_ModelSwitcher_ThinkingEffort_Submenu.txt',
     stateId: 'model-switcher-thinking-effort-menu',
     label: 'Model switcher thinking effort submenu',
+    requiredCapabilities: ['dedicatedEffortControls'],
     steps: [
       { type: 'open-model-switcher-menu', label: 'open model switcher menu' },
       { type: 'open-model-thinking-effort-menu', label: 'open thinking effort submenu' },
@@ -180,84 +186,12 @@ const DUMP_REGISTRY = Object.freeze([
     filename: '2d2_ModelSwitcher_ProThinkingEffort_Submenu.txt',
     stateId: 'model-switcher-pro-thinking-effort-menu',
     label: 'Model switcher Pro thinking effort submenu',
+    requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
     steps: [
       { type: 'open-model-switcher-menu', label: 'open model switcher menu' },
       { type: 'open-model-pro-thinking-effort-menu', label: 'open Pro thinking effort submenu' },
     ],
     capture: { type: 'latest-open-menu' },
-  },
-  {
-    filename: '2e_ModelSwitcher_ConfigureDialog_CurrentSelection.txt',
-    stateId: 'model-switcher-configure-dialog',
-    label: 'Configure dialog from model switcher',
-    steps: [{ type: 'open-configure-dialog', label: 'open configure dialog from model switcher' }],
-    capture: { type: 'configure-dialog' },
-  },
-  {
-    filename: '2f_ModelSwitcher_ConfigureDialog_ModelSelectionListbox.txt',
-    stateId: 'model-switcher-configure-listbox',
-    label: 'Configure dialog model selection listbox',
-    steps: [
-      { type: 'open-configure-dialog', label: 'open configure dialog from model switcher' },
-      { type: 'open-configure-listbox', label: 'open configure model selection listbox' },
-    ],
-    capture: { type: 'configure-listbox' },
-  },
-  {
-    filename: '2g_ModelSwitcher_ConfigureDialog_ConfigureLatest_FrontendRows.txt',
-    stateId: 'model-switcher-configure-latest-dialog',
-    label: 'Configure dialog frontend rows for Latest',
-    steps: [
-      { type: 'open-configure-dialog', label: 'open configure dialog from model switcher' },
-      {
-        type: 'select-configure-option',
-        optionId: 'configure-latest',
-        label: 'select Latest in configure dialog',
-      },
-    ],
-    capture: { type: 'configure-dialog' },
-  },
-  {
-    filename: '2h_ModelSwitcher_ConfigureDialog_Configure5-2_FrontendRows.txt',
-    stateId: 'model-switcher-configure-5-2-dialog',
-    label: 'Configure dialog frontend rows for 5.2',
-    steps: [
-      { type: 'open-configure-dialog', label: 'open configure dialog from model switcher' },
-      {
-        type: 'select-configure-option',
-        optionId: 'configure-5-2',
-        label: 'select 5.2 in configure dialog',
-      },
-    ],
-    capture: { type: 'configure-dialog' },
-  },
-  {
-    filename: '2i_ModelSwitcher_ConfigureDialog_Configure5-4_FrontendRows.txt',
-    stateId: 'model-switcher-configure-5-4-dialog',
-    label: 'Configure dialog frontend rows for 5.4',
-    steps: [
-      { type: 'open-configure-dialog', label: 'open configure dialog from model switcher' },
-      {
-        type: 'select-configure-option',
-        optionId: 'configure-5-4',
-        label: 'select 5.4 in configure dialog',
-      },
-    ],
-    capture: { type: 'configure-dialog' },
-  },
-  {
-    filename: '2j_ModelSwitcher_ConfigureDialog_ConfigureO3_FrontendRows.txt',
-    stateId: 'model-switcher-configure-o3-dialog',
-    label: 'Configure dialog frontend rows for o3',
-    steps: [
-      { type: 'open-configure-dialog', label: 'open configure dialog from model switcher' },
-      {
-        type: 'select-configure-option',
-        optionId: 'configure-o3',
-        label: 'select o3 in configure dialog',
-      },
-    ],
-    capture: { type: 'configure-dialog' },
   },
   {
     filename: '2k_Composer_AddFilesAndMore_Menu.txt',
@@ -267,36 +201,129 @@ const DUMP_REGISTRY = Object.freeze([
     capture: { type: 'latest-open-menu' },
   },
   {
-    filename: '2l_Composer_AddFilesAndMore_More_Submenu.txt',
-    stateId: 'composer-add-files-and-more-more-submenu',
-    label: 'Composer Add files and more More submenu',
-    aliasOf: '2k_Composer_AddFilesAndMore_Menu.txt',
-    notes:
-      'Current ChatGPT exposes the composer tools directly; the former nested More submenu is retained as a compatibility alias.',
-    capture: { type: 'latest-open-menu' },
+    filename: '2n_SearchChats_Dialog.txt',
+    stateId: 'search-chats-dialog',
+    label: 'Search Chats dialog',
+    steps: [
+      { type: 'set-sidebar-state', state: 'expanded', label: 'expand sidebar' },
+      { type: 'open-search-chats-dialog', label: 'open Search Chats dialog' },
+    ],
+    capture: { type: 'latest-open-dialog' },
   },
   {
-    filename: '2m_Header_ConversationOptions_Menu.txt',
-    stateId: 'header-conversation-options-menu',
-    label: 'Header conversation options menu',
-    steps: [
-      {
-        type: 'open-conversation-options-menu',
-        label: 'open header conversation options menu',
-      },
-    ],
-    capture: { type: 'latest-open-menu' },
+    filename: '2o_ShortcutOverlay_Dialog.txt',
+    stateId: 'shortcut-overlay',
+    label: 'Extension shortcut overlay',
+    steps: [{ type: 'open-shortcut-overlay', label: 'open extension shortcut overlay' }],
+    capture: { type: 'shortcut-overlay' },
+  },
+  {
+    filename: '3a_Probe_CodeBlockContent.txt',
+    stateId: 'probe-code-block-content',
+    label: 'Probe-only assistant code block content',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'code-block-content' },
+  },
+  {
+    filename: '3b_Probe_CodeboxWrapEnabled.txt',
+    stateId: 'probe-codebox-wrap-enabled',
+    label: 'Probe-only codebox wrap enabled',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'codebox-wrap-enabled' },
+  },
+  {
+    filename: '3c_Probe_EditSendButton.txt',
+    stateId: 'probe-edit-send-button',
+    label: 'Probe-only active edit Send button',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'edit-send-button' },
+  },
+  {
+    filename: '3l_Probe_EditMessageButton.txt',
+    stateId: 'probe-edit-message-button',
+    label: 'Probe-only user message Edit button in Chat',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'edit-message-button' },
+  },
+  {
+    filename: '3d_Probe_SendButton.txt',
+    stateId: 'probe-send-button',
+    label: 'Probe-only composer Send button',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'send-button' },
+  },
+  {
+    filename: '3e_Probe_StopButton.txt',
+    stateId: 'probe-stop-button',
+    label: 'Probe-only Stop button during generation',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'stop-button' },
+  },
+  {
+    filename: '3f_Probe_TemporaryChat.txt',
+    stateId: 'probe-temporary-chat',
+    label: 'Probe-only Temporary Chat control',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'temporary-chat-button' },
+  },
+  {
+    filename: '3g_Probe_NewGptConversation.txt',
+    stateId: 'probe-new-gpt-conversation',
+    label: 'Probe-only new GPT conversation control',
+    probeOnly: true,
+    steps: [{ type: 'open-gpt-menu', label: 'open GPT conversation menu' }],
+    capture: { type: 'probe-target', targetRef: 'new-gpt-conversation-item' },
+  },
+  {
+    filename: '3h_Probe_BlankChatWorkSurfaceToggle.txt',
+    stateId: 'probe-blank-chat-work-surface-toggle',
+    label: 'Probe-only blank-chat Work surface radio',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'chat-work-surface-toggle' },
+  },
+  {
+    filename: '3i_Probe_ComposerStudySearch.txt',
+    stateId: 'probe-composer-study-search',
+    label: 'Probe-only searched Study composer menu item',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'composer-study-action' },
+  },
+  {
+    filename: '3m_Probe_ComposerDeepResearchSearch.txt',
+    stateId: 'probe-composer-deep-research-search',
+    label: 'Probe-only searched Deep Research composer menu item',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'composer-deep-research-action' },
+  },
+  {
+    filename: '3j_Probe_ActiveDictationControls.txt',
+    stateId: 'probe-active-dictation-controls',
+    label: 'Probe-only active dictation controls',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'cancel-dictation-button' },
+  },
+  {
+    filename: '3k_Probe_BlankChatDictateStart.txt',
+    stateId: 'probe-blank-chat-dictate-start',
+    label: 'Probe-only blank-chat Dictate start control',
+    probeOnly: true,
+    steps: [],
+    capture: { type: 'probe-target', targetRef: 'dictate-start-button' },
   },
 ]);
 
-const DEFERRED_ARTIFACTS = Object.freeze([
-  {
-    filename: DEFERRED_FILENAME,
-    stateId: 'topbar-bottom-enabled-thread-bottom',
-    label: 'Deferred topbar-to-bottom thread-bottom capture',
-    status: 'deferred',
-  },
-]);
+const DEFERRED_ARTIFACTS = Object.freeze([]);
 
 const PLAYWRIGHT_CHECK_REQUIRED_ERROR =
   'The in-extension Check-Scrape path is retired. Run `node tests/playwright/devscrape-wide.mjs --action validate-wide` so shortcut metadata, target match groups, and report generation use the deterministic Playwright validator.';
@@ -443,6 +470,22 @@ function getOpenMenuWrappers(documentObj) {
     .filter((element) => element instanceof Element && element.isConnected);
 }
 
+function getOpenMenuWrapperForTrigger(documentObj, trigger) {
+  if (!trigger) return null;
+  const triggerId = trigger.getAttribute('id') || '';
+  const controlledIds = (trigger.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+  if (!triggerId && !controlledIds.length) return null;
+
+  const menu = Array.from(documentObj.querySelectorAll(OPEN_MENU_SELECTOR)).find((candidate) => {
+    const menuId = candidate.getAttribute('id') || '';
+    const labelledByIds = (candidate.getAttribute('aria-labelledby') || '').split(/\s+/);
+    return (
+      (menuId && controlledIds.includes(menuId)) || (triggerId && labelledByIds.includes(triggerId))
+    );
+  });
+  return menu?.closest('[data-radix-popper-content-wrapper]') || menu || null;
+}
+
 async function closeOpenMenus(documentObj, windowObj) {
   const dispatchEscape = () => {
     const target = documentObj.activeElement || documentObj.body || documentObj.documentElement;
@@ -464,6 +507,41 @@ async function closeOpenMenus(documentObj, windowObj) {
     dispatchEscape();
     await sleep(DEV_SCRAPE_MIN_STEP_DELAY_MS);
   }
+}
+
+async function dismissCapturedDialog(_documentObj, windowObj, dialog) {
+  if (!(dialog instanceof Element) || !dialog.isConnected || !isVisible(dialog)) return;
+  try {
+    dialog.dispatchEvent(
+      new windowObj.KeyboardEvent('keydown', {
+        key: 'Escape',
+        code: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  } catch {}
+  await waitForCondition(() => !dialog.isConnected || !isVisible(dialog), {
+    timeout: 1000,
+    interval: 50,
+  }).catch(() => {});
+}
+
+async function dismissCapturedShortcutOverlay(_documentObj, windowObj, overlay) {
+  if (!(overlay instanceof Element) || !overlay.isConnected) return;
+  try {
+    overlay.dispatchEvent(
+      new windowObj.KeyboardEvent('keydown', {
+        key: 'Escape',
+        code: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  } catch {}
+  await waitForCondition(() => !overlay.isConnected, { timeout: 1000, interval: 50 }).catch(
+    () => {},
+  );
 }
 
 function serializeNodePretty(node, depth = 0) {
@@ -833,6 +911,48 @@ async function openModelThinkingEffortMenu(documentObj, windowObj, runtime, opti
   return menu;
 }
 
+async function openSearchChatsDialog(documentObj, windowObj, runtime) {
+  await closeOpenMenus(documentObj, windowObj);
+  if (Array.from(documentObj.querySelectorAll(SEARCH_DIALOG_SELECTOR)).some(isVisible)) {
+    throw new Error('A dialog was already open before the Search Chats opener was activated');
+  }
+  const button = SEARCH_CONVERSATION_BUTTON_SELECTORS.map((selector) =>
+    Array.from(documentObj.querySelectorAll(selector)).find(isVisible),
+  ).find(Boolean);
+  if (!(button instanceof Element)) {
+    throw new Error('Could not find a visible Search Chats button from the source selectors');
+  }
+  smartClick(button, windowObj);
+  const dialog = await waitForCondition(
+    () => Array.from(documentObj.querySelectorAll(SEARCH_DIALOG_SELECTOR)).find(isVisible) || null,
+    { timeout: 5000, interval: 50 },
+  );
+  if (!(dialog instanceof Element)) {
+    throw new Error('Search Chats dialog did not open');
+  }
+  runtime.latestDialog = dialog;
+  return dialog;
+}
+
+async function openGptMenu(documentObj, windowObj, runtime) {
+  await closeOpenMenus(documentObj, windowObj);
+  const findGptMenuTrigger = windowObj.findGptMenuTrigger;
+  const trigger = typeof findGptMenuTrigger === 'function' ? findGptMenuTrigger() : null;
+  if (!(trigger instanceof Element) || !isVisible(trigger)) {
+    throw new Error('Could not find a visible GPT menu trigger from the extension runtime helper');
+  }
+  smartClick(trigger, windowObj);
+  const menu = await waitForCondition(() => getOpenMenuWrapperForTrigger(documentObj, trigger), {
+    timeout: 2500,
+    interval: 50,
+  });
+  if (!(menu instanceof Element)) {
+    throw new Error('GPT conversation menu did not open');
+  }
+  runtime.latestMenu = menu;
+  return menu;
+}
+
 async function executeStep(documentObj, windowObj, runtime, step) {
   if (step.type === 'set-sidebar-state') {
     await ensureSidebarState(documentObj, windowObj, step.state);
@@ -858,6 +978,27 @@ async function executeStep(documentObj, windowObj, runtime, step) {
     await openModelThinkingEffortMenu(documentObj, windowObj, runtime, { kind: 'pro' });
     return;
   }
+  if (step.type === 'open-search-chats-dialog') {
+    await openSearchChatsDialog(documentObj, windowObj, runtime);
+    return;
+  }
+  if (step.type === 'open-gpt-menu') {
+    await openGptMenu(documentObj, windowObj, runtime);
+    return;
+  }
+  if (step.type === 'open-shortcut-overlay') {
+    const overlay = await waitForCondition(
+      () => documentObj.querySelector(SHORTCUT_OVERLAY_SELECTOR),
+      { timeout: 1000, interval: 50 },
+    );
+    if (!(overlay instanceof Element)) {
+      throw new Error(
+        'Shortcut overlay was not opened by the trusted Playwright keyboard capture path',
+      );
+    }
+    runtime.shortcutOverlay = overlay;
+    return;
+  }
   if (step.type === 'set-viewport-size') {
     return;
   }
@@ -880,6 +1021,12 @@ function captureArtifactHtml(documentObj, runtime, capture) {
   if (capture.type === 'latest-open-menu') {
     const menu = runtime.latestMenu || getOpenMenuWrappers(documentObj).slice(-1)[0] || null;
     return menu?.outerHTML || '';
+  }
+  if (capture.type === 'latest-open-dialog') {
+    return runtime.latestDialog?.outerHTML || '';
+  }
+  if (capture.type === 'shortcut-overlay') {
+    return runtime.shortcutOverlay?.outerHTML || '';
   }
   return '';
 }
@@ -1098,9 +1245,21 @@ export async function runWideScrapeInPage({
 
   for (const definition of DUMP_REGISTRY) {
     if (definition.aliasOf) continue;
+    if (definition.probeOnly) {
+      artifacts.push(
+        makeArtifactRecord(definition, {
+          status: 'deferred',
+          error: 'Requires an opt-in disposable-conversation probe in the fresh Playwright run.',
+        }),
+      );
+      continue;
+    }
     try {
+      await dismissCapturedDialog(documentObj, windowObj, runtime.latestDialog);
       await closeOpenMenus(documentObj, windowObj);
       runtime.latestMenu = null;
+      runtime.latestDialog = null;
+      runtime.shortcutOverlay = null;
       const steps = Array.isArray(definition.steps) ? definition.steps : [];
       if (steps.length > 5) {
         throw new Error(`Artifact ${definition.filename} exceeds the 5-step limit`);
@@ -1132,6 +1291,8 @@ export async function runWideScrapeInPage({
         }),
       );
     }
+    await dismissCapturedDialog(documentObj, windowObj, runtime.latestDialog);
+    await dismissCapturedShortcutOverlay(documentObj, windowObj, runtime.shortcutOverlay);
   }
 
   DUMP_REGISTRY.filter((definition) => definition.aliasOf).forEach((definition) => {
@@ -1166,6 +1327,8 @@ export async function runWideScrapeInPage({
   });
 
   await closeOpenMenus(documentObj, windowObj);
+  await dismissCapturedDialog(documentObj, windowObj, runtime.latestDialog);
+  await dismissCapturedShortcutOverlay(documentObj, windowObj, runtime.shortcutOverlay);
 
   const completedAt = new Date().toISOString();
   const failedArtifacts = artifacts.filter((artifact) => artifact.status === 'failed');

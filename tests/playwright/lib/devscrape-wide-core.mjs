@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,11 +13,19 @@ import {
   writeShortcutAuditArtifacts,
 } from './shortcut-audit-artifacts.mjs';
 import {
+  assertCapabilities,
+  deriveFreshCapabilities,
+  getUnavailableCapabilities,
+  unknownCapabilities,
+} from './shortcut-capabilities.mjs';
+import {
+  buildFreshCurrentModelCatalogActionProjection,
   buildShortcutValidationInventory,
   parseModelPickerLabelsSource,
   parseOptionsDefaultsFromSource,
   parseSettingsSchemaSource,
 } from './shortcut-target-inventory.mjs';
+import { evaluateTargetPresence, targetMatchesText } from './shortcut-target-presence.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,10 +90,217 @@ const MIN_EXTENSION_PAGE_SPACING_MS = 1000;
 const NEW_CONVERSATION_SETTLE_MS = 2500;
 const NEW_CONVERSATION_ACTION_ID = 'shortcutKeyNewConversation';
 const TEMPORARY_CHAT_ACTION_ID = 'shortcutKeyTemporaryChat';
-const PREVIOUS_THREAD_ACTION_ID = 'shortcutKeyPreviousThread';
-const NEXT_THREAD_ACTION_ID = 'shortcutKeyNextThread';
 const CLICK_SEND_ACTION_ID = 'shortcutKeyClickSendButton';
 const CLICK_STOP_ACTION_ID = 'shortcutKeyClickStopButton';
+const LIVE_PROBE_CAPTURE_STATE_BY_ACTION = Object.freeze({
+  shortcutKeyCopyAllCodeBlocks: 'probe-code-block-content',
+  shortcutKeyToggleCodeboxWrap: 'probe-codebox-wrap-enabled',
+  shortcutKeySendEdit: 'probe-edit-send-button',
+  shortcutKeyClickSendButton: 'probe-send-button',
+  shortcutKeyClickStopButton: 'probe-stop-button',
+  shortcutKeyTemporaryChat: 'probe-temporary-chat',
+  shortcutKeyNewGptConversation: 'probe-new-gpt-conversation',
+  shortcutKeyNewConversation: 'probe-blank-chat-work-surface-toggle',
+  shortcutKeyStudy: 'probe-composer-study-search',
+  shortcutKeyDeepResearch: 'probe-composer-deep-research-search',
+  shortcutKeyCancelDictation: 'probe-active-dictation-controls',
+  shortcutKeyToggleDictate: 'probe-blank-chat-dictate-start',
+});
+const LIVE_PROBE_CAPTURE_TARGET_BY_STATE = Object.freeze({
+  'probe-code-block-content': 'code-block-content',
+  'probe-codebox-wrap-enabled': 'codebox-wrap-enabled',
+  'probe-edit-send-button': 'edit-send-button',
+  'probe-edit-message-button': 'edit-message-button',
+  'probe-send-button': 'send-button',
+  'probe-stop-button': 'stop-button',
+  'probe-temporary-chat': 'temporary-chat-button',
+  'probe-new-gpt-conversation': 'new-gpt-conversation-item',
+  'probe-blank-chat-work-surface-toggle': 'chat-work-surface-toggle',
+  'probe-composer-study-search': 'composer-study-action',
+  'probe-composer-deep-research-search': 'composer-deep-research-action',
+  'probe-active-dictation-controls': 'cancel-dictation-button',
+  'probe-blank-chat-dictate-start': 'dictate-start-button',
+});
+
+export function getProbeOnlyCaptureActionIds(actionIds = []) {
+  const requested = Array.isArray(actionIds) ? [...new Set(actionIds)] : [];
+  const selected = requested.length ? requested : Object.keys(LIVE_PROBE_CAPTURE_STATE_BY_ACTION);
+  const unsupported = selected.filter((actionId) => !LIVE_PROBE_CAPTURE_STATE_BY_ACTION[actionId]);
+  if (unsupported.length) {
+    throw new Error(`No probe-only state capture is registered for: ${unsupported.join(', ')}.`);
+  }
+  return selected;
+}
+
+export function requiresAuditOwnedTwoTurnFixture(options = {}) {
+  const { onlyActionIds = [], fixedContractIds = [], phase = 'all', shortcuts = [] } = options;
+  if (phase === 'model') return false;
+  const selectedActionIds = Array.isArray(onlyActionIds) ? onlyActionIds : [];
+  const selectedContractIds = Array.isArray(fixedContractIds) ? fixedContractIds : [];
+  if (!selectedActionIds.length && !selectedContractIds.length) return true;
+  const shortcutById = new Map(
+    (Array.isArray(shortcuts) ? shortcuts : []).map((shortcut) => [shortcut.actionId, shortcut]),
+  );
+  return selectedActionIds.some((actionId) => {
+    if (actionId === NEW_CONVERSATION_ACTION_ID) return true;
+    const setup = String(shortcutById.get(actionId)?.activationProbeSetup || '');
+    return (
+      ['scroll-from-top', 'scroll-from-bottom'].includes(setup) ||
+      setup.startsWith('message-scroll-')
+    );
+  });
+}
+
+export function buildCaptureOnlyLiveProbeRow(shortcut, captureArtifact, durationMs = 0) {
+  const captureStatus = captureArtifact?.status || 'deferred';
+  const captureReason = captureArtifact?.error || '';
+  return {
+    actionId: shortcut.actionId,
+    label: shortcut.label,
+    defaultCode: shortcut.defaultCode,
+    requiredCapabilities: shortcut.requiredCapabilities || [],
+    dispatchCode: '',
+    probeMode: shortcut.activationProbeMode || '',
+    expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
+    status: 'not-live-probed',
+    reason:
+      captureStatus === 'captured'
+        ? 'Prepared target state was captured; shortcut activation was intentionally not dispatched.'
+        : captureReason ||
+          'Prepared target state was not captured; shortcut activation was intentionally not dispatched.',
+    observedSelector: '',
+    observedTextSnippet: '',
+    stateCapture: {
+      stateId: captureArtifact?.stateId || '',
+      status: captureStatus,
+      error: captureReason || null,
+    },
+    semantic: {
+      status: 'not-run',
+      proofMethod: 'none',
+      expected: shortcut.activationProbeExpectedTargetRef || shortcut.notes || '',
+      observed: '',
+      reason: 'Shortcut activation was not dispatched during prepare/capture-only collection.',
+    },
+    durationMs,
+  };
+}
+
+const CAPTURE_ONLY_FAILURE_REASONS = Object.freeze({
+  setup: 'Prepared-state setup failed before the target state was captured.',
+  capture: 'Prepared-state capture did not produce a verified artifact.',
+  cleanup: 'Prepared-state cleanup failed; captured content was discarded.',
+});
+
+export function recordCaptureOnlyFailure({
+  actionId,
+  supplementalArtifactByState,
+  rows = [],
+  checkpoint = null,
+  failureType = 'capture',
+  diagnosticError = '',
+} = {}) {
+  const stateId = LIVE_PROBE_CAPTURE_STATE_BY_ACTION[actionId] || '';
+  const reason = CAPTURE_ONLY_FAILURE_REASONS[failureType] || CAPTURE_ONLY_FAILURE_REASONS.capture;
+  const artifact = stateId ? supplementalArtifactByState?.get(stateId) : null;
+  let failedArtifact = null;
+  if (artifact) {
+    failedArtifact = {
+      ...artifact,
+      status: 'failed',
+      error: reason,
+      rawHtml: '',
+      captureBytes: 0,
+    };
+    supplementalArtifactByState.set(stateId, failedArtifact);
+  }
+
+  const row = Array.isArray(rows)
+    ? rows.findLast((candidate) => candidate.actionId === actionId)
+    : null;
+  if (row) {
+    row.reason = reason;
+    if (row.stateCapture) {
+      row.stateCapture.status = 'failed';
+      row.stateCapture.error = reason;
+      if (diagnosticError) row.stateCapture.diagnosticError = diagnosticError;
+      if (failureType === 'cleanup') row.stateCapture.cleanupStatus = 'failed';
+    }
+  }
+
+  const completedCase = Array.isArray(checkpoint?.completedCases)
+    ? checkpoint.completedCases.findLast((candidate) => candidate.actionId === actionId)
+    : null;
+  if (completedCase) {
+    completedCase.captureStatus = 'failed';
+    completedCase.reason = reason;
+    if (diagnosticError) completedCase.diagnosticError = diagnosticError;
+    if (failureType === 'cleanup') completedCase.captureCleanupStatus = 'failed';
+  }
+  if (failureType === 'cleanup' && checkpoint) {
+    checkpoint.captureCleanupFailures ||= [];
+    if (!checkpoint.captureCleanupFailures.some((failure) => failure.actionId === actionId)) {
+      checkpoint.captureCleanupFailures.push({ actionId, stateId, reason });
+    }
+  }
+  return failedArtifact;
+}
+
+export function recordPreparedCaptureCleanup({ cleanup, ...options }) {
+  const { actionId, rows = [], checkpoint } = options;
+  const status = cleanup?.status || 'unknown';
+  const row = rows.findLast((candidate) => candidate.actionId === actionId);
+  const completedCase = checkpoint?.completedCases?.findLast(
+    (candidate) => candidate.actionId === actionId,
+  );
+  if (row?.stateCapture) row.stateCapture.cleanupStatus = status;
+  if (completedCase) completedCase.captureCleanupStatus = status;
+  if (['clean', 'not-needed'].includes(status)) return { failed: false, status };
+
+  const stateId = LIVE_PROBE_CAPTURE_STATE_BY_ACTION[actionId];
+  // Cleanup is diagnostic; it cannot undo the observed target capture.
+  if (checkpoint) {
+    checkpoint.captureCleanupFailures ||= [];
+    if (!checkpoint.captureCleanupFailures.some((failure) => failure.actionId === actionId)) {
+      checkpoint.captureCleanupFailures.push({
+        actionId,
+        stateId,
+        reason: 'Prepared-state cleanup did not complete successfully.',
+      });
+    }
+  }
+  return { failed: true, status };
+}
+
+const COMPOSER_TOOL_ITEM_CAPTURE_SELECTOR = [
+  'button[data-list-navigation-item="true"]',
+  'div.__menu-item[tabindex]',
+  'div[role="menuitem"]',
+  'div[role="menuitemradio"]',
+  'div[role="menuitemcheckbox"]',
+].join(', ');
+const GPT_MENU_TRIGGER_SELECTOR =
+  'button[aria-haspopup="menu"]:has(svg path[d^="M15.6981 9.04712"]):has(svg path[d^="M4.69806 9.04712"]):has(svg path[d^="M10.2003 9.04712"])';
+const GPT_MENU_ITEM_ICON_SELECTORS = Object.freeze([
+  'svg use[href*="#square-and-pencil-light-16"]',
+  'svg path[d^="M2.6687 11.333V8.66699C2.6687"]',
+  'svg use[href*="#compose"]',
+  'svg use[href*="#3a5c87"]',
+]);
+const GPT_OPEN_MENU_SELECTOR =
+  '[role="menu"][data-radix-menu-content][data-state="open"], [data-radix-menu-content][data-state="open"][role="menu"]';
+const AUDIT_OWNED_LIVE_PROBE_CAPTURE_STATES = new Set([
+  'probe-code-block-content',
+  'probe-codebox-wrap-enabled',
+  'probe-edit-send-button',
+  'probe-edit-message-button',
+  'probe-send-button',
+  'probe-stop-button',
+  'probe-temporary-chat',
+  'probe-composer-study-search',
+  'probe-composer-deep-research-search',
+  'probe-active-dictation-controls',
+]);
 
 const COPY_ALL_CODE_BLOCKS_ACTION_ID = 'shortcutKeyCopyAllCodeBlocks';
 const TOGGLE_CODEBOX_WRAP_ACTION_ID = 'shortcutKeyToggleCodeboxWrap';
@@ -105,11 +320,61 @@ const COMPOSER_PLUS_BUTTON_SELECTORS = Object.freeze([
   'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"]',
   'form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
 ]);
-const SEND_BUTTON_SELECTORS = Object.freeze([
+const DICTATION_START_BUTTON_SELECTORS = Object.freeze([
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-16"])',
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-20"])',
+  'form[data-thread-find-composer="true"] button:has(svg path[d^="M12.4584 8.96973"])',
+  'form[data-chatgpt-composer] button:has(svg path[d^="M12.4584 8.96973"])',
+]);
+const ACTIVE_DICTATION_CONTROL_SPECS = Object.freeze([
+  Object.freeze({
+    pathPrefix: 'M9.31697 3.08317',
+    symbols: Object.freeze(['#arrow-up-lg-light-20']),
+  }),
+  Object.freeze({
+    pathPrefix: 'M13.0834 3.91846',
+    symbols: Object.freeze(['#stop-fill-light-20']),
+  }),
+  Object.freeze({ pathPrefix: 'M14.779 4.27903', symbols: Object.freeze(['#xmark-lg-light-20']) }),
+]);
+const DICTATION_START_CONTROL_SPECS = Object.freeze([
+  Object.freeze({
+    pathPrefix: 'M12.4584 8.96973',
+    symbols: Object.freeze(['#microphone-light-16', '#microphone-light-20']),
+  }),
+]);
+const SEARCH_CONVERSATION_BUTTON_SELECTORS = Object.freeze([
+  'button:has(svg path[d^="M9.16211 2.37976"])',
+  'button:has(svg path[d^="M7.32849 1.91016"])',
+  'button[data-testid="search-conversation-button"]',
+]);
+const SEARCH_DIALOG_VISIBLE_SELECTOR = '[role="dialog"]:visible';
+const SHORTCUT_OVERLAY_SELECTOR = '#csp-shortcut-overlay';
+const NATIVE_COMPOSER_FORM_SELECTOR = 'form:has([contenteditable="true"][role="textbox"])';
+const NATIVE_COMPOSER_SEND_BUTTON_SELECTOR =
+  'button[type="submit"]:has(svg path[d^="M9.33467 16.6663"])';
+const NATIVE_COMPOSER_STOP_BUTTON_SELECTOR =
+  'button[type="button"]:has(svg path[d^="M4.5 5.75C4.5 5.05964"])';
+const NATIVE_COMPOSER_SEND_SELECTOR = `${NATIVE_COMPOSER_FORM_SELECTOR} ${NATIVE_COMPOSER_SEND_BUTTON_SELECTOR}`;
+const NATIVE_COMPOSER_STOP_SELECTOR = `${NATIVE_COMPOSER_FORM_SELECTOR} ${NATIVE_COMPOSER_STOP_BUTTON_SELECTOR}`;
+const LEGACY_SEND_BUTTON_SELECTORS = Object.freeze([
   'button[data-testid="send-button"]',
   '#composer-submit-button',
+  'button[aria-label="Send prompt"]',
+]);
+const LEGACY_STOP_BUTTON_SELECTORS = Object.freeze([
+  'button[data-testid="stop-button"]',
+  'button[data-test-id="stop-button"]',
+]);
+const SEND_BUTTON_SELECTORS = Object.freeze([
+  NATIVE_COMPOSER_SEND_SELECTOR,
+  ...LEGACY_SEND_BUTTON_SELECTORS,
   'form[data-thread-find-composer="true"] button[type="submit"]',
   'form[data-chatgpt-composer] button[type="submit"]',
+]);
+const STOP_BUTTON_SELECTORS = Object.freeze([
+  NATIVE_COMPOSER_STOP_SELECTOR,
+  ...LEGACY_STOP_BUTTON_SELECTORS,
 ]);
 const USER_MESSAGE_SELECTORS = Object.freeze([
   '[data-message-author-role="user"]',
@@ -122,8 +387,6 @@ const ASSISTANT_MESSAGE_SELECTORS = Object.freeze([
   '[data-chatgpt-selection-message-id][data-chatgpt-selection-conversation-id]',
   '[data-chatgpt-search-unit-key$=":assistant"]',
 ]);
-const RESPONSE_NAVIGATION_ATTEMPTS = 2;
-const RESPONSE_NAVIGATION_STEP_SETTLE_MS = 1500;
 const SIDE_EFFECT_MESSAGE_TEXT = 'this is a message I sent';
 const SIDE_EFFECT_EDITED_MESSAGE_TEXT = 'this is an edited message';
 const STOP_AFTER_SEND_DELAY_MS = 500;
@@ -143,6 +406,19 @@ const CODEBOX_WRAP_PROMPT_TEXT =
   'Return exactly one fenced JavaScript code block with one physical source line: a quoted string containing 500 consecutive digits with no spaces or line breaks inside the digits. Do not add prose.';
 const CODEBOX_COPY_PROMPT_TEXT =
   'give me a 300 word story about sword fighting rats defending a moon base in a single codebox';
+const AUDIT_FIXTURE_PROMPT_TEXTS = Object.freeze([
+  'For the keyboard audit fixture, reply only with a fenced JavaScript code block. Include a single 240-character string on one line so horizontal wrapping can be observed. Do not add prose.',
+  'Use the Search the web tool now to find an official OpenAI Help Center article about checking important information in ChatGPT. Reply in one sentence and cite that page so the response visibly includes a web citation.',
+]);
+const OWNED_AUDIT_DRAFT_TEXTS = new Set([
+  SIDE_EFFECT_MESSAGE_TEXT,
+  SIDE_EFFECT_EDITED_MESSAGE_TEXT,
+  'study',
+  'deep research',
+  CODEBOX_WRAP_PROMPT_TEXT,
+  CODEBOX_COPY_PROMPT_TEXT,
+  ...AUDIT_FIXTURE_PROMPT_TEXTS,
+]);
 const STATELESS_LIVE_PROBE_SETUPS = Object.freeze([
   'new-conversation',
   'gpt-conversation',
@@ -154,7 +430,8 @@ const STATELESS_LIVE_PROBE_SETUPS = Object.freeze([
   'model-effort-shortcut',
   'scroll-from-top',
   'scroll-from-bottom',
-  'message-scroll-from-middle',
+  'message-scroll-from-bottom',
+  'message-scroll-from-top',
   'clipboard-single-message',
   'clipboard-entire-conversation',
   'clipboard-code-blocks',
@@ -171,6 +448,9 @@ const MODEL_EFFORT_ACTION_IDS = Object.freeze([
 
 let cachedContract = null;
 let lastBrowserRequestAt = 0;
+const verifiedBlankNewChatByPage = new WeakMap();
+const ownedConversationIdsByPage = new WeakMap();
+const activeOwnedComposerDraftByPage = new WeakMap();
 
 async function waitBeforeBrowserRequest() {
   const elapsed = Date.now() - lastBrowserRequestAt;
@@ -219,6 +499,314 @@ export async function loadDevScrapeWideContract() {
   const source = await readFile(devScrapeWidePath, 'utf8');
   cachedContract = buildNodeContractFromSource(source);
   return cachedContract;
+}
+
+export function deriveCollectorCapabilities({
+  freshModelCatalog,
+  modelMenuTarget,
+  modelMenuText,
+  currentModelCatalogActionProjection,
+} = {}) {
+  const modelMenuVerified =
+    modelMenuTarget?.targetId === 'model-switcher-menu' &&
+    !modelMenuTarget.missingMatchGroups &&
+    !(modelMenuTarget.unknownUiStateRefs || []).length &&
+    Array.isArray(modelMenuTarget.matchGroups) &&
+    modelMenuTarget.matchGroups.length > 0 &&
+    typeof modelMenuText === 'string' &&
+    modelMenuText.trim().length > 0 &&
+    targetMatchesText(modelMenuTarget, modelMenuText);
+  return deriveFreshCapabilities({
+    modelCatalog: freshModelCatalog,
+    modelMenuText,
+    modelMenuVerified,
+    currentModelCatalogActionProjection,
+  });
+}
+
+export function getRegistryCapabilityDeferral(definition, capabilities) {
+  return (
+    getUnavailableCapabilityStatus(definition?.requiredCapabilities, capabilities)?.statusReason ||
+    ''
+  );
+}
+
+const FRESH_MODEL_CATALOG_PROJECTION_SOURCE = 'fresh-current-model-catalog-action-projection-v2';
+const FRESH_MODEL_CATALOG_REFRESH_PROOF_SOURCE = 'fresh-model-catalog-refresh-v1';
+const PROFILE_BY_CHAT_WORK_MODE = Object.freeze({ chat: 'legacy', work: 'latest' });
+
+async function readModelCatalogProjectionEvidence(page) {
+  if (typeof page?.evaluate !== 'function') {
+    return {
+      mode: { status: 'unknown', mode: '', source: '' },
+      activeSimpleSlider: { verified: false },
+    };
+  }
+  try {
+    return await page.evaluate(() => {
+      const selectors = window.CSPModelPickerSelectors;
+      const visible = (element) =>
+        !!(
+          element instanceof Element &&
+          element.isConnected &&
+          !element.closest('[inert], [data-active="false"]') &&
+          selectors?.isUsablyVisibleElement?.(element, window)
+        );
+      const visibleModelTriggers = () => {
+        const selector = selectors?.MODEL_MENU_BUTTON_SELECTOR;
+        if (typeof selector !== 'string' || !selector) return [];
+        return Array.from(document.querySelectorAll(selector)).filter(visible);
+      };
+      let mode = { status: 'unknown', mode: '', source: '' };
+      const radios = selectors?.getNativeChatWorkSurfaceRadios?.(document, window) || [];
+      if (radios.length === 2) {
+        const selected = radios
+          .map((radio, index) =>
+            selectors.isChatWorkSurfaceSelected?.(radio) === true ? index : -1,
+          )
+          .filter((index) => index >= 0);
+        if (selected.length === 1) {
+          mode = {
+            status: 'pass',
+            mode: selected[0] === 0 ? 'chat' : 'work',
+            source: 'native-surface-radios',
+          };
+        }
+      } else if (radios.length === 0) {
+        const triggers = visibleModelTriggers();
+        if (triggers.length === 1) {
+          mode = {
+            status: 'pass',
+            mode: triggers[0].querySelector('[data-animated-slider-trigger="true"]')
+              ? 'work'
+              : 'chat',
+            source: 'composer-model-trigger',
+          };
+        }
+      }
+
+      const sliderFailure = (issueCode) => ({
+        verified: false,
+        issueCode,
+      });
+      const triggers = visibleModelTriggers();
+      if (triggers.length !== 1) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('model-trigger-not-unique'),
+        };
+      }
+      const getOpenMenus = selectors?.getOpenModelMenuCandidates;
+      const menus =
+        typeof getOpenMenus === 'function' ? getOpenMenus(document, window, triggers[0]) : [];
+      if (!Array.isArray(menus) || menus.length !== 1) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('model-menu-not-unique'),
+        };
+      }
+
+      const simpleViews = Array.from(
+        menus[0].querySelectorAll('[data-model-picker-view="simple"]'),
+      ).filter(visible);
+      if (simpleViews.length !== 1) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('active-simple-view-not-unique'),
+        };
+      }
+      const sliderControls = Array.from(
+        simpleViews[0].querySelectorAll('[data-reasoning-slider="true"]'),
+      ).filter(visible);
+      if (sliderControls.length !== 1) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('active-simple-control-not-unique'),
+        };
+      }
+      const sliders = Array.from(
+        sliderControls[0].querySelectorAll(
+          '[role="slider"][aria-valuemin][aria-valuemax][aria-valuenow]',
+        ),
+      ).filter(visible);
+      if (sliders.length !== 1) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('active-simple-slider-not-unique'),
+        };
+      }
+
+      const min = Number(sliders[0].getAttribute('aria-valuemin'));
+      const max = Number(sliders[0].getAttribute('aria-valuemax'));
+      const value = Number(sliders[0].getAttribute('aria-valuenow'));
+      if (
+        ![min, max, value].every(Number.isSafeInteger) ||
+        min < 0 ||
+        max < min ||
+        value < min ||
+        value > max
+      ) {
+        return {
+          mode,
+          activeSimpleSlider: sliderFailure('active-simple-slider-range-invalid'),
+        };
+      }
+      return {
+        mode,
+        activeSimpleSlider: { verified: true, min, max, value },
+      };
+    });
+  } catch {
+    return {
+      mode: { status: 'unknown', mode: '', source: '' },
+      activeSimpleSlider: { verified: false, issueCode: 'live-evidence-unavailable' },
+    };
+  }
+}
+
+function resolveFreshModelCatalogForMode(refreshResult, mode) {
+  if (mode !== 'chat' && mode !== 'work') return null;
+  if (refreshResult?.profiles && typeof refreshResult.profiles === 'object') {
+    if (refreshResult.initialMode !== mode) return null;
+    return refreshResult.profiles[mode] || null;
+  }
+  return refreshResult;
+}
+
+function isFreshModelCatalogRefreshProof(proof, mode) {
+  return (
+    proof?.schemaVersion === 1 &&
+    proof?.source === FRESH_MODEL_CATALOG_REFRESH_PROOF_SOURCE &&
+    proof?.status === 'pass' &&
+    proof?.mode === mode &&
+    ['native-surface-radios', 'composer-model-trigger'].includes(proof?.modeSource) &&
+    Number.isFinite(proof?.startedAtMs) &&
+    Number.isFinite(proof?.completedAtMs) &&
+    proof.startedAtMs <= proof.completedAtMs
+  );
+}
+
+export async function collectFreshCurrentModelCatalogActionProjection(page, refreshResult) {
+  const evidence = await readModelCatalogProjectionEvidence(page);
+  const mode = evidence?.mode?.status === 'pass' ? evidence.mode.mode : '';
+  const profile = PROFILE_BY_CHAT_WORK_MODE[mode] || '';
+  const runtimeProof = refreshResult?.collectorRuntimeModeProof;
+  const proofMatchesCurrentMode = isFreshModelCatalogRefreshProof(runtimeProof, mode);
+  const profileResult = resolveFreshModelCatalogForMode(refreshResult, mode);
+  const catalog = profileResult?.modelCatalog;
+  const activeConfigId = profileResult?.activeModelConfigId || '';
+  const configureRows = Array.isArray(catalog?.configureOptions)
+    ? catalog.configureOptions.filter((option) => option?.id === activeConfigId)
+    : [];
+  const currentActions = catalog?.frontendByConfig?.[activeConfigId];
+  const activeConfigIsSelectedRow =
+    typeof activeConfigId === 'string' &&
+    activeConfigId.trim() === activeConfigId &&
+    activeConfigId.length > 0 &&
+    configureRows.length === 1 &&
+    Array.isArray(currentActions) &&
+    currentActions.length > 0;
+  const scrapedAt = catalog?.scrapedAt;
+  const scrapedDuringInvocation =
+    Number.isFinite(scrapedAt) &&
+    Number.isFinite(runtimeProof?.startedAtMs) &&
+    Number.isFinite(runtimeProof?.completedAtMs) &&
+    scrapedAt >= runtimeProof.startedAtMs &&
+    scrapedAt <= runtimeProof.completedAtMs;
+  const catalogModeMatches = !catalog?.surfaceMode || catalog.surfaceMode === mode;
+  const freshCatalogVerified =
+    profileResult?.ok === true &&
+    proofMatchesCurrentMode &&
+    activeConfigIsSelectedRow &&
+    scrapedDuringInvocation &&
+    catalogModeMatches;
+  const catalogComplete =
+    profileResult?.ok === true &&
+    Array.isArray(catalog?.configureOptions) &&
+    catalog.configureOptions.length > 0 &&
+    currentActions?.length > 0;
+
+  let modelLabels = null;
+  try {
+    modelLabels = parseModelPickerLabelsSource(await readFile(modelPickerLabelsSourcePath, 'utf8'));
+  } catch {
+    // Missing source leaves the projection unknown through the settled helper.
+  }
+  const projection = buildFreshCurrentModelCatalogActionProjection({
+    catalog,
+    profile,
+    activeConfigId,
+    modelLabels,
+    freshCatalogVerified,
+    catalogComplete,
+    activeSimpleSlider: evidence?.activeSimpleSlider,
+  });
+  const issueCodes = [...projection.issueCodes];
+  if (evidence?.mode?.status !== 'pass') issueCodes.push('active-native-mode-not-verified');
+  if (evidence?.activeSimpleSlider?.verified !== true) {
+    issueCodes.push(evidence?.activeSimpleSlider?.issueCode || 'active-simple-slider-not-verified');
+  }
+  if (!proofMatchesCurrentMode) issueCodes.push('refresh-mode-proof-missing-or-mismatched');
+  if (profileResult?.ok !== true) issueCodes.push('model-catalog-refresh-incomplete');
+  if (!activeConfigIsSelectedRow) issueCodes.push('active-config-not-selected-catalog-row');
+  if (!scrapedDuringInvocation) issueCodes.push('catalog-not-scraped-during-refresh-invocation');
+  if (!catalogModeMatches) issueCodes.push('catalog-surface-mode-mismatch');
+
+  const uniqueIssueCodes = [...new Set(issueCodes)];
+  const evidenceComplete =
+    freshCatalogVerified &&
+    catalogComplete &&
+    evidence?.activeSimpleSlider?.verified === true &&
+    projection.issueCodes.length === 0;
+  const status = evidenceComplete ? projection.status : 'unknown';
+  return {
+    schemaVersion: 2,
+    source: FRESH_MODEL_CATALOG_PROJECTION_SOURCE,
+    status,
+    profile,
+    activeConfigId:
+      activeConfigIsSelectedRow && typeof activeConfigId === 'string' ? activeConfigId : '',
+    sliderRange: projection.sliderRange,
+    actions: status === 'pass' ? projection.actions : [],
+    integratedEffort:
+      status === 'pass' && typeof projection.integratedEffort === 'boolean'
+        ? projection.integratedEffort
+        : null,
+    issueCodes: uniqueIssueCodes,
+  };
+}
+
+export function getUnavailableCapabilityStatus(requiredCapabilities, capabilities) {
+  const unavailable = getUnavailableCapabilities(requiredCapabilities, capabilities);
+  return unavailable.length
+    ? {
+        status: 'not-applicable',
+        statusReason: `Required capability is unavailable: ${unavailable.join(', ')}.`,
+      }
+    : null;
+}
+
+function capabilitiesFromManifest(manifest) {
+  return manifest && Object.hasOwn(manifest, 'capabilities')
+    ? assertCapabilities(manifest.capabilities)
+    : unknownCapabilities();
+}
+
+export async function resolveLiveProbeCapabilities(options, runFolderPath) {
+  let persistedCapabilities = Object.hasOwn(options, 'capabilities')
+    ? assertCapabilities(options.capabilities)
+    : null;
+  if (!persistedCapabilities && runFolderPath) {
+    try {
+      const manifest = JSON.parse(
+        await readFile(path.join(runFolderPath, 'run-manifest.json'), 'utf8'),
+      );
+      persistedCapabilities = capabilitiesFromManifest(manifest);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return persistedCapabilities || unknownCapabilities();
 }
 
 export function getRepoRoot() {
@@ -527,106 +1115,6 @@ async function readExtensionIdFromSecurePreferences(profileDir = null) {
   return null;
 }
 
-async function withExtensionPopup(context, options, callback) {
-  const extensionId = await getExtensionId(context, options);
-  await waitAroundExtensionPageAction();
-  const page = await context.newPage();
-  try {
-    await waitAroundExtensionPageAction();
-    await page.goto(`chrome-extension://${extensionId}/popup.html?playwrightSetup=1`, {
-      waitUntil: 'domcontentloaded',
-    });
-    await waitAroundExtensionPageAction();
-    return await callback(page);
-  } finally {
-    await waitAroundExtensionPageAction();
-    await page.close().catch(() => {});
-    await waitAroundExtensionPageAction();
-  }
-}
-
-async function readMoveTopBarToBottomSetting(context, options = {}) {
-  return withExtensionPopup(context, options, (page) =>
-    page.evaluate(
-      () =>
-        new Promise((resolve, reject) => {
-          const key = 'moveTopBarToBottomCheckbox';
-          chrome.storage.sync.get(key, (items) => {
-            const error = chrome.runtime.lastError;
-            if (error) {
-              reject(new Error(error.message));
-              return;
-            }
-            resolve({
-              present: Object.hasOwn(items, key),
-              value: items[key],
-            });
-          });
-        }),
-    ),
-  );
-}
-
-async function configureMoveTopBarToBottomSetting(context, enabled, options = {}) {
-  return withExtensionPopup(context, options, (page) =>
-    page.evaluate(
-      (value) =>
-        new Promise((resolve, reject) => {
-          chrome.storage.sync.set({ moveTopBarToBottomCheckbox: value }, () => {
-            const error = chrome.runtime.lastError;
-            if (error) reject(new Error(error.message));
-            else resolve();
-          });
-        }),
-      enabled,
-    ),
-  );
-}
-
-async function restoreMoveTopBarToBottomSetting(context, originalSetting, options = {}) {
-  return withExtensionPopup(context, options, (page) =>
-    page.evaluate(
-      (original) =>
-        new Promise((resolve, reject) => {
-          const key = 'moveTopBarToBottomCheckbox';
-          const finish = () => {
-            const error = chrome.runtime.lastError;
-            if (error) {
-              reject(new Error(error.message));
-              return;
-            }
-            chrome.storage.sync.get(key, (items) => {
-              const readError = chrome.runtime.lastError;
-              if (readError) {
-                reject(new Error(readError.message));
-                return;
-              }
-              const restored = {
-                present: Object.hasOwn(items, key),
-                value: items[key],
-              };
-              if (restored.present !== original.present || restored.value !== original.value) {
-                reject(
-                  new Error(
-                    'Move Top Bar to Bottom setting did not restore its original storage value.',
-                  ),
-                );
-                return;
-              }
-              resolve();
-            });
-          };
-          if (original.present) {
-            chrome.storage.sync.set({ [key]: original.value }, finish);
-          } else {
-            chrome.storage.sync.remove(key, finish);
-          }
-        }),
-      originalSetting,
-    ),
-  );
-}
-
 async function resetFixturePage(page, fixtureUrl, options = {}) {
   const { forceReload = false } = options;
   if (page.url() !== fixtureUrl) {
@@ -838,9 +1326,28 @@ function getTurnElementSelector(turnTestId) {
   return `section[data-testid="${escapeAttributeValue(value)}"]`;
 }
 
-async function getLatestUserMessageLocator(page) {
-  const userMessage = page.locator(USER_MESSAGE_SELECTORS.join(', ')).last();
-  if ((await userMessage.count()) > 0) return userMessage;
+export async function getLatestUserMessageLocator(page) {
+  for (const selector of USER_MESSAGE_SELECTORS) {
+    const userMessage = page.locator(selector).filter({ visible: true }).last();
+    if ((await userMessage.count()) === 0) continue;
+    // Current user bubbles and their controls are siblings inside the user search unit.
+    // Keep the scope within the nearest observed turn boundary, never the thread root.
+    const wrapperDepth = await userMessage.evaluate((message) => {
+      const turnSelector =
+        '[data-chatgpt-search-unit-key$=":user"], [data-testid^="conversation-turn-"], [data-turn-key], article[data-turn="user"]';
+      let current = message;
+      for (let depth = 0; current && depth <= 10; depth += 1) {
+        if (current.matches(turnSelector)) return depth;
+        current = current.parentElement;
+      }
+      return null;
+    });
+    let userTurn = userMessage;
+    for (let depth = 0; depth < (wrapperDepth ?? 0); depth += 1) {
+      userTurn = userTurn.locator('xpath=..');
+    }
+    return userTurn;
+  }
   throw new Error('Could not locate a current-format user message for the Edit probe.');
 }
 
@@ -1298,254 +1805,64 @@ function isComposerPlusMenuHtml(html) {
   );
 }
 
-function isComposerMoreSubmenuHtml(html) {
+export function findRenderedThreadScrollRoot(documentRef = document) {
+  const view = documentRef?.defaultView;
+  const HTMLElementType = view?.HTMLElement;
+  if (!HTMLElementType) return null;
+
   return (
-    Boolean(html) &&
-    (html.includes('#1fa93b') || html.includes('#e717cc') || html.includes('#cf3864'))
+    Array.from(documentRef.querySelectorAll('.thread-scroll-container')).find((container) => {
+      if (!(container instanceof HTMLElementType) || !container.isConnected) return false;
+      const style = view.getComputedStyle(container);
+      const rect = container.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.pointerEvents !== 'none' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    }) || null
   );
 }
 
-async function ensureComposerPlusMenuOpen(page) {
-  const html = await getLatestOpenMenuHtml(page);
-  if (isComposerPlusMenuHtml(html) || (await composerPlusButtonOpen(page))) {
-    if (html) return html;
-    const button = await findVisibleComposerPlusButton(page);
-    return button ? button.evaluate((element) => element.outerHTML) : '';
+export function captureRenderedThreadBottomBoundary(documentRef = document) {
+  const view = documentRef?.defaultView;
+  const HTMLElementType = view?.HTMLElement;
+  if (!HTMLElementType) return '';
+
+  const isRendered = (element) => {
+    if (!(element instanceof HTMLElementType) || !element.isConnected) return false;
+    const style = view.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.pointerEvents !== 'none' &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  };
+  const nativeRoot = findRenderedThreadScrollRoot(documentRef);
+  const boundary =
+    nativeRoot ||
+    Array.from(documentRef.querySelectorAll('#thread-bottom, #thread-bottom-container')).find(
+      isRendered,
+    );
+  if (!boundary) return '';
+
+  const marker = boundary.cloneNode(false);
+  for (const attribute of Array.from(marker.attributes)) {
+    marker.removeAttribute(attribute.name);
   }
-  return openComposerPlusMenu(page);
-}
-
-async function findComposerMoreTrigger(page) {
-  const menu = page.locator('[data-radix-menu-content][data-state="open"][role="menu"]').last();
-  if (!((await menu.count()) > 0)) return null;
-
-  const candidates = menu.locator(
-    '[role="menuitem"][aria-haspopup="menu"], [role="menuitem"][data-has-submenu]',
-  );
-  const count = await candidates.count();
-
-  let fallback = null;
-  for (let index = 0; index < count; index += 1) {
-    const candidate = candidates.nth(index);
-    if (!(await candidate.isVisible().catch(() => false))) continue;
-
-    const html = (await candidate.evaluate((node) => node.outerHTML).catch(() => '')) || '';
-    const text = (await candidate.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() || '';
-
-    if (html.includes('#f6d0e2') || /^more$/i.test(text)) {
-      return candidate;
-    }
-
-    fallback = candidate;
-  }
-
-  return fallback;
-}
-
-async function openComposerMoreSubmenu(page) {
-  const firstMenuHtml = await ensureComposerPlusMenuOpen(page);
-  if (!firstMenuHtml) {
-    throw new Error('Composer Add files and more menu did not open before submenu probe');
-  }
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const trigger = await findComposerMoreTrigger(page);
-    if (!trigger) {
-      if (attempt < 3) {
-        await openComposerPlusMenu(page);
-        continue;
-      }
-      throw new Error('Could not find composer More submenu trigger');
-    }
-
-    const openCountBefore = await page
-      .locator('[data-radix-menu-content][data-state="open"][role="menu"]')
-      .count();
-    await trigger.scrollIntoViewIfNeeded().catch(() => {});
-    await page.waitForTimeout(250);
-    await waitBeforeBrowserInteraction();
-    await trigger.hover({ force: true }).catch(() => {});
-    await page.waitForTimeout(250);
-    await waitBeforeBrowserInteraction();
-    await trigger.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(500);
-
-    const html = await getLatestOpenMenuHtml(page);
-    const openCountAfter = await page
-      .locator('[data-radix-menu-content][data-state="open"][role="menu"]')
-      .count();
-    if (
-      isComposerMoreSubmenuHtml(html) ||
-      (html && openCountAfter > openCountBefore) ||
-      html !== firstMenuHtml
-    ) {
-      return html;
-    }
-  }
-
-  throw new Error('Could not open composer More submenu');
-}
-
-async function openConversationOptionsMenu(page) {
-  await closeTransientUi(page);
-  const selectors = [
-    'button[data-testid="conversation-options-button"]',
-    'header [data-testid="app-shell-header-context-menu-surface"] button[aria-haspopup="menu"]',
-    'header button[aria-haspopup="menu"]',
-  ];
-  let button = null;
-  for (const selector of selectors) {
-    const candidates = page.locator(selector);
-    for (let index = 0; index < (await candidates.count().catch(() => 0)); index += 1) {
-      const candidate = candidates.nth(index);
-      if (await candidate.isVisible().catch(() => false)) {
-        button = candidate;
-        break;
-      }
-    }
-    if (button) break;
-  }
-  if (!button) {
-    throw new Error('Could not find a visible conversation options button');
-  }
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    await closeOpenMenus(page);
-    await button.scrollIntoViewIfNeeded().catch(() => {});
-    await page.waitForTimeout(250);
-    await waitBeforeBrowserInteraction();
-    await button.click({ force: true }).catch(() => {});
-    await page.waitForTimeout(350);
-    const html = await getLatestOpenMenuHtml(page);
-    if (html?.includes('role="menuitem"')) {
-      return html;
-    }
-  }
-
-  throw new Error('Could not open conversation options menu');
-}
-
-async function findComboboxByLabelId(page, labelId) {
-  const escapedLabelId = String(labelId || '').replace(/"/g, '\\"');
-  const locator = page
-    .locator(
-      [
-        `[role="dialog"] button[role="combobox"][aria-labelledby~="${escapedLabelId}"][aria-controls]`,
-        `[role="dialog"] #${escapedLabelId} ~ button[role="combobox"][aria-controls]`,
-        `[role="dialog"] #${escapedLabelId} + button[role="combobox"][aria-controls]`,
-      ].join(', '),
-    )
-    .first();
-  if (!((await locator.count()) > 0)) return null;
-  return locator;
-}
-
-async function findConfigureCombobox(page) {
-  return findComboboxByLabelId(page, modelPickerSelectors.MODEL_SELECTION_LABEL_ID);
-}
-
-async function findThinkingEffortCombobox(page) {
-  return findComboboxByLabelId(page, modelPickerSelectors.THINKING_EFFORT_SELECTION_LABEL_ID);
-}
-
-async function openConfigureDialog(page) {
-  await openModelSwitcherMenu(page);
-  const configureItem = page
-    .locator(
-      `${modelPickerSelectors.MODEL_MENU_SELECTOR} ${modelPickerSelectors.MODEL_CONFIGURE_MENU_ITEM_SELECTOR}`,
-    )
-    .first();
-  if (
-    !((await configureItem.count()) > 0) ||
-    !(await configureItem.isVisible().catch(() => false))
-  ) {
-    throw new Error('Could not find visible model-configure-modal item');
-  }
-  await configureItem.click({ force: true });
-  await page.waitForTimeout(300);
-  const combobox = await findConfigureCombobox(page);
-  if (!combobox) {
-    throw new Error('Configure dialog did not open');
-  }
-  return combobox;
-}
-
-async function openConfigureListbox(page) {
-  const combobox = (await findConfigureCombobox(page)) || (await openConfigureDialog(page));
-  await combobox.click({ force: true }).catch(() => {});
-  await page.waitForTimeout(300);
-  const listboxId = await combobox.getAttribute('aria-controls');
-  if (!listboxId) {
-    throw new Error('Configure combobox did not expose aria-controls');
-  }
-  const listbox = page.locator(`#${listboxId}`).first();
-  await listbox.waitFor({ state: 'visible', timeout: 2000 });
-  return listbox;
-}
-
-async function openThinkingEffortListbox(page) {
-  let combobox = await findThinkingEffortCombobox(page);
-  if (!combobox) {
-    await openConfigureDialog(page);
-    combobox = await findThinkingEffortCombobox(page);
-  }
-  if (!combobox) {
-    throw new Error('Could not find thinking effort combobox in Configure dialog');
-  }
-  await combobox.click({ force: true }).catch(() => {});
-  await page.waitForTimeout(300);
-  const listboxId = await combobox.getAttribute('aria-controls');
-  if (!listboxId) {
-    throw new Error('Thinking effort combobox did not expose aria-controls');
-  }
-  const listbox = page.locator(`#${listboxId}`).first();
-  await listbox.waitFor({ state: 'visible', timeout: 2000 });
-  return listbox;
-}
-
-function getConfigureOptionTarget(optionId) {
-  if (optionId === 'configure-latest') {
-    return { mode: 'first', label: '' };
-  }
-  if (optionId === 'configure-5-2') {
-    return { mode: 'label', label: '5.2' };
-  }
-  if (optionId === 'configure-5-4') {
-    return { mode: 'label', label: '5.4' };
-  }
-  if (optionId === 'configure-o3') {
-    return { mode: 'label', label: 'o3' };
-  }
-  throw new Error(`Unsupported configure option ${optionId}`);
-}
-
-async function selectConfigureOption(page, optionId) {
-  const listbox = await openConfigureListbox(page);
-  const options = listbox.locator('[role="option"]');
-  const optionCount = await options.count();
-  if (!optionCount) {
-    throw new Error('Configure listbox had no options');
-  }
-  const target = getConfigureOptionTarget(optionId);
-  let option = null;
-  if (target.mode === 'first') {
-    option = options.first();
+  if (nativeRoot) {
+    marker.setAttribute('class', 'thread-scroll-container');
   } else {
-    for (let index = 0; index < optionCount; index += 1) {
-      const candidate = options.nth(index);
-      const text =
-        (await candidate.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim() || '';
-      if (text === target.label || text.startsWith(`${target.label}Alt+`)) {
-        option = candidate;
-        break;
-      }
-    }
+    const id = boundary.getAttribute('id');
+    if (!['thread-bottom', 'thread-bottom-container'].includes(id)) return '';
+    marker.setAttribute('id', id);
   }
-  if (!option) {
-    throw new Error(`Could not find configure option for ${optionId}`);
-  }
-  await option.click({ force: true });
-  await page.waitForTimeout(350);
+  return marker.outerHTML;
 }
 
 async function captureByType(page, captureType, state) {
@@ -1554,11 +1871,18 @@ async function captureByType(page, captureType, state) {
   }
   if (captureType === 'thread-bottom') {
     return page.evaluate(
-      () =>
-        document.getElementById('thread-bottom')?.outerHTML ||
-        document.getElementById('thread-bottom-container')?.outerHTML ||
-        document.querySelector('form[data-chatgpt-composer]')?.outerHTML ||
-        '',
+      ({ scrollRootFinderSource, boundaryCaptureSource }) => {
+        const findRenderedThreadScrollRoot = new Function(`return (${scrollRootFinderSource})`)();
+        const captureBoundary = new Function(
+          'findRenderedThreadScrollRoot',
+          `return (${boundaryCaptureSource})`,
+        )(findRenderedThreadScrollRoot);
+        return captureBoundary(document);
+      },
+      {
+        scrollRootFinderSource: findRenderedThreadScrollRoot.toString(),
+        boundaryCaptureSource: captureRenderedThreadBottomBoundary.toString(),
+      },
     );
   }
   if (captureType === 'header-area') {
@@ -1581,6 +1905,12 @@ async function captureByType(page, captureType, state) {
   }
   if (captureType === 'latest-open-menu') {
     return state.latestMenuHtml || '';
+  }
+  if (captureType === 'latest-open-dialog') {
+    return state.latestDialogHtml || '';
+  }
+  if (captureType === 'shortcut-overlay') {
+    return state.shortcutOverlayHtml || '';
   }
   if (captureType === 'configure-dialog') {
     return (
@@ -1627,98 +1957,544 @@ function buildArtifactRecord(definition, status, rawHtml = '', error = null) {
   };
 }
 
-function isExtensionUnavailableError(error) {
-  const message = String(error?.message || error || '');
-  return (
-    message.includes('Could not resolve a loaded extension id') ||
-    message.includes('net::ERR_FILE_NOT_FOUND at chrome-extension://') ||
-    message.includes('net::ERR_BLOCKED_BY_CLIENT at chrome-extension://')
+function buildProbeCaptureMarkup(page, definition, { targetLocator = null } = {}) {
+  const targetRef = definition.capture?.targetRef;
+  const expectedTargetRef = LIVE_PROBE_CAPTURE_TARGET_BY_STATE[definition.stateId];
+  if (definition.capture?.type !== 'probe-target' || targetRef !== expectedTargetRef) {
+    throw new Error(`Unsupported probe capture target for ${definition.stateId}.`);
+  }
+
+  if (targetRef === 'edit-message-button') {
+    if (!targetLocator) throw new Error('Edit capture requires the prepared user-turn button.');
+    return targetLocator.evaluate((button) => button.outerHTML);
+  }
+
+  return page.evaluate(
+    ({
+      stateId,
+      targetRef,
+      codeboxContentSelectors,
+      assistantContainerSelector,
+      userMessageSelectors,
+      gptMenuTriggerSelector,
+      gptMenuItemIconSelectors,
+      gptOpenMenuSelector,
+      composerToolItemSelector,
+      composerControlFormSelector,
+      nativeSendButtonSelector,
+      nativeStopButtonSelector,
+      dictationControlSpecs,
+    }) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement) || node.hidden || node.closest('[aria-hidden="true"]')) {
+          return false;
+        }
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const unique = (nodes) => [...new Set(nodes)];
+      const wrapper = (content) => `<div data-csp-probe-state="${stateId}">${content}</div>`;
+      const visibleComposerEntries = () =>
+        Array.from(document.querySelectorAll(composerControlFormSelector))
+          .map((form) => ({
+            form,
+            textbox: Array.from(
+              form.querySelectorAll('[contenteditable="true"][role="textbox"]'),
+            ).find(isVisible),
+          }))
+          .filter(({ form, textbox }) => isVisible(form) && textbox);
+      const findUniqueComposerControl = (buttonSelector) => {
+        const matches = visibleComposerEntries().flatMap((entry) =>
+          Array.from(entry.form.querySelectorAll(buttonSelector))
+            .filter(
+              (button) =>
+                isVisible(button) &&
+                !button.disabled &&
+                button.getAttribute('aria-disabled') !== 'true',
+            )
+            .map((button) => ({ ...entry, button })),
+        );
+        return matches.length === 1 ? matches[0] : null;
+      };
+      const isStopButton = (button) =>
+        button.getAttribute('data-testid') === 'stop-button' ||
+        button.getAttribute('data-test-id') === 'stop-button' ||
+        button.matches('button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])');
+      const captureComposerControl = (match) => {
+        if (!match) return '';
+        const formShell = match.form.cloneNode(false);
+        formShell.appendChild(match.textbox.cloneNode(false));
+        formShell.appendChild(match.button.cloneNode(true));
+        return formShell.outerHTML ? wrapper(formShell.outerHTML) : '';
+      };
+      const visibleCodeBlocks = () => {
+        const nodes = unique(
+          codeboxContentSelectors.flatMap((selector) =>
+            Array.from(document.querySelectorAll(selector)),
+          ),
+        ).filter(
+          (node) =>
+            isVisible(node) && node.closest(assistantContainerSelector) && node.matches('code'),
+        );
+        return nodes.map((node) => node.closest('pre') || node);
+      };
+      const serializeCodeBlocks = () =>
+        unique(visibleCodeBlocks())
+          .map((node) => node.outerHTML)
+          .join('');
+      const findGptMenuTrigger = () => {
+        const isPartlyVisibleAboveComposer = (node) => {
+          if (!node) return false;
+          const rect = node.getBoundingClientRect();
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+          const inViewport =
+            rect.bottom > 0 &&
+            rect.right > 0 &&
+            rect.top < viewportHeight &&
+            rect.left < viewportWidth;
+          if (!inViewport) return false;
+
+          const composerContainer = document.getElementById('thread-bottom-container');
+          const composer =
+            composerContainer?.querySelector('.absolute.start-0.end-0.bottom-full.z-20') ||
+            composerContainer?.querySelector('form[data-type="unified-composer"]') ||
+            composerContainer?.querySelector('#composer-background') ||
+            document.querySelector('#composer-background') ||
+            document.querySelector('form[data-type="unified-composer"]');
+          const composerTop = composer?.getBoundingClientRect()?.top;
+          if (!Number.isFinite(composerTop)) return true;
+          if (
+            node.closest(
+              '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background',
+            )
+          ) {
+            return true;
+          }
+          return rect.bottom <= composerTop - 1;
+        };
+        const scopes = [
+          document.querySelector('#page-header'),
+          document.querySelector('#bottomBarContainer'),
+          document,
+        ];
+        for (const scope of scopes) {
+          if (!scope) continue;
+          const candidates = Array.from(scope.querySelectorAll(gptMenuTriggerSelector)).filter(
+            isPartlyVisibleAboveComposer,
+          );
+          if (!candidates.length) continue;
+          return candidates.length === 1 ? candidates[0] : null;
+        }
+        return null;
+      };
+      const getAssociatedGptMenu = (trigger) => {
+        if (!trigger) return null;
+        const triggerId = trigger.getAttribute('id') || '';
+        const controlledIds = (trigger.getAttribute('aria-controls') || '')
+          .split(/\s+/)
+          .filter(Boolean);
+        if (!triggerId && !controlledIds.length) return null;
+        return (
+          Array.from(document.querySelectorAll(gptOpenMenuSelector)).find((menu) => {
+            const menuId = menu.getAttribute('id') || '';
+            const labelledByIds = (menu.getAttribute('aria-labelledby') || '').split(/\s+/);
+            return (
+              (menuId && controlledIds.includes(menuId)) ||
+              (triggerId && labelledByIds.includes(triggerId))
+            );
+          }) || null
+        );
+      };
+
+      if (targetRef === 'code-block-content') {
+        const codeBlocks = serializeCodeBlocks();
+        return codeBlocks ? wrapper(codeBlocks) : '';
+      }
+      if (targetRef === 'codebox-wrap-enabled') {
+        const root = document.documentElement;
+        if (!root?.classList.contains('csp-codebox-wrap-enabled')) return '';
+        const codeBlocks = serializeCodeBlocks();
+        if (!codeBlocks) return '';
+        const rootClass = String(root.getAttribute('class') || '').replace(
+          /[&"<>]/g,
+          (character) => {
+            const entities = { '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' };
+            return entities[character];
+          },
+        );
+        return `<div class="${rootClass}">${codeBlocks}</div>`;
+      }
+      if (targetRef === 'edit-send-button') {
+        const editFieldSelector = userMessageSelectors
+          .flatMap((selector) => [`${selector} textarea`, `${selector} [contenteditable="true"]`])
+          .join(', ');
+        const composerSelector =
+          'form[data-thread-find-composer="true"], form[data-chatgpt-composer], #prompt-textarea, [name="prompt-textarea"]';
+        const field = unique(Array.from(document.querySelectorAll(editFieldSelector))).find(
+          (node) => !node.closest(composerSelector) && isVisible(node),
+        );
+        if (!field) return '';
+        const editCard =
+          field.closest('form') ||
+          field.closest('.bg-token-main-surface-tertiary') ||
+          field.closest('.rounded-3xl') ||
+          field.closest('[data-message-id]') ||
+          userMessageSelectors.map((selector) => field.closest(selector)).find(Boolean);
+        if (!editCard) return '';
+        const buttonRow =
+          editCard.querySelector('div.flex.justify-end.gap-2') ||
+          editCard.querySelector('div.flex.justify-end');
+        const buttons = Array.from((buttonRow || editCard).querySelectorAll('button')).filter(
+          isVisible,
+        );
+        const sendButton =
+          buttons.find((button) => button.matches('button[type="submit"]')) ||
+          (buttons.length > 1 ? buttons[buttons.length - 1] : null);
+        if (!sendButton) return '';
+        const fieldShell = field.cloneNode(false);
+        fieldShell.removeAttribute('value');
+        return wrapper(
+          `${fieldShell.outerHTML}${buttons.map((button) => button.outerHTML).join('')}`,
+        );
+      }
+      if (targetRef === 'send-button') {
+        let match = findUniqueComposerControl(nativeSendButtonSelector);
+        if (!match) {
+          const legacySelectors = [
+            '#composer-submit-button',
+            'button[data-testid="send-button"]',
+            'button[aria-label="Send prompt"]',
+          ];
+          match = visibleComposerEntries()
+            .flatMap((entry) =>
+              legacySelectors.flatMap((selector) =>
+                Array.from(entry.form.querySelectorAll(selector)).map((button) => ({
+                  ...entry,
+                  button,
+                })),
+              ),
+            )
+            .find(
+              ({ button }) =>
+                isVisible(button) &&
+                !button.disabled &&
+                button.getAttribute('aria-disabled') !== 'true' &&
+                !isStopButton(button),
+            );
+        }
+        return captureComposerControl(match);
+      }
+      if (targetRef === 'stop-button') {
+        let match = findUniqueComposerControl(nativeStopButtonSelector);
+        if (!match) {
+          const legacySelectors = [
+            '#composer-submit-button[data-testid="stop-button"]',
+            '#composer-submit-button[data-test-id="stop-button"]',
+            'button[data-testid="stop-button"]',
+            'button[data-test-id="stop-button"]',
+            'button[aria-label="Stop"]',
+          ];
+          match = visibleComposerEntries()
+            .flatMap((entry) =>
+              legacySelectors.flatMap((selector) =>
+                Array.from(entry.form.querySelectorAll(selector)).map((button) => ({
+                  ...entry,
+                  button,
+                })),
+              ),
+            )
+            .find(
+              ({ button }) =>
+                isVisible(button) &&
+                !button.disabled &&
+                button.getAttribute('aria-disabled') !== 'true',
+            );
+        }
+        return captureComposerControl(match);
+      }
+      if (targetRef === 'temporary-chat-button') {
+        const selectors = [
+          'button:has(svg use[href$="#chat-bubble-dashed-light-20"])',
+          'button:has(svg use[href$="#chat-bubble-checkmark-dashed-light-20"])',
+        ];
+        const controls = unique(
+          selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))),
+        ).filter(
+          (node) =>
+            isVisible(node) && !node.disabled && node.getAttribute('aria-disabled') !== 'true',
+        );
+        return controls.length === 1 ? wrapper(controls[0].outerHTML) : '';
+      }
+      if (targetRef === 'new-gpt-conversation-item') {
+        const trigger = findGptMenuTrigger();
+        const menu = getAssociatedGptMenu(trigger);
+        if (!trigger || !menu || !isVisible(menu)) return '';
+        const item = gptMenuItemIconSelectors
+          .flatMap((selector) => Array.from(menu.querySelectorAll(selector)))
+          .map((node) =>
+            node.closest('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]'),
+          )
+          .find((node) => node && isVisible(node));
+        return item ? wrapper(`${trigger.outerHTML}${item.outerHTML}`) : '';
+      }
+      if (targetRef === 'chat-work-surface-toggle') {
+        const radios = window.CSPModelPickerSelectors?.getNativeChatWorkSurfaceRadios?.(
+          document,
+          window,
+        );
+        if (
+          !Array.isArray(radios) ||
+          radios.length !== 2 ||
+          radios.some((radio) => !isVisible(radio))
+        ) {
+          return '';
+        }
+        const group = radios[0].parentElement;
+        const groupRole = group?.getAttribute('role');
+        if (
+          !group ||
+          !['group', 'radiogroup'].includes(groupRole) ||
+          radios.some((radio) => radio.parentElement !== group)
+        ) {
+          return '';
+        }
+        const groupShell = group.cloneNode(false);
+        if (typeof groupShell?.appendChild !== 'function') return '';
+        for (const radio of radios) groupShell.appendChild(radio.cloneNode(true));
+        return groupShell.outerHTML ? wrapper(groupShell.outerHTML) : '';
+      }
+      if (targetRef === 'composer-study-action' || targetRef === 'composer-deep-research-action') {
+        const openComposerButton = Array.from(
+          document.querySelectorAll(
+            'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"], form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
+          ),
+        ).find(
+          (button) =>
+            isVisible(button) &&
+            (button.getAttribute('aria-expanded') === 'true' ||
+              button.getAttribute('data-state') === 'open'),
+        );
+        if (!openComposerButton) return '';
+        const studyGlyphTokens = ['#book-open-light-16', '#book-open-light-20'];
+        const studyItems = Array.from(document.querySelectorAll(composerToolItemSelector))
+          .filter(isVisible)
+          .filter((candidate) =>
+            targetRef === 'composer-deep-research-action'
+              ? candidate.matches(
+                  'button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])',
+                )
+              : Array.from(candidate.querySelectorAll('svg')).some((svg) =>
+                  studyGlyphTokens.some((glyph) => String(svg.outerHTML || '').includes(glyph)),
+                ),
+          );
+        if (studyItems.length !== 1) return '';
+        const item = studyItems[0];
+        let menuScope = null;
+        const requiredMentionListMarkers = [
+          'data-mention-section-items',
+          'data-mention-section-id',
+          'data-mention-list-scroll-area',
+        ];
+        const observedMentionListMarkers = new Set();
+        for (let ancestor = item.parentElement; ancestor && ancestor !== document.body; ) {
+          for (const marker of requiredMentionListMarkers) {
+            if (ancestor.hasAttribute(marker)) observedMentionListMarkers.add(marker);
+          }
+          if (
+            ancestor.hasAttribute('data-composer-overlay-floating-ui') &&
+            requiredMentionListMarkers.every((marker) => observedMentionListMarkers.has(marker))
+          ) {
+            menuScope = ancestor;
+            break;
+          }
+          if (isVisible(ancestor)) {
+            const roleMenu = ancestor.getAttribute('role') === 'menu';
+            const fixedComposerMenu =
+              getComputedStyle(ancestor).position === 'fixed' &&
+              ancestor.querySelectorAll('button[data-list-navigation-item="true"]').length > 1;
+            if (roleMenu || fixedComposerMenu) {
+              menuScope = ancestor;
+              break;
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+        return menuScope ? wrapper(item.outerHTML) : '';
+      }
+      if (targetRef === 'cancel-dictation-button' || targetRef === 'dictate-start-button') {
+        const formSelector = 'form[data-thread-find-composer="true"], form[data-chatgpt-composer]';
+        const matchingForms = Array.from(document.querySelectorAll(formSelector))
+          .filter(isVisible)
+          .map((form) => {
+            const buttons = Array.from(form.querySelectorAll('button')).filter(isVisible);
+            const hasCurrentComposerMarkers =
+              form.hasAttribute('data-chatgpt-composer') &&
+              form.getAttribute('data-thread-find-composer') === 'true';
+            const controls = dictationControlSpecs.map((spec) => {
+              const matches = buttons.filter((button) => {
+                const pathMatches = Array.from(button.querySelectorAll('svg path')).some((path) =>
+                  String(path.getAttribute('d') || '').startsWith(spec.pathPrefix),
+                );
+                const symbolMatches =
+                  hasCurrentComposerMarkers &&
+                  Array.from(button.querySelectorAll('svg use')).some((use) => {
+                    const href = String(
+                      use.getAttribute('href') || use.getAttribute('xlink:href') || '',
+                    );
+                    return spec.symbols.some((symbol) => href.endsWith(symbol));
+                  });
+                return pathMatches || symbolMatches;
+              });
+              return matches.length === 1 ? matches[0] : null;
+            });
+            return controls.every(Boolean) ? { form, controls } : null;
+          })
+          .filter(Boolean);
+        if (matchingForms.length !== 1) return '';
+        const { form, controls } = matchingForms[0];
+        const formShell = form.cloneNode(false);
+        if (typeof formShell?.appendChild !== 'function') return '';
+        for (const control of controls) formShell.appendChild(control.cloneNode(true));
+        return formShell.outerHTML ? wrapper(formShell.outerHTML) : '';
+      }
+      return '';
+    },
+    {
+      stateId: definition.stateId,
+      targetRef,
+      codeboxContentSelectors: [...CODEBOX_CONTENT_SELECTORS],
+      assistantContainerSelector: CODEBOX_VALIDATION_CONTAINER_SELECTOR,
+      userMessageSelectors: [...USER_MESSAGE_SELECTORS],
+      gptMenuTriggerSelector: GPT_MENU_TRIGGER_SELECTOR,
+      gptMenuItemIconSelectors: [...GPT_MENU_ITEM_ICON_SELECTORS],
+      gptOpenMenuSelector: GPT_OPEN_MENU_SELECTOR,
+      composerToolItemSelector: COMPOSER_TOOL_ITEM_CAPTURE_SELECTOR,
+      composerControlFormSelector: NATIVE_COMPOSER_FORM_SELECTOR,
+      nativeSendButtonSelector: NATIVE_COMPOSER_SEND_BUTTON_SELECTOR,
+      nativeStopButtonSelector: NATIVE_COMPOSER_STOP_BUTTON_SELECTOR,
+      dictationControlSpecs:
+        targetRef === 'cancel-dictation-button'
+          ? ACTIVE_DICTATION_CONTROL_SPECS
+          : DICTATION_START_CONTROL_SPECS,
+    },
   );
 }
 
-async function captureTopBarMovedThreadBottom(context, fixtureUrl, options = {}) {
-  const { requireExtensionCapture = false } = options;
-  const definition = {
-    filename: '1c_TopbarToBottomEnabled_ThreadBottom.txt',
-    stateId: 'topbar-bottom-enabled-thread-bottom',
-    label: 'Top bar moved to bottom thread-bottom area',
-    steps: [
-      {
-        type: 'toggle-move-topbar-to-bottom',
-        label: 'enable MoveTopBarToBottom extension setting',
-      },
-    ],
-    capture: { type: 'thread-bottom' },
-  };
-  const capturePage = await context.newPage();
-  let originalSetting = null;
-  let artifact = null;
-  let captureError = null;
-  let restoreError = null;
-
-  try {
-    originalSetting = await readMoveTopBarToBottomSetting(context, options);
-    await configureMoveTopBarToBottomSetting(context, true, options);
-    await waitAroundExtensionPageAction();
-    await capturePage.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await waitForFixtureConversationReady(capturePage, 30000, { fixtureUrl });
-    await capturePage.waitForFunction(
-      () => document.documentElement.classList.contains('csp-bottom-bar-ready'),
-      undefined,
-      { timeout: 10000 },
+export async function captureSupplementalProbeArtifact(
+  page,
+  definition,
+  {
+    auditOwned = false,
+    semanticSnapshot = null,
+    blankNewChatProvenance = null,
+    targetLocator = null,
+  } = {},
+) {
+  if (!definition?.probeOnly || !LIVE_PROBE_CAPTURE_TARGET_BY_STATE[definition.stateId]) {
+    throw new Error('Probe capture requires a registered probe-only state.');
+  }
+  if (
+    definition.stateId === 'probe-codebox-wrap-enabled' &&
+    semanticSnapshot?.codeboxWrapEnabled !== true
+  ) {
+    return buildArtifactRecord(
+      definition,
+      'deferred',
+      '',
+      'The semantic probe snapshot did not observe the codebox wrap class enabled.',
     );
-    if (options.fixtureOwnership?.kind === 'audit-owned') {
-      await waitForAuditOwnedFixtureContent(capturePage, fixtureUrl);
-    }
-    const rawHtml = await captureByType(capturePage, definition.capture.type, {
-      currentTurnTestId: null,
-      latestMenuHtml: '',
-    });
-    if (!rawHtml) {
-      throw new Error(`Capture for ${definition.filename} returned empty HTML`);
-    }
-    artifact = buildArtifactRecord(definition, 'captured', rawHtml);
-  } catch (error) {
-    if (isExtensionUnavailableError(error) && !requireExtensionCapture) {
-      artifact = buildArtifactRecord(
-        definition,
-        'deferred',
-        '',
-        `${error?.message || error} This optional layout-state dump requires an extension-enabled validation profile; run setup-login after this change if the profile needs to be rebuilt.`,
-      );
-    } else {
-      captureError = error;
-    }
-  } finally {
-    if (originalSetting) {
-      try {
-        await restoreMoveTopBarToBottomSetting(context, originalSetting, options);
-      } catch (error) {
-        restoreError = error;
-      }
-    }
-    await capturePage.close().catch(() => {});
+  }
+  const blankHomeCaptureAllowed =
+    [
+      'probe-send-button',
+      'probe-temporary-chat',
+      'probe-blank-chat-work-surface-toggle',
+      'probe-composer-study-search',
+      'probe-composer-deep-research-search',
+      'probe-active-dictation-controls',
+      'probe-blank-chat-dictate-start',
+    ].includes(definition.stateId) &&
+    isVerifiedBlankNewChatProvenance(blankNewChatProvenance, page.url());
+  if (
+    AUDIT_OWNED_LIVE_PROBE_CAPTURE_STATES.has(definition.stateId) &&
+    !auditOwned &&
+    !blankHomeCaptureAllowed
+  ) {
+    return buildArtifactRecord(
+      definition,
+      'deferred',
+      '',
+      'Probe-state capture requires the prepared audit-owned disposable conversation.',
+    );
   }
 
-  if (captureError || restoreError) {
-    const errors = [captureError, restoreError]
-      .filter(Boolean)
-      .map((error) => error?.message || String(error));
+  try {
+    if (definition.stateId === 'probe-blank-chat-work-surface-toggle') {
+      await injectDevScrapeWideIntoPage(page);
+      await page.waitForFunction(
+        () => {
+          const radios = window.CSPModelPickerSelectors?.getNativeChatWorkSurfaceRadios?.(
+            document,
+            window,
+          );
+          return Array.isArray(radios) && radios.length === 2;
+        },
+        undefined,
+        { timeout: 5000 },
+      );
+    }
+    let rawHtml = await buildProbeCaptureMarkup(page, definition, { targetLocator });
+    if (definition.stateId === 'probe-temporary-chat' && !String(rawHtml || '').trim()) {
+      await selectChatModeForEditProbe(page, blankNewChatProvenance);
+      rawHtml = await buildProbeCaptureMarkup(page, definition);
+    }
+    if (!String(rawHtml || '').trim()) {
+      throw new Error(
+        `No matching ${definition.capture?.targetRef || 'probe'} fragment was found.`,
+      );
+    }
+    return buildArtifactRecord(definition, 'captured', rawHtml);
+  } catch (error) {
     return buildArtifactRecord(
       definition,
       'failed',
       '',
-      `${errors.join('; ')}${
-        requireExtensionCapture
-          ? ' Strict extension capture is enabled, so this optional dump is required.'
-          : ''
-      }`,
+      error?.message || String(error) || 'Unknown probe-state capture failure',
     );
   }
-  return (
-    artifact ||
-    buildArtifactRecord(definition, 'failed', '', 'Top-bar capture did not return an artifact.')
-  );
+}
+
+export function isVerifiedBlankNewChatProvenance(provenance, currentUrl) {
+  if (
+    provenance?.kind !== 'verified-blank-new-chat' ||
+    !['prepare-new-conversation', 'shortcut-semantic-postcondition'].includes(provenance.source) ||
+    provenance.url !== currentUrl ||
+    provenance.userMessageCount !== 0 ||
+    provenance.assistantMessageCount !== 0 ||
+    provenance.composerHasText !== false
+  ) {
+    return false;
+  }
+  try {
+    const parsed = new URL(provenance.url);
+    return (
+      parsed.origin === 'https://chatgpt.com' &&
+      parsed.pathname === '/' &&
+      !parsed.search &&
+      !parsed.hash &&
+      !parsed.username &&
+      !parsed.password
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function runWideScrapeWithPlaywright(page, context, options = {}) {
@@ -1738,11 +2514,24 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
     await waitForAuditOwnedFixtureContent(page, fixtureUrl);
   }
   const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
+  const inventory = await buildCurrentShortcutInventory(exports.DUMP_REGISTRY);
+  const shortcutOverlayAction = inventory.shortcuts.find(
+    (shortcut) => shortcut.actionId === 'shortcutKeyShowOverlay',
+  );
+  let modelCapabilities = deriveCollectorCapabilities({
+    freshModelCatalog: options.freshModelCatalog,
+  });
   const rawArtifacts = new Map();
   const artifacts = [];
+  let currentModelCatalogActionProjection = null;
 
   for (const definition of exports.DUMP_REGISTRY) {
-    if (definition.aliasOf) continue;
+    if (definition.aliasOf || definition.probeOnly) continue;
+    const capabilityDeferral = getRegistryCapabilityDeferral(definition, modelCapabilities);
+    if (capabilityDeferral) {
+      artifacts.push(buildArtifactRecord(definition, 'deferred', '', capabilityDeferral));
+      continue;
+    }
     let restoreViewportSize = null;
     try {
       await closeOpenMenus(page);
@@ -1751,6 +2540,10 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
       const state = {
         currentTurnTestId: null,
         latestMenuHtml: '',
+        latestDialogHtml: '',
+        shortcutOverlayHtml: '',
+        freshModelCatalogRefresh: options.freshModelCatalogRefresh || null,
+        collectCurrentModelCatalogActionProjection: definition.stateId === 'model-switcher-menu',
       };
       for (const step of definition.steps || []) {
         if (step.type === 'set-sidebar-state') {
@@ -1778,7 +2571,7 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           continue;
         }
         if (step.type === 'open-model-switcher-menu') {
-          state.latestMenuHtml = await openModelSwitcherMenu(page);
+          await applyProbeStateStep(page, step, state);
           continue;
         }
         if (step.type === 'open-model-thinking-effort-menu') {
@@ -1793,28 +2586,10 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
           state.latestMenuHtml = await openComposerPlusMenu(page);
           continue;
         }
-        if (step.type === 'open-composer-more-submenu') {
-          state.latestMenuHtml = await openComposerMoreSubmenu(page);
-          continue;
-        }
-        if (step.type === 'open-conversation-options-menu') {
-          state.latestMenuHtml = await openConversationOptionsMenu(page);
-          continue;
-        }
-        if (step.type === 'open-configure-dialog') {
-          await openConfigureDialog(page);
-          continue;
-        }
-        if (step.type === 'open-configure-listbox') {
-          await openConfigureListbox(page);
-          continue;
-        }
-        if (step.type === 'open-thinking-effort-listbox') {
-          await openThinkingEffortListbox(page);
-          continue;
-        }
-        if (step.type === 'select-configure-option') {
-          await selectConfigureOption(page, step.optionId);
+        if (step.type === 'open-search-chats-dialog' || step.type === 'open-shortcut-overlay') {
+          await executeSafeTargetCaptureStep(page, context, step, state, {
+            shortcut: shortcutOverlayAction,
+          });
           continue;
         }
         if (step.type === 'set-viewport-size') {
@@ -1832,6 +2607,18 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
       const rawHtml = await captureByType(page, definition.capture?.type, state);
       if (!rawHtml) {
         throw new Error(`Capture for ${definition.filename} returned empty HTML`);
+      }
+      if (definition.stateId === 'model-switcher-menu') {
+        currentModelCatalogActionProjection = state.currentModelCatalogActionProjection || null;
+        const modelMenuTarget = inventory.targets.find(
+          (target) => target.targetId === 'model-switcher-menu',
+        );
+        modelCapabilities = deriveCollectorCapabilities({
+          freshModelCatalog: options.freshModelCatalog,
+          modelMenuTarget,
+          modelMenuText: rawHtml,
+          currentModelCatalogActionProjection,
+        });
       }
       rawArtifacts.set(definition.filename, rawHtml);
       artifacts.push(buildArtifactRecord(definition, 'captured', rawHtml));
@@ -1853,6 +2640,11 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
   }
 
   for (const definition of exports.DUMP_REGISTRY.filter((item) => item.aliasOf)) {
+    const capabilityDeferral = getRegistryCapabilityDeferral(definition, modelCapabilities);
+    if (capabilityDeferral) {
+      artifacts.push(buildArtifactRecord(definition, 'deferred', '', capabilityDeferral));
+      continue;
+    }
     const sourceHtml = rawArtifacts.get(definition.aliasOf);
     if (sourceHtml) {
       rawArtifacts.set(definition.filename, sourceHtml);
@@ -1869,12 +2661,18 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
     }
   }
 
-  const oneCArtifact = await captureTopBarMovedThreadBottom(context, fixtureUrl, options);
-  artifacts.push(oneCArtifact);
-
   for (const deferred of exports.DEFERRED_ARTIFACTS) {
-    if (deferred.filename === oneCArtifact.filename) continue;
     artifacts.push(buildArtifactRecord(deferred, deferred.status || 'deferred'));
+  }
+  for (const definition of exports.DUMP_REGISTRY.filter((item) => item.probeOnly)) {
+    artifacts.push(
+      buildArtifactRecord(
+        definition,
+        definition.status || 'deferred',
+        '',
+        'Probe-only state capture is deferred until an opted-in live shortcut probe prepares it.',
+      ),
+    );
   }
 
   return {
@@ -1882,6 +2680,8 @@ export async function runWideScrapeWithPlaywright(page, context, options = {}) {
     fixtureUrl,
     fixtureOwnership: options.fixtureOwnership || null,
     pageInfo,
+    capabilities: assertCapabilities(modelCapabilities),
+    currentModelCatalogActionProjection,
     startedAt,
     completedAt: new Date().toISOString(),
     capturedCount: artifacts.filter(
@@ -1913,6 +2713,10 @@ export async function verifyExtensionRuntimeReachable(context, options = {}) {
 }
 
 export async function refreshModelCatalogForValidation(page, context, _options = {}) {
+  // A fresh page has no page-world selectors until the collector is injected.
+  // Install them before reading the native mode that binds this refresh proof.
+  await injectDevScrapeWideIntoPage(page);
+  const refreshStartedAtMs = Date.now();
   const session = await context.newCDPSession(page);
   const executionContexts = [];
   session.on('Runtime.executionContextCreated', (event) => {
@@ -1969,7 +2773,21 @@ export async function refreshModelCatalogForValidation(page, context, _options =
     if (!result?.ok) {
       throw new Error(result?.error || 'Model catalog refresh failed');
     }
-    return result;
+    const refreshCompletedAtMs = Date.now();
+    const modeEvidence = await readModelCatalogProjectionEvidence(page);
+    const verifiedMode = modeEvidence?.mode?.status === 'pass' ? modeEvidence.mode : null;
+    return {
+      ...result,
+      collectorRuntimeModeProof: {
+        schemaVersion: 1,
+        source: FRESH_MODEL_CATALOG_REFRESH_PROOF_SOURCE,
+        status: verifiedMode ? 'pass' : 'unknown',
+        mode: verifiedMode?.mode || '',
+        modeSource: verifiedMode?.source || '',
+        startedAtMs: refreshStartedAtMs,
+        completedAtMs: refreshCompletedAtMs,
+      },
+    };
   } finally {
     await session.detach().catch(() => {});
   }
@@ -2060,6 +2878,96 @@ async function mutateExtensionSyncStorage(context, extensionId, operation) {
   }
 }
 
+function findGptMenuTriggerSelection({ triggerSelector }) {
+  const isPartlyVisibleAboveComposer = (node) => {
+    if (!node) return false;
+    const rect = node.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const inViewport =
+      rect.bottom > 0 && rect.right > 0 && rect.top < viewportHeight && rect.left < viewportWidth;
+    if (!inViewport) return false;
+
+    const composerContainer = document.getElementById('thread-bottom-container');
+    const composer =
+      composerContainer?.querySelector('.absolute.start-0.end-0.bottom-full.z-20') ||
+      composerContainer?.querySelector('form[data-type="unified-composer"]') ||
+      composerContainer?.querySelector('#composer-background') ||
+      document.querySelector('#composer-background') ||
+      document.querySelector('form[data-type="unified-composer"]');
+    const composerTop = composer?.getBoundingClientRect()?.top;
+    if (!Number.isFinite(composerTop)) return true;
+    if (
+      node.closest(
+        '#thread-bottom-container, #thread-bottom, form[data-type="unified-composer"], #composer-background',
+      )
+    ) {
+      return true;
+    }
+    return rect.bottom <= composerTop - 1;
+  };
+  const scopes = [
+    { selector: '#page-header', element: document.querySelector('#page-header') },
+    { selector: '#bottomBarContainer', element: document.querySelector('#bottomBarContainer') },
+    { selector: '', element: document },
+  ];
+  for (const scope of scopes) {
+    if (!scope.element) continue;
+    const matches = Array.from(scope.element.querySelectorAll(triggerSelector));
+    const visible = matches.filter(isPartlyVisibleAboveComposer);
+    if (!visible.length) continue;
+    if (visible.length !== 1) return null;
+    return { scopeSelector: scope.selector, index: matches.indexOf(visible[0]) };
+  }
+  return null;
+}
+
+function isAssociatedGptMenuReady({
+  triggerSelector,
+  menuSelector,
+  iconSelectors,
+  scopeSelector,
+  triggerIndex,
+}) {
+  const scope = scopeSelector ? document.querySelector(scopeSelector) : document;
+  if (!scope) return false;
+  const trigger = Array.from(scope.querySelectorAll(triggerSelector))[triggerIndex];
+  if (!trigger) return false;
+  const triggerId = trigger.getAttribute('id') || '';
+  const controlledIds = (trigger.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+  if (!triggerId && !controlledIds.length) return false;
+  return Array.from(document.querySelectorAll(menuSelector)).some((menu) => {
+    const menuId = menu.getAttribute('id') || '';
+    const labelledByIds = (menu.getAttribute('aria-labelledby') || '').split(/\s+/);
+    const associated =
+      (menuId && controlledIds.includes(menuId)) ||
+      (triggerId && labelledByIds.includes(triggerId));
+    return associated && iconSelectors.some((selector) => menu.querySelector(selector));
+  });
+}
+
+export async function openGptMenuForProbeState(page) {
+  const triggerSelector = GPT_MENU_TRIGGER_SELECTOR;
+  const triggerSelection = await page.evaluate(findGptMenuTriggerSelection, { triggerSelector });
+  if (!triggerSelection) {
+    throw new Error('Could not find the existing GPT header menu trigger.');
+  }
+  const readinessOptions = {
+    triggerSelector,
+    menuSelector: GPT_OPEN_MENU_SELECTOR,
+    iconSelectors: [...GPT_MENU_ITEM_ICON_SELECTORS],
+    scopeSelector: triggerSelection.scopeSelector,
+    triggerIndex: triggerSelection.index,
+  };
+  if (await page.evaluate(isAssociatedGptMenuReady, readinessOptions)) return;
+
+  const triggerLocator = triggerSelection.scopeSelector
+    ? page.locator(triggerSelection.scopeSelector).locator(triggerSelector)
+    : page.locator(triggerSelector);
+  await triggerLocator.nth(triggerSelection.index).click();
+  await page.waitForFunction(isAssociatedGptMenuReady, readinessOptions, { timeout: 5000 });
+}
+
 async function applyProbeStateStep(page, step, state) {
   if (step.type === 'set-sidebar-state') {
     await setSidebarState(page, step.state);
@@ -2087,6 +2995,13 @@ async function applyProbeStateStep(page, step, state) {
   }
   if (step.type === 'open-model-switcher-menu') {
     state.latestMenuHtml = await openModelSwitcherMenu(page);
+    if (state.collectCurrentModelCatalogActionProjection === true) {
+      state.currentModelCatalogActionProjection =
+        await collectFreshCurrentModelCatalogActionProjection(
+          page,
+          state.freshModelCatalogRefresh || null,
+        );
+    }
     return;
   }
   if (step.type === 'open-model-thinking-effort-menu') {
@@ -2109,28 +3024,8 @@ async function applyProbeStateStep(page, step, state) {
     state.latestMenuHtml = await openComposerPlusMenu(page);
     return;
   }
-  if (step.type === 'open-composer-more-submenu') {
-    state.latestMenuHtml = await openComposerMoreSubmenu(page);
-    return;
-  }
-  if (step.type === 'open-conversation-options-menu') {
-    state.latestMenuHtml = await openConversationOptionsMenu(page);
-    return;
-  }
-  if (step.type === 'open-configure-dialog') {
-    await openConfigureDialog(page);
-    return;
-  }
-  if (step.type === 'open-configure-listbox') {
-    await openConfigureListbox(page);
-    return;
-  }
-  if (step.type === 'open-thinking-effort-listbox') {
-    await openThinkingEffortListbox(page);
-    return;
-  }
-  if (step.type === 'select-configure-option') {
-    await selectConfigureOption(page, step.optionId);
+  if (step.type === 'open-gpt-menu') {
+    await openGptMenuForProbeState(page);
     return;
   }
   throw new Error(`Unsupported live probe state step: ${step.type}`);
@@ -2158,61 +3053,587 @@ async function prepareLiveProbeState(page, stateId, scrapeStateRegistry, fixture
 export async function prepareNewConversationProbeState(
   page,
   _fixtureUrl,
-  { reportSettle = false } = {},
+  {
+    reportSettle = false,
+    checkpoint: preparationCheckpoint,
+    persistCheckpoint: preparationPersistCheckpoint,
+    diagnosticCheckpoint,
+    diagnosticPersistCheckpoint,
+    scope = 'prepare-new-conversation',
+  } = {},
 ) {
+  const checkpoint = diagnosticCheckpoint || preparationCheckpoint;
+  const persistCheckpoint = diagnosticPersistCheckpoint || preparationPersistCheckpoint;
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.home-navigation');
   await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.home-ready');
   await waitForFixtureConversationReady(page, 15000, { fixtureUrl: CHATGPT_HOME_URL });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.close-menus');
   await closeOpenMenus(page);
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'new-conversation.close-transient-ui',
+  );
   await closeTransientUi(page);
-  const blankState = await captureLiveProbeSemanticSnapshot(page, null);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.blank-proof');
+  let blankState = await captureLiveProbeSemanticSnapshot(page, null);
   if (
+    !isChatGptRootPageUrl(blankState.url) ||
+    blankState.userMessageCount ||
+    blankState.assistantMessageCount
+  ) {
+    throw new Error(
+      'ChatGPT home did not open a zero-turn audit chat; no existing conversation was changed.',
+    );
+  }
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.clear-draft');
+  const draftPreparation = await clearComposerDraftForBlankHomeAudit(page, {
+    checkpoint: preparationCheckpoint,
+    persistCheckpoint: preparationPersistCheckpoint,
+    scope,
+  });
+  if (!['clean', 'cleared'].includes(draftPreparation.status)) {
+    throw new Error(`Blank-home composer preparation failed: ${draftPreparation.reason}`);
+  }
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.verify-blank');
+  blankState = await captureLiveProbeSemanticSnapshot(page, null);
+  if (
+    !isChatGptRootPageUrl(blankState.url) ||
     blankState.userMessageCount ||
     blankState.assistantMessageCount ||
     blankState.composerHasText
   ) {
     throw new Error(
-      'ChatGPT home did not open a blank audit chat; no existing conversation or draft was changed.',
+      'ChatGPT home changed during blank-home preparation; no existing conversation was changed.',
     );
   }
+  verifiedBlankNewChatByPage.set(page, {
+    kind: 'verified-blank-new-chat',
+    source: 'prepare-new-conversation',
+    url: blankState.url,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    composerHasText: false,
+  });
   if (reportSettle) {
     console.log(
       `Fresh blank ChatGPT conversation verified; waiting ${NEW_CONVERSATION_SETTLE_MS} ms before scanning.`,
     );
   }
   const settleStartedAt = reportSettle ? Date.now() : 0;
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'new-conversation.settle');
   await page.waitForTimeout(NEW_CONVERSATION_SETTLE_MS);
   if (reportSettle) {
     console.log(
       `Blank-chat settle completed after ${Date.now() - settleStartedAt} ms; starting model refresh and dev scrape.`,
     );
   }
+  return {
+    kind: 'verified-blank-new-chat',
+    source: 'prepare-new-conversation',
+    url: blankState.url,
+    userMessageCount: blankState.userMessageCount,
+    assistantMessageCount: blankState.assistantMessageCount,
+    composerHasText: blankState.composerHasText,
+  };
 }
 
-async function setComposerText(page, text) {
-  const candidates = page.locator(COMPOSER_TEXTBOX_SELECTORS.join(', '));
-  const candidateCount = await candidates.count();
-  let composer = null;
-  for (let index = 0; index < candidateCount; index += 1) {
-    const candidate = candidates.nth(index);
-    if (await candidate.isVisible().catch(() => false)) {
-      composer = candidate;
-      break;
+export function getCodeboxProbePreparationPlan({
+  captureOnly = false,
+  sessionInitialized = false,
+  sessionConversationUrl = '',
+  currentUrl = '',
+} = {}) {
+  let reusableConversationUrl = '';
+  try {
+    const parsedUrl = new URL(sessionConversationUrl);
+    if (
+      parsedUrl.origin === 'https://chatgpt.com' &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      /^\/c\/[A-Za-z0-9-]+$/.test(parsedUrl.pathname) &&
+      !parsedUrl.search &&
+      !parsedUrl.hash
+    ) {
+      reusableConversationUrl = parsedUrl.href;
+    }
+  } catch {}
+
+  const reuseConversation = sessionInitialized && Boolean(reusableConversationUrl);
+  return {
+    reuseConversationUrl: reuseConversation ? reusableConversationUrl : '',
+    restoreConversation: reuseConversation && currentUrl !== reusableConversationUrl,
+    promptKeys: captureOnly ? ['wrap-story'] : ['wrap-story', 'copy-story'],
+    requiredCodeBlockCount: captureOnly ? 1 : 2,
+    clearClipboard: !captureOnly,
+  };
+}
+
+function normalizeComposerText(value) {
+  return String(value || '').replace(/\r\n?/g, '\n');
+}
+
+function isComposerTextBlank(value) {
+  return !normalizeComposerText(value).trim();
+}
+
+function isChatGptRootPageUrl(value) {
+  try {
+    const parsedUrl = new URL(value);
+    return (
+      parsedUrl.origin === 'https://chatgpt.com' &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      parsedUrl.pathname === '/'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function rememberAuditOwnedConversationIds(page, conversationIds) {
+  if (!page || !Array.isArray(conversationIds)) return;
+  const ownedIds = ownedConversationIdsByPage.get(page) || new Set();
+  for (const conversationId of conversationIds) {
+    if (typeof conversationId === 'string' && /^[A-Za-z0-9-]+$/.test(conversationId)) {
+      ownedIds.add(conversationId);
     }
   }
+  ownedConversationIdsByPage.set(page, ownedIds);
+}
+
+function resolveOwnedComposerScope(page, options = {}) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(page.url());
+  } catch {
+    return null;
+  }
+  if (parsedUrl.origin !== 'https://chatgpt.com' || parsedUrl.username || parsedUrl.password) {
+    return null;
+  }
+
+  const conversationId = parsedUrl.pathname.match(/^\/c\/([A-Za-z0-9-]+)$/)?.[1] || '';
+  const knownIds = new Set([
+    ...(Array.isArray(options.auditOwnedConversationIds) ? options.auditOwnedConversationIds : []),
+    ...(ownedConversationIdsByPage.get(page) || []),
+  ]);
+  if (conversationId && knownIds.has(conversationId)) {
+    return { kind: 'audit-owned-conversation', conversationId };
+  }
+
+  const provenance = options.blankHomeProvenance || verifiedBlankNewChatByPage.get(page);
+  if (
+    options.allowVerifiedBlankHome !== false &&
+    isVerifiedBlankNewChatProvenance(provenance, parsedUrl.href)
+  ) {
+    return { kind: 'verified-blank-home' };
+  }
+  return null;
+}
+
+async function findVisibleComposer(page, { timeoutMs = 0 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const candidates = page.locator(COMPOSER_TEXTBOX_SELECTORS.join(', '));
+    try {
+      const candidateCount = await candidates.count();
+      for (let index = 0; index < candidateCount; index += 1) {
+        const candidate = candidates.nth(index);
+        if (await candidate.isVisible().catch(() => false)) return candidate;
+      }
+    } catch {}
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return null;
+    await page.waitForTimeout(Math.min(100, remainingMs)).catch(() => {});
+  } while (Date.now() <= deadline);
+  return null;
+}
+
+async function readComposerState(composer) {
+  const state = await composer.evaluate((element) => {
+    const tagName = String(element?.tagName || '').toLowerCase();
+    const isFormControl = tagName === 'input' || tagName === 'textarea';
+    return {
+      isFormControl,
+      text: isFormControl ? element.value : (element.innerText ?? element.textContent ?? ''),
+      textContent: isFormControl ? null : (element.textContent ?? ''),
+    };
+  });
+  return {
+    ...state,
+    text: normalizeComposerText(state.text),
+    textContent: state.textContent === null ? null : normalizeComposerText(state.textContent),
+  };
+}
+
+async function readComposerText(composer) {
+  return (await readComposerState(composer)).text;
+}
+
+function isStructurallyBlankComposerState(state) {
+  if (!state) return false;
+  if (state.isFormControl) return state.text === '';
+  return state.textContent === '' && !state.text.trim();
+}
+
+export async function prepareStructurallyBlankComposerForMenu(page) {
+  const composer = await findVisibleComposer(page);
+  if (!composer) throw new Error('No visible composer was available before opening the menu.');
+  const before = await readComposerState(composer);
+  if (!isStructurallyBlankComposerState(before)) {
+    return { status: 'preserved', isFormControl: before.isFormControl };
+  }
+  if (before.text) {
+    await clearStructurallyBlankComposer(page, composer, before.text, { focusOnly: true });
+  }
+  const after = await readComposerState(composer);
+  if (!isStructurallyBlankComposerState(after)) {
+    throw new Error('The structurally blank composer changed during pre-menu cleanup.');
+  }
+  return { status: before.text ? 'cleared' : 'already-blank' };
+}
+
+function recordBlankHomeDraftPreparation(checkpoint, result) {
+  if (!checkpoint) return;
+  checkpoint.blankHomeDraftPreparation = {
+    status: result.status,
+    scope: result.scope,
+    reason: result.reason,
+    completedAt: new Date().toISOString(),
+  };
+}
+
+async function persistBlankHomeDraftPreparation(checkpoint, persistCheckpoint, result) {
+  recordBlankHomeDraftPreparation(checkpoint, result);
+  if (typeof persistCheckpoint !== 'function') return true;
+  try {
+    await persistCheckpoint();
+    return true;
+  } catch {
+    if (checkpoint) {
+      checkpoint.blankHomeDraftPreparation = {
+        status: 'failed',
+        scope: result.scope,
+        reason: 'The composer preparation status could not be persisted.',
+        completedAt: new Date().toISOString(),
+      };
+      checkpoint.blankHomeDraftPreparationPersistenceError =
+        'Composer preparation status could not be persisted.';
+    }
+    return false;
+  }
+}
+
+export async function clearComposerDraftForBlankHomeAudit(
+  page,
+  { checkpoint, persistCheckpoint, scope = 'blank-home-audit-preparation' } = {},
+) {
+  const finish = async (status, reason) => {
+    const result = { status, scope, reason };
+    const persisted = await persistBlankHomeDraftPreparation(checkpoint, persistCheckpoint, result);
+    return persisted ? result : { ...result, status: 'failed' };
+  };
+
+  if (
+    !(await persistBlankHomeDraftPreparation(checkpoint, persistCheckpoint, {
+      status: 'pending',
+      scope,
+      reason: 'Waiting for verified zero-turn ChatGPT home preparation.',
+    }))
+  ) {
+    return {
+      status: 'failed',
+      scope,
+      reason: 'The composer preparation status could not be persisted.',
+    };
+  }
+
+  try {
+    const beforeSnapshot = await captureLiveProbeSemanticSnapshot(page, null);
+    if (
+      !isChatGptRootPageUrl(beforeSnapshot.url) ||
+      beforeSnapshot.userMessageCount ||
+      beforeSnapshot.assistantMessageCount
+    ) {
+      return finish(
+        'not-authorized',
+        'Composer cleanup requires ChatGPT home with no existing message turns.',
+      );
+    }
+
+    const composer = await findVisibleComposer(page, { timeoutMs: 5000 });
+    if (!composer) {
+      return finish('failed', 'No visible composer was available for blank-home preparation.');
+    }
+    const beforeText = await readComposerText(composer);
+    if (beforeText === '') {
+      return finish('clean', 'No composer draft content was present.');
+    }
+
+    await composer.click({ force: true, timeout: 5000 });
+    if ((await readComposerText(composer)) !== beforeText) {
+      return finish(
+        'conflict',
+        'The composer changed before cleanup; retry blank-home preparation.',
+      );
+    }
+    await page.keyboard.press('Control+A');
+    if ((await readComposerText(composer)) !== beforeText) {
+      return finish(
+        'conflict',
+        'The composer changed during selection; retry blank-home preparation.',
+      );
+    }
+    await page.keyboard.press('Backspace');
+    if (!isComposerTextBlank(await readComposerText(composer))) {
+      return finish(
+        'conflict',
+        'The composer changed during cleanup; retry blank-home preparation.',
+      );
+    }
+
+    const afterSnapshot = await captureLiveProbeSemanticSnapshot(page, null);
+    if (
+      !isChatGptRootPageUrl(afterSnapshot.url) ||
+      afterSnapshot.userMessageCount ||
+      afterSnapshot.assistantMessageCount ||
+      afterSnapshot.composerHasText
+    ) {
+      return finish(
+        'conflict',
+        'ChatGPT home changed during composer cleanup; retry blank-home preparation.',
+      );
+    }
+    activeOwnedComposerDraftByPage.delete(page);
+    return finish('cleared', 'The blocking root-home draft was cleared with trusted keypresses.');
+  } catch {
+    return finish('failed', 'Composer cleanup failed; retry blank-home preparation.');
+  }
+}
+
+async function clearStructurallyBlankComposer(page, composer, beforeText, options = {}) {
+  if (!beforeText) return;
+  if (options.focusOnly) {
+    await composer.focus();
+  } else {
+    await composer.click({ force: true, timeout: 5000 });
+  }
+  if ((await readComposerText(composer)) !== beforeText) {
+    throw new Error('The composer changed before its blank structure could be cleared.');
+  }
+  await page.keyboard.press('Control+A');
+  if ((await readComposerText(composer)) !== beforeText) {
+    throw new Error('The composer changed during selection; its draft was preserved.');
+  }
+  await page.keyboard.press('Backspace');
+  if (!isComposerTextBlank(await readComposerText(composer))) {
+    throw new Error('The blank composer structure could not be cleared safely.');
+  }
+}
+
+function rememberComposerCleanupOutcome(checkpoint, result) {
+  if (!checkpoint) return;
+  const outcomes = Array.isArray(checkpoint.composerCleanupOutcomes)
+    ? checkpoint.composerCleanupOutcomes
+    : [];
+  outcomes.push({
+    status: result.status,
+    scope: result.scope,
+    reason: result.reason,
+    completedAt: new Date().toISOString(),
+  });
+  checkpoint.composerCleanupOutcomes = outcomes.slice(-100);
+}
+
+async function persistComposerCleanupOutcome(options) {
+  rememberComposerCleanupOutcome(options.checkpoint, options.result);
+  try {
+    await options.persistCheckpoint?.();
+  } catch {
+    if (options.checkpoint) {
+      options.checkpoint.composerCleanupCheckpointError =
+        'Composer cleanup outcome could not be persisted.';
+    }
+  }
+}
+
+export async function clearOwnedComposerDraft(page, expectedText, options = {}) {
+  const scope = String(options.scope || 'composer-draft-cleanup');
+  const expected = String(expectedText ?? '');
+  let result;
+  const finish = async (status, reason) => {
+    result = { status, scope, reason };
+    await persistComposerCleanupOutcome({ ...options, result });
+    return result;
+  };
+
+  if (!OWNED_AUDIT_DRAFT_TEXTS.has(expected)) {
+    return finish('not-owned', 'The expected text is not a known audit draft.');
+  }
+  try {
+    const composer = await findVisibleComposer(page);
+    if (!composer) return finish('failed', 'No visible composer was available for cleanup.');
+    const beforeText = await readComposerText(composer);
+    if (isComposerTextBlank(beforeText)) {
+      const activeDraft = activeOwnedComposerDraftByPage.get(page);
+      if (activeDraft?.expectedText === expected) activeOwnedComposerDraftByPage.delete(page);
+      return finish('clean', 'The composer was already empty.');
+    }
+    if (!resolveOwnedComposerScope(page, options)) {
+      return finish('not-owned', 'The current page has no verified audit-owned cleanup scope.');
+    }
+    if (beforeText !== expected) {
+      return finish('conflict', 'Composer text changed; the draft was preserved.');
+    }
+
+    await composer.click({ force: true, timeout: 5000 });
+    if ((await readComposerText(composer)) !== expected) {
+      return finish('conflict', 'Composer text changed before cleanup; the draft was preserved.');
+    }
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Backspace');
+    if (!isComposerTextBlank(await readComposerText(composer))) {
+      return finish('conflict', 'Trusted keypresses did not clear the expected draft.');
+    }
+    const activeDraft = activeOwnedComposerDraftByPage.get(page);
+    if (activeDraft?.expectedText === expected) activeOwnedComposerDraftByPage.delete(page);
+    return finish('clean', 'The expected audit draft was cleared with trusted keypresses.');
+  } catch {
+    return finish(
+      'failed',
+      'Composer cleanup could not be completed; the draft was left as observed.',
+    );
+  }
+}
+
+async function cleanupActiveOwnedComposerDraft(page, options = {}) {
+  const activeDraft = activeOwnedComposerDraftByPage.get(page);
+  if (!activeDraft)
+    return { status: 'not-owned', reason: 'No audit draft was recorded for cleanup.' };
+  return clearOwnedComposerDraft(page, activeDraft.expectedText, options);
+}
+
+export async function finalizeProbeComposerCleanup(rows, completedCases, actionId, cleanup) {
+  let cleanupStatus = 'failed';
+  let cleanupThrew = false;
+  try {
+    const result = await cleanup();
+    cleanupStatus = ['clean', 'not-owned', 'conflict', 'failed'].includes(result?.status)
+      ? result.status
+      : 'failed';
+  } catch {
+    cleanupThrew = true;
+  }
+
+  if (cleanupStatus === 'clean' || cleanupStatus === 'not-owned') {
+    return { cleanupStatus, cleanupThrew, downgraded: false, reason: '' };
+  }
+
+  const reason =
+    cleanupStatus === 'conflict'
+      ? 'Owned composer draft cleanup detected a changed draft and preserved it.'
+      : 'Owned composer draft cleanup could not verify that the audit draft was cleared.';
+  const appendReason = (existingReason) => {
+    const existing = String(existingReason || '').trim();
+    return existing.includes(reason) ? existing : [existing, reason].filter(Boolean).join(' ');
+  };
+  const row = [...(Array.isArray(rows) ? rows : [])]
+    .reverse()
+    .find((candidate) => candidate?.actionId === actionId);
+  const completedCase = [...(Array.isArray(completedCases) ? completedCases : [])]
+    .reverse()
+    .find((candidate) => candidate?.rowId === `global:${actionId}`);
+
+  if (row) {
+    row.status = 'fail';
+    row.reason = appendReason(row.reason);
+  }
+  if (completedCase) {
+    completedCase.status = 'fail';
+    completedCase.reason = appendReason(completedCase.reason);
+  }
+
+  return { cleanupStatus, cleanupThrew, downgraded: Boolean(row || completedCase), reason };
+}
+
+export async function setComposerText(page, text, options = {}) {
+  const expectedText = normalizeComposerText(text);
+  const composer = await findVisibleComposer(page);
   if (!composer) throw new Error('Could not find a visible prompt composer.');
 
-  const expectedText = String(text);
-  const normalize = (value) =>
-    String(value || '')
-      .replace(/\r\n?/g, '\n')
-      .trim();
-  await composer.fill(expectedText, { timeout: 5000 });
-  const actualText = await composer.evaluate((element) =>
-    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
-      ? element.value
-      : element.innerText || element.textContent || '',
-  );
-  if (normalize(actualText) !== normalize(expectedText)) {
+  let composerState = await readComposerState(composer);
+  let actualText = composerState.text;
+  const activeDraft = activeOwnedComposerDraftByPage.get(page);
+  if (!expectedText) {
+    if (isComposerTextBlank(actualText)) {
+      if (activeDraft) activeOwnedComposerDraftByPage.delete(page);
+      return;
+    }
+    if (!activeDraft) throw new Error('Refusing to clear composer text without audit ownership.');
+    const cleared = await clearOwnedComposerDraft(page, activeDraft.expectedText, {
+      ...options,
+      scope: options.scope || 'set-composer-clear',
+    });
+    if (cleared.status !== 'clean') {
+      throw new Error('The owned composer draft could not be cleared safely.');
+    }
+    return;
+  }
+  if (!OWNED_AUDIT_DRAFT_TEXTS.has(expectedText)) {
+    throw new Error('Refusing to type text that is not a known audit draft.');
+  }
+
+  if (!isComposerTextBlank(actualText)) {
+    if (
+      activeDraft?.expectedText === expectedText &&
+      activeDraft.url === page.url() &&
+      actualText === expectedText
+    ) {
+      return;
+    }
+    if (!activeDraft) throw new Error('Refusing to replace an unowned composer draft.');
+    const cleared = await clearOwnedComposerDraft(page, activeDraft.expectedText, {
+      ...options,
+      scope: options.scope || 'set-composer-replacement',
+    });
+    if (cleared.status !== 'clean') {
+      throw new Error('The existing composer text could not be replaced safely.');
+    }
+    actualText = '';
+    composerState = await readComposerState(composer);
+  } else if (!isStructurallyBlankComposerState(composerState)) {
+    throw new Error('Refusing to type over unowned composer whitespace.');
+  }
+
+  const ownership = resolveOwnedComposerScope(page, options);
+  if (!ownership || !isComposerTextBlank(actualText)) {
+    throw new Error('Refusing to type into a composer without verified audit ownership.');
+  }
+  if (actualText && !(options.focusOnly && isStructurallyBlankComposerState(composerState))) {
+    await clearStructurallyBlankComposer(page, composer, actualText, options);
+    composerState = await readComposerState(composer);
+    actualText = composerState.text;
+  }
+
+  const nextDraft = { expectedText, url: page.url(), ownershipKind: ownership.kind };
+  activeOwnedComposerDraftByPage.set(page, nextDraft);
+  if (options.focusOnly) {
+    await composer.focus();
+  } else {
+    await composer.click({ force: true, timeout: 5000 });
+  }
+  const beforeTyping = await readComposerState(composer);
+  if (
+    !isComposerTextBlank(beforeTyping.text) ||
+    (!isStructurallyBlankComposerState(beforeTyping) && beforeTyping.text !== '')
+  ) {
+    throw new Error('The composer changed before the audit draft could be typed.');
+  }
+  await page.keyboard.type(expectedText, { delay: 5 });
+  if ((await readComposerText(composer)) !== expectedText) {
     throw new Error('The composer did not retain the requested draft text.');
   }
   await page.waitForTimeout(250);
@@ -2312,25 +3733,56 @@ async function selectThinkingEffortExtendedForProbe(page) {
   }
 }
 
-async function prepareComposerDraftMessageProbeState(page, fixtureUrl) {
-  await prepareNewConversationProbeState(page, fixtureUrl);
+export async function prepareComposerDraftMessageProbeState(page, fixtureUrl, options = {}) {
+  const { checkpoint, persistCheckpoint } = options;
+  const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+    diagnosticCheckpoint: checkpoint,
+    diagnosticPersistCheckpoint: persistCheckpoint,
+  });
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'composer-draft-message.enable-control',
+  );
   await ensureControlSendStopEnabled(page);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'composer-draft-message.set-text');
   await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'composer-draft-message.send-ready',
+  );
   await waitForEnabledButton(page, SEND_BUTTON_SELECTORS);
+  return blankNewChatProvenance;
 }
 
-async function prepareInFlightMessageProbeState(page, fixtureUrl) {
-  await prepareNewConversationProbeState(page, fixtureUrl);
+export async function prepareInFlightMessageProbeState(page, fixtureUrl, options = {}) {
+  const { checkpoint, persistCheckpoint } = options;
+  const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+    diagnosticCheckpoint: checkpoint,
+    diagnosticPersistCheckpoint: persistCheckpoint,
+  });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'in-flight-message.enable-control');
   await ensureControlSendStopEnabled(page);
-  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
-  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
-  await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
-  await page.waitForTimeout(STOP_AFTER_SEND_DELAY_MS);
-  await waitForEnabledButton(
-    page,
-    ['button[data-testid="stop-button"]', 'button[data-test-id="stop-button"]'],
-    15000,
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'in-flight-message.thinking-effort',
   );
+  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'in-flight-message.set-text');
+  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'in-flight-message.send');
+  await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'in-flight-message.after-send-delay',
+  );
+  await page.waitForTimeout(STOP_AFTER_SEND_DELAY_MS);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'in-flight-message.stop-ready');
+  await waitForEnabledButton(page, STOP_BUTTON_SELECTORS, 15000);
+  return blankNewChatProvenance;
 }
 
 async function waitForLatestUserTurn(page) {
@@ -2381,7 +3833,16 @@ async function waitForAssistantResponseCompletion(
   { minimumCount = 1, previousCount = 0, previousHash = '' } = {},
 ) {
   await page.waitForFunction(
-    ({ minimumCount, previousCount, previousHash, selectors }) => {
+    ({
+      minimumCount,
+      previousCount,
+      previousHash,
+      selectors,
+      nativeSendSelector,
+      nativeStopSelector,
+      legacySendSelectors,
+      legacyStopSelectors,
+    }) => {
       const assistants =
         selectors
           .map((selector) => Array.from(document.querySelectorAll(selector)))
@@ -2396,25 +3857,52 @@ async function waitForAssistantResponseCompletion(
         }
         return `${value.length}:${(hash >>> 0).toString(16)}`;
       };
-      const stopVisible = Array.from(
-        document.querySelectorAll(
-          'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
-        ),
-      ).some((button) => {
-        if (!(button instanceof HTMLElement)) return false;
-        const style = getComputedStyle(button);
-        const rect = button.getBoundingClientRect();
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
         return (
           style.display !== 'none' &&
           style.visibility !== 'hidden' &&
           rect.width > 0 &&
           rect.height > 0
         );
-      });
-      const sendButton = document.querySelector(
-        'button[data-testid="send-button"], #composer-submit-button, form:has([role="textbox"]) button[type="submit"]',
+      };
+      const hasVisibleComposerTextbox = (button) => {
+        const form = button.closest('form');
+        return (
+          isVisible(form) &&
+          Array.from(form.querySelectorAll('[contenteditable="true"][role="textbox"]')).some(
+            isVisible,
+          )
+        );
+      };
+      const observedStops = Array.from(document.querySelectorAll(nativeStopSelector)).filter(
+        (button) =>
+          isVisible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true',
       );
-      const sendReady = sendButton instanceof HTMLButtonElement && !sendButton.disabled;
+      const legacyStops = legacyStopSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .filter((button) => isVisible(button) && !button.disabled);
+      const stopVisible = observedStops.some(hasVisibleComposerTextbox) || legacyStops.length > 0;
+      const observedSends = Array.from(document.querySelectorAll(nativeSendSelector)).filter(
+        (button) =>
+          isVisible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true',
+      );
+      const legacySends = legacySendSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .filter(
+          (button) =>
+            isVisible(button) &&
+            !button.disabled &&
+            button.getAttribute('aria-disabled') !== 'true' &&
+            button.getAttribute('data-testid') !== 'stop-button' &&
+            button.getAttribute('data-test-id') !== 'stop-button' &&
+            !button.matches('button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])'),
+        );
+      const sendReady =
+        (observedSends.length === 1 && hasVisibleComposerTextbox(observedSends[0])) ||
+        legacySends.length > 0;
       const responseTurn = latest?.closest('[data-content-search-turn-key]');
       const responseCompleteControlVisible = Array.from(
         responseTurn?.querySelectorAll('button[aria-label="Regenerate response"]') || [],
@@ -2443,6 +3931,10 @@ async function waitForAssistantResponseCompletion(
       previousCount,
       previousHash,
       selectors: [...ASSISTANT_MESSAGE_SELECTORS],
+      nativeSendSelector: NATIVE_COMPOSER_SEND_SELECTOR,
+      nativeStopSelector: NATIVE_COMPOSER_STOP_SELECTOR,
+      legacySendSelectors: [...LEGACY_SEND_BUTTON_SELECTORS],
+      legacyStopSelectors: [...LEGACY_STOP_BUTTON_SELECTORS],
     },
     { timeout: 60000 },
   );
@@ -2452,11 +3944,10 @@ async function createAuditOwnedFixtureConversation(
   page,
   { checkpoint, persistCheckpoint, trackAuditOwnedConversation } = {},
 ) {
-  const prompts = [
-    'For the keyboard audit fixture, reply only with a fenced JavaScript code block. Include a single 240-character string on one line so horizontal wrapping can be observed. Do not add prose.',
-    'Use the Search the web tool now to find an official OpenAI Help Center article about checking important information in ChatGPT. Reply in one sentence and cite that page so the response visibly includes a web citation.',
-  ];
-  await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  const prompts = AUDIT_FIXTURE_PROMPT_TEXTS;
+  if (!isVerifiedBlankNewChatProvenance(verifiedBlankNewChatByPage.get(page), page.url())) {
+    await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  }
   await page.waitForFunction(
     () => {
       const selectors = [
@@ -2489,61 +3980,111 @@ async function createAuditOwnedFixtureConversation(
   );
   let before = await captureLiveProbeSemanticSnapshot(page, null);
   if (
+    !isChatGptRootPageUrl(before.url) ||
     before.userMessageCount ||
-    before.assistantMessageCount ||
-    before.composerHasText ||
-    /\/c\//.test(before.url)
+    before.assistantMessageCount
   ) {
     throw new Error(
-      'ChatGPT home was not a blank audit chat; no existing conversation or draft was changed.',
+      'ChatGPT home was not a zero-turn audit chat; no existing conversation was changed.',
     );
   }
+  const draftPreparation = await clearComposerDraftForBlankHomeAudit(page, {
+    checkpoint,
+    persistCheckpoint,
+    scope: 'setup:audit-owned-fixture',
+  });
+  if (!['clean', 'cleared'].includes(draftPreparation.status)) {
+    throw new Error(`Blank-home composer preparation failed: ${draftPreparation.reason}`);
+  }
+  before = await captureLiveProbeSemanticSnapshot(page, null);
+  if (
+    !isChatGptRootPageUrl(before.url) ||
+    before.userMessageCount ||
+    before.assistantMessageCount ||
+    before.composerHasText
+  ) {
+    throw new Error(
+      'ChatGPT home changed during blank-home preparation; no existing conversation was changed.',
+    );
+  }
+  verifiedBlankNewChatByPage.set(page, {
+    kind: 'verified-blank-new-chat',
+    source: 'prepare-new-conversation',
+    url: before.url,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    composerHasText: false,
+  });
   await page.waitForTimeout(NEW_CONVERSATION_SETTLE_MS);
 
   try {
     for (let index = 0; index < prompts.length; index += 1) {
-      checkpoint.currentCase = {
-        rowId: 'setup:audit-owned-fixture',
-        phase: `message-${index + 1}-pending`,
-        intendedSideEffect: `send audit fixture message ${index + 1}`,
-        sourceConversationId: page.url().match(/\/c\/([^/]+)/)?.[1] || '',
-        startedAt: new Date().toISOString(),
-        attempt: 1,
-      };
-      await persistCheckpoint();
-      await setComposerText(page, prompts[index]);
-      await waitForEnabledButton(page, SEND_BUTTON_SELECTORS);
-      checkpoint.currentCase.phase = `message-${index + 1}-dispatch-pending`;
-      await persistCheckpoint();
-      await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
-      await waitForCommittedUserTurn(page, {
-        minimumCount: before.userMessageCount + 1,
-        previousHash: before.lastUserHash,
-      });
-      trackAuditOwnedConversation(page.url());
-      checkpoint.auditFixtureUrl = page.url();
-      checkpoint.currentCase.phase = `message-${index + 1}-response-pending`;
-      checkpoint.currentCase.sourceConversationId = page.url().match(/\/c\/([^/]+)/)?.[1] || '';
-      await persistCheckpoint();
       try {
-        await waitForAssistantResponseCompletion(page, {
-          minimumCount: before.assistantMessageCount + 1,
-          previousCount: before.assistantMessageCount,
-          previousHash: before.lastAssistantHash,
+        checkpoint.currentCase = {
+          rowId: 'setup:audit-owned-fixture',
+          phase: `message-${index + 1}-pending`,
+          intendedSideEffect: `send audit fixture message ${index + 1}`,
+          sourceConversationId: page.url().match(/\/c\/([^/]+)/)?.[1] || '',
+          startedAt: new Date().toISOString(),
+          attempt: 1,
+        };
+        await persistCheckpoint();
+        await setComposerText(page, prompts[index]);
+        await waitForEnabledButton(page, SEND_BUTTON_SELECTORS);
+        checkpoint.currentCase.phase = `message-${index + 1}-dispatch-pending`;
+        await persistCheckpoint();
+        await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
+        trackAuditOwnedConversation(page.url());
+        await waitForCommittedUserTurn(page, {
+          minimumCount: before.userMessageCount + 1,
+          previousHash: before.lastUserHash,
         });
-      } catch (error) {
-        await clickEnabledButton(page, [
-          'button[data-testid="stop-button"]',
-          'button[data-test-id="stop-button"]',
-        ]).catch(() => {});
-        throw error;
+        trackAuditOwnedConversation(page.url());
+        checkpoint.auditFixtureUrl = page.url();
+        checkpoint.currentCase.phase = `message-${index + 1}-response-pending`;
+        checkpoint.currentCase.sourceConversationId = page.url().match(/\/c\/([^/]+)/)?.[1] || '';
+        await persistCheckpoint();
+        try {
+          await waitForAssistantResponseCompletion(page, {
+            minimumCount: before.assistantMessageCount + 1,
+            previousCount: before.assistantMessageCount,
+            previousHash: before.lastAssistantHash,
+          });
+        } catch (error) {
+          await clickEnabledButton(page, STOP_BUTTON_SELECTORS).catch(() => {});
+          throw error;
+        }
+        const responseSnapshot = await captureLiveProbeSemanticSnapshot(page, null);
+        if (
+          responseSnapshot.userMessageCount !== before.userMessageCount + 1 ||
+          responseSnapshot.assistantMessageCount !== before.assistantMessageCount + 1 ||
+          responseSnapshot.lastUserHash === before.lastUserHash ||
+          responseSnapshot.lastAssistantHash === before.lastAssistantHash
+        ) {
+          throw new Error(
+            'The audit fixture turn did not retain its committed user message and assistant response.',
+          );
+        }
+        const confirmedFixture = parseFreshAuditFixtureUrl(responseSnapshot.url);
+        trackAuditOwnedConversation(confirmedFixture.fixtureUrl);
+        checkpoint.auditFixtureUrl = confirmedFixture.fixtureUrl;
+        checkpoint.currentCase.sourceConversationId = confirmedFixture.conversationId;
+        await persistCheckpoint();
+        before = responseSnapshot;
+      } finally {
+        await cleanupActiveOwnedComposerDraft(page, {
+          auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+          allowVerifiedBlankHome: true,
+          checkpoint,
+          persistCheckpoint,
+          scope: `setup:audit-owned-fixture-message-${index + 1}`,
+        }).catch(() => {});
       }
-      before = await captureLiveProbeSemanticSnapshot(page, null);
     }
     const conversationId = page.url().match(/\/c\/([^/]+)/)?.[1] || '';
-    if (!conversationId || before.userMessageCount < 2 || before.assistantMessageCount < 2) {
+    if (!conversationId || before.userMessageCount !== 2 || before.assistantMessageCount !== 2) {
       throw new Error(
-        'The audit-owned fixture did not finish with two committed user turns and two assistant responses.',
+        'The audit-owned fixture did not finish with exactly two committed user turns and two assistant responses.',
       );
     }
     checkpoint.auditFixtureUrl = page.url();
@@ -2552,6 +4093,10 @@ async function createAuditOwnedFixtureConversation(
       status: 'pass',
       semanticStatus: 'pass',
       reason: '',
+      fixtureUrl: page.url(),
+      conversationId,
+      userMessageCount: before.userMessageCount,
+      assistantMessageCount: before.assistantMessageCount,
       completedAt: new Date().toISOString(),
     });
     checkpoint.currentCase = null;
@@ -2568,25 +4113,311 @@ async function createAuditOwnedFixtureConversation(
   }
 }
 
-async function prepareSentDisposableMessage(page, fixtureUrl) {
-  await prepareNewConversationProbeState(page, fixtureUrl);
-  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
-  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
-  await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
-  await waitForLatestUserTurn(page);
-  await page.waitForTimeout(2500);
-  await clickEnabledButton(page, [
-    'button[data-testid="stop-button"]',
-    'button[data-test-id="stop-button"]',
-  ]).catch(() => {});
-  await page.waitForTimeout(3000);
+function parseFreshAuditFixtureUrl(fixtureUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(fixtureUrl);
+  } catch {
+    throw new Error('The prepared audit fixture has no valid ChatGPT conversation URL.');
+  }
+  const conversationId = parsedUrl.pathname.match(/^\/c\/([A-Za-z0-9-]+)$/)?.[1] || '';
+  if (
+    parsedUrl.origin !== 'https://chatgpt.com' ||
+    parsedUrl.username ||
+    parsedUrl.password ||
+    parsedUrl.search ||
+    parsedUrl.hash ||
+    !conversationId
+  ) {
+    throw new Error('The prepared audit fixture URL is not a direct ChatGPT conversation URL.');
+  }
+  return { fixtureUrl: parsedUrl.href, conversationId };
 }
 
-async function prepareActiveEditCardProbeState(page, fixtureUrl) {
-  await prepareSentDisposableMessage(page, fixtureUrl);
+function isCompleteFreshAuditFixtureProof(proof, fixtureUrl, conversationId) {
+  let parsedFixture;
+  try {
+    parsedFixture = parseFreshAuditFixtureUrl(fixtureUrl);
+  } catch {
+    return false;
+  }
+  return (
+    proof?.rowId === 'setup:audit-owned-fixture' &&
+    proof.status === 'pass' &&
+    proof.semanticStatus === 'pass' &&
+    proof.fixtureUrl === fixtureUrl &&
+    proof.conversationId === conversationId &&
+    parsedFixture.fixtureUrl === fixtureUrl &&
+    parsedFixture.conversationId === conversationId &&
+    proof.userMessageCount === 2 &&
+    proof.assistantMessageCount === 2 &&
+    Number.isFinite(Date.parse(proof.completedAt))
+  );
+}
+
+async function prepareExistingAuditOwnedConversationForNewChat(
+  page,
+  fixtureUrl,
+  { checkpoint, fixtureOwnership, persistCheckpoint } = {},
+) {
+  const parsedFixture = parseFreshAuditFixtureUrl(fixtureUrl);
+  const fixtureProofCandidates = [
+    fixtureOwnership?.setupProof,
+    checkpoint?.fixtureSetupProof,
+    ...(Array.isArray(checkpoint?.completedCases) ? checkpoint.completedCases : []),
+  ];
+  const hasFreshFixtureProof = fixtureProofCandidates.some((proof) =>
+    isCompleteFreshAuditFixtureProof(proof, parsedFixture.fixtureUrl, parsedFixture.conversationId),
+  );
+  if (
+    !hasFreshFixtureProof ||
+    !checkpoint?.auditOwnedConversationIds?.includes(parsedFixture.conversationId)
+  ) {
+    throw new Error(
+      'New Conversation requires a verified audit-owned two-turn conversation; no user conversation was changed.',
+    );
+  }
+
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'newconv.source-navigation');
+  await resetFixturePage(page, parsedFixture.fixtureUrl);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'newconv.source-route-ready');
+  await waitForFixtureConversationReady(page, 30000, { fixtureUrl: parsedFixture.fixtureUrl });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'newconv.source-turns-ready');
+  await waitForAuditOwnedFixtureContent(page, parsedFixture.fixtureUrl);
+  const snapshot = await captureLiveProbeSemanticSnapshot(page, null);
+  if (
+    snapshot.url !== parsedFixture.fixtureUrl ||
+    snapshot.messageCount !== 4 ||
+    snapshot.userMessageCount !== 2 ||
+    snapshot.assistantMessageCount !== 2 ||
+    !snapshot.hasComposer ||
+    snapshot.composerHasText
+  ) {
+    throw new Error(
+      'New Conversation requires the verified audit-owned conversation to remain at two user and two assistant turns with an empty composer.',
+    );
+  }
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'newconv.source-proof');
+  return true;
+}
+
+async function markProbeDiagnosticStage(checkpoint, persistCheckpoint, stage) {
+  if (!checkpoint?.currentCase) return;
+  checkpoint.currentCase.diagnosticStage = stage;
+  if (typeof persistCheckpoint !== 'function') return;
+  try {
+    await persistCheckpoint();
+  } catch {}
+}
+
+export async function prepareFreshAuditOwnedFixture(
+  page,
+  { runDirectory, fixtureCreator = createAuditOwnedFixtureConversation } = {},
+) {
+  const reservedRunDirectory = await validateReservedRunDirectory(runDirectory, {
+    allowedEntries: [],
+  });
+  const checkpointPath = path.join(reservedRunDirectory.path, AUDIT_ARTIFACT_FILENAMES.checkpoint);
+  const startedAt = new Date().toISOString();
+  const { exports } = await loadDevScrapeWideContract();
+  const protectedFixtureUrls = [
+    exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    exports.DEV_SCRAPE_WIDE_FALLBACK_FIXTURE_URL,
+  ];
+  const protectedFixtureIds = new Set(
+    protectedFixtureUrls
+      .map((url) => {
+        try {
+          return new URL(url).pathname.match(/\/c\/([^/]+)/)?.[1] || '';
+        } catch {
+          return '';
+        }
+      })
+      .filter(Boolean),
+  );
+  const checkpoint = {
+    schemaVersion: 1,
+    status: 'fixture-setup-pending',
+    phase: 'probe-shortcuts',
+    fixtureUrl: '',
+    auditFixtureUrl: '',
+    auditFixtureOwned: false,
+    auditFixtureSourceRun: reservedRunDirectory.name,
+    fixtureSetupStartedAt: startedAt,
+    startedAt,
+    currentCase: {
+      rowId: 'setup:audit-owned-fixture',
+      phase: 'fixture-creation-pending',
+      intendedSideEffect: 'create a disposable two-turn keyboard audit conversation',
+      sourceConversationId: '',
+      startedAt,
+      attempt: 1,
+    },
+    completedCases: [],
+    auditOwnedConversationIds: [],
+    storageRecoveryStatus: 'not-run',
+    clipboardRecoveryStatus: 'not-needed',
+    checkpointWriteError: '',
+  };
+  const persistCheckpoint = () =>
+    persistShortcutAuditCheckpoint(reservedRunDirectory.path, checkpoint);
+  const trackAuditOwnedConversation = (url) => {
+    try {
+      const conversationId = new URL(url).pathname.match(/\/c\/([^/]+)/)?.[1] || '';
+      if (conversationId && !protectedFixtureIds.has(conversationId)) {
+        checkpoint.auditOwnedConversationIds = [
+          ...new Set([...checkpoint.auditOwnedConversationIds, conversationId]),
+        ];
+        rememberAuditOwnedConversationIds(page, [conversationId]);
+      }
+    } catch {}
+  };
+
+  await persistCheckpoint();
+  let fixtureUrl;
+  try {
+    fixtureUrl = await fixtureCreator(page, {
+      checkpoint,
+      persistCheckpoint,
+      trackAuditOwnedConversation,
+    });
+    const fixture = parseFreshAuditFixtureUrl(fixtureUrl);
+    const setupProof = checkpoint.completedCases.find(
+      (item) => item.rowId === 'setup:audit-owned-fixture',
+    );
+    if (
+      !isCompleteFreshAuditFixtureProof(setupProof, fixture.fixtureUrl, fixture.conversationId) ||
+      checkpoint.auditFixtureUrl !== fixture.fixtureUrl ||
+      !checkpoint.auditOwnedConversationIds.includes(fixture.conversationId)
+    ) {
+      throw new Error(
+        'The fresh audit fixture did not preserve its completed two-turn setup proof.',
+      );
+    }
+    if (protectedFixtureUrls.includes(fixture.fixtureUrl)) {
+      throw new Error('A protected shared conversation cannot be used as a fresh audit fixture.');
+    }
+    const preparedAt = new Date().toISOString();
+    checkpoint.fixtureUrl = fixture.fixtureUrl;
+    checkpoint.auditFixtureUrl = fixture.fixtureUrl;
+    checkpoint.auditFixtureOwned = true;
+    checkpoint.fixturePreparedAt = preparedAt;
+    checkpoint.status = 'fixture-prepared';
+    checkpoint.currentCase = null;
+    await persistCheckpoint();
+    return {
+      kind: 'audit-owned',
+      fixtureUrl: fixture.fixtureUrl,
+      conversationId: fixture.conversationId,
+      sourceRunFolder: reservedRunDirectory.name,
+      sourceCheckpointPath: checkpointPath,
+      setupStartedAt: startedAt,
+      preparedAt,
+      setupProof: { ...setupProof },
+      setupCompletedCases: checkpoint.completedCases.map((item) => ({ ...item })),
+      setupCurrentCase: checkpoint.currentCase,
+      auditOwnedConversationIds: [...checkpoint.auditOwnedConversationIds],
+    };
+  } catch (error) {
+    if (checkpoint.currentCase) checkpoint.currentCase.phase = 'fixture-creation-failed';
+    checkpoint.fixtureCreationError ||= error?.message || String(error);
+    checkpoint.preflightError ||= `Audit-owned fixture creation failed: ${error?.message || error}`;
+    checkpoint.status = 'fixture-setup-failed';
+    await persistCheckpoint().catch(() => {});
+    throw error;
+  }
+}
+
+export async function selectChatModeForEditProbe(page, blankNewChatProvenance) {
+  if (!isVerifiedBlankNewChatProvenance(blankNewChatProvenance, page.url())) {
+    throw new Error('Edit setup requires a verified blank audit chat before selecting Chat mode.');
+  }
+  await injectDevScrapeWideIntoPage(page);
+  await page.waitForFunction(
+    () =>
+      window.CSPModelPickerSelectors?.getNativeChatWorkSurfaceRadios?.(document, window)?.length ===
+      2,
+    undefined,
+    { timeout: 5000 },
+  );
+  await waitBeforeBrowserInteraction();
+  const selected = await page.evaluate(() => {
+    const selectors = window.CSPModelPickerSelectors;
+    const radios = selectors?.getNativeChatWorkSurfaceRadios?.(document, window);
+    if (radios?.length !== 2) return false;
+    // The shared native contract orders Chat first and Work second.
+    if (!selectors.isChatWorkSurfaceSelected(radios[0])) radios[0].click();
+    return true;
+  });
+  if (!selected) throw new Error('The verified blank audit chat has no native Chat mode control.');
+  await page.waitForFunction(
+    () => {
+      const selectors = window.CSPModelPickerSelectors;
+      const radios = selectors?.getNativeChatWorkSurfaceRadios?.(document, window);
+      return radios?.length === 2 && selectors.isChatWorkSurfaceSelected(radios[0]);
+    },
+    undefined,
+    { timeout: 5000 },
+  );
+}
+
+async function prepareSentDisposableMessage(page, fixtureUrl, options = {}) {
+  const { checkpoint, persistCheckpoint } = options;
+  const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+    diagnosticCheckpoint: checkpoint,
+    diagnosticPersistCheckpoint: persistCheckpoint,
+  });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.chat-mode-ready');
+  await selectChatModeForEditProbe(page, blankNewChatProvenance);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.thinking-effort');
+  await selectThinkingEffortExtendedForProbe(page).catch(() => {});
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.set-message-text',
+  );
+  await setComposerText(page, SIDE_EFFECT_MESSAGE_TEXT);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.send');
+  await clickEnabledButton(page, SEND_BUTTON_SELECTORS);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.user-turn-ready');
+  await waitForLatestUserTurn(page);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.response-delay');
+  await page.waitForTimeout(2500);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.stop-response');
+  await clickEnabledButton(page, STOP_BUTTON_SELECTORS).catch(() => {});
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.after-stop-delay',
+  );
+  await page.waitForTimeout(3000);
+  return blankNewChatProvenance;
+}
+
+export async function prepareActiveEditCardProbeState(page, fixtureUrl, options = {}) {
+  const { checkpoint, persistCheckpoint } = options;
+  const blankNewChatProvenance = await prepareSentDisposableMessage(page, fixtureUrl, options);
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.user-turn-locator',
+  );
   const userTurn = await getLatestUserMessageLocator(page);
+  const editScope = await getStableUserEditScope(page, userTurn);
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.scroll-user-turn',
+  );
   await userTurn.scrollIntoViewIfNeeded().catch(() => {});
-  const editButton = userTurn.locator('button[aria-label="Edit message"]').first();
+  const editButton = userTurn
+    .locator('button:has(svg path[d^="M11.7313"]), button[aria-label="Edit message"]')
+    .first();
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.reveal-edit-button',
+  );
   for (let attempt = 0; attempt < 10; attempt += 1) {
     await userTurn.hover({ force: true }).catch(() => {});
     await page.waitForTimeout(700);
@@ -2595,152 +4426,280 @@ async function prepareActiveEditCardProbeState(page, fixtureUrl) {
   if (!((await editButton.count().catch(() => 0)) > 0)) {
     throw new Error('Could not find the user message edit button.');
   }
+  await options.onBeforeOpenEdit?.(editButton);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.open-edit');
   await waitBeforeBrowserInteraction();
   await editButton.click({ force: true });
+  await markProbeDiagnosticStage(
+    checkpoint,
+    persistCheckpoint,
+    'active-edit-card.edit-field-ready',
+  );
   await page.waitForTimeout(700);
-  const editField = page.locator('textarea, [contenteditable="true"]').last();
+  const editField = editScope
+    .locator('textarea, [contenteditable="true"]')
+    .filter({ visible: true })
+    .first();
   if (!((await editField.count().catch(() => 0)) > 0)) {
     throw new Error('Could not find the active edit field.');
   }
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.set-edit-text');
   await editField.click({ force: true });
   await editField.fill(SIDE_EFFECT_EDITED_MESSAGE_TEXT).catch(async () => {
     await page.keyboard.press('Control+A');
     await page.keyboard.type(SIDE_EFFECT_EDITED_MESSAGE_TEXT, { delay: 5 });
   });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'active-edit-card.edit-settle');
   await page.waitForTimeout(250);
+  return blankNewChatProvenance;
 }
 
-async function prepareSentUserMessageProbeState(page, fixtureUrl) {
-  if (page.url() !== fixtureUrl) {
-    await waitBeforeBrowserRequest();
-    await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded' });
-  }
-  await waitForFixtureConversationReady(page, 30000, { fixtureUrl });
-  await closeTransientUi(page);
+export async function getStableUserEditScope(page, userTurn) {
+  const identity = await userTurn.evaluate((turn) => {
+    for (const name of ['data-chatgpt-search-unit-key', 'data-turn-key', 'data-testid']) {
+      const value = turn.getAttribute(name);
+      if (value) return { name, value };
+    }
+    return null;
+  });
+  if (!identity) throw new Error('The owned user Edit turn has no stable wrapper identity.');
+  const value = identity.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return page.locator(`[${identity.name}="${value}"]`);
+}
+
+export async function prepareSentUserMessageProbeState(page, fixtureUrl, options = {}) {
+  const blankNewChatProvenance = await prepareSentDisposableMessage(page, fixtureUrl, options);
   const userTurn = await getLatestUserMessageLocator(page);
   await userTurn.hover({ force: true });
   await page.waitForTimeout(700);
+  return blankNewChatProvenance;
 }
 
 async function prepareDictationActiveProbeState(page, fixtureUrl) {
-  await prepareNewConversationProbeState(page, fixtureUrl);
+  const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl);
   await page
     .context()
     .grantPermissions(['microphone'], { origin: 'https://chatgpt.com' })
     .catch(() => {});
-  await clickEnabledButton(page, [
-    'button[aria-label="Start dictation"]',
-    'button:has(svg use[href*="#33d595"])',
-    'button:has(svg use[href*="#29f921"])',
-  ]);
-  await page.waitForTimeout(700);
-  await waitForLiveProbeTargetPresence(page, {
-    matchGroups: [['#2dc143'], ['#85f94b']],
-  });
+  await waitForEnabledButton(page, DICTATION_START_BUTTON_SELECTORS, 15000);
+  await clickEnabledButton(page, DICTATION_START_BUTTON_SELECTORS);
+  await page.waitForFunction(
+    (controlSpecs) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement) || node.hidden || node.closest('[aria-hidden="true"]')) {
+          return false;
+        }
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.pointerEvents !== 'none' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const forms = Array.from(
+        document.querySelectorAll(
+          'form[data-thread-find-composer="true"], form[data-chatgpt-composer]',
+        ),
+      ).filter(isVisible);
+      const activeForms = forms.filter((form) => {
+        const currentComposer =
+          form.hasAttribute('data-chatgpt-composer') &&
+          form.getAttribute('data-thread-find-composer') === 'true';
+        const buttons = Array.from(form.querySelectorAll('button')).filter(isVisible);
+        return controlSpecs.every((spec) => {
+          const matches = buttons.filter((button) => {
+            const pathMatches = Array.from(button.querySelectorAll('svg path')).some((path) =>
+              String(path.getAttribute('d') || '').startsWith(spec.pathPrefix),
+            );
+            const symbolMatches =
+              currentComposer &&
+              Array.from(button.querySelectorAll('svg use')).some((use) => {
+                const href = String(
+                  use.getAttribute('href') || use.getAttribute('xlink:href') || '',
+                );
+                return spec.symbols.some((symbol) => href.endsWith(symbol));
+              });
+            return pathMatches || symbolMatches;
+          });
+          return matches.length === 1;
+        });
+      });
+      return activeForms.length === 1;
+    },
+    ACTIVE_DICTATION_CONTROL_SPECS,
+    { timeout: 15000 },
+  );
+  return blankNewChatProvenance;
 }
 
-async function setLiveProbeScrollPosition(page, position) {
-  await page.evaluate((targetPosition) => {
-    const container =
-      typeof window.getScrollableContainer === 'function'
-        ? window.getScrollableContainer()
-        : document.scrollingElement || document.documentElement;
-    const getMaxScroll = (node) => {
-      if (node === window) {
-        const root = document.scrollingElement || document.documentElement;
-        return Math.max(0, root.scrollHeight - window.innerHeight);
-      }
-      return Math.max(0, node.scrollHeight - node.clientHeight);
-    };
-    const maxScroll = getMaxScroll(container);
-    const y =
-      targetPosition === 'bottom'
-        ? maxScroll
-        : targetPosition === 'middle'
-          ? Math.round(maxScroll / 2)
-          : 0;
-    if (container === window) {
-      window.scrollTo(0, y);
-    } else {
-      container.scrollTop = y;
+export async function prepareComposerStudySearchProbeState(
+  page,
+  fixtureUrl,
+  { checkpoint, persistCheckpoint, query = 'study', actionId = 'shortcutKeyStudy' } = {},
+) {
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.blank-home-preparation');
+  const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+    checkpoint,
+    persistCheckpoint,
+    scope: `global:${actionId}:blank-home`,
+  });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.blank-home-ready');
+  const structurePreparation = await prepareStructurallyBlankComposerForMenu(page);
+  if (checkpoint?.currentCase) {
+    checkpoint.currentCase.studyComposerStructure = structurePreparation.status;
+  }
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.plus-menu-opening');
+  await openComposerPlusMenu(page);
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.plus-menu-open');
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.owned-query-typing');
+  await setComposerText(page, query, {
+    auditOwnedConversationIds: checkpoint?.auditOwnedConversationIds,
+    blankHomeProvenance: blankNewChatProvenance,
+    checkpoint,
+    focusOnly: true,
+    persistCheckpoint,
+    scope: `global:${actionId}:setup`,
+  });
+  await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.query-ready');
+  return blankNewChatProvenance;
+}
+
+export function resolveLiveProbeScrollContainer() {
+  let helperContainer = null;
+  try {
+    if (typeof window.getScrollableContainer === 'function') {
+      helperContainer = window.getScrollableContainer();
     }
-  }, position);
+  } catch {}
+
+  if (
+    helperContainer === window ||
+    (helperContainer instanceof Element && helperContainer.isConnected)
+  ) {
+    return helperContainer;
+  }
+
+  const visibleThreadContainer = findRenderedThreadScrollRoot(document);
+  return visibleThreadContainer || document.scrollingElement || document.documentElement;
+}
+
+const LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE = `(() => {
+  const findRenderedThreadScrollRoot = ${findRenderedThreadScrollRoot.toString()};
+  return (${resolveLiveProbeScrollContainer.toString()});
+})()`;
+
+// Physical column-reverse coordinates run from -max at the top to zero at the bottom.
+// Keep every probe's setup, boundary and movement checks in top-to-bottom coordinates.
+export function readLiveProbeScrollMetrics(container, position) {
+  const root = document.scrollingElement || document.documentElement;
+  const isWindow = container === window;
+  const max = Math.max(
+    0,
+    isWindow
+      ? root.scrollHeight - window.innerHeight
+      : container.scrollHeight - container.clientHeight,
+  );
+  const reverse = !isWindow && getComputedStyle(container).flexDirection === 'column-reverse';
+  if (position !== undefined) {
+    const logical = position === 'bottom' ? max : position === 'middle' ? Math.round(max / 2) : 0;
+    const physical = reverse ? logical - max : logical;
+    if (isWindow) window.scrollTo(0, physical);
+    else container.scrollTop = physical;
+  }
+  const rawTop = Number(
+    isWindow ? window.scrollY || root.scrollTop || 0 : container.scrollTop || 0,
+  );
+  return { top: Math.max(0, Math.min(max, reverse ? max + rawTop : rawTop)), max, rawTop, reverse };
+}
+
+const LIVE_PROBE_SCROLL_METRICS_SOURCE = readLiveProbeScrollMetrics.toString();
+
+export async function setLiveProbeScrollPosition(page, position) {
+  await page.evaluate(
+    ({ targetPosition, scrollContainerResolverSource, scrollMetricsSource }) => {
+      const resolveScrollContainer = new Function(`return (${scrollContainerResolverSource})`)();
+      const readScrollMetrics = new Function(`return (${scrollMetricsSource})`)();
+      readScrollMetrics(resolveScrollContainer(), targetPosition);
+    },
+    {
+      targetPosition: position,
+      scrollContainerResolverSource: LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE,
+      scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
+    },
+  );
   await page.waitForTimeout(700);
 }
 
 async function captureLiveProbeScrollStart(page) {
-  await page.evaluate(() => {
-    const container =
-      typeof window.getScrollableContainer === 'function'
-        ? window.getScrollableContainer()
-        : document.scrollingElement || document.documentElement;
-    const getScrollTop = (node) =>
-      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
-    const getMaxScroll = (node) => {
-      if (node === window) {
-        const root = document.scrollingElement || document.documentElement;
-        return Math.max(0, root.scrollHeight - window.innerHeight);
-      }
-      return Math.max(0, node.scrollHeight - node.clientHeight);
-    };
-    window.__CGCSP_SCROLL_PROBE_START__ = {
-      top: getScrollTop(container),
-      max: getMaxScroll(container),
-    };
-  });
+  await page.evaluate(
+    ({ scrollContainerResolverSource, scrollMetricsSource }) => {
+      const resolveScrollContainer = new Function(`return (${scrollContainerResolverSource})`)();
+      const readScrollMetrics = new Function(`return (${scrollMetricsSource})`)();
+      const { top, max } = readScrollMetrics(resolveScrollContainer());
+      window.__CGCSP_SCROLL_PROBE_START__ = { top, max };
+    },
+    {
+      scrollContainerResolverSource: LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE,
+      scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
+    },
+  );
 }
 
-async function prepareMessageScrollProbeState(page, fixtureUrl) {
-  await resetFixturePage(page, fixtureUrl);
-  await closeTransientUi(page);
-  await setLiveProbeScrollPosition(page, 'middle');
+export async function setLiveProbeMessageScrollStart(page, setup) {
+  if (!['message-scroll-from-top', 'message-scroll-from-bottom'].includes(setup)) {
+    throw new Error(`Unsupported message-scroll setup: ${setup}`);
+  }
+  await setLiveProbeScrollPosition(page, setup === 'message-scroll-from-top' ? 'top' : 'bottom');
   await captureLiveProbeScrollStart(page);
 }
 
+async function prepareMessageScrollProbeState(page, fixtureUrl, setup) {
+  await resetFixturePage(page, fixtureUrl);
+  await closeTransientUi(page);
+  await setLiveProbeMessageScrollStart(page, setup);
+}
+
 async function isViewportProbeTargetReached(page, target) {
-  return page.evaluate((targetId) => {
-    const container =
-      typeof window.getScrollableContainer === 'function'
-        ? window.getScrollableContainer()
-        : document.scrollingElement || document.documentElement;
-    const getScrollTop = (node) =>
-      node === window ? window.scrollY || document.documentElement.scrollTop || 0 : node.scrollTop;
-    const getMaxScroll = (node) => {
-      if (node === window) {
-        const root = document.scrollingElement || document.documentElement;
-        return Math.max(0, root.scrollHeight - window.innerHeight);
+  return page.evaluate(
+    ({ targetId, scrollContainerResolverSource, scrollMetricsSource }) => {
+      const resolveScrollContainer = new Function(`return (${scrollContainerResolverSource})`)();
+      const container = resolveScrollContainer();
+      const readScrollMetrics = new Function(`return (${scrollMetricsSource})`)();
+      const metrics = readScrollMetrics(container);
+      if (targetId === 'page-header') {
+        const header = document.getElementById('page-header');
+        const rect = header?.getBoundingClientRect?.();
+        return metrics.top <= 120 || (rect && rect.bottom > 0 && rect.top < 180);
       }
-      return Math.max(0, node.scrollHeight - node.clientHeight);
-    };
-    if (targetId === 'page-header') {
-      const header = document.getElementById('page-header');
-      const rect = header?.getBoundingClientRect?.();
-      return getScrollTop(container) <= 120 || (rect && rect.bottom > 0 && rect.top < 180);
-    }
-    if (targetId === 'thread-bottom') {
-      const remaining = getMaxScroll(container) - getScrollTop(container);
-      const threadBottom = document.getElementById('thread-bottom');
-      const rect = threadBottom?.getBoundingClientRect?.();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-      return remaining <= 160 || (rect && rect.top < viewportHeight && rect.bottom > 0);
-    }
-    return false;
-  }, target?.targetId || '');
+      if (targetId === 'thread-bottom') {
+        const remaining = metrics.max - metrics.top;
+        const threadBottom = document.getElementById('thread-bottom');
+        const rect = threadBottom?.getBoundingClientRect?.();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        return remaining <= 160 || (rect && rect.top < viewportHeight && rect.bottom > 0);
+      }
+      return false;
+    },
+    {
+      targetId: target?.targetId || '',
+      scrollContainerResolverSource: LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE,
+      scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
+    },
+  );
 }
 
 async function isDomStateProbeTargetReached(page, target) {
   return page.evaluate(
-    ({ targetId, codeboxSelectors }) => {
-      const container =
-        typeof window.getScrollableContainer === 'function'
-          ? window.getScrollableContainer()
-          : document.scrollingElement || document.documentElement;
-      const getScrollTop = (node) =>
-        node === window
-          ? window.scrollY || document.documentElement.scrollTop || 0
-          : node.scrollTop;
+    ({ targetId, codeboxSelectors, scrollContainerResolverSource, scrollMetricsSource }) => {
+      const resolveScrollContainer = new Function(`return (${scrollContainerResolverSource})`)();
+      const container = resolveScrollContainer();
+      const readScrollMetrics = new Function(`return (${scrollMetricsSource})`)();
+      const metrics = readScrollMetrics(container);
       const start = window.__CGCSP_SCROLL_PROBE_START__ || {};
-      const currentTop = getScrollTop(container);
+      const currentTop = metrics.top;
       if (targetId === 'message-scroll-up-delta') {
         return Number.isFinite(start.top) && (start.top - currentTop >= 80 || currentTop <= 40);
       }
@@ -2803,11 +4762,13 @@ async function isDomStateProbeTargetReached(page, target) {
             );
             const requiresWrap = availableWidth > 0 && longestLineWidth > availableWidth + 2;
             const hasActualWrap = visualLineCount > hardLineCount;
+            // A native layered whitespace rule can win on code while its
+            // descendants wrap. Overlong text must prove rendered wrapping.
             return (
-              style.whiteSpace === 'pre-wrap' &&
-              style.overflowWrap === 'anywhere' &&
               availableWidth > 0 &&
-              (!requiresWrap || hasActualWrap) &&
+              (requiresWrap
+                ? hasActualWrap
+                : style.whiteSpace === 'pre-wrap' && style.overflowWrap === 'anywhere') &&
               scrollport.scrollWidth <= scrollport.clientWidth + 2
             );
           });
@@ -2818,7 +4779,12 @@ async function isDomStateProbeTargetReached(page, target) {
       }
       return false;
     },
-    { targetId: target?.targetId || '', codeboxSelectors: [...CODEBOX_CONTENT_SELECTORS] },
+    {
+      targetId: target?.targetId || '',
+      codeboxSelectors: [...CODEBOX_CONTENT_SELECTORS],
+      scrollContainerResolverSource: LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE,
+      scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
+    },
   );
 }
 
@@ -3062,6 +5028,7 @@ async function prepareClipboardEntireConversationProbeState(page, fixtureUrl, se
 function createCodeboxProbeSession() {
   return {
     initialized: false,
+    conversationUrl: '',
     sentPromptKeys: new Set(),
     clipboardSnapshot: null,
     clipboardRestoreStatus: 'not-needed',
@@ -3140,7 +5107,7 @@ async function waitForAssistantCodeBlockCount(
 
 async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEOUT_MS) {
   await page.waitForFunction(
-    () => {
+    ({ nativeSendSelector, nativeStopSelector, legacySendSelectors, legacyStopSelectors }) => {
       const isVisible = (node) => {
         if (!(node instanceof HTMLElement)) return false;
         const style = getComputedStyle(node);
@@ -3152,11 +5119,23 @@ async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEO
           rect.height > 0
         );
       };
-      const visibleStopButtons = Array.from(
-        document.querySelectorAll(
-          'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
+      const hasVisibleComposerTextbox = (button) => {
+        const form = button.closest('form');
+        return (
+          isVisible(form) &&
+          Array.from(form.querySelectorAll('[contenteditable="true"][role="textbox"]')).some(
+            isVisible,
+          )
+        );
+      };
+      const visibleStopButtons = [
+        ...Array.from(document.querySelectorAll(nativeStopSelector)).filter(
+          (button) => isVisible(button) && hasVisibleComposerTextbox(button),
         ),
-      ).filter(isVisible);
+        ...legacyStopSelectors.flatMap((selector) =>
+          Array.from(document.querySelectorAll(selector)).filter(isVisible),
+        ),
+      ];
       const visibleComposers = Array.from(
         document.querySelectorAll(
           [
@@ -3179,30 +5158,84 @@ async function waitForCodeboxResponseIdle(page, timeout = CODEBOX_RESPONSE_TIMEO
       const completionAction = Array.from(
         assistantTurn?.querySelectorAll('button[aria-label="Regenerate response"]') || [],
       ).some(isVisible);
-      const sendButton = document.querySelector(
-        'button[data-testid="send-button"], #composer-submit-button, form:has([role="textbox"]) button[type="submit"]',
+      const observedSendButtons = Array.from(document.querySelectorAll(nativeSendSelector)).filter(
+        (button) =>
+          isVisible(button) &&
+          hasVisibleComposerTextbox(button) &&
+          !button.disabled &&
+          button.getAttribute('aria-disabled') !== 'true',
       );
-      const sendReady = sendButton instanceof HTMLButtonElement && !sendButton.disabled;
+      const legacySendButtons = legacySendSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .filter(
+          (button) =>
+            isVisible(button) &&
+            !button.disabled &&
+            button.getAttribute('aria-disabled') !== 'true' &&
+            button.getAttribute('data-testid') !== 'stop-button' &&
+            button.getAttribute('data-test-id') !== 'stop-button' &&
+            !button.matches('button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])'),
+        );
+      const sendReady =
+        (observedSendButtons.length === 1 && hasVisibleComposerTextbox(observedSendButtons[0])) ||
+        legacySendButtons.length > 0;
       return (
         visibleStopButtons.length === 0 &&
         visibleComposers.length > 0 &&
         (!latestAssistant || completionAction || sendReady)
       );
     },
-    undefined,
+    {
+      nativeSendSelector: NATIVE_COMPOSER_SEND_SELECTOR,
+      nativeStopSelector: NATIVE_COMPOSER_STOP_SELECTOR,
+      legacySendSelectors: [...LEGACY_SEND_BUTTON_SELECTORS],
+      legacyStopSelectors: [...LEGACY_STOP_BUTTON_SELECTORS],
+    },
     { timeout },
   );
 }
 
 async function prepareCodeboxProbeConversation(page, fixtureUrl, session) {
-  if (session.initialized) return;
+  const plan = getCodeboxProbePreparationPlan({
+    sessionInitialized: session.initialized,
+    sessionConversationUrl: session.conversationUrl,
+    currentUrl: page.url(),
+  });
+  if (plan.reuseConversationUrl) {
+    try {
+      if (plan.restoreConversation) {
+        await page.goto(plan.reuseConversationUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
+        });
+      }
+      await waitForFixtureConversationReady(page, 15000, {
+        fixtureUrl: plan.reuseConversationUrl,
+      });
+      if (await countAssistantCodeBlocks(page)) {
+        await closeOpenMenus(page);
+        await closeTransientUi(page);
+        session.conversationUrl = page.url();
+        return;
+      }
+    } catch {}
+  }
+
+  session.initialized = false;
+  session.conversationUrl = '';
+  session.sentPromptKeys.clear();
   await prepareNewConversationProbeState(page, fixtureUrl);
   await closeOpenMenus(page);
   await closeTransientUi(page);
   session.initialized = true;
 }
 
-async function sendCodeboxPromptAndWaitForBlocks(page, promptText, expectedMinimumCount) {
+async function sendCodeboxPromptAndWaitForBlocks(
+  page,
+  promptText,
+  expectedMinimumCount,
+  trackAuditOwnedConversation,
+) {
   await waitForCodeboxResponseIdle(page);
   const beforeCount = await countAssistantCodeBlocks(page);
   await setComposerText(page, promptText);
@@ -3211,21 +5244,64 @@ async function sendCodeboxPromptAndWaitForBlocks(page, promptText, expectedMinim
   await page.waitForTimeout(CODEBOX_RESPONSE_MIN_WAIT_MS);
   await waitForAssistantCodeBlockCount(page, Math.max(expectedMinimumCount, beforeCount + 1));
   await waitForCodeboxResponseIdle(page);
+  trackAuditOwnedConversation?.(page.url());
 }
 
-async function ensureCodeboxPromptSent(page, fixtureUrl, session, promptKey, promptText) {
+async function ensureCodeboxPromptSent(
+  page,
+  fixtureUrl,
+  session,
+  promptKey,
+  promptText,
+  trackAuditOwnedConversation,
+) {
   await prepareCodeboxProbeConversation(page, fixtureUrl, session);
   if (session.sentPromptKeys.has(promptKey)) return;
   const expectedMinimumCount = session.sentPromptKeys.size + 1;
-  await sendCodeboxPromptAndWaitForBlocks(page, promptText, expectedMinimumCount);
+  await sendCodeboxPromptAndWaitForBlocks(
+    page,
+    promptText,
+    expectedMinimumCount,
+    trackAuditOwnedConversation,
+  );
+  try {
+    const parsedUrl = new URL(page.url());
+    session.conversationUrl =
+      parsedUrl.origin === 'https://chatgpt.com' &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      /^\/c\/[A-Za-z0-9-]+$/.test(parsedUrl.pathname) &&
+      !parsedUrl.search &&
+      !parsedUrl.hash
+        ? parsedUrl.href
+        : '';
+  } catch {
+    session.conversationUrl = '';
+  }
   session.sentPromptKeys.add(promptKey);
 }
 
-async function prepareClipboardCodeBlocksProbeState(page, fixtureUrl, session) {
-  await ensureCodeboxPromptSent(page, fixtureUrl, session, 'wrap-story', CODEBOX_WRAP_PROMPT_TEXT);
-  await ensureCodeboxPromptSent(page, fixtureUrl, session, 'copy-story', CODEBOX_COPY_PROMPT_TEXT);
-  await waitForAssistantCodeBlockCount(page, 2);
-  await clearClipboardForProbe(page, session);
+async function prepareClipboardCodeBlocksProbeState(
+  page,
+  fixtureUrl,
+  session,
+  { captureOnly = false, trackAuditOwnedConversation } = {},
+) {
+  const plan = getCodeboxProbePreparationPlan({ captureOnly });
+  for (const promptKey of plan.promptKeys) {
+    const promptText =
+      promptKey === 'wrap-story' ? CODEBOX_WRAP_PROMPT_TEXT : CODEBOX_COPY_PROMPT_TEXT;
+    await ensureCodeboxPromptSent(
+      page,
+      fixtureUrl,
+      session,
+      promptKey,
+      promptText,
+      trackAuditOwnedConversation,
+    );
+  }
+  await waitForAssistantCodeBlockCount(page, plan.requiredCodeBlockCount);
+  if (plan.clearClipboard) await clearClipboardForProbe(page, session);
 }
 
 async function prepareCodeboxWrapProbeState(page, fixtureUrl, session) {
@@ -3313,7 +5389,14 @@ function orderLiveProbeShortcuts(shortcuts) {
   return ordered;
 }
 
-function shouldPreservePreparedProbeState(shortcut) {
+export function shouldPreservePreparedProbeState(shortcut) {
+  if (shortcut?.activationProbeSetup === 'active-edit-card') return true;
+  if (
+    ['composer-plus-menu-search-study', 'composer-plus-menu-search-deep-research'].includes(
+      shortcut?.activationProbeSetup,
+    )
+  )
+    return true;
   const stateRefs = [
     ...(Array.isArray(shortcut.activationProbeUiStateRefs)
       ? shortcut.activationProbeUiStateRefs
@@ -3321,16 +5404,6 @@ function shouldPreservePreparedProbeState(shortcut) {
     ...(Array.isArray(shortcut.requiredUiStateRefs) ? shortcut.requiredUiStateRefs : []),
   ];
   return stateRefs.some((stateRef) => String(stateRef).includes('buttons-exposed'));
-}
-
-function isResponseNavigationShortcut(shortcut) {
-  return (
-    shortcut?.actionId === PREVIOUS_THREAD_ACTION_ID || shortcut?.actionId === NEXT_THREAD_ACTION_ID
-  );
-}
-
-function isResponseNavigationProbeSetup(shortcut) {
-  return String(shortcut?.activationProbeSetup || '').startsWith('response-navigation-before-');
 }
 
 function isModelEffortShortcut(shortcut) {
@@ -3355,117 +5428,10 @@ function isModelPhaseShortcut(shortcut) {
   return (shortcut.targetIds || []).some((targetId) => String(targetId).startsWith('model-'));
 }
 
-function getOppositeResponseNavigationActionId(actionId) {
-  return actionId === NEXT_THREAD_ACTION_ID ? PREVIOUS_THREAD_ACTION_ID : NEXT_THREAD_ACTION_ID;
-}
-
-function getResponseNavigationAriaLabel(target) {
-  if (
-    target?.targetId === PREVIOUS_THREAD_ACTION_ID ||
-    target?.targetId === 'previous-response-button'
-  ) {
-    return 'Previous response';
-  }
-  if (target?.targetId === NEXT_THREAD_ACTION_ID || target?.targetId === 'next-response-button') {
-    return 'Next response';
-  }
-  return '';
-}
-
-function getResponseNavigationAriaLabelForAction(actionId) {
-  return actionId === PREVIOUS_THREAD_ACTION_ID ? 'Previous response' : 'Next response';
-}
-
-async function waitForEnabledResponseNavigationTarget(page, target) {
-  const ariaLabel = getResponseNavigationAriaLabel(target);
-  if (!ariaLabel) return;
-  await page.waitForFunction(
-    (label) =>
-      Array.from(document.querySelectorAll(`button[aria-label="${label}"]`)).some((button) => {
-        return button instanceof HTMLButtonElement && !button.disabled;
-      }),
-    ariaLabel,
-    { timeout: 7000 },
-  );
-}
-
-async function clickEnabledResponseNavigationTarget(page, ariaLabel) {
-  await waitBeforeBrowserInteraction();
-  return page.evaluate((label) => {
-    const isVisible = (button) => {
-      if (!(button instanceof HTMLButtonElement)) return false;
-      const style = getComputedStyle(button);
-      const rect = button.getBoundingClientRect();
-      return (
-        !button.disabled &&
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        style.pointerEvents !== 'none' &&
-        rect.width > 0 &&
-        rect.height > 0
-      );
-    };
-    const buttons = Array.from(document.querySelectorAll(`button[aria-label="${label}"]`)).filter(
-      (button) => button instanceof HTMLButtonElement && !button.disabled,
-    );
-    if (!buttons.length) return false;
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    const visibleButtons = buttons.filter(isVisible);
-    const inViewport = visibleButtons.filter((button) => {
-      const rect = button.getBoundingClientRect();
-      return rect.top >= 0 && rect.bottom <= viewportHeight;
-    });
-    const target = inViewport[0] || visibleButtons[0] || buttons[0];
-    target.scrollIntoView({ block: 'center', inline: 'nearest' });
-    const wrapper = target.closest('[class*="group-hover"]');
-    wrapper?.classList?.add('force-hover');
-    ['pointerover', 'pointerenter', 'mouseover'].forEach((eventType) => {
-      wrapper?.dispatchEvent?.(new MouseEvent(eventType, { bubbles: true }));
-    });
-    target.click();
-    return true;
-  }, ariaLabel);
-}
-
-async function clickResponseNavigationTargetRepeated(page, ariaLabel, attempts) {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await clickEnabledResponseNavigationTarget(page, ariaLabel);
-    await page.waitForTimeout(RESPONSE_NAVIGATION_STEP_SETTLE_MS);
-  }
-}
-
-async function dispatchLiveShortcutRepeated(page, shortcut, code, attempts, settleMs) {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await dispatchShortcutForAction(page, shortcut, code);
-    await page.waitForTimeout(settleMs);
-  }
-}
-
-async function prepareResponseNavigationProbeState(
-  page,
-  shortcut,
-  target,
-  scrapeStateRegistry,
-  fixtureUrl,
-) {
-  const probeStateId =
-    shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
-  await prepareLiveProbeState(page, probeStateId, scrapeStateRegistry, fixtureUrl);
-  const oppositeActionId = getOppositeResponseNavigationActionId(shortcut.actionId);
-  const oppositeAriaLabel = getResponseNavigationAriaLabelForAction(oppositeActionId);
-  await clickResponseNavigationTargetRepeated(
-    page,
-    oppositeAriaLabel,
-    RESPONSE_NAVIGATION_ATTEMPTS,
-  );
-  await waitForEnabledResponseNavigationTarget(page, target);
-}
-
 async function prepareGptConversationProbeState(page, fixtureUrl) {
   await waitBeforeBrowserRequest();
   await page.goto(fixtureUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(2500);
+  await waitForFixtureConversationReady(page, 15000, { fixtureUrl });
   await closeOpenMenus(page);
   await closeTransientUi(page);
   await page.waitForFunction(
@@ -3612,13 +5578,284 @@ function getTargetNeedleGroups(target) {
   return target?.identifier ? [[String(target.identifier)]] : [];
 }
 
-async function captureLiveProbeSemanticSnapshot(page, target) {
+// Serialized into page callbacks so waiting, reporting, and semantic proof share one rule.
+export function findRenderedProbeMessageNodes(selectors) {
+  const isRendered = (node) => {
+    if (!(node instanceof HTMLElement)) return false;
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) {
+      const style = getComputedStyle(ancestor);
+      if (
+        ancestor.hidden ||
+        ancestor.hasAttribute('inert') ||
+        ancestor.getAttribute('aria-hidden') === 'true' ||
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.visibility === 'collapse'
+      )
+        return false;
+    }
+    return true;
+  };
+  for (const selector of selectors) {
+    const nodes = Array.from(document.querySelectorAll(selector)).filter(isRendered);
+    if (nodes.length) return [...new Set(nodes)];
+  }
+  return [];
+}
+
+export async function waitForVerifiedBlankConversationAfterShortcut(
+  page,
+  sourceUrl,
+  timeout = 15000,
+) {
+  await page.waitForFunction(
+    ({
+      sourceUrl,
+      composerSelectors,
+      userMessageSelectors,
+      assistantMessageSelectors,
+      messageReaderSource,
+    }) => {
+      const findMessages = new Function(`return (${messageReaderSource})`)();
+      let currentUrl;
+      try {
+        currentUrl = new URL(window.location.href);
+      } catch {
+        return false;
+      }
+      if (
+        window.location.href === sourceUrl ||
+        currentUrl.origin !== 'https://chatgpt.com' ||
+        currentUrl.username ||
+        currentUrl.password ||
+        currentUrl.pathname !== '/' ||
+        currentUrl.search ||
+        currentUrl.hash
+      ) {
+        return false;
+      }
+      const countMessages = (selectors) => findMessages(selectors).length;
+      const composer = composerSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .find((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.pointerEvents !== 'none' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        });
+      if (!composer) return false;
+      const composerText =
+        composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
+          ? composer.value
+          : composer.innerText || composer.textContent || '';
+      return (
+        countMessages(userMessageSelectors) === 0 &&
+        countMessages(assistantMessageSelectors) === 0 &&
+        !String(composerText).trim()
+      );
+    },
+    {
+      sourceUrl,
+      composerSelectors: [...COMPOSER_TEXTBOX_SELECTORS],
+      userMessageSelectors: [...USER_MESSAGE_SELECTORS],
+      assistantMessageSelectors: [...ASSISTANT_MESSAGE_SELECTORS],
+      messageReaderSource: findRenderedProbeMessageNodes.toString(),
+    },
+    { timeout },
+  );
+}
+
+export async function captureBlankHomePostconditionStatus(page, sourceUrl) {
+  return page.evaluate(
+    ({
+      sourceUrl,
+      composerSelectors,
+      userMessageSelectors,
+      assistantMessageSelectors,
+      messageReaderSource,
+    }) => {
+      const findMessages = new Function(`return (${messageReaderSource})`)();
+      const currentUrl = new URL(window.location.href);
+      const isChatGptRootPage =
+        currentUrl.origin === 'https://chatgpt.com' &&
+        !currentUrl.username &&
+        !currentUrl.password &&
+        currentUrl.pathname === '/' &&
+        !currentUrl.search &&
+        !currentUrl.hash;
+      const hasVisibleComposer = composerSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .some((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.pointerEvents !== 'none' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        });
+      const countMessages = (selectors) => {
+        for (const selector of selectors) {
+          const nodes = document.querySelectorAll(selector);
+          if (nodes.length) return nodes.length;
+        }
+        return 0;
+      };
+      const composer = composerSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .find((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.pointerEvents !== 'none' &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        });
+      const composerText = composer
+        ? composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
+          ? composer.value
+          : composer.innerText || composer.textContent || ''
+        : '';
+      const rawUserMessageCount = countMessages(userMessageSelectors);
+      const rawAssistantMessageCount = countMessages(assistantMessageSelectors);
+      const userMessageCount = findMessages(userMessageSelectors).length;
+      const assistantMessageCount = findMessages(assistantMessageSelectors).length;
+      // Raw retained-DOM and hidden-ancestor counts remain separate diagnostics.
+      const diagnoseMessages = (selectors) => {
+        let nodes = [];
+        for (const selector of selectors) {
+          nodes = Array.from(document.querySelectorAll(selector));
+          if (nodes.length) break;
+        }
+        let hiddenAncestorCount = 0;
+        for (const node of nodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) {
+            const ancestorStyle = getComputedStyle(ancestor);
+            if (
+              ancestor.hidden ||
+              ancestor.hasAttribute('inert') ||
+              ancestor.getAttribute('aria-hidden') === 'true' ||
+              ancestorStyle.display === 'none' ||
+              ancestorStyle.visibility === 'hidden' ||
+              ancestorStyle.visibility === 'collapse'
+            ) {
+              hiddenAncestorCount += 1;
+              break;
+            }
+          }
+        }
+        return { hiddenAncestorCount };
+      };
+      const userMessageDiagnostics = diagnoseMessages(userMessageSelectors);
+      const assistantMessageDiagnostics = diagnoseMessages(assistantMessageSelectors);
+      const composerHasText = Boolean(String(composerText).trim());
+      return {
+        sourceUrlChanged: window.location.href !== sourceUrl,
+        isChatGptRootPage,
+        hasVisibleComposer,
+        userMessageCount,
+        assistantMessageCount,
+        rawUserMessageCount,
+        rawAssistantMessageCount,
+        renderedUserMessageCount: userMessageCount,
+        renderedAssistantMessageCount: assistantMessageCount,
+        hiddenAncestorUserMessageCount: userMessageDiagnostics.hiddenAncestorCount,
+        hiddenAncestorAssistantMessageCount: assistantMessageDiagnostics.hiddenAncestorCount,
+        composerHasText,
+        satisfied:
+          window.location.href !== sourceUrl &&
+          isChatGptRootPage &&
+          hasVisibleComposer &&
+          userMessageCount === 0 &&
+          assistantMessageCount === 0 &&
+          !composerHasText,
+      };
+    },
+    {
+      sourceUrl,
+      composerSelectors: [...COMPOSER_TEXTBOX_SELECTORS],
+      userMessageSelectors: [...USER_MESSAGE_SELECTORS],
+      assistantMessageSelectors: [...ASSISTANT_MESSAGE_SELECTORS],
+      messageReaderSource: findRenderedProbeMessageNodes.toString(),
+    },
+  );
+}
+
+async function captureTargetPresenceCounts(page, target) {
+  const groups = getTargetNeedleGroups(target);
+  return page.evaluate((needleGroups) => {
+    const html = document.documentElement?.outerHTML || '';
+    const matchedGroups = needleGroups.filter((group) =>
+      group.every((needle) => html.includes(needle)),
+    ).length;
+    return { requiredGroups: needleGroups.length, matchedGroups };
+  }, groups);
+}
+
+async function waitForStudyPillCount(page, expectedCount, timeout = 5000) {
+  await page.waitForFunction(
+    ({ expectedCount, composerSelectors, studyIconTokens }) => {
+      const isVisible = (node) => {
+        if (!(node instanceof HTMLElement) || node.hidden) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+      };
+      const composer = composerSelectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .find(isVisible);
+      if (!composer) return false;
+      const pills = Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).filter(
+        (pill) =>
+          pill.tagName === 'SPAN' &&
+          isVisible(pill) &&
+          Array.from(pill.querySelectorAll('svg use')).some((use) => {
+            const href = String(use.getAttribute('href') || use.getAttribute('xlink:href') || '');
+            return studyIconTokens.some((symbol) => href.endsWith(symbol));
+          }),
+      );
+      return pills.length === expectedCount;
+    },
+    {
+      expectedCount,
+      composerSelectors: [...COMPOSER_TEXTBOX_SELECTORS],
+      studyIconTokens: ['#book-open-light-20', '#book-open-light-16'],
+    },
+    { timeout },
+  );
+}
+
+export async function captureLiveProbeSemanticSnapshot(page, target) {
   return page.evaluate(
     ({
       targetGroups,
       userMessageSelectors,
       assistantMessageSelectors,
       codeboxContentSelectors,
+      messageReaderSource,
+      scrollContainerResolverSource,
+      scrollMetricsSource,
     }) => {
       const isVisible = (node) => {
         if (!(node instanceof HTMLElement)) return false;
@@ -3656,31 +5893,41 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
             .filter(Boolean)
             .join('|'),
         );
-      const root = document.scrollingElement || document.documentElement;
-      const container =
-        typeof window.getScrollableContainer === 'function'
-          ? window.getScrollableContainer()
-          : root;
-      const scrollTop =
-        container === window
-          ? window.scrollY || root.scrollTop || 0
-          : Number(container?.scrollTop || 0);
-      const scrollMax =
-        container === window
-          ? Math.max(0, root.scrollHeight - window.innerHeight)
-          : Math.max(
-              0,
-              Number(container?.scrollHeight || 0) - Number(container?.clientHeight || 0),
-            );
+      const resolveScrollContainer = new Function(`return (${scrollContainerResolverSource})`)();
+      const container = resolveScrollContainer();
+      const readScrollMetrics = new Function(`return (${scrollMetricsSource})`)();
+      const {
+        top: scrollTop,
+        max: scrollMax,
+        rawTop: scrollRawTop,
+        reverse: scrollReverse,
+      } = readScrollMetrics(container);
       const activeElement = document.activeElement;
       const activeTarget = matchesTarget(activeElement);
-      const composer = document.querySelector(
-        '#prompt-textarea, [name="prompt-textarea"], [data-testid="composer-input"], [contenteditable="true"][role="textbox"]',
-      );
+      const composer = Array.from(
+        document.querySelectorAll(
+          '#prompt-textarea, [name="prompt-textarea"], [data-testid="composer-input"], [contenteditable="true"][role="textbox"]',
+        ),
+      ).find(isVisible);
       const composerText =
         composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
           ? composer.value
           : composer?.innerText || composer?.textContent || '';
+      const selectedStudyPillCount = composer
+        ? Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).filter(
+            (pill) =>
+              pill.tagName === 'SPAN' &&
+              isVisible(pill) &&
+              Array.from(pill.querySelectorAll('svg use')).some((use) => {
+                const href = String(
+                  use.getAttribute('href') || use.getAttribute('xlink:href') || '',
+                );
+                return ['#book-open-light-20', '#book-open-light-16'].some((symbol) =>
+                  href.endsWith(symbol),
+                );
+              }),
+          ).length
+        : 0;
       const hashText = (value) => {
         const text = String(value || '');
         let hash = 2166136261;
@@ -3689,13 +5936,7 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
         }
         return `${text.length}:${(hash >>> 0).toString(16)}`;
       };
-      const findMessageNodes = (selectors) => {
-        for (const selector of selectors) {
-          const nodes = Array.from(document.querySelectorAll(selector));
-          if (nodes.length) return nodes;
-        }
-        return [];
-      };
+      const findMessageNodes = new Function(`return (${messageReaderSource})`)();
       const userMessageNodes = findMessageNodes(userMessageSelectors);
       const assistantMessageNodes = findMessageNodes(assistantMessageSelectors);
       const messages = [
@@ -3847,12 +6088,14 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
           scrollportScrollWidth: scrollport.scrollWidth,
         };
       });
+      // Preserve the CSS check for short lines that cannot prove wrapping;
+      // overlong lines instead prove the actual descendant text layout.
       const codeboxWrappedCount = codeboxWrapMetrics.filter(
         (metric) =>
-          metric.whiteSpace === 'pre-wrap' &&
-          metric.overflowWrap === 'anywhere' &&
           metric.availableWidth > 0 &&
-          (!metric.requiresWrap || metric.hasActualWrap) &&
+          (metric.requiresWrap
+            ? metric.hasActualWrap
+            : metric.whiteSpace === 'pre-wrap' && metric.overflowWrap === 'anywhere') &&
           metric.scrollportScrollWidth <= metric.scrollportClientWidth + 2,
       ).length;
       return {
@@ -3878,6 +6121,7 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
         messageIds: messages.map((message) => message.id).filter(Boolean),
         composerHasText: Boolean(String(composerText).trim()),
         composerTextHash: hashText(composerText),
+        selectedStudyPillCount,
         editableUserMessageCount: document.querySelectorAll(
           [
             '[data-message-author-role="user"] [contenteditable="true"]',
@@ -3906,6 +6150,8 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
         audioPlaying: audioElements.some((element) => !element.paused),
         scrollTop,
         scrollMax,
+        scrollRawTop,
+        scrollReverse,
         headerVisible: Boolean(header && isVisible(header)),
         bottomVisible: Boolean(bottom && isVisible(bottom)),
       };
@@ -3914,7 +6160,10 @@ async function captureLiveProbeSemanticSnapshot(page, target) {
       targetGroups: getTargetNeedleGroups(target),
       userMessageSelectors: [...USER_MESSAGE_SELECTORS],
       assistantMessageSelectors: [...ASSISTANT_MESSAGE_SELECTORS],
+      messageReaderSource: findRenderedProbeMessageNodes.toString(),
       codeboxContentSelectors: [...CODEBOX_CONTENT_SELECTORS],
+      scrollContainerResolverSource: LIVE_PROBE_SCROLL_CONTAINER_RESOLVER_SOURCE,
+      scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
     },
   );
 }
@@ -3941,8 +6190,6 @@ export function buildCodeboxWrapPersistenceProof(
     actuallyWrappedCount === requiredWrapMetrics.length &&
     requiredWrapMetrics.every(
       (metric) =>
-        metric.whiteSpace === 'pre-wrap' &&
-        metric.overflowWrap === 'anywhere' &&
         Number.isFinite(metric.scrollportClientWidth) &&
         Number.isFinite(metric.scrollportScrollWidth) &&
         metric.scrollportScrollWidth <= metric.scrollportClientWidth + 2,
@@ -3972,13 +6219,202 @@ export function buildCodeboxWrapPersistenceProof(
   };
 }
 
-function evaluateLiveProbeSemantic(
+export function matchesLiveProbeFocusTarget(target, snapshot, activeElementHtml = '') {
+  if (target?.targetId === 'prompt-textarea') return snapshot?.composerFocused === true;
+  return targetMatchesText(target, activeElementHtml);
+}
+
+export async function verifyCodeboxWrapConversationSwitch(
+  page,
+  {
+    sourceSnapshot,
+    storedBeforeSwitch,
+    auditOwnedConversationIds,
+    protectedConversationIds = [],
+    checkpoint,
+    persistCheckpoint = async () => {},
+    readStorage,
+    captureSnapshot = (page) => captureLiveProbeSemanticSnapshot(page, null),
+    waitForReady = (page, fixtureUrl) =>
+      waitForFixtureConversationReady(page, 15000, { fixtureUrl }),
+    waitForCodeBlocks = (page) => waitForAssistantCodeBlockCount(page, 1),
+  },
+) {
+  const sourceUrl = page.url();
+  const parsed = new URL(sourceUrl);
+  const conversationId = parsed.pathname.match(/^\/c\/([A-Za-z0-9-]+)$/)?.[1] || '';
+  if (
+    parsed.origin !== 'https://chatgpt.com' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    !conversationId ||
+    !auditOwnedConversationIds?.includes(conversationId) ||
+    protectedConversationIds.includes(conversationId) ||
+    sourceSnapshot?.url !== sourceUrl ||
+    sourceSnapshot?.composerHasText !== false ||
+    !(sourceSnapshot?.codeboxCount > 0)
+  ) {
+    throw new Error(
+      'Wrap conversation-switch validation requires a draft-free owned codebox conversation.',
+    );
+  }
+  const setPhase = async (phase) => {
+    if (checkpoint?.currentCase) checkpoint.currentCase.phase = phase;
+    await persistCheckpoint();
+  };
+  let blankRootVerified = false;
+  await setPhase('codebox-persistence-switch-blank-pending');
+  try {
+    await page.goto(CHATGPT_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await waitForReady(page, CHATGPT_HOME_URL);
+    const blankSnapshot = await captureSnapshot(page);
+    blankRootVerified =
+      isChatGptRootPageUrl(blankSnapshot.url) &&
+      blankSnapshot.hasComposer === true &&
+      blankSnapshot.messageCount === 0 &&
+      blankSnapshot.composerHasText === false;
+    if (checkpoint?.currentCase) {
+      checkpoint.currentCase.codeboxSwitchBlankRootVerified = blankRootVerified;
+    }
+    if (!blankRootVerified) {
+      throw new Error('Wrap conversation-switch root was not blank; no draft was changed.');
+    }
+    await setPhase('codebox-persistence-switch-blank-verified');
+  } finally {
+    await setPhase('codebox-persistence-switch-return-pending');
+    await page.goto(sourceUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await waitForReady(page, sourceUrl);
+  }
+  if (page.url() !== sourceUrl) {
+    throw new Error('Wrap conversation-switch did not return to the same owned conversation.');
+  }
+  await waitForCodeBlocks(page);
+  await page.waitForTimeout(400);
+  const returnedSnapshot = await captureSnapshot(page);
+  const storedAfterSwitch = await readStorage();
+  const proof = buildCodeboxWrapPersistenceProof(
+    storedBeforeSwitch,
+    storedAfterSwitch,
+    returnedSnapshot,
+  );
+  proof.proofMethod =
+    'chrome.storage.sync read plus owned conversation to verified blank root and back with rendered line geometry';
+  proof.blankRootVerified = blankRootVerified;
+  proof.sameOwnedConversationRestored = returnedSnapshot.url === sourceUrl;
+  if (!proof.sameOwnedConversationRestored || returnedSnapshot.composerHasText !== false) {
+    proof.status = 'fail';
+  }
+  proof.reason =
+    proof.status === 'pass'
+      ? ''
+      : 'The saved codebox-wrap preference did not restore actual wrapping after conversation switch.';
+  if (checkpoint?.currentCase) checkpoint.currentCase.conversationSwitchProof = proof;
+  await setPhase(
+    proof.status === 'pass'
+      ? 'codebox-persistence-switch-verified'
+      : 'codebox-persistence-switch-failed',
+  );
+  return proof;
+}
+
+export async function installShareToastObserver(page) {
+  await page.evaluate(() => {
+    window.__cspShareToastProbe?.observer?.disconnect();
+    const state = { toastObserved: false };
+    const inspect = (root) => {
+      if (!(root instanceof Element)) return;
+      const titles = new Set(root.querySelectorAll('[data-content] [data-title]'));
+      const owningTitle = root.closest('[data-title]');
+      if (owningTitle?.closest('[data-content]')) titles.add(owningTitle);
+      for (const title of titles) {
+        // These native toast wrappers use display:contents; inspect their
+        // rendered leaves instead of requiring a rectangle on the wrapper.
+        for (const leaf of [title, ...title.querySelectorAll('*')]) {
+          if (leaf.children.length || !/^Public link\b/i.test(leaf.textContent.trim())) continue;
+          const style = getComputedStyle(leaf);
+          const rect = leaf.getBoundingClientRect();
+          if (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          ) {
+            state.toastObserved = true;
+          }
+        }
+      }
+    };
+    state.observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === 'characterData') inspect(record.target.parentElement);
+        else {
+          for (const node of record.addedNodes)
+            inspect(node instanceof Element ? node : node.parentElement);
+        }
+      }
+    });
+    state.observer.observe(document.documentElement, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    window.__cspShareToastProbe = state;
+  });
+}
+
+export async function readShareClipboardToastEvidence(page) {
+  return page.evaluate(async () => {
+    let validShareLink = false;
+    let clipboardReadSucceeded = false;
+    try {
+      const text = await navigator.clipboard.readText();
+      clipboardReadSucceeded = true;
+      const url = new URL(text);
+      validShareLink =
+        text === url.href &&
+        url.origin === 'https://chatgpt.com' &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        /^\/share\/[A-Za-z0-9-]+$/.test(url.pathname);
+    } catch {}
+    return {
+      validShareLink,
+      clipboardReadSucceeded,
+      toastObserved: window.__cspShareToastProbe?.toastObserved === true,
+    };
+  });
+}
+
+export async function waitForShareClipboardToast(page, { timeoutMs = 8000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let evidence;
+  do {
+    evidence = await readShareClipboardToastEvidence(page);
+    if (evidence.validShareLink && evidence.toastObserved) break;
+    await page.waitForTimeout(100);
+  } while (Date.now() < deadline);
+  return evidence;
+}
+
+export async function cleanupShareToastObserver(page) {
+  await page.evaluate(() => {
+    window.__cspShareToastProbe?.observer?.disconnect();
+    delete window.__cspShareToastProbe;
+  });
+}
+
+export function evaluateLiveProbeSemantic(
   shortcut,
   target,
   before,
   after,
   clipboardEvidence = null,
   fileChooserObserved = false,
+  actionEvidence = null,
 ) {
   const proof = {
     status: 'not-run',
@@ -4001,20 +6437,41 @@ function evaluateLiveProbeSemantic(
 
   if (shortcut.activationProbeMode === 'focus-target') {
     proof.proofMethod = 'active-element-state';
-    proof.status = after.activeTarget ? 'pass' : 'fail';
-    proof.observed = after.activeTarget
-      ? 'The expected target owns keyboard focus.'
-      : 'The expected target did not gain keyboard focus.';
+    const focusReached =
+      target?.targetId === 'prompt-textarea' ? after.composerFocused === true : after.activeTarget;
+    proof.status = focusReached ? 'pass' : 'fail';
+    proof.observed =
+      target?.targetId === 'prompt-textarea'
+        ? focusReached
+          ? 'The expected composer owns or contains keyboard focus.'
+          : 'The expected composer did not receive keyboard focus.'
+        : focusReached
+          ? 'The expected target owns keyboard focus.'
+          : 'The expected target did not gain keyboard focus.';
     proof.reason =
       proof.status === 'pass' ? '' : 'Keyboard focus did not reach the expected target.';
   } else if (shortcut.activationProbeMode === 'opens-target') {
     if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
       const newBlankConversation =
-        before.url !== after.url && after.hasComposer && after.messageCount === 0;
-      proof.proofMethod = 'conversation-identity-and-blank-state';
+        before.auditOwnedFixtureConversation === true &&
+        before.messageCount === 4 &&
+        before.userMessageCount === 2 &&
+        before.assistantMessageCount === 2 &&
+        !before.composerHasText &&
+        before.url !== after.url &&
+        isChatGptRootPageUrl(after.url) &&
+        after.hasComposer &&
+        after.messageCount === 0 &&
+        after.userMessageCount === 0 &&
+        after.assistantMessageCount === 0 &&
+        !after.composerHasText;
+      proof.proofMethod = 'verified-audit-conversation-to-blank-home-transition';
       proof.status = newBlankConversation ? 'pass' : 'fail';
-      proof.observed = `URL changed=${before.url !== after.url}; blank composer=${after.hasComposer && after.messageCount === 0}`;
-      proof.reason = proof.status === 'pass' ? '' : 'A new blank conversation was not opened.';
+      proof.observed = `verified audit source=${before.auditOwnedFixtureConversation === true}; source turns=${before.userMessageCount} user/${before.assistantMessageCount} assistant; route changed=${before.url !== after.url}; blank home=${isChatGptRootPageUrl(after.url) && after.hasComposer && after.messageCount === 0 && !after.composerHasText}`;
+      proof.reason =
+        proof.status === 'pass'
+          ? ''
+          : 'The shortcut did not open a blank home from the verified audit-owned conversation.';
     } else {
       proof.proofMethod = 'visible-ui-state';
       const appeared = after.visibleTarget && !before.visibleTarget;
@@ -4045,7 +6502,7 @@ function evaluateLiveProbeSemantic(
         after.codeboxHorizontalOverflowCount === 0;
       proof.status =
         after.codeboxWrapEnabled && !before.codeboxWrapEnabled && wrapped ? 'pass' : 'fail';
-      proof.observed = `wrap class ${before.codeboxWrapEnabled} -> ${after.codeboxWrapEnabled}; style/overflow pass=${after.codeboxWrappedCount}/${after.codeboxCount}; lines wrapped=${after.codeboxActuallyWrappedCount}/${after.codeboxWrapRequiredCount} codeboxes requiring it; overflowing codeboxes=${after.codeboxHorizontalOverflowCount}`;
+      proof.observed = `wrap class ${before.codeboxWrapEnabled} -> ${after.codeboxWrapEnabled}; wrapping/overflow pass=${after.codeboxWrappedCount}/${after.codeboxCount}; lines wrapped=${after.codeboxActuallyWrappedCount}/${after.codeboxWrapRequiredCount} codeboxes requiring it; overflowing codeboxes=${after.codeboxHorizontalOverflowCount}`;
       proof.reason =
         proof.status === 'pass'
           ? ''
@@ -4081,9 +6538,18 @@ function evaluateLiveProbeSemantic(
         proof.reason = matched ? '' : 'Sidebar expanded/collapsed state did not change.';
         break;
       case 'shortcutKeyShare':
-        matched = after.visibleDialogCount > before.visibleDialogCount;
-        proof.observed = `visible dialogs ${before.visibleDialogCount} -> ${after.visibleDialogCount}`;
-        proof.reason = matched ? '' : 'The share dialog did not open.';
+        matched =
+          actionEvidence?.share?.clipboardCleared === true &&
+          actionEvidence.share.clipboardReadSucceeded === true &&
+          actionEvidence.share.validShareLink === true &&
+          actionEvidence.share.toastObserved === true &&
+          actionEvidence.share.trustedDispatch === true &&
+          actionEvidence.share.targetClickObserved === true;
+        proof.proofMethod = 'fresh-share-link-clipboard-and-native-toast';
+        proof.observed = `new valid share link=${actionEvidence?.share?.validShareLink === true}; fresh native toast=${actionEvidence?.share?.toastObserved === true}; trusted target dispatch=${actionEvidence?.share?.trustedDispatch === true && actionEvidence?.share?.targetClickObserved === true}`;
+        proof.reason = matched
+          ? ''
+          : 'Share did not produce a new valid clipboard link and fresh native confirmation toast.';
         break;
       case 'shortcutKeyNewGptConversation':
         matched = before.url !== after.url && after.hasComposer;
@@ -4162,18 +6628,6 @@ function evaluateLiveProbeSemantic(
         proof.observed = `assistant messages ${before.assistantMessageCount} -> ${after.assistantMessageCount}; response hash changed=${before.lastAssistantHash !== after.lastAssistantHash}`;
         proof.reason = matched ? '' : 'Regeneration did not produce a new assistant response.';
         break;
-      case PREVIOUS_THREAD_ACTION_ID:
-      case NEXT_THREAD_ACTION_ID:
-        matched =
-          before.url === after.url &&
-          before.assistantMessageCount === after.assistantMessageCount &&
-          before.lastAssistantHash !== after.lastAssistantHash;
-        proof.proofMethod = 'response-variant-preview-hash';
-        proof.observed = `conversation identity preserved=${before.url === after.url}; response count preserved=${before.assistantMessageCount === after.assistantMessageCount}; displayed response variant changed=${before.lastAssistantHash !== after.lastAssistantHash}`;
-        proof.reason = matched
-          ? ''
-          : 'The Ctrl+Alt response preview did not switch the displayed response variant.';
-        break;
       case 'shortcutKeyCopyLowest':
         matched = clipboardMatched;
         proof.proofMethod = 'clipboard-content';
@@ -4189,16 +6643,52 @@ function evaluateLiveProbeSemantic(
         proof.observed = `tool selection/control state changed=${matched}`;
         proof.reason = matched ? '' : 'The composer tool did not enter a selected state.';
         break;
+      case 'shortcutKeyStudy': {
+        const activationSnapshot = actionEvidence?.studyPillActivationSnapshot;
+        const deactivationSnapshot = actionEvidence?.studyPillDeactivationSnapshot;
+        const stableBlankHome =
+          isChatGptRootPageUrl(before.url) &&
+          before.url === activationSnapshot?.url &&
+          activationSnapshot?.url === deactivationSnapshot?.url &&
+          deactivationSnapshot?.url === after.url &&
+          before.messageCount === 0 &&
+          activationSnapshot?.messageCount === 0 &&
+          deactivationSnapshot?.messageCount === 0 &&
+          after.messageCount === 0 &&
+          before.userMessageCount === 0 &&
+          before.assistantMessageCount === 0 &&
+          activationSnapshot?.userMessageCount === 0 &&
+          activationSnapshot?.assistantMessageCount === 0 &&
+          deactivationSnapshot?.userMessageCount === 0 &&
+          deactivationSnapshot?.assistantMessageCount === 0 &&
+          after.userMessageCount === 0 &&
+          after.assistantMessageCount === 0;
+        matched =
+          stableBlankHome &&
+          before.composerHasText === true &&
+          before.selectedStudyPillCount === 0 &&
+          activationSnapshot?.selectedStudyPillCount === 1 &&
+          actionEvidence?.studyToggleOffDispatched === true &&
+          deactivationSnapshot?.selectedStudyPillCount === 0 &&
+          after.selectedStudyPillCount === 0 &&
+          !after.composerHasText;
+        proof.proofMethod = 'observed-study-inline-pill-on-and-toggle-off';
+        proof.observed = `Study pill count 0 -> ${activationSnapshot?.selectedStudyPillCount ?? 0} -> ${deactivationSnapshot?.selectedStudyPillCount ?? 0}; second shortcut dispatched=${actionEvidence?.studyToggleOffDispatched === true}; composer empty afterward=${!after.composerHasText}`;
+        proof.reason = matched
+          ? ''
+          : 'The Study shortcut did not add the observed inline pill and toggle it off with a second shortcut.';
+        break;
+      }
       case 'shortcutKeyAddPhotosFiles':
         matched =
           fileChooserObserved &&
           before.composerTextHash === after.composerTextHash &&
           before.messageCount === after.messageCount;
-        proof.proofMethod = 'canceled-file-chooser-boundary';
-        proof.observed = `native file chooser observed and canceled=${fileChooserObserved}; conversation state unchanged=${before.composerTextHash === after.composerTextHash && before.messageCount === after.messageCount}`;
+        proof.proofMethod = 'cleared-file-chooser-boundary';
+        proof.observed = `native file chooser observed and cleared=${fileChooserObserved}; conversation state unchanged=${before.composerTextHash === after.composerTextHash && before.messageCount === after.messageCount}`;
         proof.reason = matched
           ? ''
-          : 'The file chooser boundary was not observed and canceled without uploading a file.';
+          : 'The file chooser boundary was not observed and cleared without uploading a file.';
         break;
       default:
         proof.reason =
@@ -4221,6 +6711,233 @@ async function waitForLiveProbeTargetPresence(page, target) {
     needleGroups,
     { timeout: 5000 },
   );
+}
+
+function throwCaptureCleanupError(captureError, cleanupError, captureName) {
+  if (captureError && cleanupError) {
+    throw new Error(
+      `${captureError.message || String(captureError)} Cleanup also failed: ${cleanupError.message || String(cleanupError)}`,
+      { cause: captureError },
+    );
+  }
+  if (captureError) throw captureError;
+  if (cleanupError) {
+    throw new Error(
+      `${captureName} cleanup failed: ${cleanupError.message || String(cleanupError)}`,
+      {
+        cause: cleanupError,
+      },
+    );
+  }
+}
+
+async function ensureSearchChatsOpenerVisible(page) {
+  const candidates = page.locator(SEARCH_CONVERSATION_BUTTON_SELECTORS.join(', '));
+  const opener = candidates.filter({ visible: true }).first();
+  if (await opener.count()) return opener;
+  if (!(await candidates.count())) {
+    throw new Error(
+      'Could not find a Search Chats opener using the source selectors from content.js.',
+    );
+  }
+
+  // The observed shell toggle's aria-expanded can disagree with rendered rail visibility.
+  // Search setup uses the actual opener as its postcondition, without changing other sidebar states.
+  const toggle = page
+    .locator('button[aria-controls="app-shell-sidebar"][aria-expanded]')
+    .filter({ visible: true })
+    .last();
+  if (!(await toggle.count()) || !(await toggle.isEnabled())) {
+    throw new Error(
+      'Could not reveal the hidden Search Chats opener with the observed sidebar toggle.',
+    );
+  }
+  await waitBeforeBrowserInteraction();
+  await toggle.click();
+  await waitBeforeBrowserInteraction();
+  await opener.waitFor({ state: 'visible', timeout: 5000 });
+  return opener;
+}
+
+async function captureSearchChatsDialog(page) {
+  const dialogs = page.locator(SEARCH_DIALOG_VISIBLE_SELECTOR);
+  if ((await dialogs.count()) > 0) {
+    throw new Error(
+      'Search Chats capture is blocked because a dialog was already open before the source-owned opener ran.',
+    );
+  }
+  const opener = await ensureSearchChatsOpenerVisible(page);
+  if (!(await opener.isEnabled())) {
+    throw new Error('The source-owned Search Chats opener is disabled.');
+  }
+
+  let opened = false;
+  let dialog = null;
+  let html = '';
+  let captureError = null;
+  try {
+    await opener.click();
+    opened = true;
+    dialog = page.locator(SEARCH_DIALOG_VISIBLE_SELECTOR).first();
+    await dialog.waitFor({ state: 'visible', timeout: 5000 });
+    if ((await dialogs.count()) !== 1) {
+      throw new Error('Search Chats opener did not produce one unambiguous visible dialog.');
+    }
+    html = await dialog.evaluate((element) => element.outerHTML);
+    if (!html) throw new Error('Search Chats dialog returned empty HTML.');
+  } catch (error) {
+    captureError = error;
+  }
+
+  let cleanupError = null;
+  if (opened) {
+    try {
+      await page.keyboard.press('Escape');
+    } catch (error) {
+      cleanupError = error;
+    }
+    try {
+      await dialog?.waitFor({ state: 'hidden', timeout: 2000 });
+    } catch (error) {
+      cleanupError = cleanupError
+        ? new Error(`${cleanupError.message}; ${error?.message || String(error)}`)
+        : error;
+    }
+  }
+  throwCaptureCleanupError(captureError, cleanupError, 'Search Chats dialog');
+  return html;
+}
+
+async function readActiveExtensionShortcutCodes(page, context, actionIds) {
+  const session = await context.newCDPSession(page);
+  const executionContexts = [];
+  session.on('Runtime.executionContextCreated', (event) => {
+    if (event?.context) executionContexts.push(event.context);
+  });
+  try {
+    await session.send('Runtime.enable');
+    await page.waitForTimeout(250);
+    const extensionContext = executionContexts.find(
+      (executionContext) =>
+        executionContext?.name === 'ChatGPT Custom Shortcuts Pro' &&
+        String(executionContext?.origin || '').startsWith('chrome-extension://'),
+    );
+    if (!extensionContext?.id) {
+      throw new Error(
+        'Shortcut overlay capture is blocked because the ChatGPT Custom Shortcuts Pro content script is not loaded in the active tab.',
+      );
+    }
+
+    const keysLiteral = JSON.stringify(actionIds);
+    const evaluation = await session.send('Runtime.evaluate', {
+      contextId: extensionContext.id,
+      awaitPromise: true,
+      returnByValue: true,
+      expression: `new Promise((resolve) => {
+        const extensionChrome = globalThis.chrome;
+        if (!extensionChrome?.storage?.sync?.get) {
+          resolve({ __cspError: 'Extension sync storage is unavailable in its content-script context.' });
+          return;
+        }
+        extensionChrome.storage.sync.get(${keysLiteral}, (values = {}) => {
+          const lastError = extensionChrome.runtime?.lastError;
+          resolve(lastError ? { __cspError: lastError.message || String(lastError) } : values);
+        });
+      })`,
+    });
+    if (evaluation?.exceptionDetails) {
+      throw new Error(
+        evaluation.exceptionDetails.text ||
+          'Could not read the active extension shortcut assignment.',
+      );
+    }
+    const values = evaluation?.result?.value;
+    if (!values || typeof values !== 'object' || values.__cspError) {
+      throw new Error(
+        values?.__cspError || 'Could not read the active extension shortcut assignment.',
+      );
+    }
+    return values;
+  } finally {
+    await session.detach().catch(() => {});
+  }
+}
+
+async function captureShortcutOverlay(page, context, shortcut) {
+  if (!shortcut?.actionId) {
+    throw new Error('Shortcut overlay capture has no registered shortcut assignment.');
+  }
+  const overlay = page.locator(SHORTCUT_OVERLAY_SELECTOR).first();
+  if (await overlay.isVisible()) {
+    await page.keyboard.press('Escape');
+    await overlay.waitFor({ state: 'hidden', timeout: 2000 });
+  }
+  const activeShortcutCodes = await readActiveExtensionShortcutCodes(page, context, [
+    shortcut.actionId,
+  ]);
+  const hasStoredAssignment = Object.hasOwn(activeShortcutCodes, shortcut.actionId);
+  const code = hasStoredAssignment
+    ? normalizeShortcutCode(activeShortcutCodes[shortcut.actionId])
+    : resolveShortcutDispatchCode(shortcut, activeShortcutCodes);
+  if (!code) {
+    throw new Error(
+      hasStoredAssignment
+        ? 'Shortcut overlay capture is blocked because its active assignment is blank or disabled.'
+        : 'No active or default key assignment is registered for the shortcut overlay.',
+    );
+  }
+
+  let dispatchAttempted = false;
+  let html = '';
+  let captureError = null;
+  try {
+    dispatchAttempted = true;
+    const dispatch = await dispatchObservedKeyboardChord(page, code, ['Alt']);
+    if (dispatch.status !== 'dispatched') {
+      throw new Error(
+        dispatch.reason || 'Could not dispatch the trusted Alt shortcut for the overlay.',
+      );
+    }
+    await overlay.waitFor({ state: 'visible', timeout: 5000 });
+    html = await overlay.evaluate((element) => element.outerHTML);
+    if (!html) throw new Error('Extension shortcut overlay returned empty HTML.');
+  } catch (error) {
+    captureError = error;
+  }
+
+  let cleanupError = null;
+  if (dispatchAttempted) {
+    try {
+      await page.keyboard.press('Escape');
+    } catch (error) {
+      cleanupError = error;
+    }
+    try {
+      await overlay.waitFor({ state: 'hidden', timeout: 2000 });
+    } catch (error) {
+      cleanupError = cleanupError
+        ? new Error(`${cleanupError.message}; ${error?.message || String(error)}`)
+        : error;
+    }
+  }
+  throwCaptureCleanupError(captureError, cleanupError, 'Shortcut overlay');
+  return html;
+}
+
+export async function executeSafeTargetCaptureStep(page, context, step, state, options = {}) {
+  if (step?.type === 'open-search-chats-dialog') {
+    state.latestDialogHtml = await captureSearchChatsDialog(page);
+    return;
+  }
+  if (step?.type === 'open-shortcut-overlay') {
+    state.shortcutOverlayHtml = await captureShortcutOverlay(
+      page,
+      context,
+      options.shortcut || null,
+    );
+    return;
+  }
+  throw new Error(`Unsupported safe-target capture step: ${step?.type || '(missing type)'}`);
 }
 
 function keyForShortcutCode(code) {
@@ -4497,50 +7214,7 @@ async function dispatchControlShortcut(page, code) {
   );
 }
 
-async function dispatchAltControlShortcut(page, code) {
-  try {
-    await waitBeforeBrowserInteraction();
-    await page.keyboard.down('Control');
-    await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-    await page.keyboard.down('Alt');
-    await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-    await page.keyboard.press(code, { delay: 120 });
-    await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-    await page.keyboard.up('Alt');
-    await page.keyboard.up('Control');
-    return;
-  } catch {
-    await page.keyboard.up('Alt').catch(() => {});
-    await page.keyboard.up('Control').catch(() => {});
-  }
-
-  await page.waitForTimeout(MIN_BROWSER_INTERACTION_SPACING_MS);
-  await page.evaluate(
-    ({ shortcutCode, shortcutKey }) => {
-      const eventInit = {
-        key: shortcutKey,
-        code: shortcutCode,
-        altKey: true,
-        ctrlKey: true,
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-      };
-      document.dispatchEvent(new KeyboardEvent('keydown', eventInit));
-      document.dispatchEvent(new KeyboardEvent('keyup', eventInit));
-    },
-    {
-      shortcutCode: code,
-      shortcutKey: keyForShortcutCode(code),
-    },
-  );
-}
-
 async function dispatchShortcutForAction(page, shortcut, code) {
-  if (isResponseNavigationShortcut(shortcut)) {
-    await dispatchAltControlShortcut(page, code);
-    return;
-  }
   if (CONTROL_SHORTCUT_ACTION_IDS.includes(shortcut?.actionId)) {
     await ensureControlSendStopEnabled(page);
     await dispatchControlShortcut(page, code);
@@ -4706,6 +7380,14 @@ async function runFixedShortcutContractProbes({
             'Fixed-contract probe failed before semantic evaluation.',
         ),
       );
+    } finally {
+      await cleanupActiveOwnedComposerDraft(page, {
+        auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+        allowVerifiedBlankHome: true,
+        checkpoint,
+        persistCheckpoint,
+        scope: `fixed:${contractId}`,
+      }).catch(() => {});
     }
     row.contractId = contractId;
     row.status = row.semantic?.status || row.status || 'coverage-gap';
@@ -4737,33 +7419,6 @@ async function runFixedShortcutContractProbes({
       'Alt + configured overlay key',
     ),
   );
-  await finishCase('response-navigation-preview', async (contract) => {
-    const previous = globalById.get(PREVIOUS_THREAD_ACTION_ID);
-    const next = globalById.get(NEXT_THREAD_ACTION_ID);
-    const passed = previous?.semantic?.status === 'pass' && next?.semantic?.status === 'pass';
-    const limited = [previous, next].some((row) => row?.status === 'environment-fail');
-    return buildFixedContractLiveRow(
-      contract,
-      fixedSemantic(
-        passed ? 'pass' : limited ? 'environment-fail' : 'coverage-gap',
-        'ctrl-alt-response-variant-preview',
-        'Ctrl+Alt previous/next changes the displayed response variant without changing the conversation or response count.',
-        `previous=${previous?.semantic?.observed || 'not run'}; next=${next?.semantic?.observed || 'not run'}`,
-        passed
-          ? ''
-          : 'Both live Ctrl+Alt preview directions must change the displayed response variant.',
-      ),
-      {
-        modifiers: 'Ctrl+Alt + assigned previous/next key',
-        routingProof: {
-          status: passed ? 'observed' : 'not-observed',
-          proofMethod: 'keyboard-event-path',
-          observedTargetRef: passed ? 'previous-response-button;next-response-button' : '',
-        },
-        evidence: { linkedActionIds: [PREVIOUS_THREAD_ACTION_ID, NEXT_THREAD_ACTION_ID] },
-      },
-    );
-  });
 
   const pageScrollTarget = targetById['thread-bottom'];
   let pageScrollMatrix = null;
@@ -5113,7 +7768,11 @@ async function runFixedShortcutContractProbes({
       disabled.after.composerHasText &&
       disabled.keydown?.isTrusted === true &&
       disabled.keydown?.defaultPrevented === false;
-    await setComposerText(page, '');
+    await setComposerText(page, '', {
+      checkpoint,
+      persistCheckpoint,
+      scope: 'fixed:ctrl-send-gate-draft-reset',
+    });
     checkpoint.currentCase.phase = 'enabled-gate-pending';
     await persistCheckpoint();
     await page.evaluate(() => {
@@ -5148,10 +7807,7 @@ async function runFixedShortcutContractProbes({
           previousHash: enabled.before.lastAssistantHash,
         });
       } catch (error) {
-        await clickEnabledButton(page, [
-          'button[data-testid="stop-button"]',
-          'button[data-test-id="stop-button"]',
-        ]).catch(() => {});
+        await clickEnabledButton(page, STOP_BUTTON_SELECTORS).catch(() => {});
         throw error;
       }
       enabledAfter = await captureLiveProbeSemanticSnapshot(page, sendTarget);
@@ -5499,6 +8155,7 @@ function buildNonExecutableLiveProbeRow(shortcut, dispatchCode = '') {
     actionId: shortcut.actionId,
     label: shortcut.label,
     defaultCode: shortcut.defaultCode,
+    requiredCapabilities: shortcut.requiredCapabilities || [],
     dispatchCode,
     probeMode,
     expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
@@ -5518,6 +8175,7 @@ function buildSkippedLiveProbeRow(shortcut, status, reason, dispatchCode = '') {
     actionId: shortcut.actionId,
     label: shortcut.label,
     defaultCode: shortcut.defaultCode,
+    requiredCapabilities: shortcut.requiredCapabilities || [],
     dispatchCode,
     probeMode: shortcut.activationProbeMode || '',
     expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
@@ -5529,10 +8187,59 @@ function buildSkippedLiveProbeRow(shortcut, status, reason, dispatchCode = '') {
   };
 }
 
+export async function cleanupPreparedCaptureState(page, shortcut, options = {}) {
+  const setup = shortcut?.activationProbeSetup;
+  if (!['in-flight-message', 'dictation-active'].includes(setup)) {
+    return { status: 'not-needed' };
+  }
+  if (!resolveOwnedComposerScope(page, options)) {
+    throw new Error('Prepared-state cleanup requires a verified audit-owned page.');
+  }
+  const cancelSpec = ACTIVE_DICTATION_CONTROL_SPECS[2];
+  const selectors =
+    setup === 'in-flight-message'
+      ? STOP_BUTTON_SELECTORS
+      : [
+          ...['form[data-thread-find-composer="true"]', 'form[data-chatgpt-composer]'].map(
+            (form) => `${form} button:has(svg path[d^="${cancelSpec.pathPrefix}"])`,
+          ),
+          ...cancelSpec.symbols.map(
+            (symbol) =>
+              `form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="${symbol}"])`,
+          ),
+        ];
+  const control = page.locator(selectors.join(', ')).filter({ visible: true });
+  const count = await control.count();
+  if (count === 0) {
+    if (setup === 'dictation-active') {
+      await waitForEnabledButton(page, DICTATION_START_BUTTON_SELECTORS, 5000);
+    }
+    return { status: 'clean' };
+  }
+  if (count !== 1) throw new Error('Prepared-state cleanup control is ambiguous.');
+  await waitBeforeBrowserInteraction();
+  await control.click({ timeout: 5000 });
+  await control.waitFor({ state: 'hidden', timeout: 15000 });
+  if (setup === 'dictation-active') {
+    await waitForEnabledButton(page, DICTATION_START_BUTTON_SELECTORS, 5000);
+  }
+  return { status: 'clean' };
+}
+
 export async function runLiveShortcutActivationProbes(page, context, options = {}) {
-  const requestedActionIds = new Set(options.onlyActionIds || []);
-  const fixedContractIds = new Set(options.fixedContractIds || []);
-  const phase = ['global', 'model', 'all'].includes(options.phase) ? options.phase : 'all';
+  const prepareCaptureOnly = options.prepareCaptureOnly === true;
+  const selectedCaptureActionIds = prepareCaptureOnly
+    ? getProbeOnlyCaptureActionIds(options.onlyActionIds || [])
+    : [];
+  const requestedActionIds = new Set(
+    prepareCaptureOnly ? selectedCaptureActionIds : options.onlyActionIds || [],
+  );
+  const fixedContractIds = new Set(prepareCaptureOnly ? [] : options.fixedContractIds || []);
+  const phase = prepareCaptureOnly
+    ? 'all'
+    : ['global', 'model', 'all'].includes(options.phase)
+      ? options.phase
+      : 'all';
   const { exports } = await loadDevScrapeWideContract();
   let fixtureUrl = options.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL;
   const fixtureOwnership = options.fixtureOwnership || null;
@@ -5546,7 +8253,10 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     ...(exports.DUMP_REGISTRY || []),
     ...(exports.DEFERRED_ARTIFACTS || []),
   ];
+  const collectTargetArtifacts = prepareCaptureOnly || options.collectTargetArtifacts === true;
   const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
+  const runFolderPath = options.runFolderPath || '';
+  const modelCapabilities = await resolveLiveProbeCapabilities(options, runFolderPath);
   const targetById = Object.fromEntries(
     inventory.targets.map((target) => [target.targetId, target]),
   );
@@ -5557,10 +8267,6 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   }
   if (fixedContractIds.has('shortcut-overlay-opener')) {
     selectedGlobalActionIds.add('shortcutKeyShowOverlay');
-  }
-  if (fixedContractIds.has('response-navigation-preview')) {
-    selectedGlobalActionIds.add(PREVIOUS_THREAD_ACTION_ID);
-    selectedGlobalActionIds.add(NEXT_THREAD_ACTION_ID);
   }
   const runGlobalActions = !fixedOnly || selectedGlobalActionIds.size > 0;
   const phaseShortcuts = inventory.shortcuts.filter(
@@ -5574,6 +8280,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       ? phaseShortcuts.filter((shortcut) => selectedGlobalActionIds.has(shortcut.actionId))
       : phaseShortcuts;
   const fixedContractsToRun =
+    prepareCaptureOnly ||
     options.includeFixedContracts === false ||
     phase === 'model' ||
     (requestedActionIds.size > 0 && fixedContractIds.size === 0)
@@ -5585,17 +8292,22 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     (shortcut) =>
       globalShortcutsToRun.includes(shortcut) &&
       EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) &&
-      shortcut.activationProbeSafe,
+      shortcut.activationProbeSafe &&
+      !getUnavailableCapabilities(shortcut.requiredCapabilities, modelCapabilities).length,
   );
-  const runFolderPath = options.runFolderPath || '';
   const checkpoint = {
     schemaVersion: 1,
     status: 'preflight',
     phase,
+    capabilities: modelCapabilities,
     fixtureUrl,
     auditFixtureUrl: fixtureOwnership?.fixtureUrl || '',
     auditFixtureOwned: Boolean(fixtureOwnership),
     auditFixtureSourceRun: fixtureOwnership?.sourceRunFolder || '',
+    fixtureSetupStartedAt: fixtureOwnership?.setupStartedAt || '',
+    fixturePreparedAt: fixtureOwnership?.preparedAt || '',
+    fixtureSetupProof: fixtureOwnership?.setupProof || null,
+    fixtureSetupCheckpointPath: fixtureOwnership?.sourceCheckpointPath || '',
     startedAt: new Date().toISOString(),
     extensionId: '',
     extensionPath: options.extensionDir || path.join(repoRoot, 'extension'),
@@ -5610,17 +8322,22 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     temporaryShortcutAssignments: {},
     mutationLedger: [],
     mutationOccurred: false,
-    currentCase: null,
-    completedCases: [],
-    auditOwnedConversationIds: fixtureOwnership?.conversationId
-      ? [fixtureOwnership.conversationId]
+    currentCase: fixtureOwnership?.setupCurrentCase || null,
+    completedCases: Array.isArray(fixtureOwnership?.setupCompletedCases)
+      ? fixtureOwnership.setupCompletedCases.map((item) => ({ ...item }))
       : [],
+    auditOwnedConversationIds: Array.isArray(fixtureOwnership?.auditOwnedConversationIds)
+      ? [...new Set(fixtureOwnership.auditOwnedConversationIds)]
+      : fixtureOwnership?.conversationId
+        ? [fixtureOwnership.conversationId]
+        : [],
     storageRecoveryStatus: 'not-run',
     clipboardRecoveryStatus: 'not-needed',
     clipboardRecovery: null,
     recoveryCheckpointStage: '',
     checkpointWriteError: '',
   };
+  rememberAuditOwnedConversationIds(page, checkpoint.auditOwnedConversationIds);
   const persistCheckpoint = async () => {
     try {
       const checkpointPath = await persistShortcutAuditCheckpoint(runFolderPath, checkpoint);
@@ -5649,8 +8366,90 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         checkpoint.auditOwnedConversationIds = [
           ...new Set([...checkpoint.auditOwnedConversationIds, conversationId]),
         ];
+        rememberAuditOwnedConversationIds(page, [conversationId]);
       }
     } catch {}
+  };
+
+  const supplementalArtifactByState = new Map();
+  const supplementalDefinitionByState = new Map();
+  if (collectTargetArtifacts) {
+    for (const stateId of Object.keys(LIVE_PROBE_CAPTURE_TARGET_BY_STATE)) {
+      const definition = scrapeStateRegistry.find(
+        (entry) => entry.stateId === stateId && entry.probeOnly === true,
+      );
+      if (!definition) {
+        throw new Error(`The registered probe-only artifact ${stateId} is missing.`);
+      }
+      if (definition.capture?.targetRef !== LIVE_PROBE_CAPTURE_TARGET_BY_STATE[stateId]) {
+        throw new Error(`The registered probe-only artifact ${stateId} has an unsupported target.`);
+      }
+      supplementalDefinitionByState.set(stateId, definition);
+      supplementalArtifactByState.set(
+        stateId,
+        buildArtifactRecord(
+          definition,
+          'deferred',
+          '',
+          'The matching live shortcut probe was omitted or did not reach its prepared target state.',
+        ),
+      );
+    }
+  }
+  const auditOwnedSetupByCaptureState = Object.freeze({
+    'probe-code-block-content': 'clipboard-code-blocks',
+    'probe-codebox-wrap-enabled': 'codebox-conversation',
+    'probe-edit-send-button': 'active-edit-card',
+    'probe-edit-message-button': 'active-edit-card',
+    'probe-send-button': 'composer-draft-message',
+    'probe-stop-button': 'in-flight-message',
+    'probe-temporary-chat': 'new-conversation',
+    'probe-blank-chat-work-surface-toggle': 'new-conversation',
+    'probe-composer-study-search': 'composer-plus-menu-search-study',
+    'probe-composer-deep-research-search': 'composer-plus-menu-search-deep-research',
+    'probe-active-dictation-controls': 'dictation-active',
+    'probe-blank-chat-dictate-start': 'new-conversation',
+  });
+  const captureSupplementalForAction = async (
+    shortcut,
+    semanticSnapshot = null,
+    blankNewChatProvenance = null,
+    captureOptions = {},
+  ) => {
+    if (!collectTargetArtifacts) return;
+    const stateId = captureOptions.stateId || LIVE_PROBE_CAPTURE_STATE_BY_ACTION[shortcut.actionId];
+    if (!stateId) return;
+    const definition = supplementalDefinitionByState.get(stateId);
+    if (!definition) return;
+    const expectedSetup = auditOwnedSetupByCaptureState[stateId];
+    const conversationId = page.url().match(/\/c\/([^/]+)/)?.[1] || '';
+    const setupMatches = !expectedSetup || shortcut.activationProbeSetup === expectedSetup;
+    const isAuditOwnedConversation =
+      !protectedFixtureIds.has(conversationId) &&
+      Boolean(conversationId) &&
+      checkpoint.auditOwnedConversationIds.includes(conversationId) &&
+      setupMatches;
+    const hasVerifiedBlankHomeProvenance =
+      setupMatches &&
+      [
+        'probe-send-button',
+        'probe-temporary-chat',
+        'probe-blank-chat-work-surface-toggle',
+        'probe-composer-study-search',
+        'probe-composer-deep-research-search',
+        'probe-active-dictation-controls',
+        'probe-blank-chat-dictate-start',
+      ].includes(stateId) &&
+      isVerifiedBlankNewChatProvenance(blankNewChatProvenance, page.url());
+    supplementalArtifactByState.set(
+      stateId,
+      await captureSupplementalProbeArtifact(page, definition, {
+        auditOwned: isAuditOwnedConversation,
+        semanticSnapshot,
+        blankNewChatProvenance: hasVerifiedBlankHomeProvenance ? blankNewChatProvenance : null,
+        targetLocator: captureOptions.targetLocator || null,
+      }),
+    );
   };
 
   let activeShortcutCodes = {};
@@ -5695,10 +8494,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       }
     }
     checkpoint.storageSnapshot = { keys: storedValues, catalogFingerprints };
-    temporaryShortcutAssignments = buildTemporaryShortcutAssignments(
-      executableProbeShortcuts,
-      activeShortcutCodes,
-    );
+    temporaryShortcutAssignments = prepareCaptureOnly
+      ? {}
+      : buildTemporaryShortcutAssignments(executableProbeShortcuts, activeShortcutCodes);
     mutationLedger = createStorageMutationLedger(
       originalActiveShortcutCodes,
       temporaryShortcutAssignments,
@@ -5745,15 +8543,26 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   const fixedRows = [];
   const orderedShortcuts = orderLiveProbeShortcuts(globalShortcutsToRun);
   let blankConversationReadyFromShortcut = false;
+  let lastVerifiedBlankNewChatProvenance = null;
   try {
-    const initialFixtureState = await captureLiveProbeSemanticSnapshot(page, null);
     const needsConversationState =
       phase !== 'model' && (runGlobalActions || fixedContractIds.size > 0);
+    const needsTwoTurnFixture = requiresAuditOwnedTwoTurnFixture({
+      onlyActionIds: [...requestedActionIds],
+      fixedContractIds: [...fixedContractIds],
+      phase,
+      shortcuts: inventory.shortcuts,
+    });
+    const freshFixtureSetupWasProven =
+      fixtureOwnership?.kind === 'audit-owned' &&
+      isCompleteFreshAuditFixtureProof(
+        fixtureOwnership.setupProof,
+        fixtureUrl,
+        fixtureOwnership.conversationId,
+      ) &&
+      checkpoint.auditOwnedConversationIds.includes(fixtureOwnership.conversationId);
     const shouldPrepareOwnedFixture =
-      needsConversationState &&
-      (!fixtureOwnership ||
-        initialFixtureState.userMessageCount < 2 ||
-        initialFixtureState.assistantMessageCount < 2);
+      needsConversationState && needsTwoTurnFixture && !freshFixtureSetupWasProven;
     if (shouldPrepareOwnedFixture) {
       checkpoint.currentCase = {
         rowId: 'setup:audit-owned-fixture',
@@ -5774,6 +8583,12 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       checkpoint.auditFixtureOwned = true;
       await persistCheckpoint();
     }
+    if (needsConversationState && !needsTwoTurnFixture) {
+      await prepareNewConversationProbeState(page, fixtureUrl, {
+        diagnosticCheckpoint: checkpoint,
+        diagnosticPersistCheckpoint: persistCheckpoint,
+      });
+    }
     for (const shortcut of orderedShortcuts) {
       if (
         shortcut.actionId !== NEW_CONVERSATION_ACTION_ID &&
@@ -5782,7 +8597,28 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         blankConversationReadyFromShortcut = false;
       }
       const dispatchCode = resolveShortcutDispatchCode(shortcut, activeShortcutCodes);
-      if (!executableProbeShortcuts.some((item) => item.actionId === shortcut.actionId)) {
+      const unavailableCapabilities = getUnavailableCapabilities(
+        shortcut.requiredCapabilities,
+        modelCapabilities,
+      );
+      if (unavailableCapabilities.length > 0) {
+        const reason = `Required capability is unavailable: ${unavailableCapabilities.join(', ')}.`;
+        const row = buildSkippedLiveProbeRow(shortcut, 'not-applicable', reason, dispatchCode);
+        rows.push(row);
+        checkpoint.completedCases.push({
+          rowId: `global:${shortcut.actionId}`,
+          actionId: shortcut.actionId,
+          status: row.status,
+          reason: row.reason,
+          completedAt: new Date().toISOString(),
+        });
+        await persistCheckpoint().catch(() => {});
+        continue;
+      }
+      if (
+        !prepareCaptureOnly &&
+        !executableProbeShortcuts.some((item) => item.actionId === shortcut.actionId)
+      ) {
         const row = buildNonExecutableLiveProbeRow(shortcut, dispatchCode);
         rows.push(row);
         checkpoint.completedCases.push({
@@ -5801,6 +8637,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
       const probeStateId =
         shortcut.activationProbeUiStateRefs?.[0] || shortcut.requiredUiStateRefs?.[0];
       let fileChooserObserved = false;
+      let shareClipboardCleared = false;
       let resolveFileChooser;
       const fileChooserEvent =
         shortcut.actionId === 'shortcutKeyAddPhotosFiles'
@@ -5809,18 +8646,28 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             })
           : Promise.resolve(false);
       const fileChooserListener = (chooser) => {
-        fileChooserObserved = true;
-        void chooser.cancel().then(
-          () => resolveFileChooser?.(true),
-          () => resolveFileChooser?.(false),
-        );
+        // Playwright intercepts the picker; an empty selection uploads no files.
+        // Wrap the API call so a synchronous callback failure cannot escape the emitter.
+        void Promise.resolve()
+          .then(() => chooser.setFiles([], { timeout: 1200 }))
+          .then(
+            () => {
+              fileChooserObserved = true;
+              resolveFileChooser?.(true);
+            },
+            () => resolveFileChooser?.(false),
+          );
       };
       const canReuseNewConversationState =
         shortcut.actionId === TEMPORARY_CHAT_ACTION_ID &&
         shortcut.activationProbeSetup === 'new-conversation' &&
         blankConversationReadyFromShortcut;
+      let setupBlankNewChatProvenance = canReuseNewConversationState
+        ? lastVerifiedBlankNewChatProvenance
+        : null;
+      let verifiedAuditConversationSource = false;
       try {
-        if (!dispatchCode) {
+        if (!prepareCaptureOnly && !dispatchCode) {
           const reason = extensionStorageWarning
             ? `No default shortcut key code is assigned and active extension storage was unavailable for a temporary assignment. ${extensionStorageWarning}`
             : 'No assigned shortcut key code was found in active storage or defaults.';
@@ -5865,32 +8712,74 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         await persistCheckpoint();
 
         if (shortcut.activationProbeSetup === 'new-conversation') {
-          if (!canReuseNewConversationState) {
-            await prepareNewConversationProbeState(page, fixtureUrl);
+          if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
+            if (prepareCaptureOnly) {
+              setupBlankNewChatProvenance = await prepareNewConversationProbeState(
+                page,
+                fixtureUrl,
+                {
+                  diagnosticCheckpoint: checkpoint,
+                  diagnosticPersistCheckpoint: persistCheckpoint,
+                },
+              );
+            } else {
+              verifiedAuditConversationSource =
+                await prepareExistingAuditOwnedConversationForNewChat(page, fixtureUrl, {
+                  checkpoint,
+                  fixtureOwnership,
+                  persistCheckpoint,
+                });
+            }
+          } else if (!canReuseNewConversationState) {
+            setupBlankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+              diagnosticCheckpoint: checkpoint,
+              diagnosticPersistCheckpoint: persistCheckpoint,
+            });
           }
         } else if (shortcut.activationProbeSetup === 'gpt-conversation') {
           await prepareGptConversationProbeState(
             page,
             shortcut.activationProbeUrl || GPT_CONVERSATION_PROBE_URL,
           );
-        } else if (isResponseNavigationProbeSetup(shortcut)) {
-          await prepareResponseNavigationProbeState(
-            page,
-            shortcut,
-            target,
-            scrapeStateRegistry,
-            fixtureUrl,
-          );
+          if (collectTargetArtifacts) {
+            const definition = supplementalDefinitionByState.get('probe-new-gpt-conversation');
+            if (definition) {
+              const captureState = { currentTurnTestId: null, latestMenuHtml: '' };
+              for (const step of definition.steps || []) {
+                await applyProbeStateStep(page, step, captureState);
+              }
+            }
+          }
         } else if (shortcut.activationProbeSetup === 'composer-draft-message') {
-          await prepareComposerDraftMessageProbeState(page, fixtureUrl);
+          setupBlankNewChatProvenance = await prepareComposerDraftMessageProbeState(
+            page,
+            fixtureUrl,
+            { checkpoint, persistCheckpoint },
+          );
         } else if (shortcut.activationProbeSetup === 'in-flight-message') {
-          await prepareInFlightMessageProbeState(page, fixtureUrl);
+          setupBlankNewChatProvenance = await prepareInFlightMessageProbeState(page, fixtureUrl, {
+            checkpoint,
+            persistCheckpoint,
+          });
         } else if (shortcut.activationProbeSetup === 'active-edit-card') {
-          await prepareActiveEditCardProbeState(page, fixtureUrl);
+          setupBlankNewChatProvenance = await prepareActiveEditCardProbeState(page, fixtureUrl, {
+            checkpoint,
+            persistCheckpoint,
+            onBeforeOpenEdit: async (editButton) => {
+              trackAuditOwnedConversation(page.url());
+              await captureSupplementalForAction(shortcut, null, null, {
+                stateId: 'probe-edit-message-button',
+                targetLocator: editButton,
+              });
+            },
+          });
         } else if (shortcut.activationProbeSetup === 'sent-user-message') {
-          await prepareSentUserMessageProbeState(page, fixtureUrl);
+          setupBlankNewChatProvenance = await prepareSentUserMessageProbeState(page, fixtureUrl, {
+            checkpoint,
+            persistCheckpoint,
+          });
         } else if (shortcut.activationProbeSetup === 'dictation-active') {
-          await prepareDictationActiveProbeState(page, fixtureUrl);
+          setupBlankNewChatProvenance = await prepareDictationActiveProbeState(page, fixtureUrl);
         } else if (shortcut.activationProbeSetup === 'model-effort-shortcut') {
           await resetFixturePage(page, fixtureUrl);
           await closeTransientUi(page);
@@ -5902,8 +8791,12 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           await resetFixturePage(page, fixtureUrl);
           await closeTransientUi(page);
           await setLiveProbeScrollPosition(page, 'bottom');
-        } else if (shortcut.activationProbeSetup === 'message-scroll-from-middle') {
-          await prepareMessageScrollProbeState(page, fixtureUrl);
+        } else if (
+          ['message-scroll-from-top', 'message-scroll-from-bottom'].includes(
+            shortcut.activationProbeSetup,
+          )
+        ) {
+          await prepareMessageScrollProbeState(page, fixtureUrl, shortcut.activationProbeSetup);
         } else if (shortcut.activationProbeSetup === 'clipboard-single-message') {
           await prepareClipboardSingleMessageProbeState(
             page,
@@ -5914,7 +8807,10 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         } else if (shortcut.activationProbeSetup === 'clipboard-entire-conversation') {
           await prepareClipboardEntireConversationProbeState(page, fixtureUrl, codeboxProbeSession);
         } else if (shortcut.activationProbeSetup === 'clipboard-code-blocks') {
-          await prepareClipboardCodeBlocksProbeState(page, fixtureUrl, codeboxProbeSession);
+          await prepareClipboardCodeBlocksProbeState(page, fixtureUrl, codeboxProbeSession, {
+            captureOnly: prepareCaptureOnly,
+            trackAuditOwnedConversation,
+          });
         } else if (shortcut.activationProbeSetup === 'codebox-conversation') {
           await prepareCodeboxWrapProbeState(page, fixtureUrl, codeboxProbeSession);
           await writeAuditStorageSetting({
@@ -5945,17 +8841,50 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           checkpoint.mutationLedger = mutationLedger;
           checkpoint.currentCase.codeboxPreferenceMayBecomeEnabled = true;
           await persistCheckpoint();
+          if (prepareCaptureOnly) {
+            await writeAuditStorageSetting({
+              context,
+              extensionId,
+              key: 'codeboxWrapEnabled',
+              value: true,
+              originalStorage: originalActiveShortcutCodes,
+              mutationLedger,
+              checkpoint,
+              persistCheckpoint,
+              intentType: 'codebox-wrap-capture-only',
+            });
+            await page.waitForFunction(
+              () => document.documentElement.classList.contains('csp-codebox-wrap-enabled'),
+              undefined,
+              { timeout: 5000 },
+            );
+          }
         } else if (shortcut.activationProbeSetup === 'shortcut-overlay-ready') {
           await resetFixturePage(page, fixtureUrl);
           await closeTransientUi(page);
         } else if (shortcut.activationProbeSetup === 'composer-plus-menu') {
           await resetFixturePage(page, fixtureUrl);
           await openComposerPlusMenu(page);
-        } else if (shortcut.activationProbeSetup === 'composer-more-submenu') {
-          await resetFixturePage(page, fixtureUrl);
-          await openComposerMoreSubmenu(page);
+        } else if (
+          ['composer-plus-menu-search-study', 'composer-plus-menu-search-deep-research'].includes(
+            shortcut.activationProbeSetup,
+          )
+        ) {
+          setupBlankNewChatProvenance = await prepareComposerStudySearchProbeState(
+            page,
+            fixtureUrl,
+            {
+              checkpoint,
+              persistCheckpoint,
+              query: shortcut.actionId === 'shortcutKeyDeepResearch' ? 'deep research' : 'study',
+              actionId: shortcut.actionId,
+            },
+          );
         } else {
           await prepareLiveProbeState(page, probeStateId, scrapeStateRegistry, fixtureUrl);
+        }
+        if (shortcut.actionId === 'shortcutKeySearchConversationHistory') {
+          await ensureSearchChatsOpenerVisible(page);
         }
         if (
           shortcut.activationProbeSetup !== 'gpt-conversation' &&
@@ -5963,12 +8892,77 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           shortcut.activationProbeMode !== 'dom-state' &&
           !isModelEffortShortcut(shortcut)
         ) {
-          await waitForLiveProbeTargetPresence(page, target);
-        }
-        if (isResponseNavigationShortcut(shortcut)) {
-          await waitForEnabledResponseNavigationTarget(page, target);
+          if (shortcut.actionId === 'shortcutKeyStudy') {
+            await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.target-presence');
+          }
+          try {
+            await waitForLiveProbeTargetPresence(page, target);
+          } catch (error) {
+            if (shortcut.actionId === 'shortcutKeyStudy' && checkpoint.currentCase) {
+              checkpoint.currentCase.studyTargetPresence = await captureTargetPresenceCounts(
+                page,
+                target,
+              ).catch(() => ({ requiredGroups: 0, matchedGroups: 0, unavailable: true }));
+              await persistCheckpoint().catch(() => {});
+            }
+            throw error;
+          }
+          if (shortcut.actionId === 'shortcutKeyStudy') {
+            await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.target-present');
+          }
         }
         trackAuditOwnedConversation(page.url());
+        if (
+          shortcut.actionId !== 'shortcutKeyToggleCodeboxWrap' &&
+          (shortcut.actionId !== NEW_CONVERSATION_ACTION_ID || prepareCaptureOnly)
+        ) {
+          await captureSupplementalForAction(shortcut, null, setupBlankNewChatProvenance);
+        }
+        if (prepareCaptureOnly && shortcut.actionId === 'shortcutKeyToggleCodeboxWrap') {
+          const captureSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+          await captureSupplementalForAction(
+            shortcut,
+            captureSnapshot,
+            setupBlankNewChatProvenance,
+          );
+        }
+        if (
+          !prepareCaptureOnly &&
+          collectTargetArtifacts &&
+          shortcut.actionId === 'shortcutKeyNewGptConversation'
+        ) {
+          await closeOpenMenus(page);
+          if (
+            await page.locator('[data-radix-menu-content][data-state="open"][role="menu"]').count()
+          ) {
+            throw new Error(
+              'The GPT evidence menu could not be dismissed before shortcut dispatch.',
+            );
+          }
+        }
+        if (prepareCaptureOnly) {
+          const stateId = LIVE_PROBE_CAPTURE_STATE_BY_ACTION[shortcut.actionId];
+          const captureArtifact = supplementalArtifactByState.get(stateId);
+          const row = buildCaptureOnlyLiveProbeRow(
+            shortcut,
+            captureArtifact,
+            Date.now() - startedAt,
+          );
+          rows.push(row);
+          checkpoint.currentCase.phase = 'capture-only-completed';
+          checkpoint.currentCase.captureStatus = row.stateCapture.status;
+          checkpoint.completedCases.push({
+            rowId: `global:${shortcut.actionId}`,
+            actionId: shortcut.actionId,
+            status: row.status,
+            captureStatus: row.stateCapture.status,
+            reason: row.reason,
+            completedAt: new Date().toISOString(),
+          });
+          checkpoint.currentCase = null;
+          await persistCheckpoint();
+          continue;
+        }
         checkpoint.currentCase.phase = 'ready-to-dispatch';
         checkpoint.currentCase.preActionConversationId =
           page.url().match(/\/c\/([^/]+)/)?.[1] || '';
@@ -5981,7 +8975,24 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             document.body?.focus?.();
           });
         }
+        if (shortcut.actionId === 'shortcutKeyShare') {
+          await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+            origin: new URL(page.url()).origin,
+          });
+          await page.evaluate(() => navigator.clipboard.writeText(''));
+          shareClipboardCleared = await page.evaluate(
+            async () => (await navigator.clipboard.readText()) === '',
+          );
+          if (!shareClipboardCleared)
+            throw new Error(
+              'Share clipboard preparation did not produce a verified empty clipboard.',
+            );
+          await installShareToastObserver(page);
+        }
         const beforeSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+        if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
+          beforeSnapshot.auditOwnedFixtureConversation = verifiedAuditConversationSource;
+        }
         checkpoint.currentCase.phase = 'dispatch-pending';
         checkpoint.currentCase.beforeSnapshot = {
           url: beforeSnapshot.url,
@@ -5998,14 +9009,6 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         }
         if (shortcut.activationProbeMode === 'direct-menu-target') {
           await dispatchShortcutForAction(page, shortcut, dispatchCode);
-        } else if (isResponseNavigationShortcut(shortcut)) {
-          await dispatchLiveShortcutRepeated(
-            page,
-            shortcut,
-            dispatchCode,
-            RESPONSE_NAVIGATION_ATTEMPTS,
-            RESPONSE_NAVIGATION_STEP_SETTLE_MS,
-          );
         } else {
           await dispatchShortcutForAction(page, shortcut, dispatchCode);
         }
@@ -6014,6 +9017,24 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         checkpoint.currentCase.postActionConversationId =
           page.url().match(/\/c\/([^/]+)/)?.[1] || '';
         await persistCheckpoint();
+        if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
+          await markProbeDiagnosticStage(
+            checkpoint,
+            persistCheckpoint,
+            'newconv.blank-home-postcondition',
+          );
+          try {
+            await waitForVerifiedBlankConversationAfterShortcut(page, beforeSnapshot.url);
+          } catch (error) {
+            checkpoint.currentCase.newConversationBlankHomeStatus =
+              await captureBlankHomePostconditionStatus(page, beforeSnapshot.url).catch(() => ({
+                available: false,
+              }));
+            await persistCheckpoint().catch(() => {});
+            throw error;
+          }
+          checkpoint.currentCase.newConversationBlankHomeStatus = { satisfied: true };
+        }
         await page.waitForTimeout(
           shortcut.actionId === NEW_CONVERSATION_ACTION_ID
             ? NEW_CONVERSATION_TARGET_READY_DELAY_MS
@@ -6048,10 +9069,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
               previousHash: beforeSnapshot.lastAssistantHash,
             });
           } catch (error) {
-            await clickEnabledButton(page, [
-              'button[data-testid="stop-button"]',
-              'button[data-test-id="stop-button"]',
-            ]).catch(() => {});
+            await clickEnabledButton(page, STOP_BUTTON_SELECTORS).catch(() => {});
             throw error;
           }
         }
@@ -6060,15 +9078,63 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         checkpoint.currentCase.postActionConversationId =
           page.url().match(/\/c\/([^/]+)/)?.[1] || '';
         await persistCheckpoint();
-        const observed = await readLiveProbeObserver(page);
         if (shortcut.actionId === 'shortcutKeyAddPhotosFiles') {
           await Promise.race([fileChooserEvent, page.waitForTimeout(1200).then(() => false)]);
         }
-        const afterSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+        let afterSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+        let semanticActionEvidence = null;
+        if (shortcut.actionId === 'shortcutKeyShare') {
+          semanticActionEvidence = {
+            share: {
+              ...(await waitForShareClipboardToast(page)),
+              clipboardCleared: shareClipboardCleared,
+            },
+          };
+        }
+        if (shortcut.actionId === 'shortcutKeyStudy') {
+          const studyPillActivationSnapshot = afterSnapshot;
+          let studyToggleOffDispatched = false;
+          await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.pill-on');
+          try {
+            await waitForStudyPillCount(page, 1);
+          } catch {}
+          const confirmedActivationSnapshot =
+            studyPillActivationSnapshot.selectedStudyPillCount === 1
+              ? studyPillActivationSnapshot
+              : await captureLiveProbeSemanticSnapshot(page, target);
+          if (confirmedActivationSnapshot.selectedStudyPillCount === 1) {
+            await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.pill-off');
+            checkpoint.currentCase.phase = 'study-pill-on-confirmed';
+            await persistCheckpoint();
+            try {
+              await dispatchShortcutForAction(page, shortcut, dispatchCode);
+              studyToggleOffDispatched = true;
+              checkpoint.currentCase.phase = 'study-pill-off-pending';
+              await persistCheckpoint();
+              await waitForStudyPillCount(page, 0);
+            } catch {}
+          }
+          afterSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+          semanticActionEvidence = {
+            studyPillActivationSnapshot: confirmedActivationSnapshot,
+            studyPillDeactivationSnapshot: afterSnapshot,
+            studyToggleOffDispatched,
+          };
+          checkpoint.currentCase.studyPillCounts = {
+            afterActivation: confirmedActivationSnapshot.selectedStudyPillCount,
+            afterDeactivation: afterSnapshot.selectedStudyPillCount,
+          };
+          await persistCheckpoint();
+        }
+        const observed = await readLiveProbeObserver(page);
         const clickMatch = (observed.clicks || []).find((click) =>
           targetMatchesText(target, click.html),
         );
-        const focusMatch = targetMatchesText(target, observed.activeElement?.html || '');
+        const focusMatch = matchesLiveProbeFocusTarget(
+          target,
+          afterSnapshot,
+          observed.activeElement?.html || '',
+        );
         const openedMatch =
           shortcut.activationProbeMode === 'opens-target'
             ? targetMatchesText(
@@ -6094,6 +9160,13 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         const matchingKeydown =
           [...(observed.keydowns || [])].reverse().find((event) => event.code === dispatchCode) ||
           null;
+        if (semanticActionEvidence?.share) {
+          semanticActionEvidence.share.trustedDispatch =
+            matchingKeydown?.isTrusted === true &&
+            matchingKeydown.altKey === true &&
+            matchingKeydown.defaultPrevented === true;
+          semanticActionEvidence.share.targetClickObserved = Boolean(clickMatch);
+        }
         const routed =
           shortcut.activationProbeMode === 'focus-target'
             ? focusMatch
@@ -6117,7 +9190,25 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           afterSnapshot,
           clipboardMatch,
           fileChooserObserved,
+          semanticActionEvidence,
         );
+        if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID && semantic.status === 'pass') {
+          const blankNewChatProvenance = {
+            kind: 'verified-blank-new-chat',
+            source: 'shortcut-semantic-postcondition',
+            url: afterSnapshot.url,
+            userMessageCount: afterSnapshot.userMessageCount,
+            assistantMessageCount: afterSnapshot.assistantMessageCount,
+            composerHasText: afterSnapshot.composerHasText,
+          };
+          await captureSupplementalForAction(shortcut, afterSnapshot, blankNewChatProvenance);
+        }
+        if (
+          shortcut.actionId === 'shortcutKeyToggleCodeboxWrap' &&
+          afterSnapshot.codeboxWrapEnabled === true
+        ) {
+          await captureSupplementalForAction(shortcut, afterSnapshot, setupBlankNewChatProvenance);
+        }
         if (target?.targetId === 'codebox-wrap-enabled' && semantic.status === 'pass') {
           let persistenceProof;
           try {
@@ -6153,6 +9244,23 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
               storedAfterReload,
               reloadedSnapshot,
             );
+            if (persistenceProof.status === 'pass') {
+              const conversationSwitchProof = await verifyCodeboxWrapConversationSwitch(page, {
+                sourceSnapshot: reloadedSnapshot,
+                storedBeforeSwitch: storedAfterReload,
+                auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+                protectedConversationIds: [...protectedFixtureIds],
+                checkpoint,
+                persistCheckpoint,
+                readStorage: () =>
+                  readExtensionSyncStorage(context, extensionId, ['codeboxWrapEnabled']),
+              });
+              persistenceProof.conversationSwitchProof = conversationSwitchProof;
+              if (conversationSwitchProof.status !== 'pass') {
+                persistenceProof.status = conversationSwitchProof.status;
+                persistenceProof.reason = conversationSwitchProof.reason;
+              }
+            }
             checkpoint.currentCase.persistenceProof = persistenceProof;
             checkpoint.currentCase.phase = 'codebox-persistence-verified';
             checkpoint.currentCase.postActionUrl = page.url();
@@ -6223,16 +9331,20 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
               : semantic.status === 'environment-fail'
                 ? 'environment-fail'
                 : 'coverage-gap';
+        const diagnosticStage =
+          semantic.status === 'pass' ? '' : checkpoint.currentCase?.diagnosticStage || '';
         const observedNode = clickMatch || observed.clicks?.[0] || observed.activeElement || {};
 
         rows.push({
           actionId: shortcut.actionId,
           label: shortcut.label,
           defaultCode: shortcut.defaultCode,
+          requiredCapabilities: shortcut.requiredCapabilities || [],
           dispatchCode,
           probeMode: shortcut.activationProbeMode,
           expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
           status,
+          ...(diagnosticStage ? { failureStage: diagnosticStage } : {}),
           reason:
             semantic.reason ||
             (status === 'pass'
@@ -6261,6 +9373,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           status,
           routingStatus: routingProof.status,
           semanticStatus: semantic.status,
+          ...(diagnosticStage ? { failureStage: diagnosticStage } : {}),
           preActionConversationId: checkpoint.currentCase?.preActionConversationId || '',
           postActionConversationId: checkpoint.currentCase?.postActionConversationId || '',
           completedAt: new Date().toISOString(),
@@ -6269,11 +9382,34 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         await persistCheckpoint();
         blankConversationReadyFromShortcut =
           shortcut.actionId === NEW_CONVERSATION_ACTION_ID && semantic.status === 'pass';
+        lastVerifiedBlankNewChatProvenance =
+          blankConversationReadyFromShortcut &&
+          isChatGptRootPageUrl(afterSnapshot.url) &&
+          afterSnapshot.hasComposer &&
+          afterSnapshot.messageCount === 0 &&
+          afterSnapshot.userMessageCount === 0 &&
+          afterSnapshot.assistantMessageCount === 0 &&
+          afterSnapshot.composerHasText === false
+            ? {
+                kind: 'verified-blank-new-chat',
+                source: 'shortcut-semantic-postcondition',
+                url: afterSnapshot.url,
+                userMessageCount: 0,
+                assistantMessageCount: 0,
+                composerHasText: false,
+              }
+            : null;
       } catch (error) {
         blankConversationReadyFromShortcut = false;
+        const failureReason = error?.message || String(error) || 'Unknown live probe failure';
+        const reportedFailureReason = prepareCaptureOnly
+          ? CAPTURE_ONLY_FAILURE_REASONS.capture
+          : failureReason;
+        const failureStatus = prepareCaptureOnly ? 'not-live-probed' : 'coverage-gap';
         if (checkpoint.currentCase?.actionId === shortcut.actionId) {
+          const failureStage = checkpoint.currentCase.diagnosticStage || '';
           checkpoint.currentCase.phase = 'case-failed';
-          checkpoint.currentCase.error = error?.message || String(error);
+          checkpoint.currentCase.error = reportedFailureReason;
           checkpoint.currentCase.postActionUrl = page.url();
           checkpoint.currentCase.postActionConversationId =
             page.url().match(/\/c\/([^/]+)/)?.[1] || '';
@@ -6281,10 +9417,21 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           checkpoint.completedCases.push({
             rowId: `global:${shortcut.actionId}`,
             actionId: shortcut.actionId,
-            status: 'coverage-gap',
-            reason: checkpoint.currentCase.error,
+            status: failureStatus,
+            ...(prepareCaptureOnly ? { captureStatus: 'failed' } : {}),
+            reason: reportedFailureReason,
+            failureStage,
             preActionConversationId: checkpoint.currentCase.preActionConversationId || '',
             postActionConversationId: checkpoint.currentCase.postActionConversationId || '',
+            ...(checkpoint.currentCase.newConversationBlankHomeStatus
+              ? {
+                  newConversationBlankHomeStatus:
+                    checkpoint.currentCase.newConversationBlankHomeStatus,
+                }
+              : {}),
+            ...(checkpoint.currentCase.studyTargetPresence
+              ? { studyTargetPresence: checkpoint.currentCase.studyTargetPresence }
+              : {}),
             completedAt: new Date().toISOString(),
           });
           checkpoint.currentCase = null;
@@ -6293,41 +9440,137 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           checkpoint.completedCases.push({
             rowId: `global:${shortcut.actionId}`,
             actionId: shortcut.actionId,
-            status: 'coverage-gap',
-            reason: error?.message || String(error),
+            status: failureStatus,
+            ...(prepareCaptureOnly ? { captureStatus: 'failed' } : {}),
+            reason: reportedFailureReason,
+            failureStage: '',
             completedAt: new Date().toISOString(),
           });
           await persistCheckpoint().catch(() => {});
         }
-        rows.push({
-          actionId: shortcut.actionId,
-          label: shortcut.label,
-          defaultCode: shortcut.defaultCode,
-          dispatchCode,
-          probeMode: shortcut.activationProbeMode,
-          expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
-          status: 'fail',
-          reason: error?.message || String(error) || 'Unknown live probe failure',
-          observedSelector: '',
-          observedTextSnippet: '',
-          targetProof: {
-            status: 'not-run',
-            proofMethod: 'none',
-            expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
-            observedTargetRef: '',
-          },
-          routingProof: { status: 'not-observed', proofMethod: 'none', observedTargetRef: '' },
-          semantic: {
-            status: 'not-run',
-            proofMethod: 'none',
-            expected: shortcut.activationProbeExpectedTargetRef || shortcut.notes || '',
-            observed: '',
-            reason: error?.message || String(error) || 'Probe did not reach semantic evaluation.',
-          },
-          durationMs: Date.now() - startedAt,
-        });
+        rows.push(
+          prepareCaptureOnly
+            ? buildCaptureOnlyLiveProbeRow(
+                shortcut,
+                {
+                  stateId: LIVE_PROBE_CAPTURE_STATE_BY_ACTION[shortcut.actionId],
+                  status: 'failed',
+                  error: reportedFailureReason,
+                },
+                Date.now() - startedAt,
+              )
+            : {
+                actionId: shortcut.actionId,
+                label: shortcut.label,
+                defaultCode: shortcut.defaultCode,
+                requiredCapabilities: shortcut.requiredCapabilities || [],
+                dispatchCode,
+                probeMode: shortcut.activationProbeMode,
+                expectedTargetRef: shortcut.activationProbeExpectedTargetRef,
+                status: 'fail',
+                failureStage: checkpoint.completedCases.at(-1)?.failureStage || '',
+                ...(checkpoint.completedCases.at(-1)?.newConversationBlankHomeStatus
+                  ? {
+                      newConversationBlankHomeStatus:
+                        checkpoint.completedCases.at(-1).newConversationBlankHomeStatus,
+                    }
+                  : {}),
+                ...(checkpoint.completedCases.at(-1)?.studyTargetPresence
+                  ? { studyTargetPresence: checkpoint.completedCases.at(-1).studyTargetPresence }
+                  : {}),
+                reason: error?.message || String(error) || 'Unknown live probe failure',
+                observedSelector: '',
+                observedTextSnippet: '',
+                targetProof: {
+                  status: 'not-run',
+                  proofMethod: 'none',
+                  expectedTargetRef: shortcut.activationProbeExpectedTargetRef || '',
+                  observedTargetRef: '',
+                },
+                routingProof: {
+                  status: 'not-observed',
+                  proofMethod: 'none',
+                  observedTargetRef: '',
+                },
+                semantic: {
+                  status: 'not-run',
+                  proofMethod: 'none',
+                  expected: shortcut.activationProbeExpectedTargetRef || shortcut.notes || '',
+                  observed: '',
+                  reason:
+                    error?.message || String(error) || 'Probe did not reach semantic evaluation.',
+                },
+                durationMs: Date.now() - startedAt,
+              },
+        );
+        if (prepareCaptureOnly) {
+          recordCaptureOnlyFailure({
+            actionId: shortcut.actionId,
+            supplementalArtifactByState,
+            rows,
+            checkpoint,
+            failureType: 'capture',
+            diagnosticError: failureReason,
+          });
+        }
       } finally {
+        const cleanupScope = `global:${shortcut.actionId}`;
+        if (prepareCaptureOnly) {
+          try {
+            const cleanup = await cleanupPreparedCaptureState(page, shortcut, {
+              auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+              allowVerifiedBlankHome: true,
+            });
+            const cleanupResult = recordPreparedCaptureCleanup({
+              cleanup,
+              actionId: shortcut.actionId,
+              supplementalArtifactByState,
+              rows,
+              checkpoint,
+            });
+            if (cleanupResult.failed) {
+              await persistCheckpoint().catch(() => {});
+            }
+          } catch {
+            recordPreparedCaptureCleanup({
+              cleanup: { status: 'failed' },
+              actionId: shortcut.actionId,
+              supplementalArtifactByState,
+              rows,
+              checkpoint,
+            });
+            await persistCheckpoint().catch(() => {});
+          }
+        }
+        const cleanupGate = await finalizeProbeComposerCleanup(
+          rows,
+          checkpoint.completedCases,
+          shortcut.actionId,
+          () =>
+            cleanupActiveOwnedComposerDraft(page, {
+              auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+              allowVerifiedBlankHome: true,
+              checkpoint,
+              persistCheckpoint,
+              scope: cleanupScope,
+            }),
+        );
+        if (cleanupGate.downgraded) {
+          if (cleanupGate.cleanupThrew) {
+            rememberComposerCleanupOutcome(checkpoint, {
+              status: 'failed',
+              scope: cleanupScope,
+              reason: cleanupGate.reason,
+            });
+          }
+          await persistCheckpoint().catch(() => {
+            checkpoint.composerCleanupCheckpointError =
+              'Composer cleanup gate outcome could not be persisted.';
+          });
+        }
         page.off('filechooser', fileChooserListener);
+        if (shortcut.actionId === 'shortcutKeyShare')
+          await cleanupShareToastObserver(page).catch(() => {});
         await cleanupLiveProbeObserver(page);
         await closeOpenMenus(page).catch(() => {});
       }
@@ -6354,24 +9597,47 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     }
   } catch (error) {
     const failureReason = error?.message || String(error) || 'Live shortcut audit setup failed.';
-    checkpoint.preflightError ||= failureReason;
+    const reportedFailureReason = prepareCaptureOnly
+      ? CAPTURE_ONLY_FAILURE_REASONS.setup
+      : failureReason;
+    checkpoint.preflightError ||= reportedFailureReason;
     checkpoint.status = 'preflight-failed';
     for (const shortcut of orderedShortcuts) {
       if (rows.some((row) => row.actionId === shortcut.actionId)) continue;
       const dispatchCode = resolveShortcutDispatchCode(shortcut, activeShortcutCodes);
-      const row =
-        EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) &&
-        shortcut.activationProbeSafe
-          ? buildSkippedLiveProbeRow(shortcut, 'environment-fail', failureReason, dispatchCode)
+      const row = prepareCaptureOnly
+        ? buildCaptureOnlyLiveProbeRow(shortcut, {
+            stateId: LIVE_PROBE_CAPTURE_STATE_BY_ACTION[shortcut.actionId],
+            status: 'failed',
+            error: reportedFailureReason,
+          })
+        : EXECUTABLE_LIVE_PROBE_MODES.includes(shortcut.activationProbeMode) &&
+            shortcut.activationProbeSafe
+          ? buildSkippedLiveProbeRow(
+              shortcut,
+              'environment-fail',
+              reportedFailureReason,
+              dispatchCode,
+            )
           : buildNonExecutableLiveProbeRow(shortcut, dispatchCode);
       rows.push(row);
       checkpoint.completedCases.push({
         rowId: `global:${shortcut.actionId}`,
         actionId: shortcut.actionId,
         status: row.status,
-        reason: row.reason,
+        ...(prepareCaptureOnly ? { captureStatus: row.stateCapture.status } : {}),
+        reason: row.reason || reportedFailureReason,
         completedAt: new Date().toISOString(),
       });
+      if (prepareCaptureOnly) {
+        recordCaptureOnlyFailure({
+          actionId: shortcut.actionId,
+          supplementalArtifactByState,
+          rows,
+          checkpoint,
+          failureType: 'setup',
+        });
+      }
     }
     for (const contract of fixedContractsToRun) {
       if (fixedRows.some((row) => row.contractId === contract.contractId)) continue;
@@ -6428,6 +9694,14 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   checkpoint.clipboardRecovery = clipboardRecovery;
   await persistCheckpoint().catch(() => {});
 
+  await cleanupActiveOwnedComposerDraft(page, {
+    auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+    allowVerifiedBlankHome: true,
+    checkpoint,
+    persistCheckpoint,
+    scope: 'final-run',
+  }).catch(() => {});
+
   let fixtureRecoveryError = '';
   try {
     await resetFixturePage(page, fixtureUrl);
@@ -6453,10 +9727,13 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
   const checkpointPath = checkpoint.checkpointPath || '';
   return {
     schemaVersion: 1,
+    mode: prepareCaptureOnly ? 'prepare-capture-only' : 'shortcut-activation',
+    activationStatus: prepareCaptureOnly ? 'not-live-probed' : 'probed',
     generatedAt: new Date().toISOString(),
     fixtureUrl,
     fixtureOwnership,
     phase,
+    capabilities: modelCapabilities,
     rows,
     fixedRows,
     summary: {
@@ -6468,12 +9745,17 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     },
     storageRecovery,
     clipboardRecovery,
+    ...(collectTargetArtifacts
+      ? { supplementalArtifacts: [...supplementalArtifactByState.values()] }
+      : {}),
     checkpoint: {
       status: checkpoint.status,
       path: checkpointPath,
       currentCase: checkpoint.currentCase,
       completedCaseCount: checkpoint.completedCases.length,
       auditOwnedConversationIds: checkpoint.auditOwnedConversationIds,
+      captureCleanupFailures: checkpoint.captureCleanupFailures || [],
+      composerCleanupOutcomes: checkpoint.composerCleanupOutcomes || [],
       fixtureRestored: checkpoint.finalBrowserState.fixtureRestored,
       clipboardRecoveryStatus: checkpoint.clipboardRecoveryStatus,
       checkpointWriteError: checkpoint.checkpointWriteError,
@@ -6524,9 +9806,55 @@ export async function createUniqueRunDirectory(preferredName) {
   }
 }
 
-export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
+async function validateReservedRunDirectory(runDirectory, { allowedEntries = [] } = {}) {
+  if (
+    !runDirectory ||
+    typeof runDirectory.name !== 'string' ||
+    typeof runDirectory.path !== 'string' ||
+    !path.isAbsolute(runDirectory.path) ||
+    !runDirectory.name ||
+    runDirectory.name === '.' ||
+    runDirectory.name === '..' ||
+    path.basename(runDirectory.name) !== runDirectory.name
+  ) {
+    throw new Error('A reserved run directory name and absolute path are required.');
+  }
+
+  const capturesRoot = path.resolve(inspectorCapturesRoot);
+  const folderPath = path.resolve(runDirectory.path);
+  if (
+    path.dirname(folderPath) !== capturesRoot ||
+    path.basename(folderPath) !== runDirectory.name
+  ) {
+    throw new Error('The reserved run directory must be a direct child of inspector-captures.');
+  }
+  const rootInfo = await lstat(capturesRoot);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error('The inspector-captures root must be a real directory.');
+  }
+  const folderInfo = await lstat(folderPath);
+  if (!folderInfo.isDirectory() || folderInfo.isSymbolicLink()) {
+    throw new Error('The reserved run path must be an existing folder, not a link.');
+  }
+  const entries = await readdir(folderPath);
+  const permittedEntries = new Set(allowedEntries);
+  if (entries.some((entry) => !permittedEntries.has(entry))) {
+    throw new Error('The reserved run directory contains unexpected existing files.');
+  }
+  return { name: runDirectory.name, path: folderPath };
+}
+
+export async function writeScrapeRun({
+  scrapeResult,
+  normalizedArtifacts,
+  runDirectory: reservedRunDirectory,
+}) {
   const { exports } = await loadDevScrapeWideContract();
-  const runDirectory = await createUniqueRunDirectory(exports.buildRunFolderName(new Date()));
+  const runDirectory = reservedRunDirectory
+    ? await validateReservedRunDirectory(reservedRunDirectory, {
+        allowedEntries: [AUDIT_ARTIFACT_FILENAMES.checkpoint],
+      })
+    : await createUniqueRunDirectory(exports.buildRunFolderName(new Date()));
   const normalizedByFilename = new Map(
     normalizedArtifacts.map((artifact) => [artifact.filename, artifact.normalizedHtml]),
   );
@@ -6555,6 +9883,9 @@ export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
         : normalizedByFilename.get(artifact.filename)?.length || 0,
     clickPath: Array.isArray(artifact.clickPath) ? artifact.clickPath : [],
   }));
+  const modelCapabilities = Object.hasOwn(scrapeResult, 'capabilities')
+    ? assertCapabilities(scrapeResult.capabilities)
+    : unknownCapabilities();
 
   const manifest = {
     schemaVersion: 1,
@@ -6562,6 +9893,7 @@ export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
     folderName: runDirectory.name,
     fixtureUrl: scrapeResult.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
     fixtureOwnership: scrapeResult.fixtureOwnership || null,
+    capabilities: modelCapabilities,
     pageInfo: scrapeResult.pageInfo || null,
     startedAt: scrapeResult.startedAt || new Date().toISOString(),
     completedAt: scrapeResult.completedAt || new Date().toISOString(),
@@ -6570,6 +9902,9 @@ export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
     deferredCount: Number(scrapeResult.deferredCount || 0),
     writtenFiles,
     artifacts: manifestArtifacts,
+    ...(scrapeResult.currentModelCatalogActionProjection
+      ? { currentModelCatalogActionProjection: scrapeResult.currentModelCatalogActionProjection }
+      : {}),
   };
 
   await writeFile(
@@ -6586,6 +9921,222 @@ export async function writeScrapeRun({ scrapeResult, normalizedArtifacts }) {
     deferredCount: manifest.deferredCount,
     writtenFiles,
     manifest,
+  };
+}
+
+export async function appendSupplementalProbeArtifacts({
+  runFolderPath,
+  supplementalArtifacts = [],
+  normalizedArtifacts = [],
+} = {}) {
+  if (typeof runFolderPath !== 'string' || !path.isAbsolute(runFolderPath)) {
+    throw new Error('A full path to the existing scrape run folder is required.');
+  }
+  if (!Array.isArray(supplementalArtifacts) || !Array.isArray(normalizedArtifacts)) {
+    throw new Error('Supplemental and normalized artifacts must be arrays.');
+  }
+
+  const folderPath = path.resolve(runFolderPath);
+  const folderInfo = await lstat(folderPath);
+  if (!folderInfo.isDirectory() || folderInfo.isSymbolicLink()) {
+    throw new Error('The scrape run path must be an existing folder, not a link.');
+  }
+  const manifestPath = path.join(folderPath, 'run-manifest.json');
+  const manifestInfo = await lstat(manifestPath);
+  if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink()) {
+    throw new Error('The existing scrape run manifest must be a regular file.');
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  if (
+    manifest.folderName !== path.basename(folderPath) ||
+    !Array.isArray(manifest.artifacts) ||
+    !Array.isArray(manifest.writtenFiles)
+  ) {
+    throw new Error('The existing run manifest does not identify this scrape folder.');
+  }
+
+  const { exports } = await loadDevScrapeWideContract();
+  const registryDefinitions = [
+    ...(exports.DUMP_REGISTRY || []),
+    ...(exports.DEFERRED_ARTIFACTS || []),
+  ].filter((definition) => definition.probeOnly === true);
+  const definitionByState = new Map();
+  const registryFilenames = new Set();
+  for (const definition of registryDefinitions) {
+    if (
+      !definition.stateId ||
+      !definition.filename ||
+      definitionByState.has(definition.stateId) ||
+      registryFilenames.has(definition.filename)
+    ) {
+      throw new Error('The probe-only registry contains duplicate or incomplete artifact entries.');
+    }
+    definitionByState.set(definition.stateId, definition);
+    registryFilenames.add(definition.filename);
+  }
+
+  const assertLeafFilename = (filename, description) => {
+    if (
+      typeof filename !== 'string' ||
+      !filename ||
+      filename === '.' ||
+      filename === '..' ||
+      path.isAbsolute(filename) ||
+      filename.includes('/') ||
+      filename.includes('\\') ||
+      path.basename(filename) !== filename
+    ) {
+      throw new Error(
+        `${description} must be a single filename inside the existing scrape folder.`,
+      );
+    }
+  };
+  const incomingByState = new Map();
+  const incomingFilenames = new Set();
+  for (const artifact of supplementalArtifacts) {
+    const definition = definitionByState.get(artifact?.stateId);
+    if (!definition) {
+      throw new Error(`Unknown probe-only artifact state: ${artifact?.stateId || '(empty)'}`);
+    }
+    assertLeafFilename(artifact.filename, 'Supplemental artifact filename');
+    if (artifact.filename !== definition.filename) {
+      throw new Error(`Filename does not match the registered state ${definition.stateId}.`);
+    }
+    if (incomingByState.has(artifact.stateId) || incomingFilenames.has(artifact.filename)) {
+      throw new Error('Supplemental artifacts contain a duplicate state or filename.');
+    }
+    if (!['captured', 'failed', 'deferred'].includes(artifact.status)) {
+      throw new Error(`Unsupported supplemental artifact status for ${artifact.stateId}.`);
+    }
+    incomingByState.set(artifact.stateId, { artifact, definition });
+    incomingFilenames.add(artifact.filename);
+  }
+
+  const normalizedByFilename = new Map();
+  for (const normalized of normalizedArtifacts) {
+    assertLeafFilename(normalized?.filename, 'Normalized artifact filename');
+    if (
+      normalizedByFilename.has(normalized.filename) ||
+      !incomingFilenames.has(normalized.filename) ||
+      ![...incomingByState.values()].some(
+        ({ artifact }) =>
+          artifact.filename === normalized.filename && artifact.status === 'captured',
+      )
+    ) {
+      throw new Error('Normalized artifacts must uniquely match captured supplemental artifacts.');
+    }
+    if (typeof normalized.normalizedHtml !== 'string' || !normalized.normalizedHtml.trim()) {
+      throw new Error(`Normalized HTML is missing for ${normalized.filename}.`);
+    }
+    normalizedByFilename.set(normalized.filename, normalized.normalizedHtml);
+  }
+  for (const { artifact } of incomingByState.values()) {
+    if (artifact.status === 'captured' && !normalizedByFilename.has(artifact.filename)) {
+      throw new Error(`Missing normalized HTML for ${artifact.filename}.`);
+    }
+  }
+
+  const existingByState = new Map();
+  const existingFilenames = new Map();
+  for (const entry of manifest.artifacts) {
+    if (!entry?.stateId || !entry.filename) continue;
+    if (existingByState.has(entry.stateId) || existingFilenames.has(entry.filename)) {
+      throw new Error('The existing run manifest contains duplicate artifact states or filenames.');
+    }
+    existingByState.set(entry.stateId, entry);
+    existingFilenames.set(entry.filename, entry.stateId);
+  }
+  for (const { artifact, definition } of incomingByState.values()) {
+    const existingState = existingByState.get(artifact.stateId);
+    const filenameOwner = existingFilenames.get(artifact.filename);
+    if (existingState && existingState.filename !== definition.filename) {
+      throw new Error(`The existing manifest filename does not match ${artifact.stateId}.`);
+    }
+    if (filenameOwner && filenameOwner !== artifact.stateId) {
+      throw new Error(
+        `The existing manifest filename belongs to another state: ${artifact.filename}.`,
+      );
+    }
+    if (artifact.status === 'captured') {
+      const filePath = path.join(folderPath, artifact.filename);
+      if (path.dirname(path.resolve(filePath)) !== folderPath) {
+        throw new Error(`Artifact path leaves the existing scrape folder: ${artifact.filename}.`);
+      }
+      try {
+        const targetInfo = await lstat(filePath);
+        if (!targetInfo.isFile() || targetInfo.isSymbolicLink()) {
+          throw new Error(`Artifact path is not a regular file: ${artifact.filename}.`);
+        }
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+  }
+
+  const nextArtifacts = manifest.artifacts.map((entry) => ({ ...entry }));
+  for (const { artifact, definition } of incomingByState.values()) {
+    const manifestArtifact = {
+      filename: definition.filename,
+      stateId: definition.stateId,
+      label: definition.label,
+      status: artifact.status,
+      error: artifact.error || null,
+      aliasOf: null,
+      captureBytes:
+        typeof artifact.captureBytes === 'number'
+          ? artifact.captureBytes
+          : normalizedByFilename.get(artifact.filename)?.length || 0,
+      clickPath: Array.isArray(artifact.clickPath)
+        ? artifact.clickPath
+        : Array.isArray(definition.steps)
+          ? definition.steps.map((step) => step.label || step.type)
+          : [],
+    };
+    const existingIndex = nextArtifacts.findIndex((entry) => entry.stateId === definition.stateId);
+    if (existingIndex >= 0) nextArtifacts[existingIndex] = manifestArtifact;
+    else nextArtifacts.push(manifestArtifact);
+  }
+
+  const nextWrittenFiles = [
+    ...new Set(
+      nextArtifacts
+        .filter((artifact) => artifact.status === 'captured' || artifact.status === 'alias')
+        .map((artifact) => artifact.filename),
+    ),
+  ];
+  const previousCompletedAt = Date.parse(manifest.completedAt || '');
+  const completedAt = new Date(
+    Math.max(Date.now(), Number.isFinite(previousCompletedAt) ? previousCompletedAt + 1 : 0),
+  ).toISOString();
+  const nextManifest = {
+    ...manifest,
+    completedAt,
+    capturedCount: nextArtifacts.filter(
+      (artifact) => artifact.status === 'captured' || artifact.status === 'alias',
+    ).length,
+    failedCount: nextArtifacts.filter((artifact) => artifact.status === 'failed').length,
+    deferredCount: nextArtifacts.filter((artifact) => artifact.status === 'deferred').length,
+    writtenFiles: nextWrittenFiles,
+    artifacts: nextArtifacts,
+  };
+
+  for (const { artifact } of incomingByState.values()) {
+    if (artifact.status !== 'captured') continue;
+    await writeFile(
+      path.join(folderPath, artifact.filename),
+      normalizedByFilename.get(artifact.filename),
+      'utf8',
+    );
+  }
+  await writeFile(manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`, 'utf8');
+  return {
+    folderName: nextManifest.folderName,
+    folderPath,
+    capturedCount: nextManifest.capturedCount,
+    failedCount: nextManifest.failedCount,
+    deferredCount: nextManifest.deferredCount,
+    writtenFiles: nextManifest.writtenFiles,
+    manifest: nextManifest,
   };
 }
 
@@ -6615,6 +10166,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
     auditPhase: phase,
     folderName: runDirectory.name,
     fixtureUrl: exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    capabilities: unknownCapabilities(),
     pageInfo: null,
     startedAt,
     completedAt: new Date().toISOString(),
@@ -6646,6 +10198,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     fixtureUrl: manifest.fixtureUrl,
+    capabilities: manifest.capabilities,
     runStatus: 'not-run',
     phase,
     rows: [],
@@ -6920,19 +10473,6 @@ export async function loadRunDirectory(folderName = null) {
   };
 }
 
-function targetMatchesText(target, text) {
-  const haystack = String(text || '');
-  const matchGroups = Array.isArray(target?.matchGroups) ? target.matchGroups : [];
-  return matchGroups.some((group) => {
-    const needles = Array.isArray(group) ? group : [group];
-    const requiredNeedles = needles.filter(Boolean);
-    return (
-      requiredNeedles.length > 0 &&
-      requiredNeedles.every((needle) => haystack.includes(String(needle)))
-    );
-  });
-}
-
 export async function buildCurrentShortcutInventory(scrapeStateRegistry) {
   const [
     contentSource,
@@ -6960,33 +10500,49 @@ export async function buildCurrentShortcutInventory(scrapeStateRegistry) {
 function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, inventory }) {
   const inventoryOnly = ['inventory-only', 'environment-fail'].includes(run?.manifest?.mode);
   const runMode = run?.manifest?.mode || 'inventory-only';
-  const targetRows = (inventory.targets || []).map((target) => ({
-    targetId: target.targetId,
-    identifier: target.identifier,
-    canonicalIdentifier: target.identifier,
-    kind: target.kind,
-    usedByActionIds: target.usedByActionIds,
-    expectedUiStateRefs: target.expectedUiStateRefs || [],
-    expectedFiles: target.expectedFiles || [],
-    matchGroups: target.matchGroups || [],
-    matchedExpectedFiles: [],
-    allMatchedFiles: [],
-    missingExpectedFiles: [],
-    unknownUiStateRefs: target.unknownUiStateRefs || [],
-    missingMatchGroups: target.missingMatchGroups || false,
-    status: 'not-run',
-    statusReason: 'Inventory-only run; no browser scrape dumps were captured.',
-    notes: target.notes || '',
-  }));
+  const modelCapabilities = capabilitiesFromManifest(run?.manifest);
+  const targetRows = (inventory.targets || []).map((target) => {
+    const unavailableStatus = getUnavailableCapabilityStatus(
+      target.requiredCapabilities,
+      modelCapabilities,
+    );
+    return {
+      targetId: target.targetId,
+      identifier: target.identifier,
+      canonicalIdentifier: target.identifier,
+      kind: target.kind,
+      usedByActionIds: target.usedByActionIds,
+      requiredCapabilities: target.requiredCapabilities || [],
+      expectedUiStateRefs: target.expectedUiStateRefs || [],
+      expectedFiles: target.expectedFiles || [],
+      matchGroups: target.matchGroups || [],
+      matchedExpectedFiles: [],
+      allMatchedFiles: [],
+      missingExpectedFiles: [],
+      unknownUiStateRefs: target.unknownUiStateRefs || [],
+      missingMatchGroups: target.missingMatchGroups || false,
+      status: unavailableStatus?.status || 'not-run',
+      statusReason:
+        unavailableStatus?.statusReason ||
+        'Inventory-only run; no browser scrape dumps were captured.',
+      notes: target.notes || '',
+    };
+  });
   const shortcutRows = (inventory.shortcuts || []).map((shortcut) => {
     const sourceIssues = (inventory.inventoryIssues || [])
       .filter((issue) => issue.actionId === shortcut.actionId)
       .map((issue) => issue.message || issue.type || 'Inventory issue');
+    const unavailableStatus = getUnavailableCapabilityStatus(
+      shortcut.requiredCapabilities,
+      modelCapabilities,
+    );
     const status = sourceIssues.length
       ? 'fail'
-      : runMode === 'environment-fail'
-        ? 'environment-fail'
-        : 'not-run';
+      : unavailableStatus
+        ? unavailableStatus.status
+        : runMode === 'environment-fail'
+          ? 'environment-fail'
+          : 'not-run';
     return {
       actionId: shortcut.actionId,
       label: shortcut.label,
@@ -6998,6 +10554,7 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
       targetRefs: shortcut.targetRefs || shortcut.targetIds,
       requiredUiStateRefs: shortcut.requiredUiStateRefs || [],
       requiredFiles: shortcut.requiredFiles || [],
+      requiredCapabilities: shortcut.requiredCapabilities || [],
       unknownTargetRefs: shortcut.unknownTargetRefs || [],
       unknownUiStateRefs: shortcut.unknownUiStateRefs || [],
       activationProbe: shortcut.activationProbe || null,
@@ -7017,10 +10574,12 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
       status,
       statusReason:
         sourceIssues.join('; ') ||
-        (runMode === 'environment-fail'
-          ? run?.manifest?.artifacts?.find((artifact) => artifact.error)?.error ||
-            'Browser audit could not start.'
-          : 'Live activation and scrape coverage were not run in this phase.'),
+        (unavailableStatus
+          ? unavailableStatus.statusReason
+          : runMode === 'environment-fail'
+            ? run?.manifest?.artifacts?.find((artifact) => artifact.error)?.error ||
+              'Browser audit could not start.'
+            : 'Live activation and scrape coverage were not run in this phase.'),
       notes: shortcut.notes || '',
     };
   });
@@ -7031,7 +10590,7 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
     failed: shortcutRows.filter((row) => row.status === 'fail').length,
     partial: 0,
     manual: 0,
-    notApplicable: shortcutRows.filter((row) => row.validationMode === 'not-applicable').length,
+    notApplicable: shortcutRows.filter((row) => row.status === 'not-applicable').length,
     notRun: shortcutRows.filter((row) => row.status === 'not-run').length,
     environmentFailed: shortcutRows.filter((row) => row.status === 'environment-fail').length,
   };
@@ -7039,8 +10598,9 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
     total: targetRows.length,
     passed: 0,
     failed: 0,
-    noScrapeCoverage: targetRows.length,
-    notRun: targetRows.length,
+    noScrapeCoverage: targetRows.filter((row) => row.status === 'not-run').length,
+    notApplicable: targetRows.filter((row) => row.status === 'not-applicable').length,
+    notRun: targetRows.filter((row) => row.status === 'not-run').length,
   };
   const sortedCurrentIndex = sortedRunFolders.findIndex((item) => item.name === run.folderName);
   const latestRun = sortedRunFolders[sortedRunFolders.length - 1] || null;
@@ -7058,6 +10618,7 @@ function buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, invento
     schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     fixtureUrl: run?.manifest?.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    capabilities: modelCapabilities,
     folderName: run.folderName,
     folderPath: run.folderPath,
     runManifest: run.manifest,
@@ -7125,6 +10686,7 @@ export async function buildCheckReport({ folderName = null } = {}) {
     ...(exports.DEFERRED_ARTIFACTS || []),
   ];
   const inventory = await buildCurrentShortcutInventory(scrapeStateRegistry);
+  const modelCapabilities = capabilitiesFromManifest(run.manifest);
 
   if (['inventory-only', 'environment-fail'].includes(run.manifest?.mode)) {
     return buildInventoryOnlyCheckReport({ exports, run, sortedRunFolders, inventory });
@@ -7138,39 +10700,9 @@ export async function buildCheckReport({ folderName = null } = {}) {
     }));
 
   const targetRows = inventory.targets.map((target) => {
-    const allMatchedFiles = Object.entries(run.files)
-      .filter(([, text]) => targetMatchesText(target, text))
-      .map(([fileName]) => fileName)
-      .sort();
-    const expectedFiles = Array.isArray(target.expectedFiles) ? target.expectedFiles : [];
-    const missingExpectedFiles = expectedFiles.filter(
-      (fileName) => !Object.hasOwn(run.files, fileName),
-    );
-    const matchedExpectedFiles = expectedFiles.filter((fileName) =>
-      targetMatchesText(target, run.files[fileName]),
-    );
-    const hasMatchGroups = Array.isArray(target.matchGroups) && target.matchGroups.length > 0;
-    let status = 'pass';
-    let statusReason = 'Target matched at least one expected scrape dump.';
-
-    if ((target.unknownUiStateRefs || []).length > 0) {
-      status = 'fail';
-      statusReason = `Target references unknown scrape state(s): ${target.unknownUiStateRefs.join(', ')}`;
-    } else if (target.missingMatchGroups) {
-      status = 'fail';
-      statusReason = 'Target has scrape state coverage but no deterministic match group.';
-    } else if (!expectedFiles.length || !hasMatchGroups) {
-      status = 'no-scrape-coverage';
-      statusReason =
-        target.notes ||
-        'The target is known, but the current scrape family does not capture a deterministic dump for it yet.';
-    } else if (missingExpectedFiles.length > 0) {
-      status = 'fail';
-      statusReason = `Expected dump files were missing: ${missingExpectedFiles.join(', ')}`;
-    } else if (!matchedExpectedFiles.length) {
-      status = 'fail';
-      statusReason = 'Target was not found in any expected scrape dump.';
-    }
+    const presence = evaluateTargetPresence(target, run.files, {
+      capabilities: modelCapabilities,
+    });
 
     return {
       targetId: target.targetId,
@@ -7178,16 +10710,18 @@ export async function buildCheckReport({ folderName = null } = {}) {
       canonicalIdentifier: target.identifier,
       kind: target.kind,
       usedByActionIds: target.usedByActionIds,
+      requiredCapabilities: target.requiredCapabilities || [],
       expectedUiStateRefs: target.expectedUiStateRefs || [],
-      expectedFiles,
+      expectedFiles: presence.expectedFiles,
       matchGroups: target.matchGroups || [],
-      matchedExpectedFiles,
-      allMatchedFiles,
-      missingExpectedFiles,
+      matchedExpectedFiles: presence.matchedExpectedFiles,
+      allMatchedFiles: presence.allMatchedFiles,
+      missingExpectedFiles:
+        presence.status === 'not-applicable' ? [] : presence.missingExpectedFiles,
       unknownUiStateRefs: target.unknownUiStateRefs || [],
       missingMatchGroups: target.missingMatchGroups || false,
-      status,
-      statusReason,
+      status: presence.status,
+      statusReason: presence.statusReason,
       notes: target.notes || '',
     };
   });
@@ -7208,6 +10742,10 @@ export async function buildCheckReport({ folderName = null } = {}) {
       .map((targetId) => targetRowById[targetId])
       .filter(Boolean);
     const targetStatuses = targetRowsForShortcut.map((row) => row.status);
+    const unavailableStatus = getUnavailableCapabilityStatus(
+      shortcut.requiredCapabilities,
+      modelCapabilities,
+    );
     const sourceIssues = [];
     if (shortcut.missingMetadata) {
       sourceIssues.push('missing explicit validation metadata');
@@ -7235,6 +10773,9 @@ export async function buildCheckReport({ folderName = null } = {}) {
     if (sourceIssues.length) {
       status = 'fail';
       statusReason = sourceIssues.join('; ');
+    } else if (unavailableStatus) {
+      status = unavailableStatus.status;
+      statusReason = unavailableStatus.statusReason;
     } else if (shortcut.validationMode === 'not-applicable') {
       status = 'not-applicable';
       statusReason =
@@ -7277,6 +10818,7 @@ export async function buildCheckReport({ folderName = null } = {}) {
       targetRefs: shortcut.targetRefs || shortcut.targetIds,
       requiredUiStateRefs: shortcut.requiredUiStateRefs || [],
       requiredFiles: shortcut.requiredFiles || [],
+      requiredCapabilities: shortcut.requiredCapabilities || [],
       unknownTargetRefs: shortcut.unknownTargetRefs || [],
       unknownUiStateRefs: shortcut.unknownUiStateRefs || [],
       activationProbe: shortcut.activationProbe || null,
@@ -7313,6 +10855,7 @@ export async function buildCheckReport({ folderName = null } = {}) {
     passed: targetRows.filter((row) => row.status === 'pass').length,
     failed: targetRows.filter((row) => row.status === 'fail').length,
     noScrapeCoverage: targetRows.filter((row) => row.status === 'no-scrape-coverage').length,
+    notApplicable: targetRows.filter((row) => row.status === 'not-applicable').length,
   };
 
   const failingShortcutRows = shortcutRows.filter((row) => row.status === 'fail');
@@ -7352,6 +10895,7 @@ export async function buildCheckReport({ folderName = null } = {}) {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     fixtureUrl: run?.manifest?.fixtureUrl || exports.DEV_SCRAPE_WIDE_FIXTURE_URL,
+    capabilities: modelCapabilities,
     folderName: run.folderName,
     folderPath: run.folderPath,
     runManifest: run.manifest,

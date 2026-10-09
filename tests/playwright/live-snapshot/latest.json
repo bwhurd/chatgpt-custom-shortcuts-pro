@@ -1,0 +1,519 @@
+{
+  "schemaVersion": 2,
+  "kind": "captured-token-evidence",
+  "origin": "https://chatgpt.com",
+  "capturedAt": "2026-10-09T09:18:57.325Z",
+  "sourceFingerprint": "09471fa4da6633022c87974b939842df93e23dade105cee90961ca1df797db9c",
+  "capabilities": {
+    "schemaVersion": 2,
+    "source": "fresh-model-picker-v2",
+    "proEffort": "unknown",
+    "configureRoute": "unavailable",
+    "dedicatedEffortControls": "unavailable"
+  },
+  "coverageStatus": "complete",
+  "states": [
+    {
+      "stateId": "sidebar-collapsed-body",
+      "filename": "1a_SideBarCollapsed_body.txt",
+      "status": "captured",
+      "tokens": [
+        "#arrow-up-open-base-light-16",
+        "#microphone-light-16\"",
+        "#microphone-light-20\"",
+        "<a",
+        "<button",
+        "<code",
+        "<form",
+        "<header",
+        "<input",
+        "<pre",
+        "M11.7313",
+        "M13.468 11.1216",
+        "M6.33325 1.80763",
+        "M8.16675 2.50127",
+        "M9.16211 2.37976",
+        "M9.75122 4.09203",
+        "ProseMirror",
+        "aria-controls=\"app-shell-sidebar\"",
+        "aria-haspopup=\"menu\"",
+        "aria-label=\"Search\"",
+        "aria-pressed=\"false\"",
+        "arrows-clockwise-rotate-lg-light-16",
+        "contenteditable=\"true\"",
+        "data-app-shell-header-obstacle=\"true\"",
+        "data-app-shell-sidebar-trigger=\"true\"",
+        "data-app-shell-titlebar",
+        "data-chatgpt-composer",
+        "data-chatgpt-search-unit-key",
+        "data-codex-intelligence-trigger=\"true\"",
+        "data-composer-markdown",
+        "data-composer-navigation-target=\"add-context\"",
+        "data-state=\"open\"",
+        "data-testid=\"app-shell-header-context-menu-surface\"",
+        "data-thread-find-composer=\"true\"",
+        "data-turn",
+        "data-turn-key",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "role=\"dialog\"",
+        "role=\"group\"",
+        "role=\"textbox\"",
+        "thread-scroll-container",
+        "turn-action-controls",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "sidebar-expanded-body",
+      "filename": "1b_SidebarExpaneded_body.txt",
+      "status": "captured",
+      "tokens": [
+        "#arrow-up-open-base-light-16",
+        "#microphone-light-16\"",
+        "#microphone-light-20\"",
+        "<a",
+        "<button",
+        "<code",
+        "<form",
+        "<header",
+        "<input",
+        "<pre",
+        "M11.7313",
+        "M13.468 11.1216",
+        "M6.33325 1.80763",
+        "M8.16675 2.50127",
+        "M9.16211 2.37976",
+        "M9.75122 4.09203",
+        "ProseMirror",
+        "aria-controls=\"app-shell-sidebar\"",
+        "aria-haspopup=\"menu\"",
+        "aria-label=\"Search\"",
+        "aria-pressed=\"false\"",
+        "arrows-clockwise-rotate-lg-light-16",
+        "contenteditable=\"true\"",
+        "data-app-shell-header-obstacle=\"true\"",
+        "data-app-shell-sidebar-trigger=\"true\"",
+        "data-app-shell-titlebar",
+        "data-chatgpt-composer",
+        "data-chatgpt-search-unit-key",
+        "data-codex-intelligence-trigger=\"true\"",
+        "data-composer-markdown",
+        "data-composer-navigation-target=\"add-context\"",
+        "data-state=\"open\"",
+        "data-testid=\"app-shell-header-context-menu-surface\"",
+        "data-thread-find-composer=\"true\"",
+        "data-turn",
+        "data-turn-key",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "role=\"dialog\"",
+        "role=\"group\"",
+        "role=\"textbox\"",
+        "thread-scroll-container",
+        "turn-action-controls",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "topbar-bottom-disabled-thread-bottom",
+      "filename": "1d_TopbarToBottomDisabled_ThreadBottom.txt",
+      "status": "captured",
+      "tokens": [
+        "thread-scroll-container"
+      ]
+    },
+    {
+      "stateId": "topbar-bottom-disabled-header-area",
+      "filename": "1e_TopbarToBottomDisabled_HeaderArea.txt",
+      "status": "captured",
+      "tokens": [
+        "#arrow-up-open-base-light-16",
+        "<button",
+        "<header",
+        "M6.33325 1.80763",
+        "aria-haspopup=\"menu\"",
+        "aria-pressed=\"false\"",
+        "data-app-shell-header-obstacle=\"true\"",
+        "data-app-shell-titlebar",
+        "data-testid=\"app-shell-header-context-menu-surface\"",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "narrow-header-sidebar-popover-control",
+      "filename": "1e2_NarrowViewport_HeaderArea_StagePopoverSidebarControl.txt",
+      "status": "captured",
+      "tokens": [
+        "#arrow-up-open-base-light-16",
+        "<button",
+        "<header",
+        "M6.33325 1.80763",
+        "aria-haspopup=\"menu\"",
+        "aria-pressed=\"false\"",
+        "data-app-shell-header-obstacle=\"true\"",
+        "data-app-shell-titlebar",
+        "data-testid=\"app-shell-header-context-menu-surface\"",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "user-turn-buttons-exposed",
+      "filename": "1f_UserTurnWithButtonsExposedOnHover.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<code",
+        "<pre",
+        "M11.7313",
+        "M13.468 11.1216",
+        "M9.75122 4.09203",
+        "aria-haspopup=\"menu\"",
+        "aria-pressed=\"false\"",
+        "arrows-clockwise-rotate-lg-light-16",
+        "data-chatgpt-search-unit-key",
+        "data-turn",
+        "data-turn-key",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "turn-action-controls",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "assistant-turn-non-web-buttons-exposed",
+      "filename": "1g_AgentTurnWithButtons_MultipleThreads_2of2_DidntSearchWeb.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<code",
+        "<pre",
+        "M11.7313",
+        "M13.468 11.1216",
+        "M9.75122 4.09203",
+        "aria-haspopup=\"menu\"",
+        "aria-pressed=\"false\"",
+        "arrows-clockwise-rotate-lg-light-16",
+        "data-chatgpt-search-unit-key",
+        "data-turn",
+        "data-turn-key",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "turn-action-controls",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "assistant-turn-web-buttons-exposed",
+      "filename": "1h_AgentTurnWithButtons_SingleThread_SearchedTheWeb.txt",
+      "status": "captured",
+      "tokens": [
+        "<a",
+        "<button",
+        "M11.7313",
+        "M13.468 11.1216",
+        "M9.75122 4.09203",
+        "aria-haspopup=\"menu\"",
+        "aria-pressed=\"false\"",
+        "arrows-clockwise-rotate-lg-light-16",
+        "data-chatgpt-search-unit-key",
+        "data-turn",
+        "data-turn-key",
+        "ellipsis-horizontal-light-16",
+        "id=\"radix-",
+        "turn-action-controls",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "assistant-menu-read-aloud-branch",
+      "filename": "2a_AgentOrUserTurn_SubmenuMoreActions3Dots_ReadAloudBranchButtons.txt",
+      "status": "captured",
+      "tokens": [
+        "branch-light-16",
+        "data-radix-menu-content",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "role=\"menu\"",
+        "role=\"menuitem\""
+      ]
+    },
+    {
+      "stateId": "assistant-web-regenerate-menu-copy",
+      "filename": "2b_AgentOrUserTurn_SubmenuRegenerate_AfterWebSearchResponse_RegenerateSubmenu - Copy.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<form",
+        "<input",
+        "arrows-clockwise-rotate-lg-light-16",
+        "data-radix-menu-content",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "name=\"contextual-retry-feedback\"",
+        "role=\"menu\"",
+        "role=\"menuitem\"",
+        "type=\"submit\""
+      ]
+    },
+    {
+      "stateId": "assistant-web-regenerate-menu",
+      "filename": "2c_AgentOrUserTurn_SubmenuRegenerate_AfterWebSearchResponse_RegenerateSubmenu.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<form",
+        "<input",
+        "arrows-clockwise-rotate-lg-light-16",
+        "data-radix-menu-content",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "name=\"contextual-retry-feedback\"",
+        "role=\"menu\"",
+        "role=\"menuitem\"",
+        "type=\"submit\""
+      ]
+    },
+    {
+      "stateId": "model-switcher-menu",
+      "filename": "2d_SubmenuForModelSwitcher_data-testid_model-switcher-dropdown-button.txt",
+      "status": "captured",
+      "tokens": [
+        "aria-checked=",
+        "data-radix-menu-content",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "role=\"menu\"",
+        "role=\"menuitem\"",
+        "role=\"menuitemradio\""
+      ]
+    },
+    {
+      "stateId": "model-switcher-thinking-effort-menu",
+      "filename": "2d_ModelSwitcher_ThinkingEffort_Submenu.txt",
+      "status": "deferred",
+      "tokens": []
+    },
+    {
+      "stateId": "model-switcher-pro-thinking-effort-menu",
+      "filename": "2d2_ModelSwitcher_ProThinkingEffort_Submenu.txt",
+      "status": "deferred",
+      "tokens": []
+    },
+    {
+      "stateId": "composer-add-files-and-more-menu",
+      "filename": "2k_Composer_AddFilesAndMore_Menu.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "M12 2c5.522",
+        "M7 21.005",
+        "M7.99994 14.6888",
+        "M9.9998 18.3614",
+        "data-list-navigation-item=\"true\"",
+        "deep_research_app/icon.png",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "search-chats-dialog",
+      "filename": "2n_SearchChats_Dialog.txt",
+      "status": "captured",
+      "tokens": [
+        "<a",
+        "<button",
+        "<header",
+        "<input",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "placeholder=\"Search…\"",
+        "role=\"combobox\"",
+        "role=\"dialog\"",
+        "role=\"group\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "shortcut-overlay",
+      "filename": "2o_ShortcutOverlay_Dialog.txt",
+      "status": "captured",
+      "tokens": [
+        "id=\"csp-shortcut-overlay\""
+      ]
+    },
+    {
+      "stateId": "probe-code-block-content",
+      "filename": "3a_Probe_CodeBlockContent.txt",
+      "status": "captured",
+      "tokens": [
+        "<code",
+        "<pre"
+      ]
+    },
+    {
+      "stateId": "probe-codebox-wrap-enabled",
+      "filename": "3b_Probe_CodeboxWrapEnabled.txt",
+      "status": "captured",
+      "tokens": [
+        "<code",
+        "<pre",
+        "csp-codebox-wrap-enabled"
+      ]
+    },
+    {
+      "stateId": "probe-edit-send-button",
+      "filename": "3c_Probe_EditSendButton.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "Cancel",
+        "ProseMirror",
+        "Send",
+        "contenteditable=\"true\"",
+        "data-composer-markdown",
+        "role=\"textbox\"",
+        "type=\"button\"",
+        "type=\"submit\""
+      ]
+    },
+    {
+      "stateId": "probe-edit-message-button",
+      "filename": "3l_Probe_EditMessageButton.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "M11.7313",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-send-button",
+      "filename": "3d_Probe_SendButton.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<form",
+        "M9.33467 16.6663",
+        "ProseMirror",
+        "Send",
+        "contenteditable=\"true\"",
+        "data-chatgpt-composer",
+        "data-composer-markdown",
+        "data-thread-find-composer=\"true\"",
+        "role=\"textbox\"",
+        "type=\"submit\""
+      ]
+    },
+    {
+      "stateId": "probe-stop-button",
+      "filename": "3e_Probe_StopButton.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "<form",
+        "M4.5 5.75C4.5 5.05964",
+        "ProseMirror",
+        "aria-label=\"Stop\"",
+        "contenteditable=\"true\"",
+        "data-chatgpt-composer",
+        "data-composer-markdown",
+        "data-thread-find-composer=\"true\"",
+        "role=\"textbox\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-temporary-chat",
+      "filename": "3f_Probe_TemporaryChat.txt",
+      "status": "captured",
+      "tokens": [
+        "#chat-bubble-dashed-light-20",
+        "<button",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-new-gpt-conversation",
+      "filename": "3g_Probe_NewGptConversation.txt",
+      "status": "captured",
+      "tokens": [
+        "#square-and-pencil-light-16",
+        "<a",
+        "<button",
+        "aria-haspopup=\"menu\"",
+        "data-state=\"open\"",
+        "id=\"radix-",
+        "role=\"menuitem\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-blank-chat-work-surface-toggle",
+      "filename": "3h_Probe_BlankChatWorkSurfaceToggle.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "aria-pressed=\"false\"",
+        "aria-pressed=\"true\"",
+        "role=\"group\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-composer-study-search",
+      "filename": "3i_Probe_ComposerStudySearch.txt",
+      "status": "captured",
+      "tokens": [
+        "#book-open-light-16",
+        "<button",
+        "data-list-navigation-item=\"true\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-composer-deep-research-search",
+      "filename": "3m_Probe_ComposerDeepResearchSearch.txt",
+      "status": "captured",
+      "tokens": [
+        "<button",
+        "data-list-navigation-item=\"true\"",
+        "deep_research_app/icon.png",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-active-dictation-controls",
+      "filename": "3j_Probe_ActiveDictationControls.txt",
+      "status": "captured",
+      "tokens": [
+        "#arrow-up-lg-light-20\"",
+        "#stop-fill-light-20\"",
+        "#xmark-lg-light-20\"",
+        "<button",
+        "<form",
+        "Cancel",
+        "data-chatgpt-composer",
+        "data-thread-find-composer=\"true\"",
+        "type=\"button\""
+      ]
+    },
+    {
+      "stateId": "probe-blank-chat-dictate-start",
+      "filename": "3k_Probe_BlankChatDictateStart.txt",
+      "status": "captured",
+      "tokens": [
+        "#microphone-light-16\"",
+        "#microphone-light-20\"",
+        "<button",
+        "<form",
+        "data-chatgpt-composer",
+        "data-thread-find-composer=\"true\"",
+        "type=\"button\""
+      ]
+    }
+  ]
+}

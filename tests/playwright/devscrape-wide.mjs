@@ -9,16 +9,20 @@ import { chromium } from 'playwright';
 import {
   buildCheckReport,
   buildCurrentShortcutInventory,
+  createUniqueRunDirectory,
   ensureInspectorCapturesRoot,
   evaluateWideScrapePageInfo,
   getInspectorCapturesRoot,
+  getProbeOnlyCaptureActionIds,
   getRepoRoot,
   injectDevScrapeWideIntoPage,
   loadAuditOwnedFixtureFromRun,
   loadDevScrapeWideContract,
   normalizeArtifactsInPage,
+  prepareFreshAuditOwnedFixture,
   prepareNewConversationProbeState,
   refreshModelCatalogForValidation,
+  requiresAuditOwnedTwoTurnFixture,
   runLiveShortcutActivationProbes,
   runWideScrapeWithPlaywright,
   verifyExtensionRuntimeReachable,
@@ -43,6 +47,7 @@ import {
 } from './lib/source-selector-audit.mjs';
 
 const args = process.argv.slice(2);
+const currentPageCaptureResultPrefix = 'CGCSP_CURRENT_PAGE_RESULT_V1 ';
 
 function getArgValue(flag, fallback = null) {
   const index = args.indexOf(flag);
@@ -113,12 +118,12 @@ function shouldAutoLaunchChrome() {
   return !hasFlag('--no-auto-launch');
 }
 
-function shouldRequireExtensionCapture() {
-  return hasFlag('--require-extension-capture');
-}
-
 function shouldProbeShortcuts() {
   return hasFlag('--probe-shortcuts');
+}
+
+function shouldPrepareCaptureOnly() {
+  return hasFlag('--prepare-capture-only');
 }
 
 function shouldPauseForExtensionSetup() {
@@ -141,6 +146,7 @@ function printUsage() {
   console.log(`Usage:
   node tests/playwright/devscrape-wide.mjs --action setup-login
   node tests/playwright/devscrape-wide.mjs --action scrape-wide
+  node tests/playwright/devscrape-wide.mjs --action validate-wide --prepare-capture-only
   node tests/playwright/devscrape-wide.mjs --action check-wide [--folder FOLDER_NAME]
   node tests/playwright/devscrape-wide.mjs --action validate-wide
   node tests/playwright/devscrape-wide.mjs --action probe-shortcuts [--shortcut-action-id ACTION_ID]
@@ -156,10 +162,10 @@ Options:
   --chrome-path PATH       Override the Chrome binary used by setup-login
   --user-data-dir-root DIR Override the Chrome user data root used by setup-login
   --no-auto-launch         Require an already-running CDP Chrome for scrape/validate
-  --require-extension-capture
-                           Fail validate-wide if the optional extension-backed 1c dump is not captured
-  --probe-shortcuts        Run no-token-safe live shortcut activation probes after scrape
-  --shortcut-action-id ID  Limit probe-shortcuts to one shortcut. May be repeated.
+  --probe-shortcuts        Opt into live probes, including disposable test prompts and state captures
+  --prepare-capture-only   Prepare and capture required probe-only states without shortcut activation
+  --shortcut-action-id ID  Limit probe-shortcuts or --prepare-capture-only in scrape-wide/validate-wide
+                           to selected shortcuts. May be repeated.
   --phase PHASE            audit-shortcuts phase: global, model, or all (default: all)
   --audit-owned-fixture-from-run NAME
                            Reuse a recovered audit-owned conversation from a prior run for captures
@@ -454,14 +460,34 @@ async function connectToAttachedBrowser({
 
 async function scrapeWide({
   autoLaunch = shouldAutoLaunchChrome(),
-  requireExtensionCapture = shouldRequireExtensionCapture(),
+  requireFreshModelCatalog = false,
   probeShortcuts = shouldProbeShortcuts(),
+  prepareCaptureOnly = shouldPrepareCaptureOnly(),
   phase = 'all',
   onlyActionIds = [],
   fixedContractIds = [],
   fixtureOwnership = null,
 } = {}) {
+  if (probeShortcuts && prepareCaptureOnly) {
+    throw new Error('--prepare-capture-only cannot be combined with --probe-shortcuts.');
+  }
+  const captureOnlyActionIds = prepareCaptureOnly
+    ? getProbeOnlyCaptureActionIds(getArgValues('--shortcut-action-id'))
+    : [];
+  const capturesProbeOnlyStates = probeShortcuts || prepareCaptureOnly;
   const { exports } = await loadDevScrapeWideContract();
+  const fixtureActionIds = prepareCaptureOnly ? captureOnlyActionIds : onlyActionIds;
+  const fixtureShortcutInventory = fixtureActionIds.length
+    ? await buildCurrentShortcutInventory(exports.DUMP_REGISTRY)
+    : null;
+  const needsTwoTurnFixture = capturesProbeOnlyStates
+    ? requiresAuditOwnedTwoTurnFixture({
+        onlyActionIds: fixtureActionIds,
+        fixedContractIds: prepareCaptureOnly ? [] : fixedContractIds,
+        phase,
+        shortcuts: fixtureShortcutInventory?.shortcuts || [],
+      })
+    : false;
   await ensureInspectorCapturesRoot();
   const { browser, context, cdpEndpoint, launched } = await connectToAttachedBrowser({
     autoLaunch,
@@ -477,10 +503,16 @@ async function scrapeWide({
       : null) || (await context.newPage());
 
   try {
+    const invocationStartedAt = new Date().toISOString();
+    let runDirectory = null;
     await prepareNewConversationProbeState(page, null, { reportSettle: true });
-    await refreshModelCatalogBeforeValidation(page, context, {
-      required: requireExtensionCapture && phase !== 'global',
-    });
+    if (capturesProbeOnlyStates && !fixtureOwnership) {
+      runDirectory = await createUniqueRunDirectory(exports.buildRunFolderName(new Date()));
+      if (needsTwoTurnFixture) {
+        console.log('Preparing a fresh disposable two-turn fixture before evidence capture.');
+        fixtureOwnership = await prepareFreshAuditOwnedFixture(page, { runDirectory });
+      }
+    }
     const fixtureUrl =
       fixtureOwnership?.fixtureUrl || (await chooseAvailableFixtureUrl(page, exports));
     if (fixtureOwnership) {
@@ -490,15 +522,25 @@ async function scrapeWide({
       await waitForFixtureConversationReady(page, 30000, { fixtureUrl });
       await waitForAuditOwnedFixtureContent(page, fixtureUrl);
     }
+    const freshCatalogResult = await refreshModelCatalogBeforeValidation(page, context, {
+      required: requireFreshModelCatalog && phase !== 'global',
+    });
     await injectDevScrapeWideIntoPage(page);
 
     const pageInfo = await evaluateWideScrapePageInfo(page, { fixtureUrl });
     console.log(`CDP endpoint: ${cdpEndpoint}`);
-    console.log(
-      `Fixture URL: ${fixtureUrl}${fixtureOwnership ? ` (audit-owned from ${fixtureOwnership.sourceRunFolder})` : fixtureUrl === exports.DEV_SCRAPE_WIDE_FIXTURE_URL ? '' : ' (fallback)'}`,
-    );
-    console.log(`Require extension capture: ${requireExtensionCapture ? 'yes' : 'no'}`);
+    if (prepareCaptureOnly) {
+      console.log(
+        `Fixture: ${fixtureOwnership ? 'fresh audit-owned disposable conversation' : 'configured validation fixture'}`,
+      );
+    } else {
+      console.log(
+        `Fixture URL: ${fixtureUrl}${fixtureOwnership ? ` (audit-owned from ${fixtureOwnership.sourceRunFolder})` : fixtureUrl === exports.DEV_SCRAPE_WIDE_FIXTURE_URL ? '' : ' (fallback)'}`,
+      );
+    }
+    console.log(`Require fresh model catalog: ${requireFreshModelCatalog ? 'yes' : 'no'}`);
     console.log(`Probe shortcuts: ${probeShortcuts ? 'yes' : 'no'}`);
+    console.log(`Prepare/capture-only: ${prepareCaptureOnly ? 'yes' : 'no'}`);
     console.log(
       `Conversation turns detected: ${pageInfo.turnCount} (assistant=${pageInfo.assistantTurnCount}, user=${pageInfo.userTurnCount})`,
     );
@@ -506,21 +548,23 @@ async function scrapeWide({
     const scrapeResult = await runWideScrapeWithPlaywright(page, context, {
       fixtureUrl,
       fixtureOwnership,
-      requireExtensionCapture,
+      freshModelCatalog: freshCatalogResult?.modelCatalog,
+      freshModelCatalogRefresh: freshCatalogResult,
       extensionProfileDir: getProfileDir(),
     });
     if (!scrapeResult?.artifacts) {
       throw new Error(scrapeResult?.error || 'Scrape did not return artifacts');
     }
+    scrapeResult.startedAt = invocationStartedAt;
 
     await injectDevScrapeWideIntoPage(page);
     const artifactsToNormalize = scrapeResult.artifacts.filter(
       (artifact) => artifact.status === 'captured' || artifact.status === 'alias',
     );
     const normalizedArtifacts = await normalizeArtifactsInPage(page, artifactsToNormalize);
-    const writeResult = await writeScrapeRun({ scrapeResult, normalizedArtifacts });
+    const writeResult = await writeScrapeRun({ scrapeResult, normalizedArtifacts, runDirectory });
     let liveProbeReport = null;
-    if (probeShortcuts) {
+    if (capturesProbeOnlyStates) {
       try {
         liveProbeReport = await runLiveShortcutActivationProbes(page, context, {
           fixtureUrl,
@@ -529,12 +573,17 @@ async function scrapeWide({
           extensionDir: getExtensionDir(),
           runFolderPath: writeResult.folderPath,
           phase,
-          onlyActionIds,
-          fixedContractIds,
+          onlyActionIds: prepareCaptureOnly ? captureOnlyActionIds : onlyActionIds,
+          fixedContractIds: prepareCaptureOnly ? [] : fixedContractIds,
+          collectTargetArtifacts: true,
+          prepareCaptureOnly,
+          includeFixedContracts: !prepareCaptureOnly,
         });
       } catch (error) {
         liveProbeReport = {
           schemaVersion: 1,
+          mode: prepareCaptureOnly ? 'prepare-capture-only' : 'shortcut-activation',
+          activationStatus: prepareCaptureOnly ? 'not-live-probed' : 'probed',
           generatedAt: new Date().toISOString(),
           fixtureUrl,
           phase,
@@ -558,13 +607,46 @@ async function scrapeWide({
           }),
         };
         console.error(
-          `Live shortcut probes failed; preserving partial evidence: ${error?.message || error}`,
+          prepareCaptureOnly
+            ? 'Prepared-state capture pass failed; preserving local partial evidence.'
+            : `Live shortcut probes failed; preserving partial evidence: ${error?.message || error}`,
         );
       }
+      const { supplementalArtifacts = [], ...persistedLiveProbeReport } = liveProbeReport;
+      if (supplementalArtifacts.length) {
+        const { appendSupplementalProbeArtifacts } = await import('./lib/devscrape-wide-core.mjs');
+        await injectDevScrapeWideIntoPage(page);
+        const normalizedSupplementalArtifacts = await normalizeArtifactsInPage(
+          page,
+          supplementalArtifacts.filter((artifact) => artifact.status === 'captured'),
+        );
+        Object.assign(
+          writeResult,
+          await appendSupplementalProbeArtifacts({
+            runFolderPath: writeResult.folderPath,
+            supplementalArtifacts,
+            normalizedArtifacts: normalizedSupplementalArtifacts,
+          }),
+        );
+      }
+      liveProbeReport = persistedLiveProbeReport;
       const liveProbePath = await writeLiveProbeReport(writeResult.folderPath, liveProbeReport);
-      console.log(
-        `Live shortcut probes: ${liveProbeReport.summary.passed} passed, ${liveProbeReport.summary.failed} failed, ${liveProbeReport.summary.environmentFailed} environment-failed, ${liveProbeReport.summary.notLiveProbed} not live-probed.`,
-      );
+      if (prepareCaptureOnly) {
+        const preparedStateCounts = {
+          captured: supplementalArtifacts.filter((artifact) => artifact.status === 'captured')
+            .length,
+          failed: supplementalArtifacts.filter((artifact) => artifact.status === 'failed').length,
+          deferred: supplementalArtifacts.filter((artifact) => artifact.status === 'deferred')
+            .length,
+        };
+        console.log(
+          `Prepared-state captures: ${preparedStateCounts.captured} captured, ${preparedStateCounts.failed} failed, ${preparedStateCounts.deferred} deferred; shortcut activations were not dispatched.`,
+        );
+      } else {
+        console.log(
+          `Live shortcut probes: ${liveProbeReport.summary.passed} passed, ${liveProbeReport.summary.failed} failed, ${liveProbeReport.summary.environmentFailed} environment-failed, ${liveProbeReport.summary.notLiveProbed} not live-probed.`,
+        );
+      }
       console.log(`Live probe report: ${liveProbePath}`);
     }
     const summary = exports.summarizeScrapeWriteResult(writeResult);
@@ -608,23 +690,37 @@ function openLocalFile(filePath) {
 }
 
 async function validateWide() {
-  const requireExtensionCapture = shouldRequireExtensionCapture();
+  const parentInvocationId = getArgValue('--current-page-parent-invocation-id', null);
+  if (
+    parentInvocationId &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      parentInvocationId,
+    )
+  ) {
+    throw new Error('Invalid current-page parent invocation ID.');
+  }
   const writeResult = await scrapeWide({
     autoLaunch: shouldAutoLaunchChrome(),
-    requireExtensionCapture,
     probeShortcuts: shouldProbeShortcuts(),
+    prepareCaptureOnly: shouldPrepareCaptureOnly(),
   });
-  const { report, reportFiles } = await checkWideForFolder(writeResult.folderName);
+  const { reportFiles } = await checkWideForFolder(
+    writeResult.folderName,
+    parentInvocationId
+      ? (report, files) => {
+          console.log(
+            currentPageCaptureResultPrefix +
+              JSON.stringify({
+                schemaVersion: 1,
+                parentInvocationId,
+                runFolder: path.resolve(report.folderPath),
+                reportPath: path.resolve(files.jsonPath),
+              }),
+          );
+        }
+      : undefined,
+  );
   if (!hasFlag('--no-open-report')) openLocalFile(reportFiles.htmlPath);
-  if (
-    requireExtensionCapture &&
-    Array.isArray(report.missingArtifacts) &&
-    report.missingArtifacts.length > 0
-  ) {
-    throw new Error(
-      `Strict extension capture failed with ${report.missingArtifacts.length} failed artifact(s). See ${reportFiles.htmlPath}`,
-    );
-  }
   return { folderName: writeResult.folderName, reportFiles };
 }
 
@@ -744,7 +840,7 @@ async function auditShortcuts() {
   try {
     scrapeResult = await scrapeWide({
       autoLaunch: shouldAutoLaunchChrome(),
-      requireExtensionCapture: true,
+      requireFreshModelCatalog: true,
       probeShortcuts: true,
       phase,
       onlyActionIds: filters.onlyActionIds,
@@ -877,7 +973,7 @@ async function probeShortcutsOnly() {
   }
 }
 
-async function checkWideForFolder(folderName) {
+async function checkWideForFolder(folderName, onReportWritten) {
   const { exports } = await loadDevScrapeWideContract();
   const report = await buildCheckReport({ folderName });
   const reportFiles = await writeCheckReportFiles(report);
@@ -887,6 +983,7 @@ async function checkWideForFolder(folderName) {
   console.log(`Run folder: ${report.folderPath}`);
   console.log(`JSON report: ${reportFiles.jsonPath}`);
   console.log(`HTML report: ${reportFiles.htmlPath}`);
+  onReportWritten?.(report, reportFiles);
   if (Array.isArray(report.inventoryIssues) && report.inventoryIssues.length > 0) {
     throw new Error(
       `Shortcut metadata guard failed with ${report.inventoryIssues.length} issue(s). See ${reportFiles.htmlPath}`,
@@ -940,13 +1037,17 @@ async function main() {
     return;
   }
 
+  if (shouldPrepareCaptureOnly() && !['scrape-wide', 'validate-wide'].includes(action)) {
+    throw new Error('--prepare-capture-only is supported with scrape-wide or validate-wide.');
+  }
+
   if (action === 'setup-login') {
     await launchSetupLogin();
     return;
   }
 
   if (action === 'scrape-wide') {
-    await scrapeWide();
+    await scrapeWide({ prepareCaptureOnly: shouldPrepareCaptureOnly() });
     return;
   }
 

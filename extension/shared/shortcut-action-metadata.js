@@ -50,6 +50,10 @@
       searchNeedles: Object.freeze(unique(definition.searchNeedles || matchGroups.flat())),
       matchGroups: Object.freeze(matchGroups.map((group) => Object.freeze(group))),
       uiStateRefs: Object.freeze(unique(definition.uiStateRefs)),
+      ...(definition.requiredCapabilities
+        ? { requiredCapabilities: Object.freeze(unique(definition.requiredCapabilities)) }
+        : {}),
+      ...(definition.probeOnly === true ? { probeOnly: true } : {}),
       notes: definition.notes || '',
     });
   }
@@ -111,6 +115,7 @@
       searchNeedles: options.searchNeedles || tokenList,
       matchGroups: options.matchGroups,
       uiStateRefs: options.uiStateRefs,
+      probeOnly: options.probeOnly,
       notes: options.notes,
     });
   }
@@ -123,6 +128,7 @@
       searchNeedles: options.searchNeedles || identifier,
       matchGroups: options.matchGroups,
       uiStateRefs: options.uiStateRefs,
+      requiredCapabilities: options.requiredCapabilities,
       notes: options.notes,
     });
   }
@@ -148,6 +154,7 @@
       searchNeedles: options.searchNeedles || [],
       matchGroups: options.matchGroups,
       uiStateRefs: options.uiStateRefs || [],
+      probeOnly: options.probeOnly,
       notes: options.notes,
     });
   }
@@ -167,6 +174,7 @@
       : [
           ['data-testid="model-switcher-dropdown-button"'],
           ['data-testid="Model-switCher-dropdown-button"'],
+          ['data-codex-intelligence-trigger="true"', 'aria-haspopup="menu"'],
           ['__composer-pill', 'aria-haspopup="menu"', 'id="radix-'],
         ];
   const chatWorkSurfaceToggleSelectors = Object.freeze(
@@ -190,14 +198,6 @@
     typeof modelPickerSelectors.getModelSwitcherMenuMatchGroups === 'function'
       ? modelPickerSelectors.getModelSwitcherMenuMatchGroups()
       : [['data-radix-menu-content', 'role="menu"', 'data-state="open"']];
-  const configureDialogMatchGroups =
-    typeof modelPickerSelectors.getConfigureDialogMatchGroups === 'function'
-      ? modelPickerSelectors.getConfigureDialogMatchGroups()
-      : [['role="dialog"', 'id="model-selection-label"']];
-  const configureModelListboxMatchGroups =
-    typeof modelPickerSelectors.getConfigureModelListboxMatchGroups === 'function'
-      ? modelPickerSelectors.getConfigureModelListboxMatchGroups()
-      : [['role="listbox"', 'role="option"']];
   const modelThinkingEffortActionMatchGroups =
     typeof modelPickerSelectors.getModelThinkingEffortActionMatchGroups === 'function'
       ? modelPickerSelectors.getModelThinkingEffortActionMatchGroups()
@@ -206,14 +206,6 @@
     typeof modelPickerSelectors.getModelThinkingEffortMenuMatchGroups === 'function'
       ? modelPickerSelectors.getModelThinkingEffortMenuMatchGroups()
       : [['role="menu"', 'role="menuitemradio"', 'Standard', 'Extended']];
-  const modelThinkingEffortStandardMatchGroups =
-    typeof modelPickerSelectors.getModelThinkingEffortStandardMatchGroups === 'function'
-      ? modelPickerSelectors.getModelThinkingEffortStandardMatchGroups()
-      : [['role="menuitemradio"', 'Standard']];
-  const modelThinkingEffortExtendedMatchGroups =
-    typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
-      ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
-      : [['role="menuitemradio"', 'Extended']];
   const modelThinkingEffortLightMatchGroups = [['role="menuitemradio"', 'Light']];
   const modelThinkingEffortHeavyMatchGroups = [['role="menuitemradio"', 'Heavy']];
   const modelProThinkingEffortActionMatchGroups = [
@@ -231,22 +223,40 @@
     typeof modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups === 'function'
       ? modelPickerSelectors.getModelThinkingEffortExtendedMatchGroups()
       : [['role="menuitemradio"', 'Extended']];
-  const configureProRowMatchGroups = [
-    ['role="radio"', 'Pro'],
-    ['__menu-item', 'Pro'],
-    ['data-model-picker-pro-row'],
-    ['data-model-picker-pro-menu-item'],
+  const messageScrollAnchorSelectors = [
+    '[data-chatgpt-search-unit-key]',
+    '[data-message-author-role="assistant"]',
+    '[data-message-author-role="user"]',
+    '[data-turn-key]',
+    'article[data-turn]',
+    '[data-testid^="conversation-turn-"]',
   ];
+  const messageScrollAnchorNeedles = [
+    'data-chatgpt-search-unit-key',
+    'data-message-author-role="assistant"',
+    'data-message-author-role="user"',
+    'data-turn-key',
+    'data-turn',
+    'conversation-turn-',
+  ];
+  const messageScrollAnchorStateRefs = [
+    'user-turn-buttons-exposed',
+    'assistant-turn-non-web-buttons-exposed',
+    'assistant-turn-web-buttons-exposed',
+  ];
+  const messageScrollAnchorNotes =
+    'Static message-node anchor presence only, using the runtime selector fallback alternatives in registered current-turn dumps. This does not prove scrolling or shortcut activation; the existing live domStateProbe measures the scroll-position delta.';
+  function messageScrollAnchorTarget(targetId) {
+    return bySelectorList(targetId, messageScrollAnchorSelectors, {
+      identifier: 'static message-scroll anchor presence only; no scroll-delta claim',
+      searchNeedles: messageScrollAnchorNeedles,
+      matchGroups: messageScrollAnchorNeedles.map((needle) => [needle]),
+      uiStateRefs: messageScrollAnchorStateRefs,
+      notes: messageScrollAnchorNotes,
+    });
+  }
+
   const TARGET_DESCRIPTORS = Object.freeze([
-    byTestId('close-sidebar-button', 'close-sidebar-button', {
-      uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
-    }),
-    byAriaControls('stage-slideover-sidebar-control', 'stage-slideover-sidebar', {
-      uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
-    }),
-    byAriaControls('stage-popover-sidebar-control', 'stage-popover-sidebar', {
-      uiStateRefs: ['narrow-header-sidebar-popover-control'],
-    }),
     byMenuChain('native-sidebar-toggle-control', 'native-sidebar-toggle-control', {
       matchGroups: [
         ['data-app-shell-sidebar-trigger="true"'],
@@ -265,33 +275,46 @@
         'Responsive native sidebar toggle may use the current app-shell aria-controls marker, legacy close, desktop open, or narrow popover open control.',
     }),
     byId('page-header', 'page-header', {
+      matchGroups: [['id="page-header"'], ['<header']],
       uiStateRefs: ['topbar-bottom-disabled-header-area'],
     }),
-    byId('thread-bottom', 'thread-bottom', {
-      uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
-    }),
-    manualTarget('message-scroll-up-delta', 'message-scroll-up-delta', {
-      notes:
-        'Validated by live-probe scroll position delta after invoking the extension scroll helper.',
-    }),
-    manualTarget('message-scroll-down-delta', 'message-scroll-down-delta', {
-      notes:
-        'Validated by live-probe scroll position delta after invoking the extension scroll helper.',
-    }),
+    bySelectorList(
+      'thread-bottom',
+      ['.thread-scroll-container', '#thread-bottom', '#thread-bottom-container'],
+      {
+        matchGroups: [
+          ['thread-scroll-container'],
+          ['id="thread-bottom"'],
+          ['id="thread-bottom-container"'],
+        ],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+      },
+    ),
+    messageScrollAnchorTarget('message-scroll-up-delta'),
+    messageScrollAnchorTarget('message-scroll-down-delta'),
     manualTarget('code-block-content', 'pre code', {
       searchNeedles: ['<pre', '<code'],
       matchGroups: [['<pre'], ['<code']],
+      uiStateRefs: ['probe-code-block-content'],
+      probeOnly: true,
       notes:
         'Validated from a disposable live-probe codebox conversation rather than the fixed no-token scrape fixture.',
     }),
     manualTarget('codebox-wrap-enabled', 'html.csp-codebox-wrap-enabled', {
-      searchNeedles: ['<pre', '<code'],
-      matchGroups: [['<pre'], ['<code']],
-      notes: 'Validated by asserting the extension root class after toggling codebox wrapping.',
+      searchNeedles: ['csp-codebox-wrap-enabled', '<pre', '<code'],
+      matchGroups: [
+        ['csp-codebox-wrap-enabled', '<pre'],
+        ['csp-codebox-wrap-enabled', '<code'],
+      ],
+      uiStateRefs: ['probe-codebox-wrap-enabled'],
+      probeOnly: true,
+      notes:
+        'Validated by asserting the actual extension root class and assistant codebox content after toggling wrapping.',
     }),
     manualTarget('shortcut-overlay', 'id=csp-shortcut-overlay', {
       searchNeedles: ['id="csp-shortcut-overlay"'],
       matchGroups: [['id="csp-shortcut-overlay"']],
+      uiStateRefs: ['shortcut-overlay'],
       notes: 'Internal extension shortcut overlay, opened by the standalone overlay listener.',
     }),
     bySelectorList(
@@ -332,7 +355,7 @@
         identifier: 'button:has(svg path[d^="M11.7313"])',
         searchNeedles: ['M11.7313'],
         matchGroups: [['M11.7313']],
-        uiStateRefs: ['user-turn-buttons-exposed'],
+        uiStateRefs: ['probe-edit-message-button'],
         notes:
           'Native Edit button on user-message turns, identified by its language-independent SVG path prefix; the localized aria-label is a fallback.',
       },
@@ -343,18 +366,66 @@
         ['textarea', 'Cancel', 'Send'],
         ['contenteditable="true"', 'Cancel', 'Send'],
       ],
+      uiStateRefs: ['probe-edit-send-button'],
+      probeOnly: true,
       notes: 'Requires an active edit state created by the side-effectful live probe setup.',
     }),
-    manualTarget('send-button', 'data-testid=send-button|id=composer-submit-button', {
-      searchNeedles: ['data-testid="send-button"', 'id="composer-submit-button"'],
-      notes:
-        'Only available when the composer already has draft content, so the no-token baseline scrape does not expose it.',
-    }),
-    manualTarget('stop-button', 'visible-stop-button-during-generation', {
-      searchNeedles: ['data-testid="stop-button"', 'data-test-id="stop-button"'],
-      notes:
-        'Only rendered while ChatGPT is actively generating; side-effectful live probe setup creates that state.',
-    }),
+    manualTarget(
+      'send-button',
+      'visible-composer-submit-send-glyph|data-testid=send-button|id=composer-submit-button',
+      {
+        searchNeedles: [
+          'data-testid="send-button"',
+          'id="composer-submit-button"',
+          'aria-label="Send prompt"',
+          'M9.33467 16.6663',
+        ],
+        matchGroups: [
+          [
+            '<form',
+            'contenteditable="true"',
+            'role="textbox"',
+            'type="submit"',
+            'M9.33467 16.6663',
+          ],
+          ['data-testid="send-button"'],
+          ['id="composer-submit-button"'],
+          ['aria-label="Send prompt"'],
+        ],
+        uiStateRefs: ['probe-send-button'],
+        probeOnly: true,
+        notes:
+          'The current native Send control is a visible submit button with the captured send glyph inside the composer form; legacy test-id and id selectors remain supported.',
+      },
+    ),
+    manualTarget(
+      'stop-button',
+      'visible-composer-stop-glyph|visible-stop-button-during-generation',
+      {
+        searchNeedles: [
+          'M4.5 5.75C4.5 5.05964',
+          'data-testid="stop-button"',
+          'data-test-id="stop-button"',
+          'aria-label="Stop"',
+        ],
+        matchGroups: [
+          [
+            '<form',
+            'contenteditable="true"',
+            'role="textbox"',
+            'type="button"',
+            'M4.5 5.75C4.5 5.05964',
+          ],
+          ['data-testid="stop-button"'],
+          ['data-test-id="stop-button"'],
+          ['aria-label="Stop"'],
+        ],
+        uiStateRefs: ['probe-stop-button'],
+        probeOnly: true,
+        notes:
+          'The current native Stop control is a visible type=button with the captured Stop glyph inside the composer form; legacy stop test ids and label remain supported.',
+      },
+    ),
     bySelectorList(
       'create-new-chat-button',
       [
@@ -365,6 +436,13 @@
         'button[data-testid="new-chat-button"]',
       ],
       {
+        matchGroups: [
+          ['<button', 'M8.16675 2.50127'],
+          ['data-app-shell-titlebar', '<button', 'M6.33325 1.80763'],
+          ['<a', 'data-testid="create-new-chat-button"'],
+          ['<button', 'data-testid="create-new-chat-button"'],
+          ['<button', 'data-testid="new-chat-button"'],
+        ],
         uiStateRefs: ['sidebar-collapsed-body', 'sidebar-expanded-body'],
         notes:
           'Generic new-chat action: prefer the current SVG path, then scoped titlebar and data-testid fallbacks; excludes project-row action buttons.',
@@ -373,12 +451,13 @@
     bySelectorList('chat-work-surface-toggle', chatWorkSurfaceToggleSelectors, {
       identifier: 'header-two-radio-chat-surface-toggle',
       matchGroups: chatWorkSurfaceToggleMatchGroups,
-      uiStateRefs: ['topbar-bottom-disabled-header-area'],
+      uiStateRefs: ['topbar-bottom-disabled-header-area', 'probe-blank-chat-work-surface-toggle'],
       notes:
         'Blank-chat surface selector: one visible header group or radiogroup with exactly two button radios and reciprocal checked state; runtime matching does not depend on localized Chat/Work labels.',
     }),
     byMenuChain('search-conversation-button', 'native-search-conversation-control', {
       matchGroups: [
+        ['<button', 'M9.16211 2.37976'],
         ['<button', 'M7.32849 1.91016'],
         ['data-testid="search-conversation-button"'],
         ['id="sidebar-header"', 'aria-label="Search"'],
@@ -404,8 +483,12 @@
       notes:
         'Prefer the current language-independent titlebar Search button SVG path; otherwise use sidebar adjacency, with the old test id and sprite retained as compatibility fallbacks.',
     }),
-    byMenuChain('search-chats-dialog', 'role=dialog|placeholder=Search chats', {
-      matchGroups: [['role="dialog"', 'placeholder="Search chats..."']],
+    byMenuChain('search-chats-dialog', 'role=dialog|role=combobox|placeholder=Search…', {
+      matchGroups: [
+        ['role="dialog"', '<input', 'role="combobox"', 'placeholder="Search…"'],
+        ['role="dialog"', 'placeholder="Search chats..."'],
+      ],
+      uiStateRefs: ['search-chats-dialog'],
       notes: 'Resulting dialog opened by Search Chats.',
     }),
     bySelectorList(
@@ -448,14 +531,6 @@
           'Observed composers are contenteditable textboxes scoped to form[data-thread-find-composer="true"] or form[data-chatgpt-composer]; legacy unified-composer and thread-bottom-container targets are excluded.',
       },
     ),
-    byIconToken('previous-response-button', ['#8ee2e9', 'aria-label="Previous response"'], {
-      identifier: 'svg-token=#8ee2e9|aria-label=Previous response',
-      uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
-    }),
-    byIconToken('next-response-button', ['#b140e7', 'aria-label="Next response"'], {
-      identifier: 'svg-token=#b140e7|aria-label=Next response',
-      uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
-    }),
     bySelectorList('model-switcher-button', modelSwitcherButtonSelectors, {
       identifier: 'model-picker-opener',
       matchGroups: modelSwitcherButtonMatchGroups,
@@ -471,45 +546,29 @@
       matchGroups: modelSwitcherMenuMatchGroups,
       uiStateRefs: ['model-switcher-menu'],
     }),
-    byMenuChain('model-switcher-configure-dialog', 'role=dialog|model-selection-label', {
-      matchGroups: configureDialogMatchGroups,
-      uiStateRefs: ['model-switcher-configure-dialog'],
-    }),
-    byMenuChain('model-switcher-configure-model-listbox', 'role=listbox|model-options', {
-      matchGroups: configureModelListboxMatchGroups,
-      uiStateRefs: ['model-switcher-configure-listbox'],
-    }),
-    byMenuChain('model-switcher-configure-pro-row', 'role=radio|Pro', {
-      matchGroups: configureProRowMatchGroups,
-      uiStateRefs: ['model-switcher-configure-dialog'],
-    }),
     byMenuChain(
       'model-switcher-thinking-effort-action',
       'data-model-picker-thinking-effort-action',
       {
         matchGroups: modelThinkingEffortActionMatchGroups,
         uiStateRefs: ['model-switcher-menu'],
+        requiredCapabilities: ['dedicatedEffortControls'],
       },
     ),
     byMenuChain('model-switcher-thinking-effort-menu', 'role=menu|thinking-effort-options', {
       matchGroups: modelThinkingEffortMenuMatchGroups,
       uiStateRefs: ['model-switcher-thinking-effort-menu'],
-    }),
-    byMenuChain('model-switcher-thinking-effort-standard', 'thinking-effort-standard', {
-      matchGroups: modelThinkingEffortStandardMatchGroups,
-      uiStateRefs: ['model-switcher-thinking-effort-menu'],
-    }),
-    byMenuChain('model-switcher-thinking-effort-extended', 'thinking-effort-extended', {
-      matchGroups: modelThinkingEffortExtendedMatchGroups,
-      uiStateRefs: ['model-switcher-thinking-effort-menu'],
+      requiredCapabilities: ['dedicatedEffortControls'],
     }),
     byMenuChain('model-switcher-thinking-effort-light', 'thinking-effort-light', {
       matchGroups: modelThinkingEffortLightMatchGroups,
       uiStateRefs: ['model-switcher-thinking-effort-menu'],
+      requiredCapabilities: ['dedicatedEffortControls'],
     }),
     byMenuChain('model-switcher-thinking-effort-heavy', 'thinking-effort-heavy', {
       matchGroups: modelThinkingEffortHeavyMatchGroups,
       uiStateRefs: ['model-switcher-thinking-effort-menu'],
+      requiredCapabilities: ['dedicatedEffortControls'],
     }),
     byMenuChain(
       'model-switcher-pro-thinking-effort-action',
@@ -517,48 +576,84 @@
       {
         matchGroups: modelProThinkingEffortActionMatchGroups,
         uiStateRefs: ['model-switcher-menu'],
+        requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
       },
     ),
     byMenuChain('model-switcher-pro-thinking-effort-menu', 'role=menu|pro-thinking-effort', {
       matchGroups: modelProThinkingEffortMenuMatchGroups,
       uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
+      requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
     }),
     byMenuChain('model-switcher-pro-thinking-effort-standard', 'pro-thinking-effort-standard', {
       matchGroups: modelProThinkingEffortStandardMatchGroups,
       uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
+      requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
     }),
     byMenuChain('model-switcher-pro-thinking-effort-extended', 'pro-thinking-effort-extended', {
       matchGroups: modelProThinkingEffortExtendedMatchGroups,
       uiStateRefs: ['model-switcher-pro-thinking-effort-menu'],
+      requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
     }),
     bySelectorList(
       'assistant-web-regenerate-trigger',
-      ['.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])'],
-      { uiStateRefs: ['assistant-turn-web-buttons-exposed'] },
+      [
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#arrows-clockwise-rotate-lg-light-16"])',
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])',
+      ],
+      {
+        matchGroups: [
+          [
+            'turn-action-controls',
+            '<button',
+            'aria-haspopup="menu"',
+            'arrows-clockwise-rotate-lg-light-16',
+          ],
+          ['turn-action-controls', '<button', 'aria-haspopup="menu"', 'M14.0219 8.22363'],
+        ],
+        uiStateRefs: ['assistant-turn-web-buttons-exposed'],
+      },
     ),
     bySelectorList(
       'assistant-web-regenerate-item-try-again',
-      ['[role="menu"] [role="menuitem"]:has(svg path[d^="M14.0219 8.22363"])'],
-      { uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'] },
+      [
+        '[role="menu"] [role="menuitem"]:has(svg use[href$="#arrows-clockwise-rotate-lg-light-16"])',
+        '[role="menu"] [role="menuitem"]:has(svg path[d^="M14.0219 8.22363"])',
+      ],
+      {
+        matchGroups: [
+          ['role="menu"', 'role="menuitem"', 'arrows-clockwise-rotate-lg-light-16'],
+          ['role="menu"', 'role="menuitem"', 'M14.0219 8.22363'],
+        ],
+        uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
+      },
     ),
     byInputName('assistant-web-regenerate-input', 'contextual-retry-feedback', {
       uiStateRefs: ['assistant-web-regenerate-menu-copy', 'assistant-web-regenerate-menu'],
     }),
     bySelectorList(
       'assistant-more-actions-trigger',
-      ['.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])'],
+      [
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#ellipsis-horizontal-light-16"])',
+        '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+      ],
       {
         identifier:
+          '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#ellipsis-horizontal-light-16"]) | .turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+        searchNeedles: [
+          '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#ellipsis-horizontal-light-16"])',
           '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
-        searchNeedles: ['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811'],
-        matchGroups: [['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811']],
+        ],
+        matchGroups: [
+          ['turn-action-controls', 'aria-haspopup="menu"', 'ellipsis-horizontal-light-16'],
+          ['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811'],
+        ],
         uiStateRefs: [
           'user-turn-buttons-exposed',
           'assistant-turn-non-web-buttons-exposed',
           'assistant-turn-web-buttons-exposed',
         ],
         notes:
-          'Native message overflow menu trigger scoped to .turn-action-controls and identified by its SVG path prefix.',
+          'Native message overflow menu trigger scoped to .turn-action-controls and identified by the current SVG symbol fragment or legacy path prefix.',
       },
     ),
     byIconToken('assistant-read-aloud-direct-action', 'M9.75122 4.09203', {
@@ -567,46 +662,42 @@
     }),
     bySelectorList(
       'assistant-more-actions-branch',
-      ['[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])'],
+      [
+        '[role="menu"][data-state="open"] [role="menuitem"]:has(svg use[href$="#branch-light-16"])',
+        '[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])',
+      ],
       {
         identifier:
+          '[role="menu"][data-state="open"] [role="menuitem"]:has(svg use[href$="#branch-light-16"]) | [role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])',
+        searchNeedles: [
+          '[role="menu"][data-state="open"] [role="menuitem"]:has(svg use[href$="#branch-light-16"])',
           '[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])',
-        searchNeedles: ['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461'],
-        matchGroups: [['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461']],
+        ],
+        matchGroups: [
+          ['role="menu"', 'data-state="open"', 'role="menuitem"', 'branch-light-16'],
+          ['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461'],
+        ],
         uiStateRefs: ['assistant-menu-read-aloud-branch'],
         notes:
-          'Branch in new chat is the role=menuitem with this SVG path prefix in the open message-action menu; it has no data-testid.',
+          'Branch in new chat is the role=menuitem with this SVG symbol fragment or legacy path prefix in the open message-action menu; it has no data-testid.',
       },
     ),
-    byIconToken('assistant-thinking-trigger', ['#127a53', '#c9d737'], {
-      matchGroups: [['#127a53', '#c9d737']],
-      uiStateRefs: ['assistant-turn-non-web-buttons-exposed', 'assistant-turn-web-buttons-exposed'],
-    }),
-    byIconToken('assistant-thinking-option-extended', '#143e56', {
-      notes: 'Thinking effort menu options are not yet part of the scrape dump family.',
-    }),
-    byIconToken('assistant-thinking-option-standard', '#fec800', {
-      notes: 'Thinking effort menu options are not yet part of the scrape dump family.',
-    }),
-    byIconToken('assistant-thinking-option-light', '#407870', {
-      notes: 'Thinking effort menu options are not yet part of the scrape dump family.',
-    }),
-    byIconToken('assistant-thinking-option-heavy', '#3c5754', {
-      notes: 'Thinking effort menu options are not yet part of the scrape dump family.',
-    }),
     byIconToken(
       'temporary-chat-button',
-      ['#chat-temp', '#chat-temp-checked', '#28a8a0', '#6eabdf'],
+      ['#chat-bubble-dashed-light-20', '#chat-bubble-checkmark-dashed-light-20'],
       {
-        matchGroups: [['#chat-temp'], ['#chat-temp-checked'], ['#28a8a0'], ['#6eabdf']],
-        notes: 'Only exposed on a blank new conversation, not the fixed conversation fixture.',
+        matchGroups: [['#chat-bubble-dashed-light-20'], ['#chat-bubble-checkmark-dashed-light-20']],
+        uiStateRefs: ['probe-temporary-chat'],
+        probeOnly: true,
+        notes:
+          'Identified by the current dashed-chat sprite in either observed toggle state on a blank new Chat conversation.',
       },
     ),
     byIconToken('composer-web-search-action', 'M12 2c5.522', {
       uiStateRefs: ['composer-add-files-and-more-menu'],
     }),
     byIconToken('composer-study-action', '#book-open-light-16', {
-      uiStateRefs: ['composer-add-files-and-more-menu'],
+      uiStateRefs: ['composer-add-files-and-more-menu', 'probe-composer-study-search'],
       notes: 'Study appears in the plus menu after typing "study" in the composer search.',
     }),
     byIconToken('composer-create-image-action', 'M7 21.005', {
@@ -617,7 +708,7 @@
       ['button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])'],
       {
         matchGroups: [['data-list-navigation-item="true"', 'deep_research_app/icon.png']],
-        uiStateRefs: ['composer-add-files-and-more-menu'],
+        uiStateRefs: ['probe-composer-deep-research-search'],
         notes:
           'The current Deep research menu row uses the observed app icon image inside a list-navigation button; matching it by the structural row and icon path avoids localized text.',
       },
@@ -625,75 +716,141 @@
     bySelectorList(
       'dictate-start-button',
       [
+        'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-16"])',
+        'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-20"])',
         'form[data-thread-find-composer="true"] button:has(svg path[d^="M12.4584 8.96973"])',
         'form[data-chatgpt-composer] button:has(svg path[d^="M12.4584 8.96973"])',
       ],
       {
         matchGroups: [
-          ['data-thread-find-composer="true"', 'button:has', 'M12.4584 8.96973'],
-          ['data-chatgpt-composer', 'button:has', 'M12.4584 8.96973'],
+          [
+            '<form',
+            'data-chatgpt-composer',
+            'data-thread-find-composer="true"',
+            '<button',
+            '#microphone-light-16"',
+          ],
+          [
+            '<form',
+            'data-chatgpt-composer',
+            'data-thread-find-composer="true"',
+            '<button',
+            '#microphone-light-20"',
+          ],
+          ['<form', 'data-thread-find-composer="true"', '<button', 'M12.4584 8.96973'],
+          ['<form', 'data-chatgpt-composer', '<button', 'M12.4584 8.96973'],
         ],
-        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        uiStateRefs: ['probe-blank-chat-dictate-start'],
         notes:
-          'The current Dictate button is identified by its SVG path prefix inside the observed composer form structures; the distinct Start Voice and composer-send controls are excluded without relying on localized labels or legacy SVG use IDs.',
+          'The current Dictate button uses the observed microphone-light-16 or microphone-light-20 SVG symbol inside the composer form that carries both current composer markers. Older observed SVG path selectors remain as fallbacks; Start Voice and composer-send controls are excluded without localized labels.',
       },
     ),
     bySelectorList(
       'dictate-submit-button',
       [
+        'form[data-chatgpt-composer][data-thread-find-composer="true"]:has(svg use[href$="#xmark-lg-light-20"]):has(svg use[href$="#stop-fill-light-20"]) button:has(svg use[href$="#arrow-up-lg-light-20"])',
         'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
         'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
       ],
       {
         matchGroups: [
-          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M9.31697 3.08317'],
-          ['data-chatgpt-composer', 'button[type="button"]:has', 'M9.31697 3.08317'],
+          [
+            '<form',
+            'data-chatgpt-composer',
+            'data-thread-find-composer="true"',
+            '#xmark-lg-light-20"',
+            '#stop-fill-light-20"',
+            '<button',
+            '#arrow-up-lg-light-20"',
+          ],
+          [
+            '<form',
+            'data-thread-find-composer="true"',
+            '<button',
+            'type="button"',
+            'M9.31697 3.08317',
+          ],
+          ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M9.31697 3.08317'],
         ],
-        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom', 'probe-active-dictation-controls'],
         notes:
-          'The active Dictation Transcribe-and-send control is identified by its observed SVG path on a type=button inside the composer; this avoids localized labels and legacy SVG use IDs.',
+          'The active Dictation Transcribe-and-send control uses the observed arrow-up-lg-light-20 symbol only when the same current composer also contains both observed Cancel (xmark-lg-light-20) and Stop (stop-fill-light-20) symbols; this excludes the ordinary Send button. The older type=button SVG path selectors remain as fallbacks, and the current symbol selector does not require a type attribute.',
       },
     ),
     bySelectorList(
       'stop-dictation-button',
       [
+        'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#stop-fill-light-20"])',
         'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
         'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
       ],
       {
         matchGroups: [
-          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M13.0834 3.91846'],
-          ['data-chatgpt-composer', 'button[type="button"]:has', 'M13.0834 3.91846'],
+          [
+            '<form',
+            'data-chatgpt-composer',
+            'data-thread-find-composer="true"',
+            '<button',
+            '#stop-fill-light-20"',
+          ],
+          [
+            '<form',
+            'data-thread-find-composer="true"',
+            '<button',
+            'type="button"',
+            'M13.0834 3.91846',
+          ],
+          ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M13.0834 3.91846'],
         ],
+        uiStateRefs: ['probe-active-dictation-controls'],
         notes:
-          'The active Dictation Stop control is identified by its observed SVG path on a type=button inside the composer; clicking it transcribes into the unsent composer draft.',
+          'The active Dictation Stop control uses the observed stop-fill-light-20 SVG symbol inside the composer form carrying both current composer markers. The older type=button SVG path selectors remain as fallbacks; the current symbol selector does not require a type attribute.',
       },
     ),
     bySelectorList(
       'cancel-dictation-button',
       [
+        'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#xmark-lg-light-20"])',
         'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
         'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
       ],
       {
         matchGroups: [
-          ['data-thread-find-composer="true"', 'button[type="button"]:has', 'M14.779 4.27903'],
-          ['data-chatgpt-composer', 'button[type="button"]:has', 'M14.779 4.27903'],
+          [
+            '<form',
+            'data-chatgpt-composer',
+            'data-thread-find-composer="true"',
+            '<button',
+            '#xmark-lg-light-20"',
+          ],
+          [
+            '<form',
+            'data-thread-find-composer="true"',
+            '<button',
+            'type="button"',
+            'M14.779 4.27903',
+          ],
+          ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M14.779 4.27903'],
         ],
-        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+        uiStateRefs: ['topbar-bottom-disabled-thread-bottom', 'probe-active-dictation-controls'],
         notes:
-          'The active Dictation Cancel control is identified by its observed SVG path on a type=button inside the composer; this avoids localized labels and legacy SVG use IDs.',
+          'The active Dictation Cancel control uses the observed xmark-lg-light-20 SVG symbol inside the composer form carrying both current composer markers. The older type=button SVG path selectors remain as fallbacks; the current symbol selector does not require a type attribute.',
       },
     ),
     bySelectorList(
       'share-chat-button',
       [
+        '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"])',
         '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
       ],
       {
-        identifier:
-          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
+        identifier: 'header-obstacle-icon=#arrow-up-open-base-light-16|legacy-path=M13.3337',
         matchGroups: [
+          [
+            'data-testid="app-shell-header-context-menu-surface"',
+            'data-app-shell-header-obstacle="true"',
+            '#arrow-up-open-base-light-16',
+          ],
           [
             'data-testid="app-shell-header-context-menu-surface"',
             'data-app-shell-header-obstacle="true"',
@@ -702,23 +859,35 @@
         ],
         uiStateRefs: ['topbar-bottom-disabled-header-area'],
         notes:
-          'Share button inside the app-shell header obstacle, identified by its SVG path prefix instead of a localized accessible name; the selector works before and after that wrapper is relocated to the bottom bar.',
+          'Share button inside the app-shell header obstacle, identified by the current arrow-up-open SVG symbol with the previous path prefix retained as a compatibility fallback; neither selector depends on a localized accessible name.',
       },
     ),
-    byIconToken('composer-think-longer-action', '#e717cc', {
-      uiStateRefs: ['composer-add-files-and-more-menu', 'composer-add-files-and-more-more-submenu'],
-    }),
-    byIconToken('composer-add-photos-files-action', 'M6.1416 10.1663', {
-      uiStateRefs: ['composer-add-files-and-more-menu'],
-    }),
-    byIconToken('composer-more-submenu-trigger', '#f6d0e2', {
-      identifier: 'svg-token=#f6d0e2 (composer More submenu)',
-      uiStateRefs: ['composer-add-files-and-more-menu'],
-    }),
-    byIconToken('new-gpt-conversation-item', ['#compose', '#3a5c87'], {
-      notes:
-        'Validated by live activation from the GPT conversation fixture; not part of the main scrape dump family.',
-    }),
+    byIconToken(
+      'composer-add-photos-files-action',
+      ['M7.99994 14.6888', 'M9.9998 18.3614', 'M6.1416 10.1663'],
+      {
+        identifier:
+          'composer-menu-item-icon=M7.99994 14.6888|M9.9998 18.3614|legacy-path=M6.1416 10.1663',
+        matchGroups: [
+          ['data-list-navigation-item="true"', 'M7.99994 14.6888'],
+          ['data-list-navigation-item="true"', 'M9.9998 18.3614'],
+          ['data-list-navigation-item="true"', 'M6.1416 10.1663'],
+        ],
+        uiStateRefs: ['composer-add-files-and-more-menu'],
+        notes:
+          'The current Add photos and files action is a list-navigation button matched by its observed SVG path prefixes; the previous path prefix remains as a compatibility fallback, and the runtime rejects ambiguous visible matches.',
+      },
+    ),
+    byIconToken(
+      'new-gpt-conversation-item',
+      ['#square-and-pencil-light-16', '#compose', '#3a5c87'],
+      {
+        uiStateRefs: ['probe-new-gpt-conversation'],
+        probeOnly: true,
+        notes:
+          'The current New Chat row uses the square-and-pencil sprite; former compose tokens remain compatibility fallbacks. Validated from the GPT conversation fixture.',
+      },
+    ),
   ]);
 
   const TARGET_BY_ID = Object.freeze(
@@ -838,6 +1007,9 @@
       validationMode,
       targetRefs: Object.freeze(unique(definition.targetRefs)),
       uiStateRefs: Object.freeze(unique(definition.uiStateRefs)),
+      ...(definition.requiredCapabilities
+        ? { requiredCapabilities: Object.freeze(unique(definition.requiredCapabilities)) }
+        : {}),
       activationProbe: freezeActivationProbe(definition.activationProbe),
       notes: definition.notes || '',
       handlerRef: definition.handlerRef || `keyFunctionMappingAlt.${definition.actionId}`,
@@ -881,7 +1053,7 @@
       targetRefs: ['message-scroll-up-delta'],
       uiStateRefs: [],
       activationProbe: domStateProbe('message-scroll-up-delta', {
-        setup: 'message-scroll-from-middle',
+        setup: 'message-scroll-from-bottom',
         notes: 'Validates that the shortcut moves the conversation scroll position upward.',
       }),
       notes: 'Internal extension scroll helper verified by scroll-position delta.',
@@ -891,7 +1063,7 @@
       targetRefs: ['message-scroll-down-delta'],
       uiStateRefs: [],
       activationProbe: domStateProbe('message-scroll-down-delta', {
-        setup: 'message-scroll-from-middle',
+        setup: 'message-scroll-from-top',
         notes: 'Validates that the shortcut moves the conversation scroll position downward.',
       }),
       notes: 'Internal extension scroll helper verified by scroll-position delta.',
@@ -901,7 +1073,7 @@
       targetRefs: ['message-scroll-up-delta'],
       uiStateRefs: [],
       activationProbe: domStateProbe('message-scroll-up-delta', {
-        setup: 'message-scroll-from-middle',
+        setup: 'message-scroll-from-bottom',
         notes: 'Validates that the shortcut moves the conversation scroll position upward.',
       }),
       notes: 'Internal extension scroll helper verified by scroll-position delta.',
@@ -911,7 +1083,7 @@
       targetRefs: ['message-scroll-down-delta'],
       uiStateRefs: [],
       activationProbe: domStateProbe('message-scroll-down-delta', {
-        setup: 'message-scroll-from-middle',
+        setup: 'message-scroll-from-top',
         notes: 'Validates that the shortcut moves the conversation scroll position downward.',
       }),
       notes: 'Internal extension scroll helper verified by scroll-position delta.',
@@ -949,7 +1121,7 @@
     defineShortcutAction({
       actionId: 'shortcutKeyCopyAllCodeBlocks',
       targetRefs: ['code-block-content'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('code-block-content'),
       activationProbe: clipboardTextProbe({
         expectedTargetRef: 'code-block-content',
         setup: 'clipboard-code-blocks',
@@ -962,7 +1134,7 @@
     defineShortcutAction({
       actionId: 'shortcutKeyToggleCodeboxWrap',
       targetRefs: ['codebox-wrap-enabled'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('codebox-wrap-enabled'),
       activationProbe: domStateProbe('codebox-wrap-enabled', {
         setup: 'codebox-conversation',
         notes:
@@ -992,10 +1164,14 @@
       actionId: 'shortcutKeyNewConversation',
       targetRefs: ['create-new-chat-button'],
       uiStateRefs: targetStateRefs('create-new-chat-button'),
-      activationProbe: opensTargetProbe('temporary-chat-button', {
-        uiStateRefs: ['topbar-bottom-disabled-thread-bottom'],
+      activationProbe: opensTargetProbe('prompt-textarea', {
+        setup: 'new-conversation',
+        uiStateRefs: [
+          'topbar-bottom-disabled-thread-bottom',
+          ...targetStateRefs('prompt-textarea'),
+        ],
         notes:
-          'New Conversation should open a blank chat where the Temporary Chat button is available before any prompt is sent.',
+          'New Conversation must leave the verified audit-owned conversation and open a blank root chat with a visible empty composer.',
       }),
     }),
     manualOnly('shortcutKeyNewConversationInNewTab', {
@@ -1013,8 +1189,8 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeySearchConversationHistory',
-      targetRefs: ['search-conversation-button'],
-      uiStateRefs: targetStateRefs('search-conversation-button'),
+      targetRefs: ['search-conversation-button', 'search-chats-dialog'],
+      uiStateRefs: targetStateRefs('search-conversation-button', 'search-chats-dialog'),
       activationProbe: opensTargetProbe('search-chats-dialog', {
         uiStateRefs: ['sidebar-expanded-body'],
         notes: 'Alt+Comma should open the Search chats dialog.',
@@ -1022,16 +1198,8 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyToggleSidebar',
-      targetRefs: [
-        'close-sidebar-button',
-        'stage-slideover-sidebar-control',
-        'stage-popover-sidebar-control',
-      ],
-      uiStateRefs: targetStateRefs(
-        'close-sidebar-button',
-        'stage-slideover-sidebar-control',
-        'stage-popover-sidebar-control',
-      ),
+      targetRefs: ['native-sidebar-toggle-control'],
+      uiStateRefs: targetStateRefs('native-sidebar-toggle-control'),
       activationProbe: clickTargetProbe('native-sidebar-toggle-control', {
         uiStateRefs: ['sidebar-expanded-body'],
       }),
@@ -1053,28 +1221,6 @@
         uiStateRefs: ['composer-add-files-and-more-menu'],
         notes: 'No-token direct menu target click used when no shortcut key is assigned.',
       }),
-    }),
-    defineShortcutAction({
-      actionId: 'shortcutKeyPreviousThread',
-      targetRefs: ['previous-response-button'],
-      uiStateRefs: targetStateRefs('previous-response-button'),
-      activationProbe: clickTargetProbe('previous-response-button', {
-        setup: 'response-navigation-before-previous-thread',
-        uiStateRefs: ['assistant-turn-non-web-buttons-exposed'],
-        notes: 'Primes by trying Next Thread twice, then validates Previous Thread twice.',
-      }),
-      notes: 'Response-navigation heuristic using prior thread buttons.',
-    }),
-    defineShortcutAction({
-      actionId: 'shortcutKeyNextThread',
-      targetRefs: ['next-response-button'],
-      uiStateRefs: targetStateRefs('next-response-button'),
-      activationProbe: clickTargetProbe('next-response-button', {
-        setup: 'response-navigation-before-next-thread',
-        uiStateRefs: ['assistant-turn-non-web-buttons-exposed'],
-        notes: 'Primes by trying Previous Thread twice, then validates Next Thread twice.',
-      }),
-      notes: 'Response-navigation heuristic using next thread buttons.',
     }),
     defineShortcutAction({
       actionId: 'selectThenCopy',
@@ -1201,8 +1347,9 @@
       uiStateRefs: targetStateRefs('composer-plus-button', 'composer-study-action'),
       activationProbe: directMenuTargetProbe('composer-study-action', {
         setup: 'composer-plus-menu-search-study',
-        uiStateRefs: ['composer-add-files-and-more-menu'],
-        notes: 'Type "study" in the open plus menu, then click the visible Study icon target.',
+        uiStateRefs: ['composer-add-files-and-more-menu', 'probe-composer-study-search'],
+        notes:
+          'Open the plus menu and temporarily type "study" in the owned composer, matching the runtime search route; capture the visible Study icon before dispatch and clean up the known query without submitting it.',
       }),
     }),
     defineShortcutAction({
@@ -1220,15 +1367,16 @@
       targetRefs: ['composer-plus-button', 'composer-deep-research-action'],
       uiStateRefs: targetStateRefs('composer-plus-button', 'composer-deep-research-action'),
       activationProbe: directMenuTargetProbe('composer-deep-research-action', {
-        setup: 'composer-plus-menu',
-        uiStateRefs: ['composer-add-files-and-more-menu'],
-        notes: 'No-token direct menu target click used when no shortcut key is assigned.',
+        setup: 'composer-plus-menu-search-deep-research',
+        uiStateRefs: ['probe-composer-deep-research-search'],
+        notes:
+          'Open the plus menu and temporarily type the owned deep research query; capture the target and clean up without submitting.',
       }),
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyToggleDictate',
       targetRefs: ['dictate-start-button', 'dictate-submit-button'],
-      uiStateRefs: targetStateRefs('dictate-start-button'),
+      uiStateRefs: targetStateRefs('dictate-start-button', 'dictate-submit-button'),
       activationProbe: clickTargetProbe('dictate-start-button', {
         setup: 'new-conversation',
         uiStateRefs: [],
@@ -1238,7 +1386,7 @@
     }),
     manualOnly('shortcutKeyStopAndTranscribeDictation', {
       targetRefs: ['stop-dictation-button'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('stop-dictation-button'),
       activationProbe: {
         notes:
           'Requires an already-active dictation recording; automated validation must not start recording or activate this stateful control.',
@@ -1292,6 +1440,7 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProStandard',
+      requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
@@ -1313,6 +1462,7 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyProExtended',
+      requiredCapabilities: ['proEffort', 'dedicatedEffortControls'],
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
@@ -1334,6 +1484,7 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyThinkingLight',
+      requiredCapabilities: ['dedicatedEffortControls'],
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
@@ -1355,6 +1506,7 @@
     }),
     defineShortcutAction({
       actionId: 'shortcutKeyThinkingHeavy',
+      requiredCapabilities: ['dedicatedEffortControls'],
       targetRefs: [
         'model-switcher-button',
         'model-switcher-menu',
@@ -1377,10 +1529,10 @@
     defineShortcutAction({
       actionId: 'shortcutKeyNewGptConversation',
       targetRefs: ['new-gpt-conversation-item'],
-      uiStateRefs: [],
+      uiStateRefs: targetStateRefs('new-gpt-conversation-item'),
       activationProbe: clickTargetProbe('new-gpt-conversation-item', {
         setup: 'gpt-conversation',
-        uiStateRefs: [],
+        uiStateRefs: targetStateRefs('new-gpt-conversation-item'),
         url: 'https://chatgpt.com/g/g-vU0PtzgAJ-step-1-2-nbme-medical-school-question-analysis-v2/c/69eba3bf-6f18-83ea-aa31-9a995aca7bc0',
         notes: 'Only valid from the GPT conversation fixture.',
       }),

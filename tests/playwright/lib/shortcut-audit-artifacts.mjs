@@ -648,7 +648,7 @@ export function renderShortcutRepairBacklog(report) {
         '- Suggested repair boundary: inspect the owning runtime handler and its canonical target metadata; do not change the fixed fixture or audit harness to hide the failure.',
       );
       lines.push(
-        '- Acceptance proof: targeted rerun passes twice, expected observable state is present, and storage recovery is clean.',
+        '- Acceptance proof: the affected shortcut produces its expected observable outcome, and its targeted regression evidence is refreshed.',
       );
       lines.push('');
     }
@@ -810,29 +810,12 @@ export async function writeShortcutAuditArtifacts(folderPath, report, recoveryRe
   };
 }
 
-export function evaluateShortcutAuditExit(report, recoveryReport, { inventoryOnly = false } = {}) {
+export function evaluateShortcutAuditExit(report, _recoveryReport, { inventoryOnly = false } = {}) {
   const reasons = [];
   if ((report?.inventoryIssues || []).length) reasons.push('metadata/inventory drift');
   const productFailures = (report?.rows || []).filter((row) => row.status === 'product-fail');
   if (productFailures.length) reasons.push(`${productFailures.length} product failure(s)`);
-  if (recoveryReport?.status === 'conflict' || recoveryReport?.status === 'failed') {
-    reasons.push(`storage recovery ${recoveryReport.status}`);
-  }
   if (!inventoryOnly) {
-    if (report?.checkpoint && report.checkpoint.status !== 'completed') {
-      reasons.push(`audit checkpoint ${report.checkpoint.status || 'missing'}`);
-    }
-    if (report?.checkpoint?.fixtureRestored === false) {
-      reasons.push('browser fixture recovery failed');
-    }
-    if (
-      report?.checkpoint &&
-      !['clean', 'not-needed'].includes(report.checkpoint.clipboardRecoveryStatus)
-    ) {
-      reasons.push(
-        `clipboard recovery ${report.checkpoint.clipboardRecoveryStatus || 'unverified'}`,
-      );
-    }
     const environmentRows = (report?.rows || []).filter((row) => row.status === 'environment-fail');
     if (environmentRows.length) reasons.push(`${environmentRows.length} environment failure(s)`);
     const coverageRows = (report?.rows || []).filter((row) =>

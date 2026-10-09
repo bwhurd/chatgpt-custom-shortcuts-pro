@@ -33,7 +33,13 @@ export async function runOverlayCase(context, content, started) {
       window.fixtureStorageReads = [];
       window.fixtureWarnings = [];
       console.warn = (...args) => window.fixtureWarnings.push(args.map(String).join(' '));
-      const data = { shortcutKeyShowOverlay: 'Period', shortcutKeyActivateInput: 'KeyW' };
+      const data = {
+        shortcutKeyShowOverlay: 'Period',
+        shortcutKeyActivateInput: 'KeyW',
+        shortcutKeyPreviousThread: 'KeyJ',
+        shortcutKeyNextThread: 'KeyK',
+        shortcutKeyOverlayFixtureCustom: 'KeyZ',
+      };
       window.chrome = {
         runtime: {
           id: 'isolated-fixture',
@@ -89,6 +95,18 @@ export async function runOverlayCase(context, content, started) {
       'Real renderer must produce shortcut content',
     );
     assert.ok(await overlay.locator('.key-input').count(), 'Assigned bindings must render');
+    for (const retiredKey of ['shortcutKeyPreviousThread', 'shortcutKeyNextThread']) {
+      assert.equal(
+        await overlay.locator(`#${retiredKey}`).count(),
+        0,
+        `Retired shortcut must stay out of the overlay: ${retiredKey}`,
+      );
+    }
+    assert.equal(
+      await overlay.locator('#shortcutKeyOverlayFixtureCustom').count(),
+      1,
+      'Generic assigned shortcuts must remain visible in the overlay catch-all',
+    );
     await page.keyboard.press('Escape');
     await overlay.waitFor({ state: 'detached', timeout: 2000 });
     await page.keyboard.press('Alt+Period');

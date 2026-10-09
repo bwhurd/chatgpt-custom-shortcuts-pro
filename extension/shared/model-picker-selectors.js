@@ -144,6 +144,7 @@
     return [
       ['role="radiogroup"', 'role="radio"', 'aria-checked='],
       ['role="group"', 'role="radio"', 'aria-checked='],
+      ['role="group"', '<button', 'aria-pressed="true"', 'aria-pressed="false"'],
     ];
   }
 
@@ -151,6 +152,7 @@
     return [
       ['data-testid="model-switcher-dropdown-button"'],
       ['data-testid="Model-switCher-dropdown-button"'],
+      ['data-codex-intelligence-trigger="true"', 'aria-haspopup="menu"'],
       ['__composer-pill', 'aria-haspopup="menu"', 'id="radix-'],
     ];
   }

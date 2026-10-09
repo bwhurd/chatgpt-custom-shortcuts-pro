@@ -1391,9 +1391,64 @@ const flashBorder = (el) => {
     });
 };
 
-// Prefer the captured language-neutral Stop icon; aria-label is only a fallback.
+function isVisibleEnabledComposerControl(element) {
+  if (!(element instanceof HTMLElement) || !element.isConnected) return false;
+  if (
+    element.hidden ||
+    element.getAttribute('aria-hidden') === 'true' ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    element.disabled
+  ) {
+    return false;
+  }
+
+  let current = element;
+  while (current instanceof HTMLElement) {
+    if (
+      current.hidden ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true'
+    ) {
+      return false;
+    }
+    const style = window.getComputedStyle(current);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      (current === element && style.pointerEvents === 'none')
+    ) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function findUniqueVisibleComposerControl(selector) {
+  const composerForms = Array.from(
+    document.querySelectorAll('form:has([contenteditable="true"][role="textbox"])'),
+  ).filter(
+    (form) =>
+      isVisibleEnabledComposerControl(form) &&
+      Array.from(form.querySelectorAll('[contenteditable="true"][role="textbox"]')).some(
+        isVisibleEnabledComposerControl,
+      ),
+  );
+  const matches = composerForms.flatMap((form) =>
+    Array.from(form.querySelectorAll(selector)).filter(isVisibleEnabledComposerControl),
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+// Prefer the unique language-neutral Stop icon inside the visible native composer.
 function getVisibleStopButton() {
   const candidates = [];
+  const observedComposerStopButton = findUniqueVisibleComposerControl(
+    'button[type="button"]:has(svg path[d^="M4.5 5.75C4.5 5.05964"])',
+  );
+  if (observedComposerStopButton) candidates.push(observedComposerStopButton);
 
   const composerBtn = document.getElementById('composer-submit-button');
   if (
@@ -1406,23 +1461,13 @@ function getVisibleStopButton() {
 
   candidates.push(
     ...document.querySelectorAll(
-      'button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])',
-    ),
-  );
-  candidates.push(
-    ...document.querySelectorAll(
       'button[data-testid="stop-button"], button[data-test-id="stop-button"]',
     ),
   );
   candidates.push(...document.querySelectorAll('button[aria-label="Stop"]'));
 
   for (const btn of candidates) {
-    if (!btn || btn.disabled) continue;
-    const style = window.getComputedStyle(btn);
-    if (style.display === 'none' || style.visibility === 'hidden') continue;
-    const rect = btn.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) continue;
-    if (btn.closest('[aria-hidden="true"]')) continue;
+    if (!isVisibleEnabledComposerControl(btn)) continue;
     return btn;
   }
   return null;
@@ -1751,6 +1796,7 @@ const delays = DELAYS;
   ) => {
     const normalizedEnabled = Boolean(enabled);
     const isEnabled = document.documentElement.classList.contains(ROOT_CLASS);
+    if (normalizedEnabled || isEnabled) ensureStyle();
     if (source === 'storage-change' && !storageLoadComplete) {
       storageChangedBeforeLoad = true;
     }
@@ -1766,7 +1812,6 @@ const delays = DELAYS;
     if (source === 'user-toggle') userToggledWrap = true;
     if (isEnabled === normalizedEnabled) return normalizedEnabled;
 
-    ensureStyle();
     const snapshot = captureScrollSnapshot();
     document.documentElement.classList.toggle(ROOT_CLASS, normalizedEnabled);
     if (normalizedEnabled) {
@@ -1919,8 +1964,11 @@ const clickElementLikeUser = (el) => {
   const MENU_CONTENT_SELECTOR =
     '[role="menu"][data-radix-menu-content][data-state="open"], [data-radix-menu-content][data-state="open"][role="menu"]';
 
-  // Down-chevron in the GPT trigger (text-agnostic)
-  const CHEVRON_ICON_TOKENS = ['M12.1338 5.94433', '#ba3792'];
+  const GPT_MENU_TRIGGER_PATH_PREFIXES = Object.freeze([
+    'M15.6981 9.04712',
+    'M4.69806 9.04712',
+    'M10.2003 9.04712',
+  ]);
 
   // Menu-specific cue wrapper around the shared flashBorder visual.
   function flashCustomGptMenuCue(el) {
@@ -1963,33 +2011,24 @@ const clickElementLikeUser = (el) => {
   function findOpenMenuForTrigger(triggerEl) {
     if (!triggerEl) return null;
 
-    const triggerId = triggerEl.getAttribute('id');
-    if (triggerId) {
-      const byLabel = document.querySelector(
-        `${MENU_CONTENT_SELECTOR}[aria-labelledby="${escapeCssSelectorValue(triggerId)}"]`,
-      );
-      if (byLabel) return byLabel;
-    }
-
     const menus = Array.from(document.querySelectorAll(MENU_CONTENT_SELECTOR));
     if (!menus.length) return null;
 
-    const tr = triggerEl.getBoundingClientRect();
-    const tcx = tr.left + tr.width / 2;
-    const tcy = tr.top + tr.height / 2;
+    const triggerId = triggerEl.getAttribute('id') || '';
+    const controlledIds = (triggerEl.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+    const hasAssociation = Boolean(triggerId || controlledIds.length);
+    if (!hasAssociation) return null;
 
-    menus.sort((a, b) => {
-      const ra = a.getBoundingClientRect();
-      const rb = b.getBoundingClientRect();
-      const acx = ra.left + ra.width / 2;
-      const acy = ra.top + ra.height / 2;
-      const bcx = rb.left + rb.width / 2;
-      const bcy = rb.top + rb.height / 2;
-      const da = (acx - tcx) ** 2 + (acy - tcy) ** 2;
-      const db = (bcx - tcx) ** 2 + (bcy - tcy) ** 2;
-      return da - db;
-    });
-    return menus[0] || null;
+    return (
+      menus.find((menu) => {
+        const menuId = menu.getAttribute('id') || '';
+        const labelledByIds = (menu.getAttribute('aria-labelledby') || '').split(/\s+/);
+        return (
+          (menuId && controlledIds.includes(menuId)) ||
+          (triggerId && labelledByIds.includes(triggerId))
+        );
+      }) || null
+    );
   }
 
   const getMenuItemLabel = (el) =>
@@ -2039,7 +2078,17 @@ const clickElementLikeUser = (el) => {
     return false;
   }
 
-  // Finds the GPT menu trigger in header or bottom bar (text-agnostic, locale-agnostic)
+  function isGptActionsMenuTrigger(element) {
+    return (
+      element instanceof HTMLElement &&
+      element.matches('button[aria-haspopup="menu"]') &&
+      GPT_MENU_TRIGGER_PATH_PREFIXES.every((pathPrefix) =>
+        element.querySelector(`svg path[d^="${pathPrefix}"]`),
+      )
+    );
+  }
+
+  // Finds the GPT actions trigger by its observed three-path icon, independent of its label.
   function findGptMenuTrigger() {
     const scopes = [
       document.querySelector('#page-header'),
@@ -2050,19 +2099,12 @@ const clickElementLikeUser = (el) => {
     for (const scope of scopes) {
       if (!scope) continue;
 
-      const candidates = Array.from(
-        scope.querySelectorAll(
-          ':is([aria-haspopup="menu"][id^="radix-"], div[type="button"][aria-haspopup="menu"], div[role="button"][aria-haspopup="menu"], button[aria-haspopup="menu"])',
-        ),
-      ).filter(isPartlyVisibleAboveComposer);
+      const candidates = Array.from(scope.querySelectorAll('button[aria-haspopup="menu"]')).filter(
+        (element) => isPartlyVisibleAboveComposer(element) && isGptActionsMenuTrigger(element),
+      );
 
       if (!candidates.length) continue;
-
-      const chevronSelector = buildSvgSelectorForIconTokens(CHEVRON_ICON_TOKENS);
-      const withChevron = candidates.filter((el) => el.querySelector(chevronSelector));
-      if (withChevron.length) return withChevron[withChevron.length - 1];
-
-      return candidates[candidates.length - 1];
+      return candidates.length === 1 ? candidates[0] : null;
     }
     return null;
   }
@@ -3053,6 +3095,8 @@ const clickElementLikeUser = (el) => {
   ].join(', ');
   const COMPOSER_TOOL_MENU_CUE_TOKENS = [
     'M6.1416 10.1663',
+    'M7.99994 14.6888',
+    'M9.9998 18.3614',
     'M7 21.005',
     'M12 2c5.522',
     'img:deep_research_app/icon.png',
@@ -3078,7 +3122,10 @@ const clickElementLikeUser = (el) => {
 
   const buildIconSelector = buildSvgSelectorForIconTokens;
 
-  const findComposerToolItemByIcon = (iconTokens) => {
+  const findComposerToolItemByIcon = (
+    iconTokens,
+    { itemSelector = COMPOSER_TOOL_ITEM_SELECTOR, rejectAmbiguous = false } = {},
+  ) => {
     const tokens = Array.isArray(iconTokens) ? iconTokens : [iconTokens];
     const iconSelector = tokens
       .map((token) => {
@@ -3091,7 +3138,7 @@ const clickElementLikeUser = (el) => {
       .join(', ');
     if (!iconSelector) return null;
     const items = Array.from(document.querySelectorAll(iconSelector))
-      .map((icon) => icon.closest(COMPOSER_TOOL_ITEM_SELECTOR))
+      .map((icon) => icon.closest(itemSelector))
       .filter((item, index, all) => item && all.indexOf(item) === index)
       .filter((item) => {
         const style = getComputedStyle(item);
@@ -3104,6 +3151,7 @@ const clickElementLikeUser = (el) => {
           rect.height > 0
         );
       });
+    if (rejectAmbiguous && items.length > 1) return null;
     items.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
     return items[items.length - 1] || null;
   };
@@ -3127,8 +3175,8 @@ const clickElementLikeUser = (el) => {
     );
   };
 
-  const runActionByIcon = async (iconPathPrefix, delays = DELAYS) => {
-    let item = findComposerToolItemByIcon(iconPathPrefix);
+  const runActionByIcon = async (iconPathPrefix, delays = DELAYS, matchOptions) => {
+    let item = findComposerToolItemByIcon(iconPathPrefix, matchOptions);
     if (!item) {
       const menuOpener = findComposerToolMenuOpener();
       if (!menuOpener) return;
@@ -3138,7 +3186,7 @@ const clickElementLikeUser = (el) => {
         smartClick(menuOpener);
       }
 
-      item = await waitFor(() => findComposerToolItemByIcon(iconPathPrefix), {
+      item = await waitFor(() => findComposerToolItemByIcon(iconPathPrefix, matchOptions), {
         timeout: delays.waitActionItem,
       });
     }
@@ -3164,7 +3212,7 @@ const clickElementLikeUser = (el) => {
     );
   }
 
-  const runComposerToolShortcutByIcon = async (iconTokens, delays = DELAYS) => {
+  const runComposerToolShortcutByIcon = async (iconTokens, delays = DELAYS, matchOptions) => {
     const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
     if (!composer) return;
 
@@ -3179,7 +3227,7 @@ const clickElementLikeUser = (el) => {
       return;
     }
 
-    await runActionByIcon(iconTokens, delays);
+    await runActionByIcon(iconTokens, delays, matchOptions);
   };
   window.__cspRunComposerToolShortcutByIcon = runComposerToolShortcutByIcon;
 
@@ -3944,6 +3992,7 @@ const clickElementLikeUser = (el) => {
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
   const SEARCH_CONVERSATION_SELECTORS = [
+    'button:has(svg path[d^="M9.16211 2.37976"])',
     'button:has(svg path[d^="M7.32849 1.91016"])',
     'button[data-testid="search-conversation-button"]',
   ];
@@ -4152,10 +4201,14 @@ const clickElementLikeUser = (el) => {
 
   async function waitForNativeChatWorkSurfaceRadios(timeoutMs = 3000) {
     const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
-    let radios = getNativeChatWorkSurfaceRadios();
+    const readReadyRadios = () => {
+      const radios = getNativeChatWorkSurfaceRadios();
+      return radios.length === 2 && radios.every(isDirectActionVisible) ? radios : [];
+    };
+    let radios = readReadyRadios();
     while (radios.length !== 2 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      radios = getNativeChatWorkSurfaceRadios();
+      radios = readReadyRadios();
     }
     return radios;
   }
@@ -4322,8 +4375,6 @@ const clickElementLikeUser = (el) => {
     shortcutKeyToggleSidebar: 'KeyS',
     shortcutKeyActivateInput: 'KeyW',
     shortcutKeySearchWeb: 'KeyQ',
-    shortcutKeyPreviousThread: 'KeyJ',
-    shortcutKeyNextThread: 'Semicolon',
     shortcutKeyToggleCodeboxWrap: '',
     selectThenCopy: 'KeyX',
     shortcutKeyClickSendButton: 'Enter',
@@ -4784,20 +4835,21 @@ const clickElementLikeUser = (el) => {
     }
 
     const getCtrlShortcutSendButton = () => {
-      const composerSubmitButton = document.querySelector('#composer-submit-button');
-      if (
-        composerSubmitButton &&
-        (composerSubmitButton.getAttribute('data-testid') === 'stop-button' ||
-          composerSubmitButton.getAttribute('data-test-id') === 'stop-button')
-      ) {
-        return null;
-      }
-
-      return (
-        composerSubmitButton ||
-        document.querySelector('button[data-testid="send-button"]') ||
-        document.querySelector('button[aria-label="Send prompt"]')
+      const isStopButton = (button) =>
+        button?.getAttribute('data-testid') === 'stop-button' ||
+        button?.getAttribute('data-test-id') === 'stop-button' ||
+        button?.matches?.('button:has(svg path[d^="M4.5 5.75C4.5 5.05964"])');
+      const observedComposerSendButton = findUniqueVisibleComposerControl(
+        'button[type="submit"]:has(svg path[d^="M9.33467 16.6663"])',
       );
+      const legacySendButtons = [
+        document.querySelector('#composer-submit-button'),
+        document.querySelector('button[data-testid="send-button"]'),
+        document.querySelector('button[aria-label="Send prompt"]'),
+      ];
+      return [observedComposerSendButton, ...legacySendButtons].find(
+        (button) => button && !isStopButton(button) && isVisibleEnabledComposerControl(button),
+      ) || null;
     };
 
     const keyFunctionMappingCtrl = {
@@ -5908,6 +5960,8 @@ const clickElementLikeUser = (el) => {
       scrollThreadNavigationTargetToAnchor(container, target, { scrollDuration });
     }
 
+    // Retained while response navigation is temporarily unavailable in ChatGPT.
+    // biome-ignore lint/correctness/noUnusedVariables: temporary response-navigation implementation
     function runThreadNavigationShortcut(opts = {}, config = {}) {
       const initialDelay = config.initialDelay ?? 25;
       const postClickDelay = config.postClickDelay ?? 175;
@@ -7326,21 +7380,30 @@ const clickElementLikeUser = (el) => {
     }
 
     const SHORTCUT_ICON_TOKENS = {
-      addPhotosFiles: ['M6.1416 10.1663'],
-      branchInNewChatMenuItem: ['M11.6672 1.97461'],
+      addPhotosFiles: [
+        'M7.99994 14.6888',
+        'M9.9998 18.3614',
+        'M6.1416 10.1663',
+      ],
+      branchInNewChatMenuItem: ['#branch-light-16', 'M11.6672 1.97461'],
       createImage: ['M7 21.005'],
       deepResearch: ['img:deep_research_app/icon.png'],
-      moreDotsMenuButton: ['M3.33362 6.80811'],
-      newGptConversationMenuItem: ['#compose', 'M2.6687 11.333V8.66699C2.6687', '#3a5c87'],
+      moreDotsMenuButton: ['#ellipsis-horizontal-light-16', 'M3.33362 6.80811'],
+      newGptConversationMenuItem: [
+        '#square-and-pencil-light-16',
+        '#compose',
+        'M2.6687 11.333V8.66699C2.6687',
+        '#3a5c87',
+      ],
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
-      regenerateMenuButton: ['M14.0219 8.22363'],
+      regenerateMenuButton: ['#arrows-clockwise-rotate-lg-light-16', 'M14.0219 8.22363'],
       searchWeb: ['M12 2c5.522'],
       study: ['#book-open-light-20', '#book-open-light-16'],
       thinkingMenuButton: ['#127a53', '#c9d737'],
     };
 
     const REGENERATE_MENU_TRIGGER_SELECTOR =
-      '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])';
+      '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#arrows-clockwise-rotate-lg-light-16"]), .turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])';
 
     const LEGACY_THINKING_MENU_ITEM_BY_OPTION_ID = {
       'thinking-extended': '#143e56',
@@ -7478,7 +7541,7 @@ const clickElementLikeUser = (el) => {
         BOTTOM_BAR_CONTAINER_SELECTOR,
         {
           triggerSelector:
-            '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+            '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#ellipsis-horizontal-light-16"]), .turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
           requireTriggerSelector: true,
           menuRootResolver: findOpenMenuForTrigger,
         },
@@ -7507,7 +7570,15 @@ const clickElementLikeUser = (el) => {
     }
 
     async function runIconToolbarShortcut(iconTokenKey) {
-      await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);
+      const matchOptions =
+        iconTokenKey === 'addPhotosFiles'
+          ? { itemSelector: 'button[data-list-navigation-item="true"]', rejectAmbiguous: true }
+          : undefined;
+      await window.__cspRunComposerToolShortcutByIcon(
+        SHORTCUT_ICON_TOKENS[iconTokenKey],
+        DELAYS,
+        matchOptions,
+      );
     }
 
     async function runStudyShortcut() {
@@ -7569,21 +7640,19 @@ const clickElementLikeUser = (el) => {
     }
 
     function runTemporaryChatShortcut() {
-      const root = document.querySelector('#conversation-header-actions') || document;
-      const el =
-        root.querySelector('button[aria-label="Temporary chat"]') ||
-        root.querySelector('button[aria-label="Turn off temporary chat"]') ||
-        root.querySelector('button svg use[href*="#chat-temp"]')?.closest('button') ||
-        root.querySelector('button svg use[href*="#28a8a0"]')?.closest('button') ||
-        root.querySelector('button svg use[href*="#6eabdf"]')?.closest('button');
-      if (!el) return;
-      smartClick(el);
+      const selectors = [
+        'button:has(svg use[href$="#chat-bubble-dashed-light-20"])',
+        'button:has(svg use[href$="#chat-bubble-checkmark-dashed-light-20"])',
+      ];
+      const controls = [
+        ...new Set(selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))),
+      ].filter(isDirectActionVisible);
+      if (controls.length !== 1) return;
+      smartClick(controls[0]);
     }
 
     function runNewGptConversationShortcut() {
-      window.clickGptHeaderThenSubItemSvg(SHORTCUT_ICON_TOKENS.newGptConversationMenuItem, {
-        fallbackText: 'New chat',
-      });
+      window.clickGptHeaderThenSubItemSvg(SHORTCUT_ICON_TOKENS.newGptConversationMenuItem);
     }
 
     const DictationShortcut = (() => {
@@ -7592,16 +7661,32 @@ const clickElementLikeUser = (el) => {
       const SPRITE_IDS = {
         send: ['#send-prompt-style-thin', '#01bab7'],
       };
-      const DICTATE_START_BUTTON_SELECTOR = 'button:has(svg path[d^="M12.4584 8.96973"])';
-      const DICTATE_SUBMIT_BUTTON_SELECTOR =
+      const DICTATE_START_BUTTON_SELECTORS = [
+        'button:has(svg use[href$="#microphone-light-16"])',
+        'button:has(svg use[href$="#microphone-light-20"])',
+        'button:has(svg path[d^="M12.4584 8.96973"])',
+      ];
+      const DICTATE_SUBMIT_SYMBOL_SELECTOR = 'button:has(svg use[href$="#arrow-up-lg-light-20"])';
+      const DICTATE_SUBMIT_PATH_SELECTOR =
         'button[type="button"]:has(svg path[d^="M9.31697 3.08317"])';
-      const DICTATE_STOP_BUTTON_SELECTOR =
-        'button[type="button"]:has(svg path[d^="M13.0834 3.91846"])';
-      const DICTATE_CANCEL_BUTTON_SELECTOR =
-        'button[type="button"]:has(svg path[d^="M14.779 4.27903"])';
+      const DICTATE_ACTIVE_CANCEL_SYMBOL_SELECTOR =
+        'button:has(svg use[href$="#xmark-lg-light-20"])';
+      const DICTATE_ACTIVE_STOP_SYMBOL_SELECTOR =
+        'button:has(svg use[href$="#stop-fill-light-20"])';
+      const DICTATE_STOP_BUTTON_SELECTORS = [
+        'button:has(svg use[href$="#stop-fill-light-20"])',
+        'button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
+      ];
+      const DICTATE_CANCEL_BUTTON_SELECTORS = [
+        'button:has(svg use[href$="#xmark-lg-light-20"])',
+        'button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
+      ];
 
       function getComposerRoot() {
         return (
+          document.querySelector(
+            'form[data-chatgpt-composer][data-thread-find-composer="true"]',
+          ) ||
           document.querySelector('form[data-thread-find-composer="true"]') ||
           document.querySelector('form[data-chatgpt-composer]')
         );
@@ -7657,11 +7742,17 @@ const clickElementLikeUser = (el) => {
 
         // While dictation is active, ChatGPT exposes distinct Cancel, Stop, and Transcribe-and-send controls.
         // The Dictate toggle confirms/sends; Stop-and-Transcribe and Cancel have separate shortcuts.
-        const submitDictationBtn = findFirstClickable(composerRoot, DICTATE_SUBMIT_BUTTON_SELECTOR);
+        const hasCurrentActiveDictationControls =
+          findFirstClickable(composerRoot, DICTATE_ACTIVE_CANCEL_SYMBOL_SELECTOR) &&
+          findFirstClickable(composerRoot, DICTATE_ACTIVE_STOP_SYMBOL_SELECTOR);
+        const submitDictationBtn =
+          (hasCurrentActiveDictationControls &&
+            findFirstClickable(composerRoot, DICTATE_SUBMIT_SYMBOL_SELECTOR)) ||
+          findFirstClickable(composerRoot, DICTATE_SUBMIT_PATH_SELECTOR);
         if (clickComposerControl(submitDictationBtn)) return;
 
         // Otherwise start dictation (avoid Voice Mode button).
-        const dictateBtn = findFirstClickable(composerRoot, DICTATE_START_BUTTON_SELECTOR);
+        const dictateBtn = findFirstClickable(composerRoot, ...DICTATE_START_BUTTON_SELECTORS);
         if (clickComposerControl(dictateBtn)) return;
 
         // Fall back to submit only when the dedicated dictate/stop controls are unavailable.
@@ -7678,14 +7769,14 @@ const clickElementLikeUser = (el) => {
       function runStopAndTranscribe() {
         const composerRoot = getComposerRoot();
         if (!composerRoot) return;
-        const stopDictationBtn = findFirstClickable(composerRoot, DICTATE_STOP_BUTTON_SELECTOR);
+        const stopDictationBtn = findFirstClickable(composerRoot, ...DICTATE_STOP_BUTTON_SELECTORS);
         clickComposerControl(stopDictationBtn);
       }
 
       async function runCancel() {
         const composerRoot = getComposerRoot();
         if (!composerRoot) return;
-        const btn = findFirstClickable(composerRoot, DICTATE_CANCEL_BUTTON_SELECTOR);
+        const btn = findFirstClickable(composerRoot, ...DICTATE_CANCEL_BUTTON_SELECTORS);
 
         // Only stop if the active dictation cancel control is currently available; otherwise no-op.
         if (!btn) return;
@@ -7789,22 +7880,6 @@ const clickElementLikeUser = (el) => {
         triggerDirectComposerActivation();
       },
       shortcutKeySearchWeb: () => runIconToolbarShortcut('searchWeb'),
-      shortcutKeyPreviousThread: (opts = {}) => {
-        runThreadNavigationShortcut(opts, {
-          ariaLabel: 'Previous response',
-          direction: 'previous',
-          iconTokens: ['M11.5292 3.7793', '#8ee2e9'],
-          postClickDelay: 175,
-        });
-      },
-      shortcutKeyNextThread: (opts = {}) => {
-        runThreadNavigationShortcut(opts, {
-          ariaLabel: 'Next response',
-          direction: 'next',
-          iconTokens: ['M7.52925 3.7793', '#b140e7'],
-          postClickDelay: 200,
-        });
-      },
       selectThenCopy: runSelectThenCopyShortcut,
       shortcutKeyToggleModelSelector: () => {
         window.toggleModelSelector();
@@ -7829,7 +7904,8 @@ const clickElementLikeUser = (el) => {
         // Keep native Share activation inside the trusted Alt-key task; the
         // helper's default mode yields and delays before clicking.
         void clickButtonBySelector(
-          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
+          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"]), ' +
+            '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
           { immediate: true },
         );
       },
@@ -7952,11 +8028,6 @@ const clickElementLikeUser = (el) => {
       return true;
     };
 
-    const runPreviewThreadShortcut = (storageKey, event) => {
-      if (!matchesShortcutKey(getEffectiveShortcutSetting(storageKey), event)) return false;
-      return runAltShortcutAction(storageKey, event, { previewOnly: true });
-    };
-
     const runModelPickerDigitShortcut = (event, keyIdentifier) => {
       if (!/^\d$/.test(keyIdentifier)) return false;
 
@@ -8043,13 +8114,9 @@ const clickElementLikeUser = (el) => {
     const handleAltShortcutEvent = (event, keyIdentifier, isPrimaryControlPressed) => {
       if (hasUnexpectedAltShortcutModifier(event)) return false;
 
-      // Primary-Control+Alt belongs exclusively to the currently assigned
-      // response-navigation previews. Every other compound chord passes through:
-      // on layouts such as German, Ctrl+Alt+Q is text input for "@".
-      if (isPrimaryControlPressed) {
-        if (runPreviewThreadShortcut('shortcutKeyPreviousThread', event)) return true;
-        return runPreviewThreadShortcut('shortcutKeyNextThread', event);
-      }
+      // Compound chords pass through, including the temporarily disabled
+      // response-navigation previews and layout text input such as Ctrl+Alt+Q.
+      if (isPrimaryControlPressed) return false;
 
       if (isModelToggleShortcutEvent(event)) {
         return runAltShortcutAction('shortcutKeyToggleModelSelector', event);
@@ -11969,6 +12036,15 @@ form.w-full[data-type="unified-composer"] {
               ? ['Default', ...listLabels]
               : listLabels;
           const getHintAction = (item, index) => {
+            if (integratedModelItems.length > 0 && window.__modelCatalog?.configureOptions?.length) {
+              const label = getModelVersionMenuItemLabel(item);
+              if (/^default\b/i.test(label)) return { nativeOnly: true };
+              const catalogActions = window.ModelLabels?.getCatalogModelNameActions?.(window.__modelCatalog, []) || [];
+              const action = catalogActions.find(
+                (candidate) => String(candidate.label || '').replace(/\s+/g, ' ').trim() === label,
+              );
+              return isModelNameHintAction(action) ? action : null;
+            }
             // The direct composer menu has no view marker for the shared
             // model-name helper to detect, so supply its synthetic Default
             // anchor explicitly when Chat starts with a model row.
@@ -13858,6 +13934,18 @@ form.w-full[data-type="unified-composer"] {
             nativeOnly: true,
           };
         }
+        // Current catalogs own model identity and persisted slots. A newly
+        // appearing native row must not borrow another model's positional
+        // fallback binding before the catalog has been refreshed.
+        if (catalog?.integratedModelMenu === true) {
+          const catalogActions = window.ModelLabels?.getCatalogModelNameActions?.(catalog, []) || [];
+          if (catalogActions.length) {
+            const matchingAction = catalogActions.find(
+              (action) => String(action.label || '').replace(/\s+/g, ' ').trim() === label,
+            );
+            return matchingAction ? { ...matchingAction, label, fromCatalog: true } : null;
+          }
+        }
         const listAction =
           Array.isArray(listLabels) &&
           listLabels.length &&
@@ -13906,14 +13994,14 @@ form.w-full[data-type="unified-composer"] {
         const group = String(action.group || '').trim();
         const slot = Number(action.slot);
         // Model rows may use the static legacy slots (3-6) or the dynamic
-        // catalog slots (8-10). Effort, speed, reset, and primary slots are
+        // catalog slots (8-10 and 15+). Effort, speed, reset, and primary slots are
         // deliberately excluded even if a stale catalog reports one of
         // those slots for the same model id.
         return (
           actionKind === 'configure-option' &&
           group === 'configure' &&
           Number.isInteger(slot) &&
-          [3, 4, 5, 6, 8, 9, 10].includes(slot)
+          ([3, 4, 5, 6, 8, 9, 10].includes(slot) || slot >= 15)
         );
       };
       const getOpenModelVersionSubmenu = (trigger = null) => {
@@ -17265,8 +17353,6 @@ ${groupMarkup.join('')}
             'shortcutKeyActivateInput',
             'shortcutKeyToggleSidebar',
             'shortcutKeySearchConversationHistory',
-            'shortcutKeyPreviousThread',
-            'shortcutKeyNextThread',
           ],
         },
         {
@@ -17366,10 +17452,15 @@ ${groupMarkup.join('')}
     const deprecatedShortcutKeys = Array.isArray(schemaDeprecated)
       ? schemaDeprecated
       : ['shortcutKeyRegenerate', 'shortcutKeyCopyAllResponses'];
+    const retiredShortcutKeys = new Set([
+      'shortcutKeyPreviousThread',
+      'shortcutKeyNextThread',
+    ]);
 
     const catchAllKeys = Object.keys(cfg)
       .filter((k) => k.startsWith(keyPrefix) || extraShortcutKeys.includes(k))
       .filter((k) => !EFFORT_SHORTCUT_KEY_SET.has(k))
+      .filter((k) => !retiredShortcutKeys.has(k))
       .filter((k) => !deprecatedShortcutKeys.includes(k))
       .filter((k) => isShortcutVisibleInCatalog(k))
       .filter((k) => isAssigned(cfg?.[k]))

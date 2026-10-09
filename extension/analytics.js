@@ -21,8 +21,6 @@
     shortcutKeyNewConversation: 'n',
     shortcutKeyActivateInput: 'w',
     shortcutKeyToggleSidebar: 's',
-    shortcutKeyPreviousThread: 'j',
-    shortcutKeyNextThread: ';',
     shortcutKeyEdit: 'e',
     shortcutKeySendEdit: 'd',
     shortcutKeySearchConversationHistory: ',',
@@ -106,8 +104,6 @@
       'shortcutKeyNewConversation',
       'shortcutKeySearchConversationHistory',
       'shortcutKeyToggleSidebar',
-      'shortcutKeyPreviousThread',
-      'shortcutKeyNextThread',
       'shortcutKeyTemporaryChat',
       'shortcutKeyShare',
       'shortcutKeyShowOverlay',
@@ -303,14 +299,15 @@
       .forEach((bucketDay) => {
         const bucket = store.buckets[bucketDay] || {};
         const shortcuts = bucket.shortcuts || {};
-        const dayTotal = Number(bucket.totalShortcutUses || 0);
-        if (dayTotal > 0 || Object.keys(shortcuts).length > 0) daysObserved += 1;
+        let dayTotal = 0;
         Object.entries(shortcuts).forEach(([actionId, count]) => {
           if (!SHORTCUT_ACTION_ID_SET.has(actionId)) return;
           const safeCount = Number(count || 0);
           totals[actionId] = (totals[actionId] || 0) + safeCount;
           totalShortcutUses += safeCount;
+          dayTotal += safeCount;
         });
+        if (dayTotal > 0) daysObserved += 1;
       });
 
     return { totals, totalShortcutUses, daysObserved };

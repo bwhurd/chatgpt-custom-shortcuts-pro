@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
+import {
+  captureRenderedThreadBottomBoundary,
+  findRenderedThreadScrollRoot,
+} from './playwright/lib/devscrape-wide-core.mjs';
 
 const require = createRequire(import.meta.url);
 const modelPickerSelectors = require('../extension/shared/model-picker-selectors.js');
@@ -11,19 +15,228 @@ const contentSource = await readFile(new URL('../extension/content.js', import.m
 const descriptorById = new Map(
   shortcutMetadata.TARGET_DESCRIPTORS.map((descriptor) => [descriptor.targetId, descriptor]),
 );
+const targetMatchesCapture = (descriptor, html) =>
+  descriptor.matchGroups.some((group) => group.every((needle) => html.includes(needle)));
+
+const expectedModelSwitcherButtonMatchGroups = [
+  ['data-testid="model-switcher-dropdown-button"'],
+  ['data-testid="Model-switCher-dropdown-button"'],
+  ['data-codex-intelligence-trigger="true"', 'aria-haspopup="menu"'],
+  ['__composer-pill', 'aria-haspopup="menu"', 'id="radix-'],
+];
+assert.deepEqual(
+  modelPickerSelectors.getModelSwitcherButtonMatchGroups(),
+  expectedModelSwitcherButtonMatchGroups,
+);
+const modelSwitcherButtonTarget = descriptorById.get('model-switcher-button');
+assert.deepEqual(modelSwitcherButtonTarget.matchGroups, expectedModelSwitcherButtonMatchGroups);
+assert.ok(
+  targetMatchesCapture(
+    modelSwitcherButtonTarget,
+    '<button data-codex-intelligence-trigger="true" aria-haspopup="menu">',
+  ),
+  'The audit opener matcher should recognize the current Codex intelligence trigger',
+);
+
+const pageHeaderTarget = descriptorById.get('page-header');
+assert.deepEqual(pageHeaderTarget.matchGroups, [['id="page-header"'], ['<header']]);
+assert.ok(
+  targetMatchesCapture(pageHeaderTarget, '<header data-app-shell-main-titlebar="true">'),
+  'The header-area capture fallback should match a structural header without the legacy id',
+);
+const threadBottomTarget = descriptorById.get('thread-bottom');
+assert.deepEqual(threadBottomTarget.matchGroups, [
+  ['thread-scroll-container'],
+  ['id="thread-bottom"'],
+  ['id="thread-bottom-container"'],
+]);
+assert.equal(threadBottomTarget.kind, 'selector-list');
+assert.equal(
+  threadBottomTarget.matchGroups.flat().some((needle) => needle.includes('composer')),
+  false,
+  'the bottom scroll target should not depend on a composer marker',
+);
+
+const searchChatsDialogTarget = descriptorById.get('search-chats-dialog');
+assert.deepEqual(searchChatsDialogTarget.matchGroups, [
+  ['role="dialog"', '<input', 'role="combobox"', 'placeholder="Search…"'],
+  ['role="dialog"', 'placeholder="Search chats..."'],
+]);
+assert.ok(
+  targetMatchesCapture(
+    searchChatsDialogTarget,
+    '<div role="dialog"><input role="combobox" placeholder="Search…"></div>',
+  ),
+  'the Search Chats target should match the observed dialog and combobox placeholder',
+);
+assert.ok(
+  targetMatchesCapture(
+    searchChatsDialogTarget,
+    '<div role="dialog"><input placeholder="Search chats..."></div>',
+  ),
+  'the Search Chats target should retain its legacy English placeholder match',
+);
+for (const unrelatedCapture of [
+  '<input role="combobox" placeholder="Search…">',
+  '<div role="dialog"><input placeholder="Search…"></div>',
+  '<div role="dialog"><input role="combobox" placeholder="Search"></div>',
+]) {
+  assert.equal(
+    targetMatchesCapture(searchChatsDialogTarget, unrelatedCapture),
+    false,
+    `the Search Chats target should reject outside-dialog, incomplete, or unrelated markup: ${unrelatedCapture}`,
+  );
+}
+
+class SyntheticElement {
+  constructor({ id = '', className = '', style = {}, width = 0, height = 0, text = '' } = {}) {
+    this.isConnected = true;
+    this.style = {
+      display: 'block',
+      visibility: 'visible',
+      pointerEvents: 'auto',
+      ...style,
+    };
+    this.rect = { width, height };
+    this.text = text;
+    this.attributes = [];
+    if (id) this.setAttribute('id', id);
+    if (className) this.setAttribute('class', className);
+  }
+
+  getBoundingClientRect() {
+    return this.rect;
+  }
+
+  getAttribute(name) {
+    return this.attributes.find((attribute) => attribute.name === name)?.value ?? null;
+  }
+
+  setAttribute(name, value) {
+    const next = String(value);
+    const existing = this.attributes.find((attribute) => attribute.name === name);
+    if (existing) existing.value = next;
+    else this.attributes.push({ name, value: next });
+  }
+
+  removeAttribute(name) {
+    this.attributes = this.attributes.filter((attribute) => attribute.name !== name);
+  }
+
+  cloneNode(deep) {
+    assert.equal(deep, false, 'thread-bottom capture should clone without child content');
+    const clone = Object.create(SyntheticElement.prototype);
+    Object.assign(clone, {
+      isConnected: this.isConnected,
+      style: { ...this.style },
+      rect: { ...this.rect },
+      text: '',
+      attributes: this.attributes.map((attribute) => ({ ...attribute })),
+    });
+    return clone;
+  }
+
+  get outerHTML() {
+    const attributes = this.attributes.map(({ name, value }) => ` ${name}="${value}"`).join('');
+    return `<div${attributes}>${this.text}</div>`;
+  }
+}
+
+function makeSyntheticDocument({ roots = [], boundaries = [] } = {}) {
+  return {
+    defaultView: {
+      HTMLElement: SyntheticElement,
+      getComputedStyle: (element) => element.style,
+    },
+    querySelectorAll(selector) {
+      if (selector === '.thread-scroll-container') return roots;
+      if (selector === '#thread-bottom, #thread-bottom-container') return boundaries;
+      throw new Error(`Unexpected synthetic selector: ${selector}`);
+    },
+  };
+}
+
+const hiddenFirstRoot = new SyntheticElement({
+  className: 'thread-scroll-container fixture-private-class',
+  style: { display: 'none' },
+  width: 600,
+  height: 800,
+  text: 'fixture-only content',
+});
+const visibleRoot = new SyntheticElement({
+  className: 'thread-scroll-container fixture-generated-class',
+  width: 600,
+  height: 800,
+  text: 'fixture-only conversation content',
+});
+const renderedRootDocument = makeSyntheticDocument({ roots: [hiddenFirstRoot, visibleRoot] });
+assert.equal(
+  findRenderedThreadScrollRoot(renderedRootDocument),
+  visibleRoot,
+  'thread-bottom capture should skip a hidden root before the rendered native root',
+);
+const renderedRootCapture = captureRenderedThreadBottomBoundary(renderedRootDocument);
+assert.equal(renderedRootCapture, '<div class="thread-scroll-container"></div>');
+assert.ok(
+  targetMatchesCapture(threadBottomTarget, renderedRootCapture),
+  'the native scroll-root capture should satisfy the thread-bottom target metadata',
+);
+assert.equal(
+  renderedRootCapture.includes('fixture-private') || renderedRootCapture.includes('content'),
+  false,
+  'the native scroll-root capture should omit unrelated attributes and children',
+);
+assert.equal(
+  captureRenderedThreadBottomBoundary(makeSyntheticDocument({ roots: [hiddenFirstRoot] })),
+  '',
+  'a hidden native root must not create target-presence evidence',
+);
+
+const visibleLegacyBoundary = new SyntheticElement({
+  id: 'thread-bottom-container',
+  width: 300,
+  height: 80,
+  text: 'fixture-only boundary content',
+});
+const legacyBoundaryCapture = captureRenderedThreadBottomBoundary(
+  makeSyntheticDocument({ boundaries: [visibleLegacyBoundary] }),
+);
+assert.equal(legacyBoundaryCapture, '<div id="thread-bottom-container"></div>');
+assert.ok(targetMatchesCapture(threadBottomTarget, legacyBoundaryCapture));
+
+const sidebarToggleTarget = descriptorById.get('native-sidebar-toggle-control');
+const expectedSidebarToggleMatchGroups = [
+  ['data-app-shell-sidebar-trigger="true"'],
+  ['aria-controls="app-shell-sidebar"'],
+  ['data-testid="close-sidebar-button"'],
+  ['aria-controls="stage-slideover-sidebar"'],
+  ['aria-controls="stage-popover-sidebar"'],
+  ['data-testid="open-sidebar-button"'],
+];
+assert.ok(sidebarToggleTarget, 'Toggle Sidebar should use the consolidated native control target');
+assert.deepEqual(sidebarToggleTarget.matchGroups, expectedSidebarToggleMatchGroups);
+for (const group of expectedSidebarToggleMatchGroups) {
+  assert.ok(
+    targetMatchesCapture(sidebarToggleTarget, `<button ${group.join(' ')}></button>`),
+    `the consolidated sidebar target should retain marker group ${group.join(' + ')}`,
+  );
+}
 
 const currentTargetTokens = {
-  'assistant-more-actions-trigger': 'M3.33362 6.80811',
+  'assistant-more-actions-trigger': '#ellipsis-horizontal-light-16',
+  'assistant-more-actions-branch': '#branch-light-16',
+  'assistant-web-regenerate-trigger': '#arrows-clockwise-rotate-lg-light-16',
+  'assistant-web-regenerate-item-try-again': '#arrows-clockwise-rotate-lg-light-16',
   'assistant-read-aloud-direct-action': 'M9.75122 4.09203',
-  'temporary-chat-button': '#chat-temp',
+  'temporary-chat-button': '#chat-bubble-dashed-light-20',
   'composer-web-search-action': 'M12 2c5.522',
   'composer-create-image-action': 'M7 21.005',
   'composer-deep-research-action': 'deep_research_app/icon.png',
   'composer-add-photos-files-action': 'M6.1416 10.1663',
-  'dictate-start-button': 'M12.4584 8.96973',
-  'dictate-submit-button': 'M9.31697 3.08317',
-  'stop-dictation-button': 'M13.0834 3.91846',
-  'cancel-dictation-button': 'M14.779 4.27903',
+  'dictate-start-button': '#microphone-light-16',
+  'dictate-submit-button': '#arrow-up-lg-light-20',
+  'stop-dictation-button': '#stop-fill-light-20',
+  'cancel-dictation-button': '#xmark-lg-light-20',
   'new-gpt-conversation-item': '#compose',
 };
 
@@ -36,6 +249,177 @@ for (const [targetId, token] of Object.entries(currentTargetTokens)) {
   );
   assert.ok(contentSource.includes(token), `${targetId} should appear in the runtime source`);
 }
+
+const regenerateTriggerTarget = descriptorById.get('assistant-web-regenerate-trigger');
+const expectedRegenerateTriggerSelectors = [
+  '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#arrows-clockwise-rotate-lg-light-16"])',
+  '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M14.0219 8.22363"])',
+];
+assert.deepEqual(regenerateTriggerTarget.searchNeedles, expectedRegenerateTriggerSelectors);
+assert.deepEqual(regenerateTriggerTarget.matchGroups, [
+  [
+    'turn-action-controls',
+    '<button',
+    'aria-haspopup="menu"',
+    'arrows-clockwise-rotate-lg-light-16',
+  ],
+  ['turn-action-controls', '<button', 'aria-haspopup="menu"', 'M14.0219 8.22363'],
+]);
+const regenerateTriggerCapture =
+  '<div class="turn-action-controls"><button aria-haspopup="menu"><svg><use href="/assets/sprite.svg#arrows-clockwise-rotate-lg-light-16"></use></svg></button></div>';
+assert.ok(
+  targetMatchesCapture(regenerateTriggerTarget, regenerateTriggerCapture),
+  'The web regenerate trigger should match serialized turn-action markup by structure and SVG symbol',
+);
+assert.equal(
+  targetMatchesCapture(
+    regenerateTriggerTarget,
+    regenerateTriggerCapture.replace('turn-action-controls', 'other-actions'),
+  ),
+  false,
+  'The web regenerate trigger should reject the same icon outside turn-action-controls',
+);
+const legacyRegenerateTriggerCapture = regenerateTriggerCapture.replace(
+  '<use href="/assets/sprite.svg#arrows-clockwise-rotate-lg-light-16"></use>',
+  '<path d="M14.0219 8.22363 10 12"></path>',
+);
+assert.ok(
+  targetMatchesCapture(regenerateTriggerTarget, legacyRegenerateTriggerCapture),
+  'The web regenerate trigger should retain its legacy SVG path fallback',
+);
+assert.equal(
+  targetMatchesCapture(
+    regenerateTriggerTarget,
+    regenerateTriggerCapture.replace(
+      'arrows-clockwise-rotate-lg-light-16',
+      'ellipsis-horizontal-light-16',
+    ),
+  ),
+  false,
+  'The web regenerate trigger should reject the More Actions symbol',
+);
+
+const moreActionsTriggerTarget = descriptorById.get('assistant-more-actions-trigger');
+const expectedMoreActionsTriggerSelectors = [
+  '.turn-action-controls button[aria-haspopup="menu"]:has(svg use[href$="#ellipsis-horizontal-light-16"])',
+  '.turn-action-controls button[aria-haspopup="menu"]:has(svg path[d^="M3.33362 6.80811"])',
+];
+assert.deepEqual(moreActionsTriggerTarget.searchNeedles, expectedMoreActionsTriggerSelectors);
+assert.deepEqual(moreActionsTriggerTarget.matchGroups, [
+  ['turn-action-controls', 'aria-haspopup="menu"', 'ellipsis-horizontal-light-16'],
+  ['turn-action-controls', 'aria-haspopup="menu"', 'M3.33362 6.80811'],
+]);
+const moreActionsTriggerCapture =
+  '<div class="turn-action-controls"><button aria-haspopup="menu"><svg><use href="/assets/sprite.svg#ellipsis-horizontal-light-16"></use></svg></button></div>';
+assert.ok(
+  targetMatchesCapture(moreActionsTriggerTarget, moreActionsTriggerCapture),
+  'More Actions should match its current SVG symbol in turn-action controls',
+);
+assert.equal(
+  targetMatchesCapture(moreActionsTriggerTarget, regenerateTriggerCapture),
+  false,
+  'More Actions should reject the regenerate control symbol',
+);
+assert.ok(
+  targetMatchesCapture(
+    moreActionsTriggerTarget,
+    moreActionsTriggerCapture.replace(
+      '<use href="/assets/sprite.svg#ellipsis-horizontal-light-16"></use>',
+      '<path d="M3.33362 6.80811 10 12"></path>',
+    ),
+  ),
+  'More Actions should retain its legacy SVG path fallback',
+);
+
+const regenerateTryAgainTarget = descriptorById.get('assistant-web-regenerate-item-try-again');
+const expectedRegenerateTryAgainSelectors = [
+  '[role="menu"] [role="menuitem"]:has(svg use[href$="#arrows-clockwise-rotate-lg-light-16"])',
+  '[role="menu"] [role="menuitem"]:has(svg path[d^="M14.0219 8.22363"])',
+];
+assert.deepEqual(regenerateTryAgainTarget.searchNeedles, expectedRegenerateTryAgainSelectors);
+assert.deepEqual(regenerateTryAgainTarget.matchGroups, [
+  ['role="menu"', 'role="menuitem"', 'arrows-clockwise-rotate-lg-light-16'],
+  ['role="menu"', 'role="menuitem"', 'M14.0219 8.22363'],
+]);
+const regenerateTryAgainCapture =
+  '<div role="menu"><div role="menuitem"><svg><use href="/assets/sprite.svg#arrows-clockwise-rotate-lg-light-16"></use></svg></div></div>';
+assert.ok(
+  targetMatchesCapture(regenerateTryAgainTarget, regenerateTryAgainCapture),
+  'Try again should match serialized menu-item markup by menu role and SVG symbol',
+);
+assert.equal(
+  targetMatchesCapture(
+    regenerateTryAgainTarget,
+    regenerateTryAgainCapture.replace('role="menu"', 'role="dialog"'),
+  ),
+  false,
+  'Try again should reject the same menu item outside a menu',
+);
+for (const decoySymbol of ['arrow-up-md-light-16', 'globe-slash-light-16']) {
+  assert.equal(
+    targetMatchesCapture(
+      regenerateTryAgainTarget,
+      regenerateTryAgainCapture.replace('arrows-clockwise-rotate-lg-light-16', decoySymbol),
+    ),
+    false,
+    `Try again should reject the ${decoySymbol} menu-item symbol`,
+  );
+}
+assert.ok(
+  targetMatchesCapture(
+    regenerateTryAgainTarget,
+    regenerateTryAgainCapture.replace(
+      '<use href="/assets/sprite.svg#arrows-clockwise-rotate-lg-light-16"></use>',
+      '<path d="M14.0219 8.22363 10 12"></path>',
+    ),
+  ),
+  'Try again should retain its legacy SVG path fallback',
+);
+assert.equal(
+  targetMatchesCapture(
+    regenerateTryAgainTarget,
+    regenerateTryAgainCapture.replace('arrows-clockwise-rotate-lg-light-16', 'branch-light-16'),
+  ),
+  false,
+  'Try again should reject a different SVG symbol',
+);
+
+const moreActionsBranchTarget = descriptorById.get('assistant-more-actions-branch');
+const expectedMoreActionsBranchSelectors = [
+  '[role="menu"][data-state="open"] [role="menuitem"]:has(svg use[href$="#branch-light-16"])',
+  '[role="menu"][data-state="open"] [role="menuitem"]:has(svg path[d^="M11.6672 1.97461"])',
+];
+assert.deepEqual(moreActionsBranchTarget.searchNeedles, expectedMoreActionsBranchSelectors);
+assert.deepEqual(moreActionsBranchTarget.matchGroups, [
+  ['role="menu"', 'data-state="open"', 'role="menuitem"', 'branch-light-16'],
+  ['role="menu"', 'data-state="open"', 'role="menuitem"', 'M11.6672 1.97461'],
+]);
+const moreActionsBranchCapture =
+  '<div role="menu" data-state="open"><div role="menuitem"><svg><use href="/assets/sprite.svg#branch-light-16"></use></svg></div></div>';
+assert.ok(
+  targetMatchesCapture(moreActionsBranchTarget, moreActionsBranchCapture),
+  'Branch in new chat should match its current symbol in the open action menu',
+);
+for (const decoySymbol of ['arrows-clockwise-rotate-lg-light-16', 'globe-slash-light-16']) {
+  assert.equal(
+    targetMatchesCapture(
+      moreActionsBranchTarget,
+      moreActionsBranchCapture.replace('branch-light-16', decoySymbol),
+    ),
+    false,
+    `Branch in new chat should reject the ${decoySymbol} menu-item symbol`,
+  );
+}
+assert.ok(
+  targetMatchesCapture(
+    moreActionsBranchTarget,
+    moreActionsBranchCapture.replace(
+      '<use href="/assets/sprite.svg#branch-light-16"></use>',
+      '<path d="M11.6672 1.97461 10 12"></path>',
+    ),
+  ),
+  'Branch in new chat should retain its legacy SVG path fallback',
+);
 
 const expectedComposerToolMenuOpenerSelectors = [
   'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"]',
@@ -74,7 +458,7 @@ const composerToolSelectorsAndCuesSource = contentSource
   .replace(/^ {2}/gm, '');
 const composerToolFinderStart = contentSource.indexOf('  const findComposerToolItemByIcon =');
 const runComposerToolActionSource = contentSource.match(
-  / {2}const runActionByIcon = async \(iconPathPrefix, delays = DELAYS\) => \{[\s\S]*?\n {2}\};/,
+  / {2}const runActionByIcon = async \(iconPathPrefix, delays = DELAYS, matchOptions\) => \{[\s\S]*?\n {2}\};/,
 )?.[0];
 const composerToolFinderAndOpenerSource = contentSource
   .slice(
@@ -293,10 +677,91 @@ assert.deepEqual(composerTarget.searchNeedles, [
   'data-composer-markdown',
 ]);
 
+const temporaryChatTarget = descriptorById.get('temporary-chat-button');
+assert.deepEqual(temporaryChatTarget.matchGroups, [
+  ['#chat-bubble-dashed-light-20'],
+  ['#chat-bubble-checkmark-dashed-light-20'],
+]);
 assert.match(
   contentSource,
-  /button\[aria-label="Temporary chat"\]/,
-  'Temporary Chat should prefer its stable accessible label',
+  /button:has\(svg use\[href\$="#chat-bubble-dashed-light-20"\]\)/,
+  'Temporary Chat should use the observed unchecked sprite selector',
+);
+assert.match(
+  contentSource,
+  /button:has\(svg use\[href\$="#chat-bubble-checkmark-dashed-light-20"\]\)/,
+  'Temporary Chat should use the observed checked sprite selector',
+);
+assert.doesNotMatch(
+  contentSource.match(/function runTemporaryChatShortcut\(\) \{[\s\S]*?\n {4}\}/)?.[0] || '',
+  /aria-label|#conversation-header-actions|#chat-temp|#28a8a0|#6eabdf/,
+  'Temporary Chat resolution should use observed sprites without label or stale header assumptions',
+);
+const temporaryChatHandlerSource = contentSource.match(
+  / {4}function runTemporaryChatShortcut\(\) \{[\s\S]*?\n {4}\}/,
+)?.[0];
+assert.ok(
+  temporaryChatHandlerSource,
+  'Temporary Chat should have a directly testable runtime handler',
+);
+const temporaryChatSelectors = [
+  'button:has(svg use[href$="#chat-bubble-dashed-light-20"])',
+  'button:has(svg use[href$="#chat-bubble-checkmark-dashed-light-20"])',
+];
+let temporaryChatButtons = [];
+const temporaryChatSelectorQueries = [];
+const temporaryChatClicks = [];
+const temporaryChatContext = {
+  document: {
+    querySelectorAll(selector) {
+      temporaryChatSelectorQueries.push(selector);
+      const symbol = selector.match(/href\$="#([^"]+)"/)?.[1];
+      return temporaryChatButtons.filter((button) => button.href.endsWith(`#${symbol}`));
+    },
+  },
+  isDirectActionVisible: (button) => button.visible && !button.disabled,
+  smartClick: (button) => temporaryChatClicks.push(button),
+};
+runInNewContext(
+  `${temporaryChatHandlerSource}\nglobalThis.runTemporaryChatShortcut = runTemporaryChatShortcut;`,
+  temporaryChatContext,
+);
+const visibleTemporaryButton = {
+  href: '/assets/sprite.svg#chat-bubble-dashed-light-20',
+  visible: true,
+  disabled: false,
+};
+temporaryChatButtons = [
+  visibleTemporaryButton,
+  { href: visibleTemporaryButton.href, visible: false, disabled: false },
+  {
+    href: '/assets/sprite.svg#chat-bubble-checkmark-dashed-light-20',
+    visible: true,
+    disabled: true,
+  },
+  {
+    href: '/assets/sprite.svg#unrelated-control',
+    ariaLabel: 'Temporary chat',
+    visible: true,
+    disabled: false,
+  },
+];
+temporaryChatContext.runTemporaryChatShortcut();
+assert.deepEqual(temporaryChatSelectorQueries, temporaryChatSelectors);
+assert.deepEqual(temporaryChatClicks, [visibleTemporaryButton]);
+temporaryChatButtons = [
+  visibleTemporaryButton,
+  {
+    href: '/assets/sprite.svg#chat-bubble-checkmark-dashed-light-20',
+    visible: true,
+    disabled: false,
+  },
+];
+temporaryChatContext.runTemporaryChatShortcut();
+assert.equal(
+  temporaryChatClicks.length,
+  1,
+  'Temporary Chat should not click when multiple visible enabled sprite targets match',
 );
 assert.match(
   contentSource,
@@ -318,8 +783,21 @@ assert.match(
   /button\[type="button"\]:has\(svg path\[d\^="M13\.0834 3\.91846"\]\)/,
   'Stop and Transcribe should target only the observed square Stop icon path',
 );
+for (const symbol of [
+  '#microphone-light-16',
+  '#microphone-light-20',
+  '#arrow-up-lg-light-20',
+  '#stop-fill-light-20',
+  '#xmark-lg-light-20',
+])
+  assert.ok(
+    contentSource.includes(`use[href$="${symbol}"]`),
+    `${symbol} should be a runtime target`,
+  );
 const dictateStartTarget = descriptorById.get('dictate-start-button');
 const expectedDictateStartSelectors = [
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-16"])',
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-20"])',
   'form[data-thread-find-composer="true"] button:has(svg path[d^="M12.4584 8.96973"])',
   'form[data-chatgpt-composer] button:has(svg path[d^="M12.4584 8.96973"])',
 ];
@@ -327,10 +805,11 @@ assert.equal(dictateStartTarget.kind, 'selector-list');
 assert.deepEqual(
   dictateStartTarget.searchNeedles,
   expectedDictateStartSelectors,
-  'Dictation start metadata should use the current composer roots and exact observed icon path',
+  'Dictation start metadata should prefer exact current SVG symbols and retain observed path fallbacks',
 );
 const dictateSubmitTarget = descriptorById.get('dictate-submit-button');
 const expectedDictateSubmitSelectors = [
+  'form[data-chatgpt-composer][data-thread-find-composer="true"]:has(svg use[href$="#xmark-lg-light-20"]):has(svg use[href$="#stop-fill-light-20"]) button:has(svg use[href$="#arrow-up-lg-light-20"])',
   'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
   'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M9.31697 3.08317"])',
 ];
@@ -338,10 +817,11 @@ assert.equal(dictateSubmitTarget.kind, 'selector-list');
 assert.deepEqual(
   dictateSubmitTarget.searchNeedles,
   expectedDictateSubmitSelectors,
-  'Dictation submit metadata should use the current composer roots and exact observed icon path',
+  'Dictation submit metadata should prefer the current SVG symbol and retain observed path fallbacks',
 );
 const dictateCancelTarget = descriptorById.get('cancel-dictation-button');
 const expectedDictateCancelSelectors = [
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#xmark-lg-light-20"])',
   'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
   'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M14.779 4.27903"])',
 ];
@@ -349,10 +829,11 @@ assert.equal(dictateCancelTarget.kind, 'selector-list');
 assert.deepEqual(
   dictateCancelTarget.searchNeedles,
   expectedDictateCancelSelectors,
-  'Dictation cancel metadata should use the current composer roots and exact observed icon path',
+  'Dictation cancel metadata should prefer the current SVG symbol and retain observed path fallbacks',
 );
 const stopDictationTarget = descriptorById.get('stop-dictation-button');
 const expectedStopDictationSelectors = [
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#stop-fill-light-20"])',
   'form[data-thread-find-composer="true"] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
   'form[data-chatgpt-composer] button[type="button"]:has(svg path[d^="M13.0834 3.91846"])',
 ];
@@ -360,8 +841,173 @@ assert.equal(stopDictationTarget.kind, 'selector-list');
 assert.deepEqual(
   stopDictationTarget.searchNeedles,
   expectedStopDictationSelectors,
-  'Stop and Transcribe metadata should use both current composer roots and the exact Stop icon path',
+  'Stop and Transcribe metadata should prefer the current SVG symbol and retain observed path fallbacks',
 );
+
+const dictationCaptureCases = [
+  {
+    target: dictateStartTarget,
+    path: 'M12.4584 8.96973',
+    symbols: ['#microphone-light-16', '#microphone-light-20'],
+    activeButton: false,
+    matchGroups: [
+      [
+        '<form',
+        'data-chatgpt-composer',
+        'data-thread-find-composer="true"',
+        '<button',
+        '#microphone-light-16"',
+      ],
+      [
+        '<form',
+        'data-chatgpt-composer',
+        'data-thread-find-composer="true"',
+        '<button',
+        '#microphone-light-20"',
+      ],
+      ['<form', 'data-thread-find-composer="true"', '<button', 'M12.4584 8.96973'],
+      ['<form', 'data-chatgpt-composer', '<button', 'M12.4584 8.96973'],
+    ],
+  },
+  {
+    target: dictateSubmitTarget,
+    path: 'M9.31697 3.08317',
+    symbols: ['#arrow-up-lg-light-20'],
+    activeContextSymbols: ['#xmark-lg-light-20', '#stop-fill-light-20'],
+    activeButton: true,
+    matchGroups: [
+      [
+        '<form',
+        'data-chatgpt-composer',
+        'data-thread-find-composer="true"',
+        '#xmark-lg-light-20"',
+        '#stop-fill-light-20"',
+        '<button',
+        '#arrow-up-lg-light-20"',
+      ],
+      ['<form', 'data-thread-find-composer="true"', '<button', 'type="button"', 'M9.31697 3.08317'],
+      ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M9.31697 3.08317'],
+    ],
+  },
+  {
+    target: stopDictationTarget,
+    path: 'M13.0834 3.91846',
+    symbols: ['#stop-fill-light-20'],
+    activeButton: true,
+    matchGroups: [
+      [
+        '<form',
+        'data-chatgpt-composer',
+        'data-thread-find-composer="true"',
+        '<button',
+        '#stop-fill-light-20"',
+      ],
+      ['<form', 'data-thread-find-composer="true"', '<button', 'type="button"', 'M13.0834 3.91846'],
+      ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M13.0834 3.91846'],
+    ],
+  },
+  {
+    target: dictateCancelTarget,
+    path: 'M14.779 4.27903',
+    symbols: ['#xmark-lg-light-20'],
+    activeButton: true,
+    matchGroups: [
+      [
+        '<form',
+        'data-chatgpt-composer',
+        'data-thread-find-composer="true"',
+        '<button',
+        '#xmark-lg-light-20"',
+      ],
+      ['<form', 'data-thread-find-composer="true"', '<button', 'type="button"', 'M14.779 4.27903'],
+      ['<form', 'data-chatgpt-composer', '<button', 'type="button"', 'M14.779 4.27903'],
+    ],
+  },
+];
+
+for (const {
+  target,
+  path,
+  symbols,
+  activeContextSymbols = [],
+  activeButton,
+  matchGroups,
+} of dictationCaptureCases) {
+  assert.deepEqual(target.matchGroups, matchGroups);
+  assert.ok(
+    matchGroups.flat().every((needle) => !needle.includes(':has') && !needle.includes('[d^=')),
+    `${target.targetId} match groups should contain serialized HTML tokens, not CSS syntax`,
+  );
+  const buttonType = activeButton ? ' type="button"' : '';
+  for (const composerAttribute of [
+    'data-thread-find-composer="true"',
+    'data-chatgpt-composer="true"',
+  ]) {
+    const validCapture = `<form ${composerAttribute}><button${buttonType}><svg><path d="${path} 0 0"></path></svg></button></form>`;
+    assert.ok(
+      targetMatchesCapture(target, validCapture),
+      `${target.targetId} should match its icon within either current composer form`,
+    );
+  }
+
+  const wrongPathCapture = `<form data-thread-find-composer="true"><button${buttonType}><svg><path d="M0 0 wrong"></path></svg></button></form>`;
+  assert.equal(
+    targetMatchesCapture(target, wrongPathCapture),
+    false,
+    `${target.targetId} should reject a different SVG path`,
+  );
+  const wrongScopeCapture = `<section data-thread-find-composer="true"><button${buttonType}><svg><path d="${path} 0 0"></path></svg></button></section>`;
+  assert.equal(
+    targetMatchesCapture(target, wrongScopeCapture),
+    false,
+    `${target.targetId} should reject the icon outside a composer form`,
+  );
+  if (activeButton) {
+    const wrongButtonTypeCapture = `<form data-thread-find-composer="true"><button><svg><path d="${path} 0 0"></path></svg></button></form>`;
+    assert.equal(
+      targetMatchesCapture(target, wrongButtonTypeCapture),
+      false,
+      `${target.targetId} should require the active control type button`,
+    );
+  }
+  for (const symbol of symbols) {
+    const activeContextMarkup = activeContextSymbols
+      .map(
+        (contextSymbol) =>
+          `<button><svg><use href="/assets/sprite.svg${contextSymbol}"></use></svg></button>`,
+      )
+      .join('');
+    const currentSymbolCapture = `<form data-chatgpt-composer="" data-thread-find-composer="true">${activeContextMarkup}<button><svg><use href="/assets/sprite.svg${symbol}"></use></svg></button></form>`;
+    assert.ok(
+      targetMatchesCapture(target, currentSymbolCapture),
+      `${target.targetId} should match exact current SVG symbol markup without requiring a type attribute`,
+    );
+    const wrongSymbolCapture = currentSymbolCapture.replace(symbol, '#voice-regular-20');
+    assert.equal(
+      targetMatchesCapture(target, wrongSymbolCapture),
+      false,
+      `${target.targetId} should reject the Voice or another wrong SVG symbol`,
+    );
+    const wrongSymbolScope = currentSymbolCapture
+      .replace('<form ', '<section ')
+      .replace('</form>', '</section>');
+    assert.equal(
+      targetMatchesCapture(target, wrongSymbolScope),
+      false,
+      `${target.targetId} should reject its symbol outside the composer form`,
+    );
+  }
+  if (target === dictateSubmitTarget) {
+    const ordinarySendOnly =
+      '<form data-chatgpt-composer="" data-thread-find-composer="true"><button><svg><use href="/assets/sprite.svg#arrow-up-lg-light-20"></use></svg></button></form>';
+    assert.equal(
+      targetMatchesCapture(target, ordinarySendOnly),
+      false,
+      'The ordinary composer Send arrow-up symbol must not match without active Cancel and Stop controls',
+    );
+  }
+}
+
 const stopAndTranscribeAction = shortcutMetadata.SHORTCUT_ACTIONS.find(
   (action) => action.actionId === 'shortcutKeyStopAndTranscribeDictation',
 );
@@ -394,10 +1040,17 @@ for (const targetId of Object.keys(currentTargetTokens)) {
 }
 
 class FixtureDictationNode {
-  constructor({ tagName = 'BUTTON', attributes = {}, iconPath = '', buttons = [] } = {}) {
+  constructor({
+    tagName = 'BUTTON',
+    attributes = {},
+    iconPath = '',
+    iconHref = '',
+    buttons = [],
+  } = {}) {
     this.tagName = tagName.toUpperCase();
     this.attributes = { ...attributes };
     this.iconPath = iconPath;
+    this.iconHref = iconHref;
     this.buttons = buttons;
     this.clickCount = 0;
   }
@@ -407,6 +1060,11 @@ class FixtureDictationNode {
   }
 
   querySelector(selector) {
+    const symbolMatch = selector.match(/^button:has\(svg use\[href\$="#([^"]+)"\]\)$/);
+    if (symbolMatch) {
+      const [, symbol] = symbolMatch;
+      return this.buttons.find((button) => button.iconHref.endsWith(`#${symbol}`)) || null;
+    }
     const pathMatch = selector.match(
       /^button(?:\[type="([^"]+)"\])?:has\(svg path\[d\^="([^"]+)"\]\)$/,
     );
@@ -446,39 +1104,44 @@ class FixtureDictationNode {
 }
 
 const dictateButton = new FixtureDictationNode({
-  attributes: { 'aria-label': 'Dictate' },
+  iconHref: '/assets/sprite.svg#microphone-light-16',
   iconPath: 'M12.4584 8.96973 ...',
 });
 const voiceModeButton = new FixtureDictationNode({
-  attributes: { 'aria-label': 'Start voice' },
+  iconHref: '/assets/sprite.svg#voice-regular-20',
   iconPath: 'M12.4583 8.96973 ...',
 });
 const composerSendButton = new FixtureDictationNode({
   attributes: { 'data-testid': 'send-button' },
+  iconHref: '/assets/sprite.svg#arrow-up-lg-light-20',
   iconPath: 'M8 2.5 ...',
 });
 const cancelDictationButton = new FixtureDictationNode({
-  attributes: { type: 'button', 'aria-label': 'Annuler la dictée' },
+  iconHref: '/assets/sprite.svg#xmark-lg-light-20',
   iconPath: 'M14.779 4.27903 ...',
 });
 const stopDictationButton = new FixtureDictationNode({
-  attributes: { type: 'button', 'aria-label': 'Diktat beenden' },
+  iconHref: '/assets/sprite.svg#stop-fill-light-20',
   iconPath: 'M13.0834 3.91846 ...',
 });
 const transcribeAndSendButton = new FixtureDictationNode({
-  attributes: { type: 'button', 'aria-label': 'Transcrire et envoyer' },
+  iconHref: '/assets/sprite.svg#arrow-up-lg-light-20',
   iconPath: 'M9.31697 3.08317 ...',
 });
 const dictationComposer = new FixtureDictationNode({
   tagName: 'FORM',
-  attributes: { 'data-chatgpt-composer': '' },
+  attributes: { 'data-chatgpt-composer': '', 'data-thread-find-composer': 'true' },
   buttons: [voiceModeButton, composerSendButton, dictateButton],
 });
 const scheduledTimers = [];
 const dictationContext = {
   document: {
     querySelector(selector) {
-      if (selector === 'form[data-chatgpt-composer]') {
+      if (
+        selector === 'form[data-chatgpt-composer][data-thread-find-composer="true"]' ||
+        selector === 'form[data-thread-find-composer="true"]' ||
+        selector === 'form[data-chatgpt-composer]'
+      ) {
         return dictationComposer;
       }
       return null;
@@ -509,6 +1172,15 @@ assert.equal(
   composerSendButton.clickCount,
   0,
   'The composer Send button must not be clicked as Dictate',
+);
+
+scheduledTimers.shift()();
+dictateButton.iconHref = '/assets/sprite.svg#microphone-light-20';
+dictationContext.runDictationToggle();
+assert.equal(
+  dictateButton.clickCount,
+  2,
+  'The alternate observed microphone symbol should also start Dictation',
 );
 
 dictationComposer.buttons = [cancelDictationButton, stopDictationButton, transcribeAndSendButton];
@@ -543,6 +1215,48 @@ assert.equal(
   'Stop and Transcribe must not click Transcribe-and-send',
 );
 assert.equal(composerSendButton.clickCount, 0, 'Stop and Transcribe must not click composer Send');
+
+const legacyStartButton = new FixtureDictationNode({
+  iconPath: 'M12.4584 8.96973 ...',
+});
+const legacySubmitButton = new FixtureDictationNode({
+  attributes: { type: 'button' },
+  iconPath: 'M9.31697 3.08317 ...',
+});
+const legacyStopButton = new FixtureDictationNode({
+  attributes: { type: 'button' },
+  iconPath: 'M13.0834 3.91846 ...',
+});
+const legacyCancelButton = new FixtureDictationNode({
+  attributes: { type: 'button' },
+  iconPath: 'M14.779 4.27903 ...',
+});
+scheduledTimers.shift()();
+dictationComposer.buttons = [legacyStartButton];
+dictationContext.runDictationToggle();
+assert.equal(
+  legacyStartButton.clickCount,
+  1,
+  'The verified legacy Dictate path should remain usable',
+);
+scheduledTimers.shift()();
+dictationComposer.buttons = [legacySubmitButton];
+dictationContext.runDictationToggle();
+assert.equal(
+  legacySubmitButton.clickCount,
+  1,
+  'The verified legacy Transcribe-and-send path should remain usable',
+);
+dictationComposer.buttons = [legacyCancelButton];
+await dictationContext.runDictationCancel();
+assert.equal(
+  legacyCancelButton.clickCount,
+  1,
+  'The verified legacy Cancel path should remain usable',
+);
+dictationComposer.buttons = [legacyStopButton];
+dictationContext.runStopAndTranscribeDictation();
+assert.equal(legacyStopButton.clickCount, 1, 'The verified legacy Stop path should remain usable');
 
 const branchMenuHelperStart = contentSource.indexOf(
   '  const DEFAULT_MENU_DELAYS = Object.freeze({',
@@ -1164,7 +1878,7 @@ const visibleSearchButton = new FixtureSearchButton({
   width: 36,
   height: 36,
 });
-const currentSearchSelector = 'button:has(svg path[d^="M7.32849 1.91016"])';
+const currentSearchSelector = 'button:has(svg path[d^="M9.16211 2.37976"])';
 const searchSelectorQueries = [];
 let searchPointerClickCount = 0;
 const searchRuntimeSource = [
@@ -1201,8 +1915,12 @@ const searchShortcutContext = {
 runInNewContext(searchRuntimeSource, searchShortcutContext);
 assert.deepEqual(
   Array.from(searchShortcutContext.searchConversationSelectors),
-  [currentSearchSelector, 'button[data-testid="search-conversation-button"]'],
-  'Search should prefer the current icon shape, then retain the older test ID fallback',
+  [
+    currentSearchSelector,
+    'button:has(svg path[d^="M7.32849 1.91016"])',
+    'button[data-testid="search-conversation-button"]',
+  ],
+  'Search should prefer the freshly observed sidebar icon and retain its legacy fallbacks',
 );
 assert.ok(
   Array.from(searchShortcutContext.searchConversationSelectors).every(
@@ -1220,7 +1938,7 @@ assert.equal(
 assert.equal(
   visibleSearchButton.clickCount,
   1,
-  'Search should click the visible titlebar control exactly once',
+  'Search should click the visible native control exactly once',
 );
 assert.equal(
   searchPointerClickCount,
@@ -1393,8 +2111,34 @@ assert.deepEqual(
 );
 assert.deepEqual(
   Array.from(newChatDescriptor.matchGroups, (group) => Array.from(group)),
-  Array.from(newChatFixture.context.newChatSelectors, (selector) => [selector]),
-  'Each runtime New Chat selector should remain an independent audit match group',
+  [
+    ['<button', 'M8.16675 2.50127'],
+    ['data-app-shell-titlebar', '<button', 'M6.33325 1.80763'],
+    ['<a', 'data-testid="create-new-chat-button"'],
+    ['<button', 'data-testid="create-new-chat-button"'],
+    ['<button', 'data-testid="new-chat-button"'],
+  ],
+  'New Chat audit groups should use structural tokens derived from each runtime selector',
+);
+for (const captureHtml of [
+  '<button><svg><path d="M8.16675 2.50127"></path></svg></button>',
+  '<div data-app-shell-titlebar="true"><button><svg><path d="M6.33325 1.80763"></path></svg></button></div>',
+  '<a data-testid="create-new-chat-button"></a>',
+  '<button data-testid="create-new-chat-button"></button>',
+  '<button data-testid="new-chat-button"></button>',
+]) {
+  assert.ok(
+    targetMatchesCapture(newChatDescriptor, captureHtml),
+    `New Chat audit matcher should recognize structural capture ${captureHtml}`,
+  );
+}
+assert.equal(
+  targetMatchesCapture(
+    newChatDescriptor,
+    '<button><svg><path d="M6.33325 1.88379"></path></svg></button>',
+  ),
+  false,
+  'Structural New Chat matching must still exclude the project-row action icon',
 );
 assert.ok(
   Array.from(newChatDescriptor.searchNeedles).every(
@@ -1622,6 +2366,11 @@ const shareShortcutSource = contentSource.match(
 assert.ok(shareShortcutSource, 'The Share shortcut should activate the current native control');
 assert.match(
   shareShortcutSource,
+  /\[data-testid="app-shell-header-context-menu-surface"\] > \[data-app-shell-header-obstacle="true"\] button:has\(svg use\[href\$="#arrow-up-open-base-light-16"\]\)/,
+  'The Share shortcut should match the current header sprite glyph',
+);
+assert.match(
+  shareShortcutSource,
   /\[data-testid="app-shell-header-context-menu-surface"\] > \[data-app-shell-header-obstacle="true"\] button:has\(svg path\[d\^="M13\.3337"\]\)/,
   'The Share shortcut should match its header target before and after bottom-bar relocation',
 );
@@ -1676,9 +2425,11 @@ class FixtureMouseEvent {
 class FixturePointerEvent extends FixtureMouseEvent {}
 
 const structuralShareSelector =
+  '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"]), ' +
   '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])';
 const staleShareButton = new FixtureShareButton();
 const currentShareButton = new FixtureShareButton();
+const duplicateShareButton = new FixtureShareButton();
 let resolvedShareButton = staleShareButton;
 staleShareButton.scrollIntoView = () => {
   staleShareButton.isConnected = false;
@@ -1699,7 +2450,7 @@ const shareShortcutContext = {
           'The default header target must not require a bottom-bar marker',
         );
       }
-      return resolvedShareButton ? [resolvedShareButton] : [];
+      return resolvedShareButton ? [resolvedShareButton, duplicateShareButton] : [];
     },
   },
   DELAYS: { beforeFinalClick: 150 },
@@ -1741,6 +2492,25 @@ assert.equal(
   1,
   'Share should click the current native button exactly once',
 );
+assert.equal(
+  duplicateShareButton.clickCount,
+  0,
+  'Share should not activate a second matching header button',
+);
+
+const removedShareButton = new FixtureShareButton();
+resolvedShareButton = removedShareButton;
+removedShareButton.scrollIntoView = () => {
+  removedShareButton.isConnected = false;
+  resolvedShareButton = null;
+};
+shareShortcutContext.runShareShortcut();
+assert.equal(shareSelectorQueryCount, 4, 'Share should re-resolve even when scrolling removes it');
+assert.equal(removedShareButton.clickCount, 0, 'Share must not activate a removed header button');
+assert.equal(currentShareButton.clickCount, 1, 'Share must not reuse the previous header button');
+assert.equal(duplicateShareButton.clickCount, 0, 'Share must not reuse a previous duplicate');
+assert.equal(shareWaitForCalls, 0, 'Missing Share targets must not start asynchronous polling');
+assert.equal(shareSleepCalls, 0, 'Missing Share targets must not start a delayed click');
 
 const editTurnLogicStart = contentSource.indexOf('      const EDIT_ICON_TOKENS =');
 const editTurnLogicEnd = contentSource.indexOf(

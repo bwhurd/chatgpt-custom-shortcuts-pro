@@ -13,15 +13,66 @@ const ci = args.includes('--ci');
 const live = args.includes('--live');
 const probeShortcuts = args.includes('--probe-shortcuts');
 const results = [];
+const liveSnapshotWarnings = new Set([
+  'capture-time-in-future',
+  'capture-stale',
+  'coverage-incomplete',
+  'snapshot-missing',
+  'snapshot-schema-outdated',
+  'source-fingerprint-mismatch',
+]);
+let liveSnapshotSummary = '';
+
+function buildLiveSnapshotSummary(result) {
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const lines = output.split(/\r?\n/);
+  const statusLine = lines.find((line) => line.startsWith('Live snapshot: '));
+  const match = statusLine?.match(
+    /^Live snapshot: (VERIFIED|DRIFT|WARNING|UNVERIFIED|INVALID)(?: — (.*))?$/,
+  );
+  const safeLines = [];
+
+  if (!match) safeLines.push('Live snapshot: INVALID — check returned no recognized status.');
+  else if (match[1] === 'INVALID')
+    safeLines.push('Live snapshot: INVALID — check rejected the snapshot or evaluator contract.');
+  else if (match[1] === 'WARNING' || match[1] === 'UNVERIFIED') {
+    const warnings = (match[2] || '').split(',').map((warning) => warning.trim());
+    if (warnings.length && warnings.every((warning) => liveSnapshotWarnings.has(warning)))
+      safeLines.push(`Live snapshot: ${match[1]} — ${warnings.join(', ')}`);
+    else safeLines.push(`Live snapshot: ${match[1]} — check returned unrecognized warnings.`);
+  } else if (!match[2]) safeLines.push(`Live snapshot: ${match[1]}`);
+  else safeLines.push('Live snapshot: INVALID — check returned an unexpected status.');
+
+  for (const line of lines) {
+    const drift = line.match(
+      /^Target drift: ([a-zA-Z0-9-]+) \((missing-evidence|target-not-found)\)$/,
+    );
+    if (drift) safeLines.push(`Target drift: ${drift[1]} (${drift[2]})`);
+    const captured = line.match(
+      /^Last observed: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/,
+    );
+    if (captured && Number.isFinite(Date.parse(captured[1])))
+      safeLines.push(`Last observed: ${captured[1]}`);
+  }
+
+  return `### Last-observed live snapshot replay\n\n${safeLines.join('\n')}\n`;
+}
 
 function run(name, npmArgs) {
   console.log(`\n${ci ? `::group::${name}` : name}`);
   const started = performance.now();
+  const liveSnapshot = npmArgs[1] === 'check:live-snapshot';
   const result = spawnSync(process.execPath, [npmCli, ...npmArgs], {
     cwd: root,
-    stdio: 'inherit',
+    ...(liveSnapshot ? { encoding: 'utf8', stdio: 'pipe' } : { stdio: 'inherit' }),
     env: process.env,
   });
+  if (liveSnapshot) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    liveSnapshotSummary = buildLiveSnapshotSummary(result);
+    writeFileSync(path.join(outputDirectory, 'live-snapshot.md'), liveSnapshotSummary, 'utf8');
+  }
   const status =
     result.status === 0 && !result.error
       ? 'pass'
@@ -92,6 +143,7 @@ async function main() {
     ['Validator regression', 'test:validators'],
     ['Settings wiring', 'validate:keys'],
     ['Shortcut report and inventory contracts', 'test:shortcuts:contracts'],
+    ['Last-observed live snapshot replay', 'check:live-snapshot'],
     ['Shortcut regressions on prepared fixture pages', 'test:shortcuts:fast'],
   ])
     run(name, ['run', script]);
@@ -105,7 +157,7 @@ async function main() {
 
 (async () => {
   await mkdir(outputDirectory, { recursive: true });
-  for (const file of ['report.json', 'report.md', 'report.html']) {
+  for (const file of ['report.json', 'report.md', 'report.html', 'live-snapshot.md']) {
     const target = path.join(outputDirectory, file);
     if (existsSync(target)) await unlink(target);
   }
@@ -151,14 +203,11 @@ async function main() {
     ),
     '',
   ].join('\n');
-  console.log(`\n${summary}`);
-  writeFileSync(path.join(outputDirectory, 'checks.md'), summary);
+  const completeSummary = [summary, liveSnapshotSummary].filter(Boolean).join('\n');
+  console.log(`\n${completeSummary}`);
+  writeFileSync(path.join(outputDirectory, 'checks.md'), completeSummary);
   if (process.env.GITHUB_STEP_SUMMARY) {
-    await appendFile(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
-    await appendFile(
-      process.env.GITHUB_STEP_SUMMARY,
-      readFileSync(path.join(outputDirectory, 'report.md')),
-    );
+    await appendFile(process.env.GITHUB_STEP_SUMMARY, `${completeSummary}\n`);
   }
   console.log(`Shortcut report: ${path.join(outputDirectory, 'report.html')}`);
   if (live)

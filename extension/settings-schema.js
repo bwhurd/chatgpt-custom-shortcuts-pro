@@ -4,6 +4,20 @@
   window.CSP_SETTINGS_SCHEMA = window.CSP_SETTINGS_SCHEMA || {};
   window.CSP_SETTINGS_SCHEMA.schemaVersion = 1;
 
+  // The shipped OptionsSync shim does not execute migrations. Run this narrow,
+  // idempotent cleanup in both content and popup bootstrap so old assignments
+  // are released even when the popup has not opened since the update.
+  if (typeof globalThis.chrome?.storage?.sync?.remove === 'function') {
+    chrome.storage.sync.remove(['shortcutKeyPreviousThread', 'shortcutKeyNextThread'], () => {
+      if (chrome.runtime?.lastError) {
+        console.warn(
+          '[csp] Could not clear disabled response shortcuts:',
+          chrome.runtime.lastError,
+        );
+      }
+    });
+  }
+
   window.CSP_SETTINGS_SCHEMA.excludeDefaultsKeys = [
     // Keep current behavior: popup should not seed these on first run.
     'modelNames',
@@ -93,8 +107,6 @@
       shortcutKeyToggleChatWork: 'label_toggleChatWork',
       shortcutKeyActivateInput: 'label_focus_input',
       shortcutKeyToggleSidebar: 'label_toggle_sidebar',
-      shortcutKeyPreviousThread: 'label_prev_thread',
-      shortcutKeyNextThread: 'label_next_thread',
       shortcutKeySearchConversationHistory: 'label_search_chats',
       shortcutKeyShare: 'label_share',
       shortcutKeyNewGptConversation: 'label_NewGptConversation',
@@ -159,8 +171,6 @@
           'shortcutKeyActivateInput',
           'shortcutKeyToggleSidebar',
           'shortcutKeySearchConversationHistory',
-          'shortcutKeyPreviousThread',
-          'shortcutKeyNextThread',
           'shortcutKeyShare',
           'shortcutKeyNewGptConversation',
         ],

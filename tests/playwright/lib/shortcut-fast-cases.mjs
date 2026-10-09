@@ -59,7 +59,7 @@ export const FAST_CASES = [
     type: 'menu-cascade',
     fixture: 'composer-tools',
     fixtureCode: 'KeyU',
-    fixtureIcon: '<svg><path d="M6.1416 10.1663" /></svg>',
+    fixtureIcon: '<svg><path d="M7.99994 14.6888" /><path d="M9.9998 18.3614" /></svg>',
     parallelSafe: true,
   },
   ...[
@@ -149,8 +149,8 @@ export const FAST_CASES = [
   },
   {
     actionId: 'shortcutKeyNewConversation',
-    type: 'direct-control',
-    fixture: 'sidebar',
+    type: 'new-conversation',
+    fixture: 'existing-conversation',
     parallelSafe: true,
   },
   {
@@ -188,12 +188,6 @@ export const FAST_CASES = [
     parallelSafe: true,
   },
   {
-    actionId: 'shortcutKeyNextThread',
-    type: 'multiple-response',
-    fixture: 'response-variants',
-    parallelSafe: true,
-  },
-  {
     actionId: 'shortcutKeyScrollToTop',
     type: 'scroll-dom',
     fixture: 'scroll-and-code',
@@ -213,12 +207,6 @@ export const FAST_CASES = [
     parallelSafe: false,
   },
   {
-    actionId: 'shortcutKeyPreviousThread',
-    type: 'multiple-response',
-    fixture: 'response-variants',
-    parallelSafe: true,
-  },
-  {
     actionId: 'shortcutKeySearchWeb',
     type: 'menu-cascade',
     fixture: 'composer-tools',
@@ -230,6 +218,8 @@ export const FAST_CASES = [
     type: 'menu-cascade',
     fixture: 'composer-tools',
     fixtureCode: 'KeyS',
+    fixtureQuery: 'study',
+    fixturePillIconId: 'book-open-light-20',
     fixtureIcon: '<svg><use href="#book-open-light-20"></use></svg>',
     parallelSafe: true,
   },
@@ -270,10 +260,10 @@ export const FAST_ADAPTER_TYPES = new Set([
   'header-share',
   'blank-mode',
   'direct-control',
+  'new-conversation',
   'control-gate',
   'menu-cascade',
   'scroll-dom',
-  'multiple-response',
   'message-edit',
   'code-dom',
   'focus',
@@ -318,7 +308,6 @@ const FIXED_FAST_PROOFS = {
   'alt-modifier-isolation': ['shortcutKeyActivateInput'],
   'ctrl-send-gate': ['shortcutKeyClickSendButton'],
   'ctrl-stop-gate': ['shortcutKeyClickStopButton'],
-  'response-navigation-preview': ['shortcutKeyPreviousThread', 'shortcutKeyNextThread'],
 };
 const FIXED_DEFERRED_POLICIES = {
   'model-picker-slot-dispatch': {
@@ -1077,7 +1066,6 @@ export async function extractFastRuntime(content, actionId) {
     'isModelToggleShortcutEvent',
     'findMatchedAltShortcutActionKey',
     'runAltShortcutAction',
-    'runPreviewThreadShortcut',
     'getModelPickerAssignedIndexForDigit',
     'isModelPickerAssignedShortcutEvent',
     'runModelPickerDigitShortcut',
@@ -1174,7 +1162,7 @@ export async function extractFastRuntime(content, actionId) {
       func('isAboveComposer'),
       func('runNewGptConversationShortcut'),
     );
-    const anchor = named('CHEVRON_ICON_TOKENS', 'VariableDeclarator');
+    const anchor = named('GPT_MENU_TRIGGER_PATH_PREFIXES', 'VariableDeclarator');
     const wrapper = nodes
       .filter(
         (node) =>
@@ -1429,24 +1417,6 @@ export async function extractFastRuntime(content, actionId) {
     );
     extra.push(`${content.slice(wrapper.start, wrapper.end)};`);
   }
-  if (['shortcutKeyPreviousThread', 'shortcutKeyNextThread'].includes(actionId)) {
-    extra.push(
-      ...[
-        'getIconTokenList',
-        'escapeCssSelectorValue',
-        'escapeAttributeSelectorFragment',
-        'buildSvgSelectorForIconTokens',
-        'svgSelectorForTokens',
-        'withPrefix',
-      ].map(variable),
-    );
-    const start = named('getThreadNavigationScrollAnchorPct', 'FunctionDeclaration').start;
-    const end = named('runThreadNavigationShortcut', 'FunctionDeclaration').end;
-    extra.push(content.slice(start, end));
-    extra.push(
-      'const flashBorder = () => {}; window.fastThreadState = () => ({...threadNavigationPreviewState});',
-    );
-  }
   if (FAST_CASES.find((item) => item.actionId === actionId)?.type === 'menu-cascade') {
     extra.push(
       ...[
@@ -1477,7 +1447,13 @@ export async function extractFastRuntime(content, actionId) {
     // Visual feedback is outside this target/keyboard fixture; action logic and delays remain real.
     extra.push('const flashBorder = () => {};');
   }
-  if (isControl) extra.push(variable('getCtrlShortcutSendButton'), func('isCtrlShortcutEnabled'));
+  if (isControl)
+    extra.push(
+      func('isVisibleEnabledComposerControl'),
+      func('findUniqueVisibleComposerControl'),
+      variable('getCtrlShortcutSendButton'),
+      func('isCtrlShortcutEnabled'),
+    );
   if (actionId === 'shortcutKeyClickStopButton') extra.push(func('getVisibleStopButton'));
   if (actionId === 'shortcutKeyToggleSidebar') {
     extra.push(variable('SIDEBAR_TOGGLE_SELECTORS'));

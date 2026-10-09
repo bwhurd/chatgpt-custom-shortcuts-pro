@@ -146,6 +146,97 @@ const modelHintAction = declaration(
   'const getOpenModelVersionSubmenu',
   'isModelNameHintAction',
 );
+
+// A newly inserted live model must not inherit a persisted binding from
+// its current row position while the stored catalog still describes older rows.
+const itemActionStart = contentSource.indexOf('const getModelNameActionForMenuItem = (');
+const itemActionEnd = contentSource.indexOf('const isModelNameHintAction = (', itemActionStart);
+assert.ok(itemActionStart >= 0 && itemActionEnd > itemActionStart);
+class ModelRow {
+  constructor(label) {
+    this.label = label;
+  }
+  closest() {
+    return null;
+  }
+}
+const itemActionContext = {
+  window: { ModelLabels },
+  Element: ModelRow,
+  getModelVersionMenuItemLabel: (row) => row.label,
+};
+vm.createContext(itemActionContext);
+vm.runInContext(
+  `${contentSource.slice(itemActionStart, itemActionEnd)}\nthis.resolve = getModelNameActionForMenuItem;`,
+  itemActionContext,
+);
+const persistedCatalog = {
+  integratedModelMenu: true,
+  configureOptions: [
+    { id: 'configure-dynamic-gpt-5-6-sol', label: 'GPT-5.6 Sol', slot: 8 },
+    { id: 'configure-dynamic-gpt-5-6-luna', label: 'GPT-5.6 Luna', slot: 15 },
+  ],
+};
+const changedRows = ['Default', 'GPT-6.1 Sol', 'GPT-5.6 Sol', 'GPT-5.6 Luna'];
+assert.equal(
+  itemActionContext.resolve(new ModelRow('GPT-6.1 Sol'), 1, persistedCatalog, changedRows),
+  null,
+  'uncatalogued live row must not borrow slot 8 from GPT-5.6 Sol',
+);
+for (const [label, slot] of [
+  ['GPT-5.6 Sol', 8],
+  ['GPT-5.6 Luna', 15],
+]) {
+  assert.equal(
+    itemActionContext.resolve(
+      new ModelRow(label),
+      changedRows.indexOf(label),
+      persistedCatalog,
+      changedRows,
+    )?.slot,
+    slot,
+    'known live model must retain its persisted slot despite inserted rows',
+  );
+}
+assert.equal(
+  itemActionContext.resolve(new ModelRow('Default'), 0, persistedCatalog, changedRows)?.nativeOnly,
+  true,
+);
+const hintActionStart = contentSource.indexOf('const getHintAction = (item, index) =>');
+const hintActionEnd = contentSource.indexOf('items.forEach((item, index) =>', hintActionStart);
+assert.ok(hintActionStart >= 0 && hintActionEnd > hintActionStart);
+const liveRows = changedRows.map((label) => new ModelRow(label));
+const hintActionContext = {
+  window: { ModelLabels, __modelCatalog: persistedCatalog },
+  directComposerItems: liveRows,
+  integratedModelItems: liveRows,
+  hasDefaultRow: true,
+  effectiveListLabels: changedRows,
+  listLabels: changedRows,
+  getModelNameActionForMenuItem: itemActionContext.resolve,
+  getModelVersionMenuItemLabel: (row) => row.label,
+  isModelNameHintAction: modelHintAction,
+};
+vm.createContext(hintActionContext);
+vm.runInContext(
+  `${contentSource.slice(hintActionStart, hintActionEnd)}\nthis.resolve = getHintAction;`,
+  hintActionContext,
+);
+assert.equal(
+  hintActionContext.resolve(liveRows[1], 1),
+  null,
+  'hint caller must not revive the uncatalogued row with a positional fallback',
+);
+assert.equal(hintActionContext.resolve(liveRows[2], 2)?.slot, 8);
+assert.equal(hintActionContext.resolve(liveRows[3], 3)?.slot, 15);
+delete persistedCatalog.integratedModelMenu;
+assert.equal(
+  hintActionContext.resolve(liveRows[1], 1),
+  null,
+  'current native menu must reject positional hints even with an older unmarked catalog',
+);
+assert.equal(hintActionContext.resolve(liveRows[2], 2)?.slot, 8);
+assert.equal(hintActionContext.resolve(liveRows[3], 3)?.slot, 15);
 assert.equal(
   modelHintAction({ actionKind: 'configure-option', group: 'configure', slot: 8 }),
   true,

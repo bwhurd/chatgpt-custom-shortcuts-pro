@@ -98,10 +98,7 @@ for (const event of ctrlAltPassThroughCases) {
     isPrimaryControlPressed: true,
   });
   assert.equal(compoundChord.result, false, `Ctrl+Alt+${event.code} must pass through`);
-  assert.deepEqual(compoundChord.calls, [
-    'preview-check:shortcutKeyPreviousThread',
-    'preview-check:shortcutKeyNextThread',
-  ]);
+  assert.deepEqual(compoundChord.calls, []);
 }
 
 const reassignedPreviewCodes = {
@@ -116,9 +113,8 @@ for (const [previewStorageKey, code] of Object.entries(reassignedPreviewCodes)) 
     isPrimaryControlPressed: true,
     previewCodes: reassignedPreviewCodes,
   });
-  assert.equal(preview.result, true);
-  assert.equal(preview.calls.at(-1), `preview-check:${previewStorageKey}`);
-  assert.ok(!preview.calls.includes('ordinary-alt'));
+  assert.equal(preview.result, false, `${previewStorageKey} is temporarily disabled`);
+  assert.deepEqual(preview.calls, []);
 }
 
 const formerPreviewKey = runCase({
@@ -128,10 +124,7 @@ const formerPreviewKey = runCase({
   previewCodes: reassignedPreviewCodes,
 });
 assert.equal(formerPreviewKey.result, false);
-assert.deepEqual(formerPreviewKey.calls, [
-  'preview-check:shortcutKeyPreviousThread',
-  'preview-check:shortcutKeyNextThread',
-]);
+assert.deepEqual(formerPreviewKey.calls, []);
 
 for (const event of [{ shiftKey: true }, { metaKey: true }]) {
   const extraModifier = runCase({
@@ -148,8 +141,8 @@ const macPreview = runCase({
   isMac: true,
   isPrimaryControlPressed: true,
 });
-assert.equal(macPreview.result, true);
-assert.ok(!macPreview.calls.includes('ordinary-alt'));
+assert.equal(macPreview.result, false);
+assert.deepEqual(macPreview.calls, []);
 
 const macRawControlChord = runCase({
   event: { ctrlKey: true, key: '@', code: 'KeyQ' },
@@ -167,4 +160,6 @@ const macCommandOptionTextChord = runCase({
 assert.equal(macCommandOptionTextChord.result, false);
 assert.ok(!macCommandOptionTextChord.calls.includes('ordinary-alt'));
 
-console.log('Alt shortcut modifier routing preserves text entry and preview-only chords');
+console.log(
+  'Alt shortcut modifier routing preserves text entry and disabled response preview chords',
+);

@@ -10,6 +10,12 @@
   const TOKEN_URL = 'https://profound-yeot-41eb0a.netlify.app/oauth/google/token';
   const SCOPES = ['https://www.googleapis.com/auth/drive.appdata'];
   const S = chrome.storage.session;
+  chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+    if (reason !== 'install' && reason !== 'update') return;
+    try {
+      await chrome.storage.sync.remove(['shortcutKeyPreviousThread', 'shortcutKeyNextThread']);
+    } catch {}
+  });
   const POPUP_URL_BASE = chrome.runtime.getURL('popup.html');
   const POPUP_URL_MATCH = `${POPUP_URL_BASE}*`;
   const LAST_ACTION_TAB_KEY = 'csp_last_action_chatgpt_tab_id';

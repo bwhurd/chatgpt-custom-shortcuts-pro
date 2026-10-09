@@ -63,15 +63,6 @@ const EXPECTED_SOURCE_KEYBOARD_CONTRACTS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    contractId: 'response-navigation-preview',
-    classification: 'response-navigation-preview',
-    sourceNeedles: Object.freeze([
-      'const runPreviewThreadShortcut =',
-      "runPreviewThreadShortcut('shortcutKeyPreviousThread', event)",
-      "runPreviewThreadShortcut('shortcutKeyNextThread', event)",
-    ]),
-  }),
-  Object.freeze({
     contractId: 'ctrl-send-gate',
     classification: 'ctrl-send-gate',
     sourceNeedles: Object.freeze([
@@ -469,6 +460,159 @@ export function buildModelPickerSlotInventory({
   };
 }
 
+// Projects only explicitly verified current-catalog rows that line up with
+// ModelLabels' active presentation and the observed active Simple slider.
+// Freshness/completeness are caller assertions from this invocation; catalog
+// contents and persisted snapshots cannot establish either one on their own.
+export function buildFreshCurrentModelCatalogActionProjection({
+  catalog,
+  profile,
+  activeConfigId,
+  modelLabels,
+  freshCatalogVerified = false,
+  catalogComplete = false,
+  activeSimpleSlider = null,
+} = {}) {
+  const issueCodes = [];
+  const addIssue = (code) => issueCodes.push(code);
+  const normalizedProfile = MODEL_PICKER_PROFILE_NAMES.includes(profile) ? profile : '';
+  const slotCount =
+    Number.isInteger(modelLabels?.MAX_SLOTS) && modelLabels.MAX_SLOTS > 0
+      ? modelLabels.MAX_SLOTS
+      : 15;
+
+  if (freshCatalogVerified !== true) addIssue('catalog-not-verified-fresh');
+  if (catalogComplete !== true) addIssue('catalog-not-verified-complete');
+  if (!normalizedProfile) addIssue('invalid-profile');
+  if (!modelLabels || typeof modelLabels.getPopupPresentationGroups !== 'function') {
+    addIssue('missing-model-label-source');
+  }
+
+  const sliderMin = activeSimpleSlider?.min;
+  const sliderMax = activeSimpleSlider?.max;
+  const sliderValue = activeSimpleSlider?.value;
+  const sliderRangeValid =
+    activeSimpleSlider?.verified === true &&
+    Number.isFinite(sliderMin) &&
+    Number.isFinite(sliderMax) &&
+    Number.isFinite(sliderValue) &&
+    sliderMin <= sliderMax &&
+    sliderValue >= sliderMin &&
+    sliderValue <= sliderMax;
+  if (!sliderRangeValid) addIssue('active-simple-slider-not-verified');
+
+  const range = sliderRangeValid ? { min: sliderMin, max: sliderMax, value: sliderValue } : null;
+  const frontendByConfig = catalog?.frontendByConfig;
+  const hasActiveConfigId =
+    typeof activeConfigId === 'string' &&
+    activeConfigId.trim() === activeConfigId &&
+    activeConfigId.length > 0 &&
+    frontendByConfig &&
+    typeof frontendByConfig === 'object' &&
+    Object.hasOwn(frontendByConfig, activeConfigId);
+  if (!hasActiveConfigId) addIssue('missing-active-config-catalog');
+
+  const catalogEntries = hasActiveConfigId ? frontendByConfig[activeConfigId] : null;
+  if (!Array.isArray(catalogEntries) || catalogEntries.length === 0) {
+    addIssue('missing-current-catalog-actions');
+  }
+
+  let profileRows = [];
+  let primaryActions = [];
+  if (normalizedProfile && modelLabels && hasActiveConfigId) {
+    const namesByProfile = { [normalizedProfile]: [] };
+    const catalogsByProfile = { [normalizedProfile]: catalog };
+    const slotInventory = buildModelPickerSlotInventory({
+      modelLabels,
+      catalogsByProfile,
+      namesByProfile,
+      activeConfigId,
+    });
+    profileRows = slotInventory.profiles?.[normalizedProfile]?.rows || [];
+    const groups = getModelPickerPresentationGroups({
+      modelLabels,
+      profile: normalizedProfile,
+      optionsDefaults: {},
+      catalogsByProfile,
+      namesByProfile,
+      activeConfigId,
+    });
+    primaryActions = groups.find((group) => group?.id === 'primary')?.actions || [];
+    if (!primaryActions.length) addIssue('missing-current-presentation-actions');
+  }
+
+  const projectedActions = [];
+  const seenActionIds = new Set();
+  const seenSlots = new Set();
+  if (Array.isArray(catalogEntries)) {
+    for (const entry of catalogEntries) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        addIssue('invalid-current-catalog-action');
+        continue;
+      }
+
+      const actionId = entry.id;
+      const slot = entry.slot;
+      const actionIdValid =
+        typeof actionId === 'string' && actionId.length > 0 && actionId.trim() === actionId;
+      const slotValid = Number.isInteger(slot) && slot >= 0 && slot < slotCount;
+      if (!actionIdValid) addIssue('invalid-current-catalog-action-id');
+      if (!slotValid) addIssue('invalid-current-catalog-action-slot');
+      if (!actionIdValid || !slotValid) continue;
+
+      if (seenActionIds.has(actionId)) addIssue('duplicate-current-catalog-action-id');
+      if (seenSlots.has(slot)) addIssue('duplicate-current-catalog-action-slot');
+      seenActionIds.add(actionId);
+      seenSlots.add(slot);
+
+      const matchesPresentation = primaryActions.filter(
+        (action) => action?.id === actionId && action?.slot === slot,
+      );
+      const inventoryRow = profileRows[slot];
+      if (
+        matchesPresentation.length !== 1 ||
+        inventoryRow?.slot !== slot ||
+        !inventoryRow.actionIds?.includes(actionId)
+      ) {
+        addIssue('current-action-not-presented-at-exact-slot');
+      }
+      if (entry.available !== true) addIssue('current-action-not-available');
+      if (!Number.isFinite(entry.sliderValue)) {
+        addIssue('invalid-current-action-slider-value');
+      } else if (
+        sliderRangeValid &&
+        (entry.sliderValue < sliderMin || entry.sliderValue > sliderMax)
+      ) {
+        addIssue('current-action-slider-value-out-of-range');
+      }
+
+      projectedActions.push({
+        profile: normalizedProfile,
+        slot,
+        actionId,
+        available: entry.available === true,
+        sliderValue: entry.sliderValue,
+      });
+    }
+  }
+
+  const uniqueIssueCodes = [...new Set(issueCodes)];
+  const status = uniqueIssueCodes.length === 0 ? 'pass' : 'fail';
+  return {
+    schemaVersion: 2,
+    source: 'fresh-current-model-catalog-action-projection-v2',
+    status,
+    profile: normalizedProfile,
+    sliderRange: range,
+    actions: status === 'pass' ? projectedActions : [],
+    integratedEffort:
+      status === 'pass' && typeof catalog?.integratedEffort === 'boolean'
+        ? catalog.integratedEffort
+        : null,
+    issueCodes: uniqueIssueCodes,
+  };
+}
+
 function buildKeyboardListenerInventory(contentSource) {
   const listeners = parseKeyboardListenerContracts(contentSource);
   const observedById = Object.fromEntries(
@@ -551,6 +695,9 @@ function buildShortcutRow({
     labelKey: labelInfo.labelKey,
     defaultCode: Object.hasOwn(defaults, definition.actionId) ? defaults[definition.actionId] : '',
     validationMode: missingMetadata ? 'missing-metadata' : definition.validationMode,
+    ...(definition.requiredCapabilities
+      ? { requiredCapabilities: [...definition.requiredCapabilities] }
+      : {}),
     targetIds: definition.targetRefs || [],
     targetRefs: definition.targetRefs || [],
     requiredUiStateRefs,

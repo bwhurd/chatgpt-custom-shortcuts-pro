@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const modelPickerSelectors = require('../extension/shared/model-picker-selectors.js');
 const shortcutMetadata = require('../extension/shared/shortcut-action-metadata.js');
+const { targetMatchesText } = await import('./playwright/lib/shortcut-target-presence.mjs');
 const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
 
 class FakeElement {
@@ -104,6 +106,7 @@ assert.deepEqual(modelPickerSelectors.getChatWorkSurfaceToggleSelectors(), [
 assert.deepEqual(modelPickerSelectors.getChatWorkSurfaceToggleMatchGroups(), [
   ['role="radiogroup"', 'role="radio"', 'aria-checked='],
   ['role="group"', 'role="radio"', 'aria-checked='],
+  ['role="group"', '<button', 'aria-pressed="true"', 'aria-pressed="false"'],
 ]);
 
 assert.match(
@@ -120,6 +123,29 @@ assert.deepEqual(
   toggleTarget.searchNeedles,
   modelPickerSelectors.getChatWorkSurfaceToggleSelectors(),
   'runtime validation should use every supported executable surface selector',
+);
+const pressedPairMarkup =
+  '<main><div role="group"><button aria-pressed="true"></button><button aria-pressed="false"></button></div></main>';
+assert.equal(
+  targetMatchesText(toggleTarget, pressedPairMarkup),
+  true,
+  'the target metadata should match the current main-surface reciprocal pressed-button markup',
+);
+assert.equal(
+  targetMatchesText(
+    toggleTarget,
+    '<main><div role="group"><button aria-pressed="true"></button></div></main>',
+  ),
+  false,
+  'the target metadata should reject a surface group with only one pressed state',
+);
+assert.equal(
+  targetMatchesText(
+    toggleTarget,
+    '<main><div><button aria-pressed="true"></button><button aria-pressed="false"></button></div></main>',
+  ),
+  false,
+  'the target metadata should reject pressed buttons outside the supported group scope',
 );
 
 const pressed = [
@@ -143,6 +169,38 @@ assert.deepEqual(
   modelPickerSelectors.getNativeChatWorkSurfaceRadios(documentWith(pressedGroup), windowObj),
   [],
   'nested unrelated pressed buttons must not become surface controls',
+);
+
+const waitStart = contentSource.indexOf('async function waitForNativeChatWorkSurfaceRadios(');
+const waitEnd = contentSource.indexOf('function getNativeChatWorkSurfaceMode(', waitStart);
+assert.ok(waitStart >= 0 && waitEnd > waitStart);
+const loadingButtons = [{ disabled: true }, { disabled: true }];
+let readinessPolls = 0;
+const waitContext = {
+  getNativeChatWorkSurfaceRadios: () => loadingButtons,
+  isDirectActionVisible: (button) => !button.disabled,
+  setTimeout: (callback) => {
+    readinessPolls++;
+    loadingButtons.forEach((button) => {
+      button.disabled = false;
+    });
+    callback();
+  },
+};
+vm.createContext(waitContext);
+vm.runInContext(
+  `${contentSource.slice(waitStart, waitEnd)}\nthis.waitForRadios = waitForNativeChatWorkSurfaceRadios;`,
+  waitContext,
+);
+assert.equal((await waitContext.waitForRadios()).length, 2);
+assert.equal(readinessPolls, 1, 'visible disabled mode buttons must wait for hydration');
+loadingButtons.forEach((button) => {
+  button.disabled = true;
+});
+assert.equal(
+  (await waitContext.waitForRadios(0)).length,
+  0,
+  'disabled controls must remain unavailable on timeout',
 );
 
 console.log('Chat/Work surface selection accepts current and legacy structural wrappers');
