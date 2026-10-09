@@ -439,9 +439,11 @@ function Get-GitPushSensitivePathReason {
     $leaf = [System.IO.Path]::GetFileName($normalized)
     if ($normalized -match '(?i)(^|/)\.env[^/]*$') { return 'sensitive-environment-file' }
     if ($normalized -match '(?i)(^|/)(?:[^/]*\.)?(?:dpapi|pem|pfx|p12|key|keystore)(?:\.[^/]*)?$') { return 'sensitive-key-file' }
-    if ($normalized -match '(?i)(^|/)(?:settings\.json(?:\.[^/]*)?|tray-git-sync\.local)(?:/|$)') { return 'sensitive-configuration-path' }
+    if ($normalized -match '(?i)^(?:settings\.json(?:\.[^/]*)?|ahk-tray-tools/settings\.json(?:\.[^/]*)?)$' -or
+        $normalized -match '(?i)(^|/)tray-git-sync\.local(?:/|$)') { return 'sensitive-configuration-path' }
     if ($normalized -match '(?i)(^|/)(?:secrets?|credentials?|tokens?)(?:/|\.|$)') { return 'sensitive-credential-path' }
-    if ($leaf -match '(?i)(?:secret|credential|token|password|passwd)') { return 'sensitive-credential-path' }
+    if ($leaf -match '(?i)(?:^|[-_.])(?:secret|credential|token|password|passwd)(?:[-_.]|$)' -and
+        $leaf -match '(?i)\.(?:json|txt|ini|ya?ml|toml|csv|xml|dat|db|sqlite|bak|old)$') { return 'sensitive-credential-path' }
     return ''
 }
 

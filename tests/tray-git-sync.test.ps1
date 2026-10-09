@@ -324,6 +324,9 @@ function Invoke-UnitPhase {
     Assert-Equal -Expected 'sensitive-key-file' -Actual (Get-GitPushSensitivePathReason -Path 'docs/openai-key.dpapi.bak') -Message 'key backups are classified as private'
     Assert-Equal -Expected 'sensitive-configuration-path' -Actual (Get-GitPushSensitivePathReason -Path 'ahk-tray-tools/settings.json.bak') -Message 'tray settings backups are classified as private'
     Assert-Equal -Expected 'sensitive-configuration-path' -Actual (Get-GitPushSensitivePathReason -Path 'tray-git-sync.local/key-backup.txt') -Message 'tray-local configuration paths are classified as private'
+    Assert-Equal -Expected 'sensitive-credential-path' -Actual (Get-GitPushSensitivePathReason -Path 'private/google-token.json') -Message 'token data files are classified as private'
+    Assert-Equal -Expected '' -Actual (Get-GitPushSensitivePathReason -Path 'netlify/functions/google-token.js') -Message 'source files named for token handling are allowed'
+    Assert-Equal -Expected '' -Actual (Get-GitPushSensitivePathReason -Path 'tests/fixtures/settings.json') -Message 'settings test fixtures are allowed'
     Assert-Equal -Expected 5 -Actual (Get-GitPushUtf8ByteCount -Text (Limit-GitPushUtf8Text -Text ('a' + [char]::ConvertFromUtf32(0x1F600) + 'bc') -MaximumBytes 5 -Suffix '')) -Message 'UTF-8 truncation preserves whole Unicode characters'
     Assert-Throws -Action { ConvertTo-GitPushNote -Note ('n' * 1001) } -Message 'one-run note has a 1,000-character limit'
 
@@ -555,7 +558,8 @@ function New-IntegrationGitPair {
         [Parameter(Mandatory = $true)][string]$FixtureRoot,
         [Parameter(Mandatory = $true)][string]$Name,
         [switch]$NoRemote,
-        [switch]$IncludeSensitivePath
+        [switch]$IncludeSensitivePath,
+        [switch]$IncludeBenignLookalikePaths
     )
     $repoRoot = Join-Path $FixtureRoot ('integration ' + $Name + ' repo')
     $remoteRoot = Join-Path $FixtureRoot ('integration ' + $Name + ' bare remote.git')
@@ -579,6 +583,13 @@ function New-IntegrationGitPair {
     [System.IO.File]::WriteAllText((Join-Path $repoRoot 'notes.md'), ('Base notes.' + [Environment]::NewLine), [System.Text.Encoding]::UTF8)
     if ($IncludeSensitivePath) {
         [System.IO.File]::WriteAllText((Join-Path $repoRoot '.env.production'), 'Synthetic test fixture content only.', [System.Text.Encoding]::UTF8)
+    }
+    if ($IncludeBenignLookalikePaths) {
+        $sourceDirectory = Join-Path $repoRoot 'netlify\functions'
+        $fixtureDirectory = Join-Path $repoRoot 'tests\fixtures'
+        $null = New-Item -ItemType Directory -Path $sourceDirectory, $fixtureDirectory -Force
+        [System.IO.File]::WriteAllText((Join-Path $sourceDirectory 'google-token.js'), 'export const handler = () => "fixture";' + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText((Join-Path $fixtureDirectory 'settings.json'), '{"data":{}}' + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
     }
     Invoke-TestGit -RepositoryRoot $repoRoot -Arguments @('add', '--all', '--', '.') | Out-Null
     Invoke-TestGit -RepositoryRoot $repoRoot -Arguments @('commit', '--quiet', '-m', 'Fixture base') | Out-Null
@@ -750,6 +761,17 @@ function Invoke-IntegrationPhase {
         Assert-Equal -Expected 0 -Actual $script:MockCalls -Message 'clean repository makes zero API calls'
         Assert-Equal -Expected $cleanPair.BaseHead -Actual $clean.CommitSha -Message 'clean repository sends the existing HEAD'
         Assert-Equal -Expected $cleanPair.BaseHead -Actual (Get-IntegrationRemoteHead -RemoteRoot $cleanPair.RemoteRoot) -Message 'clean repository leaves the remote at the existing commit'
+
+        $lookalikePair = New-IntegrationGitPair -FixtureRoot $FixtureRoot -Name 'benign protected-name paths' -IncludeBenignLookalikePaths
+        $lookalikePathsText = Invoke-TestGit -RepositoryRoot $lookalikePair.RepositoryRoot -Arguments @('ls-files')
+        $lookalikePaths = @($lookalikePathsText -split '\r?\n' | Where-Object { $_ })
+        Assert-True -Condition ($lookalikePaths -contains 'netlify/functions/google-token.js') -Message 'integration fixture tracks token-named source code'
+        Assert-True -Condition ($lookalikePaths -contains 'tests/fixtures/settings.json') -Message 'integration fixture tracks a settings JSON fixture'
+        Initialize-IntegrationMock -Subject 'Should not be requested'
+        $lookalike = Invoke-IntegrationWorkflow -Pair $lookalikePair -FixtureRoot $FixtureRoot
+        Assert-True -Condition $lookalike.Success -Message ('clean push allows benign source and fixture paths: ' + $lookalike.Status)
+        Assert-Equal -Expected 0 -Actual $script:MockCalls -Message 'benign tracked paths do not request an AI subject on a clean push'
+        Assert-Equal -Expected $lookalikePair.BaseHead -Actual (Get-IntegrationRemoteHead -RemoteRoot $lookalikePair.RemoteRoot) -Message 'benign tracked paths push the existing commit to the local remote'
 
         $fallbackPair = New-IntegrationGitPair -FixtureRoot $FixtureRoot -Name 'missing upstream'
         Invoke-TestGit -RepositoryRoot $fallbackPair.RepositoryRoot -Arguments @('config', '--unset', 'branch.main.remote') | Out-Null
