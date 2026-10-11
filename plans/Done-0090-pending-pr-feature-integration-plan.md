@@ -1,5 +1,9 @@
 # Pending GitHub PR Feature Integration
 
+## Status
+
+Closed at the user's request on 2026-10-10. This integration work is not planned for the future. The unchecked items below are retained as historical scope, not pending tasks; closure does not assert that the features were integrated or the PRs resolved.
+
 ## Goal
 
 - [ ] Integrate the Copy Lowest and Command Palette features from PRs #79 and #80 without losing existing shortcut customizations or disrupting the in-progress copy-selector work in the primary checkout.

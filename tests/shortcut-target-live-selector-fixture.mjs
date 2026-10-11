@@ -1878,7 +1878,7 @@ const visibleSearchButton = new FixtureSearchButton({
   width: 36,
   height: 36,
 });
-const currentSearchSelector = 'button:has(svg path[d^="M9.16211 2.37976"])';
+const currentSearchSelector = 'button:has(svg use[href$="#magnifying-glass-lg-light-16"])';
 const searchSelectorQueries = [];
 let searchPointerClickCount = 0;
 const searchRuntimeSource = [
@@ -1917,6 +1917,8 @@ assert.deepEqual(
   Array.from(searchShortcutContext.searchConversationSelectors),
   [
     currentSearchSelector,
+    'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
+    'button:has(svg path[d^="M9.16211 2.37976"])',
     'button:has(svg path[d^="M7.32849 1.91016"])',
     'button[data-testid="search-conversation-button"]',
   ],
@@ -1945,6 +1947,28 @@ assert.equal(
   1,
   'Search should use the pointer-aware native-control activation helper exactly once',
 );
+
+const searchTarget = descriptorById.get('search-conversation-button');
+for (const size of [16, 20]) {
+  assert.ok(
+    targetMatchesCapture(
+      searchTarget,
+      `<button><svg><use href="/cdn/assets/icons-fixture.svg#magnifying-glass-lg-light-${size}"></use></svg></button>`,
+    ),
+    `Search metadata must recognize the observed ${size}px named sprite without legacy identifiers`,
+  );
+}
+searchShortcutContext.document.querySelectorAll = (selector) =>
+  selector === 'button:has(svg use[href$="#magnifying-glass-lg-light-20"])'
+    ? [hiddenSearchButton, visibleSearchButton]
+    : [];
+assert.equal(searchShortcutContext.runSearchConversationShortcut(), true);
+assert.equal(
+  visibleSearchButton.clickCount,
+  2,
+  'The standalone 20px sprite must also activate Search',
+);
+assert.equal(hiddenSearchButton.clickCount, 0);
 
 const newChatSelectorsSource = contentSource.match(
   / {2}const NEW_CHAT_SELECTORS = \[[\s\S]*?\n {2}\];/,

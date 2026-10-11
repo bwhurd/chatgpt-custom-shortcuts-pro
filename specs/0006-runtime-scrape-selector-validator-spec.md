@@ -11,6 +11,14 @@ This is the durable reference for the repo's dev-only runtime scrape validator. 
 
 ## Purpose
 
+The October 10 Search Chats repair exposed a controlled-fixture coverage gap: the fast check supplied a legacy test-ID button while the live page used named `magnifying-glass-lg-light-16` / `-20` SVG sprites. Runtime and both collector opener lists recognize the same observed symbols.
+
+Focused proof: `npm run test:shortcuts:fast -- --shortcut-action-id shortcutKeySearchConversationHistory` uses `tests/playwright/lib/search-chats-fixture.mjs`. It extracts the actual listener, handler and complete Search helper dependencies, assigns K only in isolated fixture memory, and dispatches trusted Alt+K from the composer. Both independently recorded sprite sizes must open exactly one new visible modal (`role="dialog"`, `aria-modal="true"`, `data-state="open"`) containing the observed input (`role="combobox"`, `aria-autocomplete="list"`, `aria-expanded="true"`, `placeholder="Search…"`) and its visible `aria-controls`-linked listbox within that modal. No preexisting popup may satisfy completion. Hidden/disabled controls, wrong keys/modifiers and unrelated/hidden dialogs cannot pass. Escape dismisses the popup and the draft is preserved. The placeholder is an observed English-page contract, not a claim of localization coverage.
+
+`node tests/search-chats-validation-proof.mjs` challenges that same checker with six in-memory mutations: historical missing sprite selectors, no-op handler, click helper falsely reporting success, wrong-button activation, popup missing its linked listbox and duplicate popups. Every mutation must fail the popup-completion assertion with zero page errors; current source must pass. The proof is included in `test:shortcuts:contracts`, so normal `checks` exercises it. Reports are local under `test-results/search-chats-proof/`. Mutation runs never rewrite shipped source or installed settings.
+
+Live Search activation uses the same DOM reader in `search-chats-popup.mjs`. Its semantic postcondition requires zero matching Search popups before dispatch, exactly one after dispatch, and a recorded trusted, intercepted Alt-only keydown. An increase in unrelated dialogs or a whole-document substring match is insufficient. The proof script also challenges the actual live semantic evaluator with unrelated/preexisting/duplicate popup, untrusted dispatch and missing-evidence cases. This remains controlled source regression proof; future live DOM changes require fresh current-page evidence. Live acceptance must independently start with Search closed, send the configured trusted chord through the installed extension, observe the newly visible Search popup and dismiss it. Merely capturing an already open dialog, finding an opener or replaying old markup is insufficient.
+
 The runtime scrape selector validator complements the static popup/settings validator.
 
 Its job is to:

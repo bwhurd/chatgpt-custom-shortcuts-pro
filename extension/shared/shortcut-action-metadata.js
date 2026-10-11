@@ -457,6 +457,8 @@
     }),
     byMenuChain('search-conversation-button', 'native-search-conversation-control', {
       matchGroups: [
+        ['<button', '#magnifying-glass-lg-light-16'],
+        ['<button', '#magnifying-glass-lg-light-20'],
         ['<button', 'M9.16211 2.37976'],
         ['<button', 'M7.32849 1.91016'],
         ['data-testid="search-conversation-button"'],
@@ -481,7 +483,7 @@
         'narrow-header-sidebar-popover-control',
       ],
       notes:
-        'Prefer the current language-independent titlebar Search button SVG path; otherwise use sidebar adjacency, with the old test id and sprite retained as compatibility fallbacks.',
+        'Prefer the observed named Search SVG sprites, then prior titlebar paths and sidebar adjacency; retain the old test id and sprites as compatibility fallbacks.',
     }),
     byMenuChain('search-chats-dialog', 'role=dialog|role=combobox|placeholder=Search…', {
       matchGroups: [

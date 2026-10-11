@@ -739,6 +739,8 @@ export async function loadFastCatalogue() {
             [
               '../shortcut-fast-fixture.mjs',
               './shortcut-tab-pool.mjs',
+              './search-chats-fixture.mjs',
+              './search-chats-popup.mjs',
               './shortcut-overlay-fixture.mjs',
               './shortcut-response-fixture.mjs',
               './shortcut-clipboard-fixture.mjs',
@@ -1294,8 +1296,16 @@ export async function extractFastRuntime(content, actionId) {
   if (actionId === 'shortcutKeySearchConversationHistory') {
     extra.push(
       variable('SEARCH_CONVERSATION_SELECTORS'),
+      variable('NARROW_SIDEBAR_POPOVER_SELECTORS'),
+      variable('SEARCH_SPRITE_FRAGMENT'),
+      variable('SEARCH_SPRITE_FALLBACK_FRAGMENT'),
       variable('clickElementLikeUser'),
+      func('safeClick'),
       func('safeClickSearchConversationButton'),
+      func('findStructuralSearchConversationButton'),
+      func('waitForFirstVisibleElement'),
+      func('openNarrowSidebarPopover'),
+      func('triggerNativeSearchConversationFromNarrowPopover'),
       func('triggerNativeSearchConversationButton'),
     );
   }

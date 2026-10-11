@@ -456,8 +456,8 @@ const searchConversationTarget = shortcutActionMetadata.TARGET_DESCRIPTORS.find(
   (target) => target.targetId === 'search-conversation-button',
 );
 assert.ok(
-  searchConversationTarget?.matchGroups[0]?.includes('M9.16211 2.37976'),
-  'Search Conversations should prefer the current language-independent sidebar Search SVG path',
+  searchConversationTarget?.matchGroups[0]?.includes('#magnifying-glass-lg-light-16'),
+  'Search Conversations should prefer the observed language-independent named Search sprite',
 );
 const searchConversationAction = shortcutActionMetadata.SHORTCUT_ACTIONS.find(
   (action) => action.actionId === 'shortcutKeySearchConversationHistory',

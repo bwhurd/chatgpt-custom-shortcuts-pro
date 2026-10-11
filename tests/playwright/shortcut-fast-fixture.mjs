@@ -7,6 +7,7 @@ import {
   readShareClipboardToastEvidence,
   waitForShareClipboardToast,
 } from './lib/devscrape-wide-core.mjs';
+import { runSearchChatsCase } from './lib/search-chats-fixture.mjs';
 import { runClipboardCase } from './lib/shortcut-clipboard-fixture.mjs';
 import {
   CATALOGUE_RESULT_PATH,
@@ -86,6 +87,10 @@ if (!args.includes('--catalog-only') && selected.length) {
     const context = await browser.newContext();
     await context.route('**/*', (route) => route.abort());
     const runCase = async (item) => {
+      if (item.actionId === 'shortcutKeySearchConversationHistory') {
+        report.observations.push(await runSearchChatsCase(context, content, item, started));
+        return;
+      }
       if (item.type === 'model-slot' || item.type === 'model-unassigned') {
         const row = await (item.type === 'model-slot' ? runSlotCase : runUnassignedModelCase)(
           context,
@@ -332,28 +337,6 @@ if (!args.includes('--catalog-only') && selected.length) {
             composerVisible: true,
             composerEmpty: true,
           });
-        }
-        if (item.type === 'direct-control') {
-          await page.evaluate((newChat) => {
-            const testId = newChat ? 'create-new-chat-button' : 'search-conversation-button';
-            document.body.insertAdjacentHTML(
-              'beforeend',
-              `<button hidden data-testid="${testId}" id="hidden-direct">Hidden</button><button disabled data-testid="${testId}" id="disabled-direct">Disabled</button><button type="button" data-testid="${testId}" id="direct-target">Control</button><button id="direct-distractor">Unrelated</button>`,
-            );
-            window.fixtureClicks = [];
-            for (const button of document.querySelectorAll(
-              '[id$="direct"], #direct-target, #direct-distractor',
-            ))
-              button.onclick = () => {
-                window.fixtureClicks.push(button.id);
-                if (button.id === 'direct-target')
-                  document.body.dataset.directEffect = newChat
-                    ? 'blank-conversation'
-                    : 'search-dialog';
-              };
-          }, item.actionId === 'shortcutKeyNewConversation');
-          row.pathScope =
-            'visible direct control only; narrow-sidebar/navigation fallbacks remain deferred';
         }
         if (item.type === 'toggle') {
           await page.evaluate(() => {
@@ -1038,14 +1021,6 @@ if (!args.includes('--catalog-only') && selected.length) {
             ]);
             assert.equal(await page.locator('#hidden-chat').getAttribute('aria-checked'), 'true');
             assert.equal(await page.locator('#hidden-work').getAttribute('aria-checked'), 'false');
-          } else if (item.type === 'direct-control') {
-            assert.deepEqual(await page.evaluate(() => window.fixtureClicks), ['direct-target']);
-            assert.equal(
-              await page.locator('body').getAttribute('data-direct-effect'),
-              item.actionId === 'shortcutKeyNewConversation'
-                ? 'blank-conversation'
-                : 'search-dialog',
-            );
           } else if (item.type === 'new-conversation') {
             await page.waitForFunction(
               () =>

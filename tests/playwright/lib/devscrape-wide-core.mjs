@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import modelPickerSelectors from '../../../extension/shared/model-picker-selectors.js';
+import { isNewSearchChatsPopup, readSearchChatsPopup } from './search-chats-popup.mjs';
 import {
   AUDIT_ARTIFACT_FILENAMES,
   buildShortcutAuditReport,
@@ -344,6 +345,8 @@ const DICTATION_START_CONTROL_SPECS = Object.freeze([
   }),
 ]);
 const SEARCH_CONVERSATION_BUTTON_SELECTORS = Object.freeze([
+  'button:has(svg use[href$="#magnifying-glass-lg-light-16"])',
+  'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
   'button:has(svg path[d^="M9.16211 2.37976"])',
   'button:has(svg path[d^="M7.32849 1.91016"])',
   'button[data-testid="search-conversation-button"]',
@@ -5847,7 +5850,7 @@ async function waitForStudyPillCount(page, expectedCount, timeout = 5000) {
 }
 
 export async function captureLiveProbeSemanticSnapshot(page, target) {
-  return page.evaluate(
+  const snapshot = await page.evaluate(
     ({
       targetGroups,
       userMessageSelectors,
@@ -6166,6 +6169,10 @@ export async function captureLiveProbeSemanticSnapshot(page, target) {
       scrollMetricsSource: LIVE_PROBE_SCROLL_METRICS_SOURCE,
     },
   );
+  if (target?.targetId === 'search-chats-dialog') {
+    snapshot.searchChatsPopups = await page.evaluate(readSearchChatsPopup);
+  }
+  return snapshot;
 }
 
 export function buildCodeboxWrapPersistenceProof(
@@ -6451,7 +6458,16 @@ export function evaluateLiveProbeSemantic(
     proof.reason =
       proof.status === 'pass' ? '' : 'Keyboard focus did not reach the expected target.';
   } else if (shortcut.activationProbeMode === 'opens-target') {
-    if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
+    if (shortcut.actionId === 'shortcutKeySearchConversationHistory') {
+      const opened = isNewSearchChatsPopup(before.searchChatsPopups, after.searchChatsPopups);
+      proof.proofMethod = 'new-visible-search-modal-combobox-linked-listbox';
+      proof.status = opened && actionEvidence?.search?.trustedDispatch === true ? 'pass' : 'fail';
+      proof.observed = `Search popups ${before.searchChatsPopups?.length ?? 'unverified'} -> ${after.searchChatsPopups?.length ?? 'unverified'}; trusted Alt dispatch=${actionEvidence?.search?.trustedDispatch === true}`;
+      proof.reason =
+        proof.status === 'pass'
+          ? ''
+          : 'A trusted shortcut did not open exactly one new visible Search popup with its combobox and linked listbox from a closed state.';
+    } else if (shortcut.actionId === NEW_CONVERSATION_ACTION_ID) {
       const newBlankConversation =
         before.auditOwnedFixtureConversation === true &&
         before.messageCount === 4 &&
@@ -9137,10 +9153,15 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         );
         const openedMatch =
           shortcut.activationProbeMode === 'opens-target'
-            ? targetMatchesText(
-                target,
-                await page.evaluate(() => document.documentElement?.outerHTML || ''),
-              )
+            ? shortcut.actionId === 'shortcutKeySearchConversationHistory'
+              ? isNewSearchChatsPopup(
+                  beforeSnapshot.searchChatsPopups,
+                  afterSnapshot.searchChatsPopups,
+                )
+              : targetMatchesText(
+                  target,
+                  await page.evaluate(() => document.documentElement?.outerHTML || ''),
+                )
             : false;
         const viewportMatch =
           shortcut.activationProbeMode === 'viewport-target'
@@ -9166,6 +9187,19 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             matchingKeydown.altKey === true &&
             matchingKeydown.defaultPrevented === true;
           semanticActionEvidence.share.targetClickObserved = Boolean(clickMatch);
+        }
+        if (shortcut.actionId === 'shortcutKeySearchConversationHistory') {
+          semanticActionEvidence = {
+            search: {
+              trustedDispatch:
+                matchingKeydown?.isTrusted === true &&
+                matchingKeydown.altKey === true &&
+                !matchingKeydown.ctrlKey &&
+                !matchingKeydown.metaKey &&
+                !matchingKeydown.shiftKey &&
+                matchingKeydown.defaultPrevented === true,
+            },
+          };
         }
         const routed =
           shortcut.activationProbeMode === 'focus-target'
