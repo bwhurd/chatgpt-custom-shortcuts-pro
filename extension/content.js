@@ -3992,6 +3992,8 @@ const clickElementLikeUser = (el) => {
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
   const SEARCH_CONVERSATION_SELECTORS = [
+    'button:has(svg use[href$="#magnifying-glass-lg-light-16"])',
+    'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
     'button:has(svg path[d^="M9.16211 2.37976"])',
     'button:has(svg path[d^="M7.32849 1.91016"])',
     'button[data-testid="search-conversation-button"]',
