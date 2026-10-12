@@ -153,6 +153,7 @@ Key wiring:
 - overlay labels come from `settings-schema.js` `shortcuts.labelI18nByKey`
 - fallback is key-name text only when no better label exists
 - assigned popup shortcuts should render in the overlay through that same schema path; the overlay opener is not a permanent exception
+- Escape stored shortcut values and storage-derived property names for their HTML text or attribute context before inserting generated overlay markup.
 
 If a shortcut shows in the popup but lands in the overlay “Other” bucket unexpectedly, check the schema mapping before changing overlay rendering.
 

@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   extractFastRuntime,
   FastAdapterUnavailableError,
@@ -9,6 +14,7 @@ import {
   summarizeFastReport,
 } from './playwright/lib/shortcut-fast-cases.mjs';
 import { extractModelPickerSource } from './playwright/lib/shortcut-model-controls-fixture.mjs';
+import { DEFAULT_TAB_LIMIT } from './playwright/lib/shortcut-tab-pool.mjs';
 
 const { content, report: catalogue } = await loadFastCatalogue();
 assert.deepEqual(catalogue.issues, []);
@@ -105,6 +111,26 @@ assert.equal(
 const makeReport = () => structuredClone(catalogue);
 const actionId = 'shortcutKeyActivateInput';
 
+const allWarningPreflight = makeReport();
+const allWarningSelection = selectFastCases(allWarningPreflight, [actionId], ['focus']);
+await preflightFastCases(allWarningPreflight, allWarningSelection, async () => {
+  throw new FastAdapterUnavailableError('Source adapter is unavailable');
+});
+const allWarningOutcome = fastReportOutcome(allWarningPreflight);
+assert.equal(allWarningOutcome.exitCode, 1);
+assert.equal(allWarningOutcome.status, 'failure');
+assert.equal(allWarningOutcome.checks, 'No checks ran');
+assert.match(
+  allWarningOutcome.errors[0].message,
+  /no runnable fast-check cases remained after source preflight/i,
+);
+assert.ok(
+  allWarningOutcome.warnings.some((warning) =>
+    warning.reason.includes('Source adapter is unavailable'),
+  ),
+  'All-warning preflight details remain visible alongside the empty-run failure',
+);
+
 // A future missing adapter stays a visible warning while an independently
 // available case can still be selected and completed.
 const partial = makeReport();
@@ -127,6 +153,10 @@ assert.deepEqual(
   selected.map((item) => item.actionId),
   [actionId],
 );
+partial.scheduling = {
+  serialBarrierPassed: true,
+  observedParallelTabs: 1,
+};
 partial.observations.push({
   actionId,
   fixtureId: 'ready',
@@ -136,6 +166,9 @@ partial.observations.push({
   targetStatus: 'present',
   dispatchStatus: 'pass',
   effectStatus: 'pass',
+  startedMs: 1,
+  endedMs: 6,
+  durationMs: 5,
 });
 const partialOutcome = fastReportOutcome(partial);
 assert.equal(partialOutcome.exitCode, 0, 'Coverage warnings do not stop runnable cases');
@@ -178,18 +211,183 @@ assert.equal(
   true,
 );
 
-// Unknown-only selection is a warning-only zero-check run with explicit scope.
+// Unknown-only selection keeps its warning and fails because no cases can run.
 const zeroSelection = makeReport();
 assert.deepEqual(selectFastCases(zeroSelection, ['unknown-only'], []), []);
 const zeroOutcome = fastReportOutcome(zeroSelection);
-assert.equal(zeroOutcome.exitCode, 0);
+assert.equal(zeroOutcome.exitCode, 1);
+assert.equal(zeroOutcome.status, 'failure');
 assert.equal(zeroOutcome.scope, 'filtered');
 assert.equal(zeroOutcome.checks, 'No checks ran');
 assert.equal(zeroOutcome.coverage, 'partial');
+assert.match(zeroOutcome.errors[0].message, /no runnable fast-check cases matched/i);
 assert.ok(
   zeroOutcome.warnings.some((warning) =>
     warning.reason.toLowerCase().includes('unknown requested actionid'),
   ),
+);
+
+const noIntersection = makeReport();
+assert.deepEqual(
+  selectFastCases(noIntersection, [actionId], ['clipboard-message']),
+  [],
+  'Both selection filters are recognized but have no intersection',
+);
+const noIntersectionOutcome = fastReportOutcome(noIntersection);
+assert.equal(noIntersectionOutcome.exitCode, 1);
+assert.equal(noIntersectionOutcome.status, 'failure');
+assert.equal(noIntersectionOutcome.coverage, 'partial');
+assert.match(
+  noIntersectionOutcome.errors[0].message,
+  /no runnable fast-check cases matched the requested action\/type selection/i,
+);
+
+const catalogueOnly = makeReport();
+catalogueOnly.catalogueOnly = true;
+catalogueOnly.selection = {
+  actionIds: [],
+  runnableActionIds: [],
+  filtered: true,
+};
+const makeScheduledReport = () => {
+  const scheduled = makeReport();
+  scheduled.scheduling = {
+    serialBarrierPassed: true,
+    observedParallelTabs: 1,
+  };
+  scheduled.selection = { actionIds: [actionId], filtered: true };
+  scheduled.observations.push({
+    actionId,
+    fixtureId: 'timed',
+    attempted: true,
+    proofScope: 'fixture-keyboard',
+    status: 'pass',
+    startedMs: 1,
+    endedMs: 6,
+    durationMs: 5,
+  });
+  return scheduled;
+};
+
+assert.equal(
+  fastReportOutcome(makeScheduledReport()).exitCode,
+  0,
+  'A filtered scheduled pass with an internally consistent timing window succeeds',
+);
+
+for (const [description, corruptScheduling] of [
+  ['missing scheduling metadata', (report) => delete report.scheduling],
+  ['missing serial barrier evidence', (report) => delete report.scheduling.serialBarrierPassed],
+  [
+    'false serial barrier evidence',
+    (report) => {
+      report.scheduling.serialBarrierPassed = false;
+    },
+  ],
+  [
+    'non-boolean serial barrier evidence',
+    (report) => {
+      report.scheduling.serialBarrierPassed = 'true';
+    },
+  ],
+  [
+    'missing observed parallel tab count',
+    (report) => delete report.scheduling.observedParallelTabs,
+  ],
+  [
+    'non-finite observed parallel tab count',
+    (report) => {
+      report.scheduling.observedParallelTabs = Number.NaN;
+    },
+  ],
+  [
+    'negative observed parallel tab count',
+    (report) => {
+      report.scheduling.observedParallelTabs = -1;
+    },
+  ],
+  [
+    'observed parallel tab count above the limit',
+    (report) => {
+      report.scheduling.observedParallelTabs = DEFAULT_TAB_LIMIT + 1;
+    },
+  ],
+]) {
+  const scheduled = makeScheduledReport();
+  corruptScheduling(scheduled);
+  const schedulingOutcome = fastReportOutcome(scheduled);
+  assert.equal(schedulingOutcome.exitCode, 1, `A scheduled pass with ${description} must fail`);
+  assert.ok(
+    schedulingOutcome.errors.some((error) => error.owner === 'scheduling-integrity'),
+    `The ${description} failure must identify scheduling integrity`,
+  );
+}
+
+for (const [description, corruptTiming] of [
+  ['missing startedMs', (observation) => delete observation.startedMs],
+  [
+    'non-finite startedMs',
+    (observation) => {
+      observation.startedMs = Number.NaN;
+    },
+  ],
+  ['missing endedMs', (observation) => delete observation.endedMs],
+  [
+    'non-finite endedMs',
+    (observation) => {
+      observation.endedMs = Number.POSITIVE_INFINITY;
+    },
+  ],
+  [
+    'unordered timestamps',
+    (observation) => {
+      observation.startedMs = 7;
+      observation.endedMs = 6;
+    },
+  ],
+  ['missing durationMs', (observation) => delete observation.durationMs],
+  [
+    'non-finite durationMs',
+    (observation) => {
+      observation.durationMs = Number.NaN;
+    },
+  ],
+  [
+    'negative durationMs',
+    (observation) => {
+      observation.durationMs = -1;
+    },
+  ],
+  [
+    'durationMs longer than its interval',
+    (observation) => {
+      observation.durationMs = 6;
+    },
+  ],
+]) {
+  const scheduled = makeScheduledReport();
+  corruptTiming(scheduled.observations[0]);
+  const timingOutcome = fastReportOutcome(scheduled);
+  assert.equal(timingOutcome.exitCode, 1, `A scheduled pass with ${description} must fail`);
+  assert.equal(timingOutcome.status, 'failure');
+  assert.ok(
+    timingOutcome.errors.some((error) => error.owner === 'timing-integrity'),
+    `The ${description} failure must identify timing integrity`,
+  );
+}
+
+catalogueOnly.scheduling = {};
+catalogueOnly.observations.push({
+  actionId,
+  status: 'pass',
+  startedMs: Number.NaN,
+  endedMs: 1,
+  durationMs: -1,
+});
+assert.equal(
+  fastReportOutcome(catalogueOnly).exitCode,
+  0,
+  'Catalogue-only success does not require timing data for scheduled observations',
 );
 
 // A success on one prepared tab cannot mask an environment failure on another.
@@ -303,5 +501,106 @@ contractReport.observations.push({
 });
 summarizeFastReport(contractReport);
 assert.equal(contractRow.status, 'fail', 'A duplicate failed proof cannot hide behind a pass');
+
+async function proveZeroRunnableCliFailsInIsolatedMirror() {
+  const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
+  const mirrorRoot = await mkdtemp(path.join(os.tmpdir(), 'cgcsp-b04-fast-cli-'));
+  const mirrorPath = (...parts) => path.join(mirrorRoot, ...parts);
+  const copyFileIntoMirror = async (relativePath) => {
+    const destination = mirrorPath(relativePath);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await copyFile(path.join(repositoryRoot, relativePath), destination);
+  };
+
+  try {
+    await cp(
+      path.join(repositoryRoot, 'tests/playwright/lib'),
+      mirrorPath('tests/playwright/lib'),
+      { recursive: true },
+    );
+    await Promise.all(
+      [
+        'package.json',
+        'tests/playwright/shortcut-fast-fixture.mjs',
+        'tests/fixtures/copy-all-formatted-conversation.html',
+        'tests/fixtures/copy-all-formatted-expected.txt',
+        'extension/content.js',
+        'extension/manifest.json',
+        'extension/lib/DevScrapeWide.js',
+        'extension/settings-schema.js',
+        'extension/options-storage.js',
+        'extension/shared/model-picker-labels.js',
+        'extension/shared/model-picker-selectors.js',
+        'extension/shared/shortcut-action-metadata.js',
+        'extension/_locales/en/messages.json',
+      ].map(copyFileIntoMirror),
+    );
+
+    const manifestSource = await readFile(
+      path.join(repositoryRoot, 'extension/manifest.json'),
+      'utf8',
+    );
+    const manifest = JSON.parse(manifestSource.replace(/^\uFEFF/, ''));
+    const manifestScripts = [
+      ...(manifest.content_scripts || []).flatMap((entry) => entry.js || []),
+      ...(manifest.background?.service_worker ? [manifest.background.service_worker] : []),
+    ].filter((file) => !file.startsWith('lib/') && !file.startsWith('vendor/'));
+    const manifestFiles = [
+      ...manifestScripts.map((file) => path.join('extension', file)),
+      ...(manifest.action?.default_popup
+        ? [path.join('extension', manifest.action.default_popup)]
+        : []),
+    ];
+    await Promise.all(manifestFiles.map(copyFileIntoMirror));
+
+    await symlink(
+      path.join(repositoryRoot, 'node_modules'),
+      mirrorPath('node_modules'),
+      'junction',
+    );
+
+    const child = spawnSync(
+      process.execPath,
+      [
+        mirrorPath('tests/playwright/shortcut-fast-fixture.mjs'),
+        '--shortcut-action-id',
+        actionId,
+        '--type',
+        'clipboard-message',
+      ],
+      {
+        cwd: mirrorRoot,
+        encoding: 'utf8',
+        maxBuffer: 4 * 1024 * 1024,
+        timeout: 120_000,
+        windowsHide: true,
+      },
+    );
+    assert.equal(child.error, undefined, child.error?.message);
+    assert.equal(child.status, 1, child.stderr || child.stdout);
+
+    const reportSource = await readFile(
+      mirrorPath('tests/playwright/shortcut-fast-results.local.json'),
+      'utf8',
+    );
+    assert.ok(reportSource.includes('"outcome"'), reportSource.slice(0, 120));
+    const report = JSON.parse(reportSource.replace(/^\uFEFF/, ''));
+    assert.equal(report.outcome.exitCode, 1);
+    assert.equal(report.outcome.status, 'failure');
+    assert.equal(report.outcome.checks, 'No checks ran');
+    assert.equal(report.selection.actionIds.length, 0);
+    assert.deepEqual(report.selection.runnableActionIds, []);
+    assert.equal(report.observations.length, 0);
+    assert.equal(report.timings.browserStartupMs, undefined);
+    assert.match(
+      report.outcome.errors[0].message,
+      /no runnable fast-check cases matched the requested action\/type selection/i,
+    );
+  } finally {
+    await rm(mirrorRoot, { recursive: true, force: true });
+  }
+}
+
+await proveZeroRunnableCliFailsInIsolatedMirror();
 
 console.log('Fast report fixture passed: warnings, scope, external denominator and failures.');

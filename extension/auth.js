@@ -32,7 +32,11 @@
     if (!r.ok) throw new Error('TOKEN_ENDPOINT_ERROR');
     return r.json();
   }
-  async function ensure(interactive = false) {
+  async function ensure(interactive = false, forceRefresh = false) {
+    // Drive can revoke an access token before its recorded expiry. Invalidate
+    // only the access token so an interactive refresh can reuse the session's
+    // refresh token instead of returning the same still-unexpired token.
+    if (forceRefresh) await S.remove([TOK, EXP]);
     const { token, refresh, exp } = await tokens();
     // Valid token — use it
     if (token && exp > now()) return token;
@@ -112,5 +116,6 @@
     googleLogin,
     googleLogout,
     getAuthToken: (o = {}) => ensure(!!o.interactive),
+    refreshAuthToken: () => ensure(true, true),
   };
 })();

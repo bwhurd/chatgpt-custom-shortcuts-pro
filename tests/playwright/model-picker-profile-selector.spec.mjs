@@ -468,6 +468,256 @@ test('Chat and Work profiles keep matching defaults but persist edits independen
   }
 });
 
+test('a late catalog startup read does not undo a newer popup profile selection', async () => {
+  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'cgcsp-profile-read-race-'));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    channel: 'chromium',
+    headless: true,
+    args: [`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`],
+  });
+
+  try {
+    const serviceWorker =
+      context.serviceWorkers()[0] ||
+      (await context.waitForEvent('serviceworker', { timeout: 15000 }));
+    const extensionId = new URL(serviceWorker.url()).host;
+    await serviceWorker.evaluate(
+      async ({ latestProfileCatalog, legacyProfileCatalog }) => {
+        const emptyCodes = new Array(15).fill('');
+        await chrome.storage.sync.set({
+          modelCatalogSelectedProfile: 'legacy',
+          modelCatalogLatest: latestProfileCatalog,
+          modelCatalogLegacy: legacyProfileCatalog,
+          modelPickerKeyCodesLatest: emptyCodes,
+          modelPickerKeyCodesLegacy: emptyCodes,
+          modelPickerKeyCodeProfilesVersion: 1,
+        });
+      },
+      {
+        latestProfileCatalog: { ...latestCatalog, surfaceMode: 'work' },
+        legacyProfileCatalog: { ...legacyCatalog, surfaceMode: 'chat' },
+      },
+    );
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      const sync = chrome.storage.sync;
+      const originalGet = sync.get.bind(sync);
+      let held = false;
+      sync.get = (keys, callback) => {
+        if (!held && Array.isArray(keys) && keys.includes('modelCatalogSelectedProfile')) {
+          held = true;
+          originalGet(keys, (stored) => {
+            window.__initialCatalogProfileRead = stored;
+            window.__releaseInitialCatalogProfileRead = () => callback(stored);
+          });
+          return;
+        }
+        return originalGet(keys, callback);
+      };
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.modelCatalogSelectedProfile) {
+          window.__testProfileChangeDelivered = true;
+        }
+      });
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForFunction(
+      () => typeof window.__releaseInitialCatalogProfileRead === 'function',
+    );
+    expect(
+      await page.evaluate(() => window.__initialCatalogProfileRead.modelCatalogSelectedProfile),
+    ).toBe('legacy');
+
+    await page.locator('[data-model-catalog-profile="latest"]').click();
+    await expect
+      .poll(() =>
+        serviceWorker.evaluate(
+          async () =>
+            (await chrome.storage.sync.get('modelCatalogSelectedProfile'))
+              .modelCatalogSelectedProfile,
+        ),
+      )
+      .toBe('latest');
+    await page.waitForFunction(() => window.__testProfileChangeDelivered === true);
+
+    const stateAfterLateRead = await page.evaluate(() => {
+      window.__releaseInitialCatalogProfileRead();
+      return {
+        selected: document
+          .querySelector('[data-model-catalog-profile="latest"]')
+          ?.getAttribute('aria-selected'),
+      };
+    });
+    expect(stateAfterLateRead).toEqual({ selected: 'true' });
+    await expect(
+      page.locator(
+        '#model-picker-grid .mp-configure-item[data-action-id="configure-dynamic-gpt-5-6-terra"]',
+      ),
+    ).toBeVisible();
+    const storedAfterLateRead = await serviceWorker.evaluate(
+      async () =>
+        (await chrome.storage.sync.get('modelCatalogSelectedProfile')).modelCatalogSelectedProfile,
+    );
+    expect(storedAfterLateRead).toBe('latest');
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('a late startup read does not undo a newer popup model config selection', async () => {
+  const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'cgcsp-config-read-race-'));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    channel: 'chromium',
+    headless: true,
+    args: [`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`],
+  });
+
+  try {
+    const serviceWorker =
+      context.serviceWorkers()[0] ||
+      (await context.waitForEvent('serviceworker', { timeout: 15000 }));
+    const extensionId = new URL(serviceWorker.url()).host;
+    const today = new Date();
+    const currentWeekDate = new Date(
+      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()),
+    );
+    currentWeekDate.setUTCDate(
+      currentWeekDate.getUTCDate() + 4 - (currentWeekDate.getUTCDay() || 7),
+    );
+    const yearStart = new Date(Date.UTC(currentWeekDate.getUTCFullYear(), 0, 1));
+    const currentWeek = `${currentWeekDate.getUTCFullYear()}-W${String(
+      Math.ceil(((currentWeekDate - yearStart) / 86400000 + 1) / 7),
+    ).padStart(2, '0')}`;
+    await serviceWorker.evaluate(
+      async ({ modelCatalogRefreshPromptWeek, modelCatalogLegacy }) => {
+        const emptyCodes = new Array(15).fill('');
+        await chrome.storage.sync.set({
+          activeModelConfigId: 'configure-latest',
+          modelCatalogSelectedProfile: 'legacy',
+          modelCatalogRefreshPromptWeek,
+          modelCatalogLegacy,
+          modelPickerKeyCodesLatest: emptyCodes,
+          modelPickerKeyCodesLegacy: emptyCodes,
+          modelPickerKeyCodeProfilesVersion: 1,
+        });
+      },
+      { modelCatalogRefreshPromptWeek: currentWeek, modelCatalogLegacy: legacyCatalog },
+    );
+
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      const sync = chrome.storage.sync;
+      const originalGet = sync.get.bind(sync);
+      let held = false;
+      sync.get = (keys, callback) => {
+        if (!held && Array.isArray(keys) && keys.includes('activeModelConfigId')) {
+          held = true;
+          originalGet(keys, (stored) => {
+            window.__initialActiveConfigRead = stored;
+            window.__releaseInitialActiveConfigRead = () => callback(stored);
+          });
+          return;
+        }
+        return originalGet(keys, callback);
+      };
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'sync' && changes.activeModelConfigId) {
+          window.__testActiveConfigChangeDelivered = true;
+        }
+      });
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForFunction(() => typeof window.__releaseInitialActiveConfigRead === 'function');
+    await expect(page.locator('#model-picker-grid .mp-grid-loading-overlay-visible')).toHaveCount(
+      0,
+    );
+    expect(await page.evaluate(() => window.__initialActiveConfigRead.activeModelConfigId)).toBe(
+      'configure-latest',
+    );
+    const readConfigView = () =>
+      page.evaluate(() => ({
+        selectedConfig: document
+          .querySelector('#model-picker-grid .mp-configure-item[aria-pressed="true"]')
+          ?.getAttribute('data-action-id'),
+        primaryActionIds: Array.from(
+          document.querySelectorAll(
+            '#model-picker-grid .mp-grid-group[data-group="primary"] [data-action-id]',
+          ),
+        ).map((action) => action.getAttribute('data-action-id')),
+      }));
+    await expect.poll(readConfigView).toEqual({
+      selectedConfig: 'configure-latest',
+      primaryActionIds: ['instant', 'thinking', 'pro'],
+    });
+
+    const o3Config = page.locator(
+      '#model-picker-grid .mp-configure-item[data-action-id="configure-o3"]',
+    );
+    await expect(o3Config).toBeVisible();
+    await o3Config.click();
+    await expect
+      .poll(() =>
+        serviceWorker.evaluate(
+          async () => (await chrome.storage.sync.get('activeModelConfigId')).activeModelConfigId,
+        ),
+      )
+      .toBe('configure-o3');
+    await page.waitForFunction(() => window.__testActiveConfigChangeDelivered === true);
+    await expect.poll(readConfigView).toEqual({
+      selectedConfig: 'configure-o3',
+      primaryActionIds: ['configure-o3'],
+    });
+
+    await page.evaluate(() => window.__releaseInitialActiveConfigRead());
+    await expect.poll(readConfigView).toEqual({
+      selectedConfig: 'configure-o3',
+      primaryActionIds: ['configure-o3'],
+    });
+    await expect
+      .poll(() =>
+        serviceWorker.evaluate(
+          async () => (await chrome.storage.sync.get('activeModelConfigId')).activeModelConfigId,
+        ),
+      )
+      .toBe('configure-o3');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof window.__releaseInitialActiveConfigRead === 'function');
+    expect(await page.evaluate(() => window.__initialActiveConfigRead.activeModelConfigId)).toBe(
+      'configure-o3',
+    );
+    await expect.poll(readConfigView).toEqual({
+      selectedConfig: 'configure-latest',
+      primaryActionIds: ['instant', 'thinking', 'pro'],
+    });
+
+    await serviceWorker.evaluate(async () => {
+      await chrome.storage.sync.set({ activeModelConfigId: 'configure-latest' });
+    });
+    await page.waitForFunction(() => window.__testActiveConfigChangeDelivered === true);
+    await page.evaluate(() => window.__releaseInitialActiveConfigRead());
+    await expect.poll(readConfigView).toEqual({
+      selectedConfig: 'configure-latest',
+      primaryActionIds: ['instant', 'thinking', 'pro'],
+    });
+    await expect
+      .poll(() =>
+        serviceWorker.evaluate(
+          async () => (await chrome.storage.sync.get('activeModelConfigId')).activeModelConfigId,
+        ),
+      )
+      .toBe('configure-latest');
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test('legacy shared shortcuts migrate once into unique independent profile arrays', async () => {
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), 'cgcsp-dedupe-'));
   const context = await chromium.launchPersistentContext(userDataDir, {

@@ -76,8 +76,10 @@ const extracted = report.catalogueOnly
       if (['model-slot', 'model-unassigned'].includes(item.type)) return null;
       return extractFastRuntime(content, item.actionId);
     });
+const runnable = report.catalogueOnly ? [] : selected;
+report.selection.runnableActionIds = runnable.map((item) => item.actionId);
 report.timings = { catalogueMs: performance.now() - started };
-if (!args.includes('--catalog-only') && selected.length) {
+if (runnable.length) {
   let browser;
   const boot = performance.now();
   try {
@@ -1370,29 +1372,34 @@ if (!args.includes('--catalog-only') && selected.length) {
       row.endedMs = performance.now() - started;
       report.observations.push(row);
     };
-    const parallel = selected.filter((item) => item.parallelSafe);
+    const parallel = runnable.filter((item) => item.parallelSafe);
     report.scheduling = {
       maxParallelTabs: Math.min(DEFAULT_TAB_LIMIT, parallel.length),
       tabLimit: DEFAULT_TAB_LIMIT,
       parallel: parallel.map((item) => item.actionId),
-      serial: selected.filter((item) => !item.parallelSafe).map((item) => item.actionId),
+      serial: runnable.filter((item) => !item.parallelSafe).map((item) => item.actionId),
     };
     const settledCase = async (item) => {
+      const caseStarted = performance.now();
       try {
         await runCase(item);
       } catch (error) {
+        const caseEnded = performance.now();
         report.observations.push({
           actionId: item.actionId,
           attempted: true,
           proofScope: 'fixture-keyboard',
           status: 'fail',
           reason: error.message,
+          startedMs: caseStarted - started,
+          durationMs: caseEnded - caseStarted,
+          endedMs: caseEnded - started,
         });
       }
     };
     await settleTabPool(parallel, settledCase);
     // Shared-state families start only after all tab-local work has settled.
-    for (const item of selected.filter((entry) => !entry.parallelSafe)) await settledCase(item);
+    for (const item of runnable.filter((entry) => !entry.parallelSafe)) await settledCase(item);
     const parallelRows = report.observations.filter((row) =>
       report.scheduling.parallel.includes(row.actionId),
     );
@@ -1421,7 +1428,7 @@ if (!args.includes('--catalog-only') && selected.length) {
       );
     }
   } catch (error) {
-    for (const item of selected.filter(
+    for (const item of runnable.filter(
       (entry) => !report.observations.some((row) => row.actionId === entry.actionId),
     ))
       report.observations.push({
@@ -1441,7 +1448,7 @@ if (!args.includes('--catalog-only') && selected.length) {
 }
 report.timings.executionMs = performance.now() - started;
 for (const row of report.observations) {
-  const item = selected.find((entry) => entry.actionId === row.actionId);
+  const item = runnable.find((entry) => entry.actionId === row.actionId);
   if (item && !row.bindingScope)
     row.bindingScope = item.fixtureCode
       ? 'fixture-only-assignment'

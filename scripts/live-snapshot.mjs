@@ -63,6 +63,7 @@ export const SOURCE_FINGERPRINT_PATHS = Object.freeze([
   'tests/playwright/devscrape-wide.mjs',
   'tests/playwright/lib/current-page-validation.mjs',
   'tests/playwright/lib/devscrape-wide-core.mjs',
+  'tests/playwright/lib/search-chats-popup.mjs',
   'tests/playwright/lib/shortcut-audit-artifacts.mjs',
   'tests/playwright/lib/shortcut-capabilities.mjs',
   'tests/playwright/lib/shortcut-fast-visual-report.mjs',

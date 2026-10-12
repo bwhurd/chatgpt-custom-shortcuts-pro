@@ -163,8 +163,12 @@ export async function runSearchChatsCase(context, content, item, started = perfo
     row.reason = error.message;
   } finally {
     row.pageErrors = pageErrors;
-    row.durationMs = performance.now() - begin;
-    await page.close();
+    try {
+      await page.close();
+    } finally {
+      row.durationMs = performance.now() - begin;
+      row.endedMs = performance.now() - started;
+    }
   }
   return row;
 }

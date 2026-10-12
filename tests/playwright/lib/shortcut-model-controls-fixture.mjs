@@ -99,7 +99,11 @@ export function extractModelPickerSource(content) {
 
 // The caller supplies site DOM and catalogue state. All picker routing, queues,
 // hint observers and production delays come from the actual complete IIFE.
-export async function installModelPickerFixture(page, content, { storage = {} } = {}) {
+export async function installModelPickerFixture(
+  page,
+  content,
+  { storage = {}, deferStorageGet = false } = {},
+) {
   for (const file of [
     'settings-schema.js',
     'shared/model-picker-labels.js',
@@ -109,61 +113,79 @@ export async function installModelPickerFixture(page, content, { storage = {} } 
       path: fileURLToPath(new URL(`../../../extension/${file}`, import.meta.url)),
     });
   }
-  await page.evaluate((initial) => {
-    const data = {
-      useControlForModelSwitcherRadio: false,
-      modelPickerKeyCodeProfilesVersion: 1,
-      ...initial,
-    };
-    const listeners = [];
-    window.fixtureStorage = data;
-    window.chrome = {
-      runtime: {
-        id: 'isolated-model-fixture',
-        getURL: (path) => `https://shortcut-fixture.invalid/${path}`,
-      },
-      i18n: { getMessage: () => '' },
-      storage: {
-        sync: {
-          get(keys, callback) {
-            const result =
-              keys === null
-                ? { ...data }
-                : Array.isArray(keys)
-                  ? Object.fromEntries(keys.map((key) => [key, data[key]]))
-                  : { ...keys, ...data };
-            queueMicrotask(() => callback(result));
-          },
-          set(values, callback) {
-            const changes = Object.fromEntries(
-              Object.entries(values).map(([key, value]) => [
-                key,
-                { oldValue: data[key], newValue: value },
-              ]),
-            );
-            Object.assign(data, values);
-            queueMicrotask(() => {
-              listeners.forEach((listener) => {
-                listener(changes, 'sync');
+  await page.evaluate(
+    ({ initial, deferStorageGet }) => {
+      const data = {
+        useControlForModelSwitcherRadio: false,
+        modelPickerKeyCodeProfilesVersion: 1,
+        ...initial,
+      };
+      const listeners = [];
+      const pendingGets = [];
+      window.fixtureStorage = data;
+      window.flushFixtureStorageGet = () => {
+        const respond = pendingGets.shift();
+        if (!respond) return false;
+        respond();
+        return true;
+      };
+      window.chrome = {
+        runtime: {
+          id: 'isolated-model-fixture',
+          getURL: (path) => `https://shortcut-fixture.invalid/${path}`,
+        },
+        i18n: { getMessage: () => '' },
+        storage: {
+          sync: {
+            get(keys, callback) {
+              const result =
+                keys === null
+                  ? { ...data }
+                  : Array.isArray(keys)
+                    ? Object.fromEntries(keys.map((key) => [key, data[key]]))
+                    : { ...keys, ...data };
+              const respond = () => callback(result);
+              if (deferStorageGet) pendingGets.push(respond);
+              else queueMicrotask(respond);
+            },
+            set(values, callback) {
+              const changes = Object.fromEntries(
+                Object.entries(values).map(([key, value]) => [
+                  key,
+                  { oldValue: data[key], newValue: value },
+                ]),
+              );
+              Object.assign(data, values);
+              queueMicrotask(() => {
+                listeners.forEach((listener) => {
+                  listener(changes, 'sync');
+                });
+                callback?.();
               });
-              callback?.();
-            });
+            },
+          },
+          onChanged: {
+            addListener(listener) {
+              listeners.push(listener);
+            },
+            removeListener(listener) {
+              const index = listeners.indexOf(listener);
+              if (index >= 0) listeners.splice(index, 1);
+            },
           },
         },
-        onChanged: {
-          addListener(listener) {
-            listeners.push(listener);
-          },
-        },
-      },
-    };
-  }, storage);
-  await page.addScriptTag({ content: extractModelPickerSource(content).source });
-  await page.waitForFunction(
-    () => typeof window.__cspRunProThinkingEffortAction === 'function',
-    null,
-    { timeout: 2000 },
+      };
+    },
+    { initial: storage, deferStorageGet },
   );
+  await page.addScriptTag({ content: extractModelPickerSource(content).source });
+  if (!deferStorageGet) {
+    await page.waitForFunction(
+      () => typeof window.__cspRunProThinkingEffortAction === 'function',
+      null,
+      { timeout: 2000 },
+    );
+  }
 }
 
 export async function installModelControlShortcut(page, content, actionId, code = 'KeyQ') {

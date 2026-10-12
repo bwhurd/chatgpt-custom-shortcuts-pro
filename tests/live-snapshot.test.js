@@ -38,6 +38,7 @@ const FIXED_NOW = Date.parse('2026-10-07T12:05:00.000Z');
 const AUDITED_SOURCE_FINGERPRINT_PATHS = Object.freeze([
   'extension/composer-layout-bootstrap.js',
   'extension/composer-layout.css',
+  'tests/playwright/lib/search-chats-popup.mjs',
   'tests/playwright/lib/shortcut-audit-artifacts.mjs',
 ]);
 
