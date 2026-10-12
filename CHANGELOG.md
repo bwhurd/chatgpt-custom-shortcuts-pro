@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 10.10.2026
+- Fixed: Search Chats shortcut (Alt+K) opens ChatGPT's search popup.
+
 #### 10.01.2026
 - Added: configurable shortcut to open a new ChatGPT conversation in a new browser tab ([#81](https://github.com/bwhurd/chatgpt-custom-shortcuts-pro/pull/81), [@Akilaydin](https://github.com/Akilaydin)).
 

@@ -44,9 +44,21 @@
 
   const getToken = async (interactive = false) =>
     (await window.CloudAuth?.getAuthToken?.({ interactive })) || '';
-  async function removeCachedToken(token) {
-    if (!token) return;
-    await new Promise((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve));
+  async function refreshToken() {
+    const token = (await window.CloudAuth?.refreshAuthToken?.()) || '';
+    if (!token) throw new Error('Auth required');
+    return token;
+  }
+  async function withUnauthorizedRetry(token, operation, request) {
+    let result = await request(token);
+    if (!result?.unauthorized) return { token, result };
+
+    const refreshedToken = await refreshToken();
+    result = await request(refreshedToken);
+    if (result?.unauthorized) {
+      throw new Error(`Drive ${operation} failed (${result.status || '401/403'})`);
+    }
+    return { token: refreshedToken, result };
   }
 
   // Drive helpers
@@ -68,10 +80,17 @@
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
-    if (r.status === 401 || r.status === 403) return { unauthorized: true };
+    if (r.status === 401 || r.status === 403) return { unauthorized: true, status: r.status };
     if (!r.ok) throw new Error(`Drive list failed (${r.status})`);
     const data = await r.json();
-    const id = data?.files?.[0]?.id || null;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.files)) {
+      throw new Error('Drive list failed (invalid response)');
+    }
+    const firstFile = data.files[0];
+    if (data.files.length > 0 && (typeof firstFile?.id !== 'string' || !firstFile.id)) {
+      throw new Error('Drive list failed (invalid response)');
+    }
+    const id = firstFile?.id || null;
     if (id) await chrome.storage.local.set({ [CLOUD_KEY]: id });
     return { id };
   }
@@ -96,10 +115,13 @@
       },
       body,
     });
-    if (r.status === 401 || r.status === 403) return { unauthorized: true };
+    if (r.status === 401 || r.status === 403) return { unauthorized: true, status: r.status };
     if (!r.ok) throw new Error(`Drive create failed (${r.status})`);
     const created = await r.json();
-    return { id: created?.id || null };
+    if (typeof created?.id !== 'string' || !created.id) {
+      throw new Error('Drive create failed (invalid response)');
+    }
+    return { id: created.id };
   }
   async function updateFile(token, fileId, json) {
     const r = await fetch(`${DRIVE_UPLOAD}/${fileId}?uploadType=media`, {
@@ -107,7 +129,7 @@
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: json,
     });
-    if (r.status === 401 || r.status === 403) return { unauthorized: true };
+    if (r.status === 401 || r.status === 403) return { unauthorized: true, status: r.status };
     if (r.status === 404) return { notFound: true };
     if (!r.ok) throw new Error(`Drive update failed (${r.status})`);
     return {};
@@ -121,10 +143,14 @@
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
-    if (r.status === 401 || r.status === 403) return { unauthorized: true };
+    if (r.status === 401 || r.status === 403) return { unauthorized: true, status: r.status };
     if (r.status === 404) return { notFound: true };
     if (!r.ok) throw new Error(`Drive download failed (${r.status})`);
-    return { obj: await r.json() };
+    const obj = await r.json();
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      throw new Error('Drive download failed (invalid response)');
+    }
+    return { obj };
   }
 
   async function saveSyncedSettings(settings) {
@@ -135,44 +161,26 @@
     if (!token) throw new Error('Not authenticated');
 
     // Prefer known id, else list
-    let { id, unauthorized } = await findFileId(token);
-    if (unauthorized) {
-      await removeCachedToken(token);
-      token = await getToken(true);
-      if (!token) throw new Error('Auth required');
-      ({ id } = await findFileId(token));
-    }
+    const lookup = await withUnauthorizedRetry(token, 'list', findFileId);
+    token = lookup.token;
+    let { id } = lookup.result;
 
     // Update or create
     if (id) {
-      let res = await updateFile(token, id, json);
-      if (res?.unauthorized) {
-        await removeCachedToken(token);
-        token = await getToken(true);
-        if (!token) throw new Error('Auth required');
-        res = await updateFile(token, id, json);
-      }
+      const update = await withUnauthorizedRetry(token, 'update', (t) => updateFile(t, id, json));
+      token = update.token;
+      const res = update.result;
       if (res?.notFound) {
         await chrome.storage.local.remove(CLOUD_KEY);
         id = null;
       } else {
-        await chrome.storage.local.set({ [CLOUD_KEY]: id });
         return;
       }
     }
 
     // Create path
-    const created = await createFile(token, json);
-    if (created?.unauthorized) {
-      await removeCachedToken(token);
-      const t2 = await getToken(true);
-      if (!t2) throw new Error('Auth required');
-      const c2 = await createFile(t2, json);
-      if (!c2?.id) throw new Error('Drive permission missing or Drive API disabled');
-      await chrome.storage.local.set({ [CLOUD_KEY]: c2.id });
-      return;
-    }
-    if (!created?.id) throw new Error('Drive permission missing or Drive API disabled');
+    const creation = await withUnauthorizedRetry(token, 'create', (t) => createFile(t, json));
+    const created = creation.result;
     await chrome.storage.local.set({ [CLOUD_KEY]: created.id });
   }
 
@@ -185,35 +193,27 @@
     // Try known id first
     const known = (await chrome.storage.local.get(CLOUD_KEY))[CLOUD_KEY] || null;
     if (known) {
-      let dl = await downloadFile(token, known);
-      if (dl?.unauthorized) {
-        await removeCachedToken(token);
-        token = await getToken(true);
-        if (!token) throw new Error('Auth required');
-        dl = await downloadFile(token, known);
-      }
-      if (!dl?.notFound) return pickOptions(dl?.obj || {});
+      const download = await withUnauthorizedRetry(token, 'download', (t) =>
+        downloadFile(t, known),
+      );
+      token = download.token;
+      const dl = download.result;
+      if (!dl.notFound) return pickOptions(dl.obj);
       await chrome.storage.local.remove(CLOUD_KEY); // stale id, fall through
     }
 
     // Fallback: list and download
-    let { id, unauthorized } = await findFileId(token);
-    if (unauthorized) {
-      await removeCachedToken(token);
-      token = await getToken(true);
-      if (!token) throw new Error('Auth required');
-      ({ id } = await findFileId(token));
-    }
+    const lookup = await withUnauthorizedRetry(token, 'list', findFileId);
+    token = lookup.token;
+    const { id } = lookup.result;
     if (!id) return {};
-    let dl = await downloadFile(token, id);
-    if (dl?.unauthorized) {
-      await removeCachedToken(token);
-      token = await getToken(true);
-      if (!token) throw new Error('Auth required');
-      dl = await downloadFile(token, id);
+    const download = await withUnauthorizedRetry(token, 'download', (t) => downloadFile(t, id));
+    const dl = download.result;
+    if (dl.notFound) {
+      await chrome.storage.local.remove(CLOUD_KEY);
+      return {};
     }
-    await chrome.storage.local.set({ [CLOUD_KEY]: id });
-    return pickOptions(dl?.obj || {});
+    return pickOptions(dl.obj);
   }
 
   const mergeSettings = (local, remote) => ({ ...local, ...remote });

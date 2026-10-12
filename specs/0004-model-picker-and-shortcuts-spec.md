@@ -24,6 +24,8 @@ This is the durable architecture reference for the shared shortcut and model-pic
 
 ## Fast keyboard audit
 
+For Search Chats specifically, the focused fast check requires a newly visible Search modal with its combobox and linked listbox after trusted Alt+K, rather than a click counter or synthetic effect flag. The same checker is challenged by six broken-source mutations; commands and live-proof boundaries are in [spec 0006](0006-runtime-scrape-selector-validator-spec.md#purpose).
+
 The canonical command is `npm run test:shortcuts:fast`; setup, filters, coverage warnings, reporting and optional live diagnostics are owned by [spec 0006](0006-runtime-scrape-selector-validator-spec.md#canonical-fast-shortcut-check). `npm run shortcuts:catalog` is the optional browser-free listing. Unknown filters and missing coverage warn at the end while available cases continue; observed behavioral or environment failures remain failures.
 
 Controlled fixtures use the real extracted listeners/actions and recorded structural DOM states. They cover overlay hydration/dismissal, response/GPT menus, clipboard payloads (including a deterministic 24-message lazy-loading reference), media-control routing, upload-menu activation, composer focus/tools, Send/Stop gates, editing, sidebar/mode state, wrap and scrolling. Previous/Next Response shortcuts are temporarily disabled because the current site no longer exposes retained response-version navigation. Their popup controls, runtime bindings and canonical audit requirements are removed; startup and install/update cleanup remove their stored assignments, and import/cloud allowlists exclude those keys. Retained inert navigation helpers do not enable the feature. Shipped GSAP/ScrollTo and shared mode selectors are loaded where relevant. IME/AltGraph probes are explicitly synthetic; Mac modifier permutations and current live site compatibility are not implied.
@@ -151,6 +153,7 @@ Key wiring:
 - overlay labels come from `settings-schema.js` `shortcuts.labelI18nByKey`
 - fallback is key-name text only when no better label exists
 - assigned popup shortcuts should render in the overlay through that same schema path; the overlay opener is not a permanent exception
+- Escape stored shortcut values and storage-derived property names for their HTML text or attribute context before inserting generated overlay markup.
 
 If a shortcut shows in the popup but lands in the overlay “Other” bucket unexpectedly, check the schema mapping before changing overlay rendering.
 
@@ -177,7 +180,7 @@ Current direct-DOM pattern:
 
 The current app shell's sidebar toggle exposes `data-app-shell-sidebar-trigger="true"`; the narrow header uses `aria-controls="browser-sidebar-popover"`. New Chat lacks a test ID: the inspected sidebar and narrow-header SVG paths begin with `M6.33325 1.88379` and `M6.33325 1.80763` respectively. The shared native helpers prefer these current targets and retain older test IDs as fallbacks, so the bottom bar's static controls use the same native actions as shortcuts.
 
-Search Chats prioritizes the observed sidebar rail button's language-independent SVG path prefix `M9.16211 2.37976`, followed by the prior titlebar path `M7.32849 1.91016` and older `data-testid="search-conversation-button"` locator. Structural routes (the button before `close-sidebar-button` in `#sidebar-header`, or the `data-sidebar-item` after `create-new-chat-button` in the collapsed or narrow sidebar), legacy sprite fragments, and narrow-popover opening remain fallbacks where present. Runtime, audit metadata and collector openers must recognize the same observed control. Keep selectors language-agnostic and ground fallback changes in a current DOM capture.
+Search Chats prioritizes the October 10 observed named SVG sprite fragments `#magnifying-glass-lg-light-16` and `#magnifying-glass-lg-light-20`. That button has neither a test ID nor `data-sidebar-item`. The prior paths `M9.16211 2.37976` and `M7.32849 1.91016`, older `data-testid="search-conversation-button"`, structural sidebar adjacency, legacy sprite fragments and narrow-popover opening remain compatibility fallbacks. Runtime, audit metadata and collector openers must recognize the same observed control. Keep selectors language-agnostic and ground fallback changes in a current DOM capture.
 
 The current native composer Send button can be an enabled `type="submit"` control without either legacy identifier; its observed arrow begins `M9.33467 16.6663`. During generation the same composer form exposes a `type="button"` square Stop control beginning `M4.5 5.75C4.5 5.05964`. Resolve those glyphs within one rendered form containing the visible contenteditable textbox, reject ambiguous or disabled controls, and retain explicit legacy selectors. Ctrl+Enter must reject Stop state. Runtime, collector and target metadata share that observed structure. Collector selectors passed to native DOM APIs must be valid CSS; Playwright's `:visible` belongs only in Playwright locators. The headless native-button regression checks real browser parsing and hidden, disabled and unrelated-form controls.
 

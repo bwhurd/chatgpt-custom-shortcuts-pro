@@ -38,6 +38,8 @@ const MODEL_THINKING_EFFORT_ACTION_SELECTOR =
   MODEL_PICKER_SELECTORS.MODEL_THINKING_EFFORT_ACTION_SELECTOR ||
   '[data-model-picker-thinking-effort-action="true"][aria-haspopup="menu"]';
 const SEARCH_CONVERSATION_BUTTON_SELECTORS = Object.freeze([
+  'button:has(svg use[href$="#magnifying-glass-lg-light-16"])',
+  'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
   'button:has(svg path[d^="M7.32849 1.91016"])',
   'button[data-testid="search-conversation-button"]',
 ]);

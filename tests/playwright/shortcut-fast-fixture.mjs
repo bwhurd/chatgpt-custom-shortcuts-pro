@@ -7,6 +7,7 @@ import {
   readShareClipboardToastEvidence,
   waitForShareClipboardToast,
 } from './lib/devscrape-wide-core.mjs';
+import { runSearchChatsCase } from './lib/search-chats-fixture.mjs';
 import { runClipboardCase } from './lib/shortcut-clipboard-fixture.mjs';
 import {
   CATALOGUE_RESULT_PATH,
@@ -75,8 +76,10 @@ const extracted = report.catalogueOnly
       if (['model-slot', 'model-unassigned'].includes(item.type)) return null;
       return extractFastRuntime(content, item.actionId);
     });
+const runnable = report.catalogueOnly ? [] : selected;
+report.selection.runnableActionIds = runnable.map((item) => item.actionId);
 report.timings = { catalogueMs: performance.now() - started };
-if (!args.includes('--catalog-only') && selected.length) {
+if (runnable.length) {
   let browser;
   const boot = performance.now();
   try {
@@ -86,6 +89,10 @@ if (!args.includes('--catalog-only') && selected.length) {
     const context = await browser.newContext();
     await context.route('**/*', (route) => route.abort());
     const runCase = async (item) => {
+      if (item.actionId === 'shortcutKeySearchConversationHistory') {
+        report.observations.push(await runSearchChatsCase(context, content, item, started));
+        return;
+      }
       if (item.type === 'model-slot' || item.type === 'model-unassigned') {
         const row = await (item.type === 'model-slot' ? runSlotCase : runUnassignedModelCase)(
           context,
@@ -332,28 +339,6 @@ if (!args.includes('--catalog-only') && selected.length) {
             composerVisible: true,
             composerEmpty: true,
           });
-        }
-        if (item.type === 'direct-control') {
-          await page.evaluate((newChat) => {
-            const testId = newChat ? 'create-new-chat-button' : 'search-conversation-button';
-            document.body.insertAdjacentHTML(
-              'beforeend',
-              `<button hidden data-testid="${testId}" id="hidden-direct">Hidden</button><button disabled data-testid="${testId}" id="disabled-direct">Disabled</button><button type="button" data-testid="${testId}" id="direct-target">Control</button><button id="direct-distractor">Unrelated</button>`,
-            );
-            window.fixtureClicks = [];
-            for (const button of document.querySelectorAll(
-              '[id$="direct"], #direct-target, #direct-distractor',
-            ))
-              button.onclick = () => {
-                window.fixtureClicks.push(button.id);
-                if (button.id === 'direct-target')
-                  document.body.dataset.directEffect = newChat
-                    ? 'blank-conversation'
-                    : 'search-dialog';
-              };
-          }, item.actionId === 'shortcutKeyNewConversation');
-          row.pathScope =
-            'visible direct control only; narrow-sidebar/navigation fallbacks remain deferred';
         }
         if (item.type === 'toggle') {
           await page.evaluate(() => {
@@ -1038,14 +1023,6 @@ if (!args.includes('--catalog-only') && selected.length) {
             ]);
             assert.equal(await page.locator('#hidden-chat').getAttribute('aria-checked'), 'true');
             assert.equal(await page.locator('#hidden-work').getAttribute('aria-checked'), 'false');
-          } else if (item.type === 'direct-control') {
-            assert.deepEqual(await page.evaluate(() => window.fixtureClicks), ['direct-target']);
-            assert.equal(
-              await page.locator('body').getAttribute('data-direct-effect'),
-              item.actionId === 'shortcutKeyNewConversation'
-                ? 'blank-conversation'
-                : 'search-dialog',
-            );
           } else if (item.type === 'new-conversation') {
             await page.waitForFunction(
               () =>
@@ -1395,29 +1372,34 @@ if (!args.includes('--catalog-only') && selected.length) {
       row.endedMs = performance.now() - started;
       report.observations.push(row);
     };
-    const parallel = selected.filter((item) => item.parallelSafe);
+    const parallel = runnable.filter((item) => item.parallelSafe);
     report.scheduling = {
       maxParallelTabs: Math.min(DEFAULT_TAB_LIMIT, parallel.length),
       tabLimit: DEFAULT_TAB_LIMIT,
       parallel: parallel.map((item) => item.actionId),
-      serial: selected.filter((item) => !item.parallelSafe).map((item) => item.actionId),
+      serial: runnable.filter((item) => !item.parallelSafe).map((item) => item.actionId),
     };
     const settledCase = async (item) => {
+      const caseStarted = performance.now();
       try {
         await runCase(item);
       } catch (error) {
+        const caseEnded = performance.now();
         report.observations.push({
           actionId: item.actionId,
           attempted: true,
           proofScope: 'fixture-keyboard',
           status: 'fail',
           reason: error.message,
+          startedMs: caseStarted - started,
+          durationMs: caseEnded - caseStarted,
+          endedMs: caseEnded - started,
         });
       }
     };
     await settleTabPool(parallel, settledCase);
     // Shared-state families start only after all tab-local work has settled.
-    for (const item of selected.filter((entry) => !entry.parallelSafe)) await settledCase(item);
+    for (const item of runnable.filter((entry) => !entry.parallelSafe)) await settledCase(item);
     const parallelRows = report.observations.filter((row) =>
       report.scheduling.parallel.includes(row.actionId),
     );
@@ -1446,7 +1428,7 @@ if (!args.includes('--catalog-only') && selected.length) {
       );
     }
   } catch (error) {
-    for (const item of selected.filter(
+    for (const item of runnable.filter(
       (entry) => !report.observations.some((row) => row.actionId === entry.actionId),
     ))
       report.observations.push({
@@ -1466,7 +1448,7 @@ if (!args.includes('--catalog-only') && selected.length) {
 }
 report.timings.executionMs = performance.now() - started;
 for (const row of report.observations) {
-  const item = selected.find((entry) => entry.actionId === row.actionId);
+  const item = runnable.find((entry) => entry.actionId === row.actionId);
   if (item && !row.bindingScope)
     row.bindingScope = item.fixtureCode
       ? 'fixture-only-assignment'

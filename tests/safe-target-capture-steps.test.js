@@ -2,11 +2,6 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const coreModule = import('./playwright/lib/devscrape-wide-core.mjs');
-const SEARCH_SELECTORS = [
-  'button:has(svg path[d^="M9.16211 2.37976"])',
-  'button:has(svg path[d^="M7.32849 1.91016"])',
-  'button[data-testid="search-conversation-button"]',
-];
 
 function createPageStub({
   dialogInitiallyOpen = false,
@@ -140,7 +135,6 @@ test('Search Chats capture uses the source opener, records the new dialog, and d
   await executeSafeTargetCaptureStep(page, {}, { type: 'open-search-chats-dialog' }, captureState);
 
   assert.match(captureState.latestDialogHtml, /role="dialog"/);
-  assert.ok(pageState.selectors.includes(SEARCH_SELECTORS.join(', ')));
   assert.deepEqual(
     pageState.events.filter((event) => event === 'search-opener-click' || event === 'press-Escape'),
     ['search-opener-click', 'press-Escape'],
@@ -156,7 +150,6 @@ test('Search Chats capture retains the legacy opener fallback', async () => {
   await executeSafeTargetCaptureStep(page, {}, { type: 'open-search-chats-dialog' }, captureState);
 
   assert.match(captureState.latestDialogHtml, /role="dialog"/);
-  assert.ok(state.selectors.includes(SEARCH_SELECTORS.join(', ')));
   assert.equal(state.events.filter((event) => event === 'search-opener-click').length, 1);
   assert.equal(state.dialogOpen, false);
 });

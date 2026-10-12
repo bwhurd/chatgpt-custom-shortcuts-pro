@@ -38,6 +38,8 @@ If login breaks, check this sequence first:
 
 ## Drive save / restore flow
 
+Within a popup, only one Save or Restore operation can run at a time; starting either blocks the other until it finishes.
+
 ### Save
 
 Popup path:
@@ -67,7 +69,12 @@ Important data rules:
 - duplicate cleanup completes before the restored shortcut controls are rehydrated; failed repair keeps them gated and reports the existing popup error
 
 Retry behavior:
-- `CloudStorage` clears stale token/file-id state on `401` / `403` style failures and retries through the helper path
+- After a Drive request returns `401` or `403`, storage tries to obtain a fresh token through `CloudAuth.refreshAuthToken()` and retries the request once if it succeeds. If token acquisition fails, storage stops without another Drive request. A second unauthorized response throws an operation-specific Drive error with its HTTP status.
+- Before the refresh-token grant, `auth.js` clears the cached access token and expiry while retaining the refresh token. If the refresh grant fails, it falls through to interactive login through the background broker.
+- Unauthorized responses do not clear `csp_cloud_file_id_v1`; a cached file ID is unrelated to whether the access token is authorized.
+- `csp_cloud_file_id_v1` is a fast path. If updating the cached ID returns `404`, save clears the ID and creates a replacement. If downloading it returns `404`, restore clears the ID and falls back to listing.
+- A successful file list with no match is genuine absence: save creates a file, while restore returns `{}`. List failures, including `404`, throw instead of becoming absence. If a file found by listing returns `404` on download, restore clears the cached ID and returns `{}`.
+- A successful list response must contain a `files` array; if it is nonempty, its first entry must contain a nonempty string `id`. A successful create response must contain a nonempty string `id`, and a successful download response must contain a JSON object. Parsed JSON with the wrong shape throws an operation-specific error instead of triggering duplicate creation or reporting no backup. If `response.json()` cannot parse the body, its native parse error rejects the operation; that error is not converted to a Drive-specific message.
 
 ## Local file export / import flow
 
