@@ -7,7 +7,7 @@
 - Chat uses `[data-inline-selection-pill][data-system-hint-type="picture_v2"]` inside the editable textbox. Work uses a native button containing the same `M7 21.005` image icon and a close icon, inside the form's `[data-composer-footer-responsive]`, outside the textbox. Its observed label is `Remove Create image`; localized labels and generated classes must not become selectors.
 - `extension/content.js:3199` (`findSelectedComposerToolPill`) searches only inside the editor. `runComposerToolShortcutByIcon` therefore takes the add path in Work. `runStudyShortcut:7585` separately checks that same inline-only detector before its query preparation.
 - `tests/playwright/shortcut-fast-fixture.mjs:401,1235` models persistent tools only as inline pills. `tests/playwright/lib/shortcut-fast-cases.mjs:1515` extracts the real helpers and must include any new dependencies.
-- Only Create Image was reproduced live. Search, Study, Deep Research and Add Photos + Files need targeted verification during execution. Other tool bindings were unset; do not alter live bindings just to test them.
+- The user reports the tool toggles appear to work both ways and asked to stop further per-tool live probing. Keep automated structural coverage for Search, Study, Create Image and Deep Research; do not alter live bindings or repeat tool-by-tool UI checks. Live CDP proof remains scoped to the requested Create Image Alt+Q round trip in Chat and Work.
 - Context checked first: [official Work overview](https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex), [upstream inline Search report](https://community.openai.com/t/search-should-be-a-composer-level-toggle-not-an-inline-mention-inserted-at-the-caret/1394560). These explain product context, not the specific removal contract; the live DOM above is authoritative.
 
 ## Design and limits
@@ -32,9 +32,9 @@
 ## Luna Batch 02 - Live proof, owning docs and closure
 
 - [ ] Objective: verify the shared change and document its supported boundaries. Prerequisite: Batch 01 fully proven.
-- [ ] Reload the unpacked extension through the documented Chrome setup, then repeat Chat Alt+Q twice and Alt+W followed by Work Alt+Q twice, including a disposable nonempty draft. Verify native removal and re-addition. Inspect/test Search, Study and Deep Research via existing assignments or the existing helper in the extension's isolated context; distinguish helper proof from keyboard proof. Verify Add Photos + Files' actual boundary without uploading/removing user files or sending messages. Preserve settings/tabs and clean up only owned state.
+- [ ] Reload the unpacked extension through the documented Chrome setup, then verify only the requested Create Image Alt+Q round trip in Chat and after Alt+W in Work, including a disposable nonempty draft. Use the existing automated fixture coverage for Search, Study and Deep Research; do not continue per-tool live probing unless a focused check exposes a mismatch. Preserve the Add Photos + Files one-shot chooser boundary without uploading/removing user files or sending messages. Preserve settings/tabs and clean up only owned state.
 - [ ] Update the composer-tool contract in spec 0004 and the fast-check proof scope in spec 0006, including the observed Add Photos boundary. Run `npm run test:shortcuts:fast` once for final shared-helper acceptance, `npm run test:shortcuts:contracts`, and `npm run check:text`; run additional focused tests only for newly changed owners. No popup suite or release build is required by this scope.
-- [ ] Acceptance: live Create Image round trips pass in both modes; every other named tool has verified supported behavior or an explicit unavailable/external boundary, with no fabricated pass. All focused/final checks and docs pass. Record commands, failures/skips, live scope and remaining risk here; rename this plan to `Done-0110-work-composer-tool-toggle-plan.md` only when complete.
+- [ ] Acceptance: live Create Image round trips pass in both modes; fixture regressions cover the other persistent tools and preserve the Add Photos + Files boundary. All focused/final checks and docs pass. Record commands, failures/skips, live scope and remaining risk here; rename this plan to `Done-0110-work-composer-tool-toggle-plan.md` only when complete.
 - [ ] Rollback: revert only this workstream's runtime/test/doc hunks and reload the extension; preserve unrelated work. No publication/deployment is requested. Results / remaining risk: pending.
 
 ## Acceptance matrix
@@ -42,7 +42,7 @@
 | Requirement | Batch | Proof |
 | --- | --- | --- |
 | Chat remains a toggle; Work removes its selected tool | 01, 02 | Trusted fixture round trips and live Alt+Q in both modes |
-| Search, Study, Image, Research use correct selected-state routing | 01, 02 | Per-tool mode assertions; verified live structure/activation scope |
+| Search, Study, Image, Research use correct selected-state routing | 01, 02 | Per-tool mode assertions in the fast fixture; no extra live probes unless a mismatch appears |
 | Add Photos + Files retains its verified native boundary | 01, 02 | Ambiguity/activation assertions plus live inspection |
 | Draft and other tools survive; decoys cannot be removed | 01 | DOM/draft assertions and unavailable/wrong-modifier cases |
 | Fast validator catches the original bug; dependent tests stay accurate | 01, 02 | Inline-only mutation fails; extraction, focused and final contract checks pass |
