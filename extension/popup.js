@@ -59,6 +59,25 @@ const FALLBACK_MODEL_ACTION_GROUPS = [
     ],
   },
 ];
+function normalizeColorSettingsPatch(settings) {
+  const patch = { ...(settings || {}) };
+  if (
+    Object.hasOwn(patch, 'colorBoldTextEnabled') &&
+    typeof patch.colorBoldTextEnabled !== 'boolean'
+  ) {
+    delete patch.colorBoldTextEnabled;
+  }
+  for (const key of ['colorBoldTextLightColor', 'colorBoldTextDarkColor']) {
+    if (
+      Object.hasOwn(patch, key) &&
+      (typeof patch[key] !== 'string' || !/^#[0-9a-f]{6}$/i.test(patch[key]))
+    ) {
+      delete patch[key];
+    }
+  }
+  return patch;
+}
+
 const cloneModelActionGroups = (groups) =>
   (Array.isArray(groups) ? groups : []).map((group) => ({
     ...group,
@@ -242,12 +261,14 @@ const getPendingModelConfigTargetId = () => {
 };
 const getVisualActiveModelConfigId = () =>
   normalizeActiveModelConfigId(getPendingModelConfigTargetId() || window.__activeModelConfigId);
+let activeModelConfigRevision = 0;
 const setActiveModelConfigIdCache = (value, source = 'storage') => {
   const next = normalizeActiveModelConfigId(value);
   const pending = getPendingModelConfigTargetId();
   if (pending && isExternalActiveConfigSource(source) && next !== pending) {
     return getVisualActiveModelConfigId();
   }
+  if (source !== 'bootstrap') activeModelConfigRevision += 1;
   if (window.__activeModelConfigId === next) return next;
   window.__activeModelConfigId = next;
   document.dispatchEvent(
@@ -609,8 +630,12 @@ const applySelectedModelCatalogProfile = (source = 'popup') => {
   );
   return profile;
 };
+let modelCatalogProfileSelectionRevision = 0;
 const selectModelCatalogProfile = (profile, source = 'popup') => {
   const next = normalizeModelCatalogProfile(profile);
+  if (source === 'popup:profile' || source === 'storage:onChanged') {
+    modelCatalogProfileSelectionRevision += 1;
+  }
   if (source === 'popup:profile') {
     try {
       chrome.storage.sync.set({ [MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY]: next });
@@ -752,6 +777,8 @@ window.__pendingModelConfigTargetId = '';
 window.__modelCatalogScrapeState = 'idle';
 window.__modelCatalogRefreshPromptVisible = false;
 
+const startupActiveModelConfigRevision = activeModelConfigRevision;
+const startupModelCatalogProfileSelectionRevision = modelCatalogProfileSelectionRevision;
 try {
   chrome.storage.sync.get(
     [
@@ -765,38 +792,44 @@ try {
       MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY,
     ],
     (stored = {}) => {
-      window.__modelCatalogProfile = normalizeModelCatalogProfile(
-        stored[MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY],
-      );
-      setActiveModelConfigIdCache(stored.activeModelConfigId, 'bootstrap');
-      const genericProfile = stored.modelCatalog
-        ? getModelCatalogProfileForCatalog(stored.modelCatalog)
-        : '';
-      setModelCatalogCache(
-        stored.modelCatalogLatest ||
-          (genericProfile === MODEL_CATALOG_PROFILE_LATEST ? stored.modelCatalog : null),
-        'bootstrap',
-        MODEL_CATALOG_PROFILE_LATEST,
-      );
-      setModelCatalogCache(
-        stored.modelCatalogLegacy ||
-          (genericProfile === MODEL_CATALOG_PROFILE_LEGACY ? stored.modelCatalog : null),
-        'bootstrap',
-        MODEL_CATALOG_PROFILE_LEGACY,
-      );
-      setModelNamesProfileCache(
-        stored.modelNamesLatest ||
-          (genericProfile === MODEL_CATALOG_PROFILE_LATEST ? stored.modelNames : null),
-        MODEL_CATALOG_PROFILE_LATEST,
-        'bootstrap',
-      );
-      setModelNamesProfileCache(
-        stored.modelNamesLegacy ||
-          (genericProfile === MODEL_CATALOG_PROFILE_LEGACY ? stored.modelNames : null),
-        MODEL_CATALOG_PROFILE_LEGACY,
-        'bootstrap',
-      );
-      applySelectedModelCatalogProfile('bootstrap');
+      if (startupActiveModelConfigRevision === activeModelConfigRevision) {
+        setActiveModelConfigIdCache(stored.activeModelConfigId, 'bootstrap');
+      }
+      if (
+        startupModelCatalogProfileSelectionRevision === modelCatalogProfileSelectionRevision
+      ) {
+        window.__modelCatalogProfile = normalizeModelCatalogProfile(
+          stored[MODEL_CATALOG_SELECTED_PROFILE_STORAGE_KEY],
+        );
+        const genericProfile = stored.modelCatalog
+          ? getModelCatalogProfileForCatalog(stored.modelCatalog)
+          : '';
+        setModelCatalogCache(
+          stored.modelCatalogLatest ||
+            (genericProfile === MODEL_CATALOG_PROFILE_LATEST ? stored.modelCatalog : null),
+          'bootstrap',
+          MODEL_CATALOG_PROFILE_LATEST,
+        );
+        setModelCatalogCache(
+          stored.modelCatalogLegacy ||
+            (genericProfile === MODEL_CATALOG_PROFILE_LEGACY ? stored.modelCatalog : null),
+          'bootstrap',
+          MODEL_CATALOG_PROFILE_LEGACY,
+        );
+        setModelNamesProfileCache(
+          stored.modelNamesLatest ||
+            (genericProfile === MODEL_CATALOG_PROFILE_LATEST ? stored.modelNames : null),
+          MODEL_CATALOG_PROFILE_LATEST,
+          'bootstrap',
+        );
+        setModelNamesProfileCache(
+          stored.modelNamesLegacy ||
+            (genericProfile === MODEL_CATALOG_PROFILE_LEGACY ? stored.modelNames : null),
+          MODEL_CATALOG_PROFILE_LEGACY,
+          'bootstrap',
+        );
+        applySelectedModelCatalogProfile('bootstrap');
+      }
     },
   );
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -3154,6 +3187,8 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           const hydrateNonShortcutSettings = () => {
+            // The specialized picker callback uses this same normalization, so either read may finish last.
+            const colorSettings = normalizeColorSettingsPatch(data);
             allKeys.forEach((key) => {
               if (
                 key.startsWith('shortcutKey') ||
@@ -3166,12 +3201,19 @@ document.addEventListener('DOMContentLoaded', () => {
               if (!el) return;
 
               if (el.type === 'checkbox' || el.type === 'radio') {
-                el.checked = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
+                const value = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
+                el.checked =
+                  key === 'colorBoldTextEnabled' ? value === true : value;
                 return;
               }
 
               if (typeof DEFAULT_PRESET_DATA[key] === 'string') {
-                const raw = data[key] !== undefined ? data[key] : DEFAULT_PRESET_DATA[key];
+                const raw =
+                  key === 'colorBoldTextLightColor' || key === 'colorBoldTextDarkColor'
+                    ? (colorSettings[key] ?? DEFAULT_PRESET_DATA[key])
+                    : data[key] !== undefined
+                      ? data[key]
+                      : DEFAULT_PRESET_DATA[key];
                 el.value = key === 'copyCodeUserSeparator' ? sep_storageToUI(raw) : raw;
               }
             });
@@ -4632,7 +4674,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function importSettingsObj(src, { skipBrowserConfirm = false } = {}) {
       const keySet = getExportKeySet();
-      const next = {};
+      let next = {};
 
       Object.keys(src || {}).forEach((k) => {
         if (
@@ -4648,6 +4690,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         next[k] = Array.isArray(v) ? v.slice() : v;
       });
+      next = normalizeColorSettingsPatch(next);
 
       const latestKey =
         MODEL_PICKER_KEY_CODES_STORAGE_BY_PROFILE[MODEL_CATALOG_PROFILE_LATEST];
@@ -4879,9 +4922,10 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.get(
       ['colorBoldTextEnabled', 'colorBoldTextLightColor', 'colorBoldTextDarkColor'],
       (data) => {
-        const isEnabled = !!data.colorBoldTextEnabled;
-        const lightColor = data.colorBoldTextLightColor || COLOR_BOLD_LIGHT_DEFAULT;
-        const darkColor = data.colorBoldTextDarkColor || COLOR_BOLD_DARK_DEFAULT;
+        const colorSettings = normalizeColorSettingsPatch(data);
+        const isEnabled = colorSettings.colorBoldTextEnabled === true;
+        const lightColor = colorSettings.colorBoldTextLightColor ?? COLOR_BOLD_LIGHT_DEFAULT;
+        const darkColor = colorSettings.colorBoldTextDarkColor ?? COLOR_BOLD_DARK_DEFAULT;
 
         colorBoldTextEnabled.checked = isEnabled;
         toggleColorBoldTextUI(isEnabled);
@@ -6649,6 +6693,8 @@ enableEditableOpacity(
 // @note top of Sync Settings to Google IIFE
 //≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
 (() => {
+  let cloudSyncOperationActive = false;
+
   // Utilities
   const domReady = () =>
     new Promise((r) =>
@@ -6748,20 +6794,24 @@ enableEditableOpacity(
       btnSave.dataset.wired = '1';
       btnSave.addEventListener('click', async () => {
         const store = window.CloudStorage;
-        if (!store)
+        if (cloudSyncOperationActive) return;
+        if (!store) {
           return setStatus(
             chrome.i18n.getMessage('status_sync_unavailable') || 'Cloud sync unavailable.',
             'error',
           );
-
-        const granted = await ensureDriveAuth();
-        if (!granted) {
-          setStatus('Permission required to save to cloud.', 'error');
-          return;
         }
 
-        window.busy?.(btnSave, true);
+        cloudSyncOperationActive = true;
         try {
+          window.busy?.(btnSave, true);
+          window.busy?.(btnRestore, true);
+          const granted = await ensureDriveAuth();
+          if (!granted) {
+            setStatus('Permission required to save to cloud.', 'error');
+            return;
+          }
+
           setStatus(chrome.i18n.getMessage('status_saving') || 'Saving…');
           const local = await store.loadLocalSettings();
           await store.saveSyncedSettings(local);
@@ -6774,7 +6824,9 @@ enableEditableOpacity(
             'error',
           );
         } finally {
+          cloudSyncOperationActive = false;
           window.busy?.(btnSave, false);
+          window.busy?.(btnRestore, false);
         }
       });
     }
@@ -6817,28 +6869,32 @@ enableEditableOpacity(
 
       btnRestore.addEventListener('click', async () => {
         const store = window.CloudStorage;
-        if (!store)
+        if (cloudSyncOperationActive) return;
+        if (!store) {
           return setStatus(
             chrome.i18n.getMessage('status_restore_unavailable') || 'Cloud restore unavailable.',
             'error',
           );
-
-        // One combined prompt for identity + googleapis
-        const granted = await ensureDriveAuth();
-        if (!granted) {
-          setStatus('Permission required to restore from cloud.', 'error');
-          return;
         }
 
-        window.busy?.(btnRestore, true);
+        cloudSyncOperationActive = true;
         try {
+          window.busy?.(btnSave, true);
+          window.busy?.(btnRestore, true);
+          // One combined prompt for identity + googleapis
+          const granted = await ensureDriveAuth();
+          if (!granted) {
+            setStatus('Permission required to restore from cloud.', 'error');
+            return;
+          }
+
           setStatus(chrome.i18n.getMessage('status_restoring') || 'Restoring…');
           const remote = await store.loadSyncedSettings();
           if (!remote || Object.keys(remote).length === 0) {
             setStatus(chrome.i18n.getMessage('status_no_backup') || 'No backup found.', 'error');
             return;
           }
-          const portableRemote = { ...remote };
+          const portableRemote = normalizeColorSettingsPatch({ ...remote });
           MODEL_CATALOG_SCRAPE_STATE_KEYS.forEach((key) => {
             delete portableRemote[key];
           });
@@ -6859,6 +6915,8 @@ enableEditableOpacity(
             'error',
           );
         } finally {
+          cloudSyncOperationActive = false;
+          window.busy?.(btnSave, false);
           window.busy?.(btnRestore, false);
         }
       });

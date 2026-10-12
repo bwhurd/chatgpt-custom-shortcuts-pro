@@ -32,6 +32,22 @@ const legacyCatalog = {
   frontendByConfig: {},
 };
 
+const effortRaceCatalog = {
+  ...latestCatalog,
+  selectorShape: 'integrated-model-selection',
+  integratedModelMenu: true,
+  integratedEffort: true,
+  pillMenu: false,
+  frontendByConfig: {
+    'configure-dynamic-gpt-5-5': [
+      { available: true, id: 'effort-extra-high', label: 'Extra High', slot: 11 },
+    ],
+    'configure-dynamic-gpt-5-6-luna': [
+      { available: true, id: 'effort-max', label: 'Max', slot: 12 },
+    ],
+  },
+};
+
 const makeReportedLatestCodes = () => {
   const codes = Array(22).fill('');
   codes[3] = 'KeyH';
@@ -139,6 +155,58 @@ test('scrubbed model keys stop dispatch while preserved Chat and Work owners sta
   );
   expect(preservedChatOwner.status).toBe('pass');
   expect(preservedChatOwner.observed.effect.selected).toBe('configure-latest');
+});
+
+test('startup storage response does not drop a newly active Effort shortcut', async ({ page }) => {
+  const startupConfigId = 'configure-dynamic-gpt-5-5';
+  const changedConfigId = 'configure-dynamic-gpt-5-6-luna';
+  const codes = Array(22).fill('');
+  codes[12] = 'Digit7';
+
+  await page.setContent(
+    '<input id="composer"><div data-composer-surface="true"><button id="radix-fixture" class="__composer-pill" aria-haspopup="menu" aria-expanded="true"><span data-animated-slider-trigger="true">Models</span></button></div><div id="picker" role="menu" data-radix-menu-content data-state="open" aria-labelledby="radix-fixture"><div data-model-selection-view="true"><div data-model-picker-view="simple" data-testid="composer-model-picker-slider-simple-view" data-active="true"><div data-reasoning-slider="true"><span role="slider" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0"></span></div><button role="menuitemradio" data-fixture-model="configure-dynamic-gpt-5-6-luna" aria-checked="true"><div data-menu-row-content="true"><span>GPT-5.6 Luna</span></div></button></div></div></div>',
+  );
+  await page.evaluate(() => {
+    const trigger = document.querySelector('#radix-fixture');
+    const sliderControl = document.querySelector('[data-reasoning-slider]');
+    const slider = sliderControl.querySelector('[role="slider"]');
+    sliderControl.addEventListener('keydown', (event) => {
+      if (!['ArrowRight', 'ArrowLeft'].includes(event.key)) return;
+      const next =
+        Number(slider.getAttribute('aria-valuenow')) + (event.key === 'ArrowRight' ? 1 : -1);
+      slider.setAttribute('aria-valuenow', String(next));
+    });
+    window.triggerDirectComposerActivation = () => {
+      document.querySelector('#composer').focus();
+      trigger.setAttribute('aria-expanded', 'false');
+      document.querySelector('#picker')?.remove();
+    };
+  });
+
+  await installModelPickerFixture(page, contentSource, {
+    storage: {
+      activeModelConfigId: startupConfigId,
+      modelCatalog: effortRaceCatalog,
+      modelCatalogLatest: effortRaceCatalog,
+      modelPickerKeyCodesLatest: codes,
+    },
+    deferStorageGet: true,
+  });
+  await page.evaluate(
+    (activeModelConfigId) =>
+      new Promise((resolve) => window.chrome.storage.sync.set({ activeModelConfigId }, resolve)),
+    changedConfigId,
+  );
+  expect(await page.evaluate(() => window.flushFixtureStorageGet())).toBe(true);
+  await page.waitForFunction(
+    () => typeof window.__cspRunProThinkingEffortAction === 'function',
+    null,
+    { timeout: 2000 },
+  );
+
+  await page.locator('#composer').focus();
+  await page.keyboard.press('Alt+Digit7');
+  await expect(page.locator('[role="slider"]')).toHaveAttribute('aria-valuenow', '4');
 });
 
 test('overlay model hints omit scrubbed owners and retain assigned hints in both profiles', async ({

@@ -76,8 +76,10 @@ const extracted = report.catalogueOnly
       if (['model-slot', 'model-unassigned'].includes(item.type)) return null;
       return extractFastRuntime(content, item.actionId);
     });
+const runnable = report.catalogueOnly ? [] : selected;
+report.selection.runnableActionIds = runnable.map((item) => item.actionId);
 report.timings = { catalogueMs: performance.now() - started };
-if (!args.includes('--catalog-only') && selected.length) {
+if (runnable.length) {
   let browser;
   const boot = performance.now();
   try {
@@ -193,7 +195,7 @@ if (!args.includes('--catalog-only') && selected.length) {
         const composerMarkup =
           item.type === 'control-gate'
             ? '<form id="native-composer"><div id="composer" class="ProseMirror" contenteditable="true" role="textbox">Draft</div></form>'
-            : `<form data-thread-find-composer="true"><div hidden class="ProseMirror" contenteditable="true" role="textbox">Hidden distractor</div><div id="composer" class="ProseMirror" contenteditable="true" role="textbox"${isNewConversation ? ' style="min-height: 1em"' : ''}>${isNewConversation ? '' : 'Draft'}</div></form>`;
+            : `<form data-thread-find-composer="true"><div hidden class="ProseMirror" contenteditable="true" role="textbox">Hidden distractor</div><div id="composer" class="ProseMirror" contenteditable="true" role="textbox"${isNewConversation ? ' style="min-height: 1em"' : ''}>${isNewConversation ? '' : 'Draft'}</div>${item.type === 'menu-cascade' ? '<div id="tool-footer" data-composer-footer-responsive="true"></div>' : ''}</form>`;
         await page.setContent(
           `<input id="search" role="textbox"><div contenteditable="true" role="textbox" id="edit">Edit distractor</div>${isNewConversation ? `<main id="thread-turns">${existingTurns}</main>` : ''}${composerMarkup}`,
         );
@@ -405,9 +407,29 @@ if (!args.includes('--catalog-only') && selected.length) {
           const persistentTool = item.actionId !== 'shortcutKeyAddPhotosFiles';
           if (study)
             row.pathScope =
-              'Plus opens before the owned Study query is typed; extracted shortcut selects the scoped Study pill, and a second trusted press removes it from the empty composer.';
+              'The Chat fixture exercises Study and its owned query. The controlled Work footer-button simulation verifies shared removal routing; the current live Work menu does not expose Study.';
+          else if (persistentTool)
+            row.pathScope =
+              'Chat inline-pill and controlled Work footer-button fixtures exercise the extracted shortcut through add, remove, and re-add transitions; live Work availability is verified separately.';
           await page.evaluate(
-            ({ icon, study, addPhotosFiles, persistentTool, query }) => {
+            ({ icon, workIcon, study, addPhotosFiles, persistentTool, query }) => {
+              window.fixtureToolIcon = icon;
+              window.fixtureWorkToolIcon = workIcon || icon;
+              document.body.dataset.fixtureMode = 'chat';
+              document.body.insertAdjacentHTML(
+                'afterbegin',
+                '<button type="button" id="chat-mode" aria-pressed="true">Chat</button><button type="button" id="work-mode" aria-pressed="false">Work</button>',
+              );
+              document.querySelector('#chat-mode').onclick = () => {
+                document.body.dataset.fixtureMode = 'chat';
+                document.querySelector('#chat-mode').setAttribute('aria-pressed', 'true');
+                document.querySelector('#work-mode').setAttribute('aria-pressed', 'false');
+              };
+              document.querySelector('#work-mode').onclick = () => {
+                document.body.dataset.fixtureMode = 'work';
+                document.querySelector('#chat-mode').setAttribute('aria-pressed', 'false');
+                document.querySelector('#work-mode').setAttribute('aria-pressed', 'true');
+              };
               document
                 .querySelector('form')
                 .insertAdjacentHTML(
@@ -450,23 +472,43 @@ if (!args.includes('--catalog-only') && selected.length) {
                   window.fixtureClicks.push('tool-target');
                   composer.dataset.toolEnabled = 'true';
                   if (persistentTool) {
-                    const pill = `<span data-inline-selection-pill ${study ? 'data-system-hint-type="tatertot"' : ''} contenteditable="false">${icon}<span>${study ? 'Study' : 'Web search'}</span></span>`;
-                    if (study) {
-                      composer.innerHTML = pill;
-                      window.studyOwnedQuery = null;
-                    } else composer.insertAdjacentHTML('afterbegin', pill);
-                  }
-                  composer.addEventListener('input', () => {
-                    if (!composer.querySelector('[data-inline-selection-pill]')) {
-                      delete composer.dataset.toolEnabled;
-                      delete composer.dataset.studyEnabled;
-                      delete composer.dataset.systemHintType;
+                    if (document.body.dataset.fixtureMode === 'work') {
+                      if (study && composer.innerText.toLowerCase().endsWith(query)) {
+                        const preservedDraft = composer.innerText.slice(0, -query.length).trimEnd();
+                        composer.replaceChildren(document.createTextNode(preservedDraft));
+                      }
+                      const selectedButton = document.createElement('button');
+                      selectedButton.type = 'button';
+                      selectedButton.dataset.testid = 'work-selected-tool';
+                      selectedButton.innerHTML = `${window.fixtureWorkToolIcon}<svg><path d="M10.7997 2.48486" /></svg><span>${study ? 'Study' : 'Selected tool'}</span>`;
+                      selectedButton.onclick = () => {
+                        window.fixtureClicks.push('tool-remove');
+                        selectedButton.remove();
+                        delete composer.dataset.toolEnabled;
+                        delete composer.dataset.studyEnabled;
+                        delete composer.dataset.systemHintType;
+                      };
+                      document.querySelector('#tool-footer').append(selectedButton);
+                    } else {
+                      const pill = `<span data-inline-selection-pill ${study ? 'data-system-hint-type="tatertot"' : ''} contenteditable="false">${icon}<span>${study ? 'Study' : 'Web search'}</span></span>`;
+                      if (study) {
+                        composer.innerHTML = pill;
+                        window.studyOwnedQuery = null;
+                      } else composer.insertAdjacentHTML('afterbegin', pill);
+                      composer.addEventListener('input', () => {
+                        if (!composer.querySelector('[data-inline-selection-pill]')) {
+                          delete composer.dataset.toolEnabled;
+                          delete composer.dataset.studyEnabled;
+                          delete composer.dataset.systemHintType;
+                        }
+                      });
                     }
-                  });
+                  }
                   if (study) {
                     composer.dataset.studyEnabled = 'true';
                     composer.dataset.systemHintType = 'tatertot';
                   }
+                  document.querySelector('[role="menu"]')?.remove();
                 };
                 document.querySelector('#tool-distractor').onclick = () =>
                   window.fixtureClicks.push('tool-distractor');
@@ -474,6 +516,7 @@ if (!args.includes('--catalog-only') && selected.length) {
             },
             {
               icon: item.fixtureIcon,
+              workIcon: item.fixtureWorkSelectedIcon,
               study,
               addPhotosFiles,
               persistentTool,
@@ -1153,6 +1196,7 @@ if (!args.includes('--catalog-only') && selected.length) {
               'Persistence requests must reflect both state transitions in memory only',
             );
           } else if (item.type === 'menu-cascade') {
+            const study = item.actionId === 'shortcutKeyStudy';
             if (item.actionId === 'shortcutKeyAddPhotosFiles') {
               await page.waitForFunction(() => window.fixtureClicks.includes('tool-opener'), null, {
                 timeout: 2000,
@@ -1231,31 +1275,202 @@ if (!args.includes('--catalog-only') && selected.length) {
               );
             }
             if (item.actionId !== 'shortcutKeyAddPhotosFiles') {
-              assert.equal(
-                await page.locator('#composer [data-inline-selection-pill]').count(),
-                1,
-                'The first shortcut press should leave its matching tool pill selected',
-              );
-              await page.keyboard.press(`Alt+${code}`);
-              await page.waitForFunction(
-                () => !document.querySelector('#composer [data-inline-selection-pill]'),
-                null,
-                { timeout: 1000 },
-              );
-              assert.equal(
-                await page.locator('#composer').innerText(),
-                item.actionId === 'shortcutKeyStudy' ? '' : 'Draft',
-                item.actionId === 'shortcutKeyStudy'
-                  ? 'The second Study press must leave the originally empty composer empty'
-                  : 'Toggling the tool off must preserve any draft text',
-              );
-              assert.deepEqual(
-                await page.evaluate(() => window.fixtureClicks),
+              const firstModeClicks =
                 item.actionId === 'shortcutKeyStudy'
                   ? ['tool-target']
-                  : ['tool-opener', 'tool-target'],
-                'Toggling an active pill must not reopen the menu or click a second action',
-              );
+                  : ['tool-opener', 'tool-target'];
+              const selectionCount = (mode) =>
+                page.evaluate((selectedMode) => {
+                  const composer = document.querySelector('#composer');
+                  const draft = composer.cloneNode(true);
+                  draft.querySelectorAll('[data-inline-selection-pill]').forEach((pill) => {
+                    pill.remove();
+                  });
+                  return {
+                    inline: composer.querySelectorAll('[data-inline-selection-pill]').length,
+                    work: document.querySelectorAll(
+                      '#tool-footer [data-testid="work-selected-tool"]',
+                    ).length,
+                    mode: document.body.dataset.fixtureMode,
+                    draft: draft.innerText.trim(),
+                    legacyInlineOnlyMatch:
+                      composer.querySelectorAll('[data-inline-selection-pill]').length > 0 &&
+                      selectedMode === 'chat',
+                  };
+                }, mode);
+              const assertSelected = async (mode, expectedDraft) => {
+                const state = await selectionCount(mode);
+                assert.equal(
+                  state.mode,
+                  mode,
+                  'Tool selection must belong to the active fixture mode',
+                );
+                assert.equal(state.inline, mode === 'chat' ? 1 : 0);
+                assert.equal(state.work, mode === 'work' ? 1 : 0);
+                assert.equal(state.draft, expectedDraft, 'Tool selection must preserve the draft');
+              };
+              const expectedDraft = item.actionId === 'shortcutKeyStudy' ? '' : 'Draft';
+              const modeProofs = {};
+              for (const mode of ['chat', 'work']) {
+                if (mode === 'work') {
+                  await page.locator('#work-mode').click();
+                  await page.evaluate(() => {
+                    document
+                      .querySelector('#composer')
+                      .replaceChildren(document.createTextNode('Draft'));
+                    document.querySelector('#tool-footer').replaceChildren();
+                    window.fixtureClicks = [];
+                    const icon = window.fixtureWorkToolIcon;
+                    const footer = document.querySelector('#tool-footer');
+                    footer.insertAdjacentHTML(
+                      'beforeend',
+                      `<button type="button" id="hidden-work-decoy" hidden>${icon}<svg><path d="M10.7997 2.48486" /></svg></button><button type="button" id="disabled-work-decoy" disabled>${icon}<svg><path d="M10.7997 2.48486" /></svg></button><button type="button" id="wrong-work-decoy"><svg><path d="M0 0" /></svg></button>`,
+                    );
+                    document.body.insertAdjacentHTML(
+                      'beforeend',
+                      `<button type="button" id="outside-work-decoy">${icon}<svg><path d="M10.7997 2.48486" /></svg></button>`,
+                    );
+                  });
+                  await page.locator('#composer').click();
+                  await page.keyboard.press(`Alt+${code}`);
+                  await page.waitForFunction(
+                    () => document.querySelector('#composer').dataset.toolEnabled === 'true',
+                    null,
+                    { timeout: 2000 },
+                  );
+                  assert.deepEqual(
+                    await page.evaluate(() => window.fixtureClicks),
+                    ['tool-opener', 'tool-target'],
+                    'Work selection must activate only the active form menu target',
+                  );
+                  const iconTokenKey = item.actionId
+                    .slice('shortcutKey'.length)
+                    .replace(/^[A-Z]/, (letter) => letter.toLowerCase());
+                  if (study) {
+                    await page.locator('#tool-opener').click();
+                    await page.locator('#composer').evaluate((composer) => {
+                      composer.focus();
+                      const selection = window.getSelection();
+                      const range = document.createRange();
+                      range.selectNodeContents(composer);
+                      range.collapse(false);
+                      selection.removeAllRanges();
+                      selection.addRange(range);
+                      document.execCommand('insertText', false, ' study');
+                    });
+                    await page.waitForFunction(
+                      () => !document.querySelector('#tool-target')?.hidden,
+                      null,
+                      { timeout: 1000 },
+                    );
+                  }
+                  await page.evaluate((key) => {
+                    window.fixtureClicks = [];
+                    return window.__cspRunComposerToolAddForFixture(key);
+                  }, iconTokenKey);
+                  await page.waitForFunction(
+                    () =>
+                      document.querySelectorAll('#tool-footer [data-testid="work-selected-tool"]')
+                        .length === 2,
+                    null,
+                    { timeout: 2000 },
+                  );
+                  assert.deepEqual(
+                    await page.evaluate(() => window.fixtureClicks),
+                    study ? ['tool-target'] : ['tool-opener', 'tool-target'],
+                    'The former add-only path must reproduce a duplicate Work selection',
+                  );
+                  await page.evaluate(() => {
+                    const selected = document.querySelectorAll(
+                      '#tool-footer [data-testid="work-selected-tool"]',
+                    );
+                    selected[1].remove();
+                    window.fixtureClicks = [];
+                  });
+                  row.legacyResolverProof = 'add-only fallback duplicated the Work selection';
+                }
+                const modeClicks = mode === 'work' ? [] : firstModeClicks;
+                const modeDraft = mode === 'work' ? 'Draft' : expectedDraft;
+                await assertSelected(mode, modeDraft);
+                if (mode === 'work') {
+                  const state = await selectionCount(mode);
+                  assert.equal(
+                    state.legacyInlineOnlyMatch,
+                    false,
+                    'The former inline-only resolver cannot see a Work footer selection',
+                  );
+                  await page
+                    .locator('#tool-footer [data-testid="work-selected-tool"]')
+                    .evaluate((button) => {
+                      const ambiguous = button.cloneNode(true);
+                      ambiguous.removeAttribute('data-testid');
+                      ambiguous.id = 'ambiguous-work-selection';
+                      button.parentElement.append(ambiguous);
+                    });
+                  await page.keyboard.press(`Alt+${code}`);
+                  assert.equal(
+                    await page.locator('#ambiguous-work-selection').count(),
+                    1,
+                    'The ambiguous Work decoy must remain untouched',
+                  );
+                  assert.equal(
+                    await page.locator('#tool-footer [data-testid="work-selected-tool"]').count(),
+                    1,
+                    'Ambiguous selected Work buttons must leave the original selection untouched',
+                  );
+                  assert.deepEqual(
+                    await page.evaluate(() => window.fixtureClicks),
+                    [],
+                    'An ambiguous selection must not remove a tool or reopen its menu',
+                  );
+                  await page
+                    .locator('#ambiguous-work-selection')
+                    .evaluate((button) => button.remove());
+                }
+                await page.keyboard.press(`Alt+${code}`);
+                await page.waitForFunction(
+                  (selectedMode) =>
+                    selectedMode === 'work'
+                      ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
+                      : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  mode,
+                  { timeout: 1000 },
+                );
+                assert.deepEqual(
+                  await page.evaluate(() => window.fixtureClicks),
+                  mode === 'work' ? ['tool-remove'] : modeClicks,
+                  'The second press must remove only the selected tool without reopening its menu',
+                );
+                assert.equal(
+                  await page.locator('#composer').innerText(),
+                  modeDraft,
+                  'Removing a selected tool must preserve the draft',
+                );
+                modeProofs[mode] = ['added', 'removed'];
+                await page.locator('#composer').click();
+                await page.keyboard.press(`Alt+${code}`);
+                await page.waitForFunction(
+                  (selectedMode) =>
+                    selectedMode === 'work'
+                      ? !!document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
+                      : !!document.querySelector('#composer [data-inline-selection-pill]'),
+                  mode,
+                  { timeout: 2000 },
+                );
+                await assertSelected(mode, modeDraft);
+                modeProofs[mode].push('re-added-once');
+                await page.keyboard.press(`Alt+${code}`);
+                await page.waitForFunction(
+                  (selectedMode) =>
+                    selectedMode === 'work'
+                      ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
+                      : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  mode,
+                  { timeout: 1000 },
+                );
+                modeProofs[mode].push('removed-again');
+              }
+              row.modeProofs = modeProofs;
             }
           } else {
             assert.deepEqual(
@@ -1370,29 +1585,34 @@ if (!args.includes('--catalog-only') && selected.length) {
       row.endedMs = performance.now() - started;
       report.observations.push(row);
     };
-    const parallel = selected.filter((item) => item.parallelSafe);
+    const parallel = runnable.filter((item) => item.parallelSafe);
     report.scheduling = {
       maxParallelTabs: Math.min(DEFAULT_TAB_LIMIT, parallel.length),
       tabLimit: DEFAULT_TAB_LIMIT,
       parallel: parallel.map((item) => item.actionId),
-      serial: selected.filter((item) => !item.parallelSafe).map((item) => item.actionId),
+      serial: runnable.filter((item) => !item.parallelSafe).map((item) => item.actionId),
     };
     const settledCase = async (item) => {
+      const caseStarted = performance.now();
       try {
         await runCase(item);
       } catch (error) {
+        const caseEnded = performance.now();
         report.observations.push({
           actionId: item.actionId,
           attempted: true,
           proofScope: 'fixture-keyboard',
           status: 'fail',
           reason: error.message,
+          startedMs: caseStarted - started,
+          durationMs: caseEnded - caseStarted,
+          endedMs: caseEnded - started,
         });
       }
     };
     await settleTabPool(parallel, settledCase);
     // Shared-state families start only after all tab-local work has settled.
-    for (const item of selected.filter((entry) => !entry.parallelSafe)) await settledCase(item);
+    for (const item of runnable.filter((entry) => !entry.parallelSafe)) await settledCase(item);
     const parallelRows = report.observations.filter((row) =>
       report.scheduling.parallel.includes(row.actionId),
     );
@@ -1421,7 +1641,7 @@ if (!args.includes('--catalog-only') && selected.length) {
       );
     }
   } catch (error) {
-    for (const item of selected.filter(
+    for (const item of runnable.filter(
       (entry) => !report.observations.some((row) => row.actionId === entry.actionId),
     ))
       report.observations.push({
@@ -1441,7 +1661,7 @@ if (!args.includes('--catalog-only') && selected.length) {
 }
 report.timings.executionMs = performance.now() - started;
 for (const row of report.observations) {
-  const item = selected.find((entry) => entry.actionId === row.actionId);
+  const item = runnable.find((entry) => entry.actionId === row.actionId);
   if (item && !row.bindingScope)
     row.bindingScope = item.fixtureCode
       ? 'fixture-only-assignment'

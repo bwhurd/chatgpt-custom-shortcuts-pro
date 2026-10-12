@@ -94,16 +94,21 @@
   const STYLE_ID = 'csp-color-bold-text-style';
   const DEFAULT_LIGHT_COLOR = '#2037e6';
   const DEFAULT_DARK_COLOR = '#4da3ff';
+  const isValidColor = (value) => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 
   const host = () => document.head || document.documentElement;
 
-  const buildCSS = (lightColor, darkColor) => `
-    :root[data-theme="light"] b, :root[data-theme="light"] strong { color: ${lightColor} !important; }
-    :root[data-theme="dark"] b, :root[data-theme="dark"] strong { color: ${darkColor} !important; }
-  `;
+  const buildCSS = (lightColor, darkColor) => {
+    const safeLightColor = isValidColor(lightColor) ? lightColor : DEFAULT_LIGHT_COLOR;
+    const safeDarkColor = isValidColor(darkColor) ? darkColor : DEFAULT_DARK_COLOR;
+    return `
+      :root[data-theme="light"] b, :root[data-theme="light"] strong { color: ${safeLightColor} !important; }
+      :root[data-theme="dark"] b, :root[data-theme="dark"] strong { color: ${safeDarkColor} !important; }
+    `;
+  };
 
   const enable = (lightColor, darkColor) => {
-    const css = buildCSS(lightColor || DEFAULT_LIGHT_COLOR, darkColor || DEFAULT_DARK_COLOR);
+    const css = buildCSS(lightColor, darkColor);
     let s = document.getElementById(STYLE_ID);
     if (s) {
       s.textContent = css;
@@ -121,7 +126,7 @@
   };
 
   const apply = (on, lightColor, darkColor) => {
-    if (on) {
+    if (on === true) {
       enable(lightColor, darkColor);
     } else {
       disable();
@@ -136,7 +141,7 @@
       colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
     },
     ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
-      apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
+      apply(colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
     },
   );
 
@@ -158,7 +163,7 @@
         colorBoldTextDarkColor: DEFAULT_DARK_COLOR,
       },
       ({ colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor }) => {
-        apply(!!colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
+        apply(colorBoldTextEnabled, colorBoldTextLightColor, colorBoldTextDarkColor);
       },
     );
   });

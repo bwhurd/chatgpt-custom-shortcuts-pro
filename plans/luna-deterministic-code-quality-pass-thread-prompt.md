@@ -1,10 +1,10 @@
-/goal Audit maintained code and implement consequential improvements to correctness, determinism, recurring cost, and simplicity using plans/0109-deterministic-code-quality-pass-plan.md. Work on one earliest unfinished batch per execution turn. Keep the goal active across automatic continuations without asking me to say "continue." Finish only after all five batches and the final acceptance gate are proven.
+/goal Audit maintained code and implement consequential improvements to correctness, determinism, recurring cost, and simplicity using the completed record in plans/Done-0109-deterministic-code-quality-pass-plan.md. The five batches and final acceptance gate are complete; reopen work only for a newly identified issue.
 
 # GPT-6-Luna Max audit and repair handoff
 
 Use GPT-6-Luna with Max reasoning. This prompt does not switch models. Work in the current repository task; do not launch another task. All paths below are relative to the repository root.
 
-Plan: `plans/0109-deterministic-code-quality-pass-plan.md`.
+Plan: `plans/Done-0109-deterministic-code-quality-pass-plan.md`.
 Paired prompt: `plans/luna-deterministic-code-quality-pass-thread-prompt.md`.
 
 ## Outcome
@@ -21,7 +21,7 @@ Read `AGENTS.md`, the plan, relevant `PROJECT_SPEC.md` sections, and only the ow
 4. **Developer code and evidence reliability:** check failure/status propagation, empty or stale evidence, source-backed fixtures and cleanup; complete remaining triage/review at the stated depth.
 5. **Combined acceptance and closure:** prove the aggregate changes, reconcile findings and coverage, update owning docs when necessary, and archive only when required gates pass.
 
-The active 0087 audit provides hypotheses. Read relevant findings once and verify them; do not duplicate its reports or wait for that audit to finish. Current planning inspection found retry failure paths in `storage.js`, but these still need isolated behavioral proof. The historical Send Edit candidate-search migration was not found in current source; never recreate it just to satisfy CSP-AUD-007. Record any 0087 evidence invalidated by source edits once at closure, leaving its records intact.
+The active 0087 audit provides hypotheses. Read relevant findings once and verify them; do not duplicate its reports or wait for that audit to finish. B02 already records a pre-fix 401→403 false-success reproduction and actual-source focused fixtures for corrected storage retry outcomes; reuse that proof and rerun it only if relevant inputs change. The historical Send Edit candidate-search migration was not found in current source; never recreate it just to satisfy CSP-AUD-007. Record any 0087 evidence invalidated by source edits once at closure, leaving its records intact.
 
 ## Work and proof contract
 
@@ -41,6 +41,6 @@ Follow the repository’s official-docs/upstream research route when diagnosing 
 
 At each turn, work on the earliest unfinished batch and update its gate: `[ ]` not started, `[~]` incomplete, `[x]` proven, `[!]` concrete blocker. Record useful progress and yield after that batch; retain the overall goal across automatic continuations. An unfinished batch may span turns. Continue independent work within it while resolving blockers. Follow the host’s goal-status rules; never mark completion merely to stop.
 
-On resume, read the checkpoint and relevant results, compare changed inputs, and reopen only affected evidence. At completion, all five batch gates and every accepted repair must be proven; reconcile each deferred finding and its next action. Rename the plan to `plans/Done-0109-deterministic-code-quality-pass-plan.md` and update this prompt’s references in the same closure step. No deployment is required.
+The completed plan records all five batch gates, final acceptance evidence, remaining external follow-ups, and deferred review areas. Do not reopen completed batches unless the user identifies a new issue. No deployment was required.
 
 Return concrete improvements and their evidence, review depth and limits, meaningful deferrals, check results, any 0087 evidence needing revalidation, and links to the final plan and prompt. Do not equate an archived plan with every possible improvement having been made.

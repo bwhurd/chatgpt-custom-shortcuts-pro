@@ -36,13 +36,51 @@ if (!version || typeof version !== 'string') {
   process.exit(1);
 }
 
-// 2. Ensure dist/ exists
+// 2. Require every configured input before creating the output archive
+const includeItems = [
+  'manifest.json',
+  '_locales',
+  'lib',
+  'vendor',
+  'shared',
+  'background.js',
+  'content.js',
+  'content-gated-ui-features.js',
+  'composer-layout.css',
+  'composer-layout-bootstrap.js',
+  'popup.js',
+  'popup.html',
+  'popup.css',
+  'options-storage.js',
+  'settings-schema.js',
+  'storage.js',
+  'auth.js',
+  'icon128.png',
+  'icon48.png',
+  'icon32.png',
+  'icon16.png',
+];
+
+const defaultLocaleMessages =
+  typeof manifest.default_locale === 'string' && manifest.default_locale.length > 0
+    ? `_locales/${manifest.default_locale}/messages.json`
+    : null;
+const requiredItems = defaultLocaleMessages
+  ? [...includeItems, defaultLocaleMessages]
+  : includeItems;
+const missingItems = requiredItems.filter((item) => !fs.existsSync(path.join(extensionDir, item)));
+if (missingItems.length > 0) {
+  console.error(`Missing required input(s): ${missingItems.join(', ')}`);
+  process.exit(1);
+}
+
+// 3. Ensure dist/ exists
 const distDir = path.join(repoRoot, 'dist');
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir);
 }
 
-// 3. Create output zip stream (auto-number if existing)
+// 4. Create output zip stream (auto-number if existing)
 let finalZipPath = path.join(distDir, `${version}.zip`);
 let counter = 1;
 while (fs.existsSync(finalZipPath)) {
@@ -83,44 +121,16 @@ archive.on('error', (err) => {
 
 archive.pipe(output);
 
-// 4. Add only the allowed folders/files
-const includeItems = [
-  'manifest.json',
-  '_locales',
-  'lib',
-  'vendor',
-  'shared',
-  'background.js',
-  'content.js',
-  'content-gated-ui-features.js',
-  'composer-layout.css',
-  'composer-layout-bootstrap.js',
-  'popup.js',
-  'popup.html',
-  'popup.css',
-  'options-storage.js',
-  'settings-schema.js',
-  'storage.js',
-  'auth.js',
-  'icon128.png',
-  'icon48.png',
-  'icon32.png',
-  'icon16.png',
-];
-
+// 5. Add all configured folders/files
 includeItems.forEach((item) => {
   const itemPath = path.join(extensionDir, item);
-  if (fs.existsSync(itemPath)) {
-    const stats = fs.statSync(itemPath);
-    if (stats.isDirectory()) {
-      addDirectoryRecursive(itemPath, item);
-    } else {
-      archive.file(itemPath, { name: item });
-    }
+  const stats = fs.statSync(itemPath);
+  if (stats.isDirectory()) {
+    addDirectoryRecursive(itemPath, item);
   } else {
-    console.warn(`Skipping missing: ${item}`);
+    archive.file(itemPath, { name: item });
   }
 });
 
-// 5. Finalize zip
+// 6. Finalize zip
 archive.finalize();

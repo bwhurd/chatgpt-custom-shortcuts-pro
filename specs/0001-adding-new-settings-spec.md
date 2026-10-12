@@ -319,6 +319,7 @@ When adding a new setting, validate at the level that matches the setting type.
 
 - stored value changes in `chrome.storage.sync`
 - default value is correct on a clean path
+- For bold-text color settings, omit malformed toggle values and non-`#RRGGBB` colors from file-import and cloud-restore patches while retaining valid sibling fields; runtime consumers require exact boolean `true` and use default colors for malformed stored colors.
 
 ### Feature-off validation
 

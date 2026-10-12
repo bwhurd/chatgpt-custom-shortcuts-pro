@@ -42,6 +42,7 @@
     "playwright:chatgpt:wiggle-check": "node tests/playwright/chatgpt-wiggle-check.mjs",
     "test:popup-visual": "node scripts/run-popup-tests.js",
     "test:popup-visual:update": "node scripts/run-popup-tests.js --update-snapshots",
+    "test:zip-builder": "node tests/build-zip-required-includes-fixture.mjs",
     "zip": "node scripts/build-zip.js"
   },
   "keywords": [],

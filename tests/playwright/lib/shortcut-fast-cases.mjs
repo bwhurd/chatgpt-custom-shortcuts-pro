@@ -211,6 +211,7 @@ export const FAST_CASES = [
     type: 'menu-cascade',
     fixture: 'composer-tools',
     fixtureIcon: '<svg><path d="M12 2c5.522" /></svg>',
+    fixtureWorkSelectedIcon: '<svg><path d="M10 2.125" /></svg>',
     parallelSafe: true,
   },
   {
@@ -295,6 +296,7 @@ export async function preflightFastCases(report, selected, extract) {
       selected.splice(index, 1);
     }
   }
+  if (report.selection) report.selection.runnableActionIds = selected.map((item) => item.actionId);
   return extracted;
 }
 const FIXED_FAST_PROOFS = {
@@ -796,6 +798,91 @@ export function selectFastCases(report, requested = [], types = []) {
 export function fastReportOutcome(report) {
   const summary = summarizeFastReport(report);
   const errors = report.issues.filter((issue) => issue.fatal);
+  const runnableActionIds =
+    report.selection?.runnableActionIds ?? report.selection?.actionIds ?? [];
+  const hasRunnableActions = !report.catalogueOnly && runnableActionIds.length > 0;
+  const timingErrors =
+    !report.catalogueOnly && report.scheduling
+      ? report.observations.flatMap((observation, index) => {
+          if (observation.status !== 'pass') return [];
+          const invalid = [];
+          const finiteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+          if (!finiteNumber(observation.startedMs) || observation.startedMs < 0)
+            invalid.push('startedMs must be a finite non-negative number');
+          if (!finiteNumber(observation.endedMs) || observation.endedMs < 0)
+            invalid.push('endedMs must be a finite non-negative number');
+          if (!finiteNumber(observation.durationMs) || observation.durationMs < 0)
+            invalid.push('durationMs must be a finite non-negative number');
+          if (
+            finiteNumber(observation.startedMs) &&
+            finiteNumber(observation.endedMs) &&
+            observation.endedMs < observation.startedMs
+          )
+            invalid.push('endedMs must not precede startedMs');
+          if (
+            finiteNumber(observation.startedMs) &&
+            finiteNumber(observation.endedMs) &&
+            finiteNumber(observation.durationMs) &&
+            observation.durationMs >= 0
+          ) {
+            const elapsedMs = observation.endedMs - observation.startedMs;
+            const toleranceMs = Math.max(0.01, Math.abs(elapsedMs) * Number.EPSILON * 8);
+            if (observation.durationMs > elapsedMs + toleranceMs)
+              invalid.push('durationMs exceeds the scheduled observation interval');
+          }
+          return invalid.length
+            ? [
+                {
+                  owner: 'timing-integrity',
+                  rowId: observation.rowId,
+                  message: `Scheduled passing observation ${observation.actionId || observation.fixtureId || index + 1} has invalid timing: ${invalid.join('; ')}.`,
+                },
+              ]
+            : [];
+        })
+      : [];
+  const schedulingErrors = [];
+  if (hasRunnableActions) {
+    if (
+      !report.scheduling ||
+      typeof report.scheduling !== 'object' ||
+      Array.isArray(report.scheduling)
+    )
+      schedulingErrors.push({
+        owner: 'scheduling-integrity',
+        message: 'Fast-check scheduling evidence is missing for runnable actions.',
+      });
+    else {
+      const invalid = [];
+      if (report.scheduling.serialBarrierPassed !== true)
+        invalid.push('serialBarrierPassed must be true');
+      const observedParallelTabs = report.scheduling.observedParallelTabs;
+      if (
+        typeof observedParallelTabs !== 'number' ||
+        !Number.isFinite(observedParallelTabs) ||
+        observedParallelTabs < 0
+      )
+        invalid.push('observedParallelTabs must be a finite non-negative number');
+      else if (observedParallelTabs > DEFAULT_TAB_LIMIT)
+        invalid.push(`observedParallelTabs must not exceed ${DEFAULT_TAB_LIMIT}`);
+      if (invalid.length)
+        schedulingErrors.push({
+          owner: 'scheduling-integrity',
+          message: `Fast-check scheduling evidence is invalid: ${invalid.join('; ')}.`,
+        });
+    }
+  }
+  errors.push(...timingErrors);
+  errors.push(...schedulingErrors);
+  const noRunnableCases =
+    !report.catalogueOnly && Boolean(report.selection) && runnableActionIds.length === 0;
+  if (noRunnableCases)
+    errors.push({
+      owner: 'command-line',
+      message: report.selection?.actionIds?.length
+        ? 'No runnable fast-check cases remained after source preflight.'
+        : 'No runnable fast-check cases matched the requested action/type selection.',
+    });
   const selectedActionIds = new Set(report.selection?.actionIds || []);
   const unprovenDerivedContracts = report.catalogueOnly
     ? []
@@ -837,11 +924,12 @@ export function fastReportOutcome(report) {
       })),
   ];
   const failed =
+    noRunnableCases ||
     summary.failed ||
     summary.environmentFailed ||
-    report.issues.some((issue) => issue.fatal) ||
-    report.scheduling?.serialBarrierPassed === false ||
-    report.scheduling?.observedParallelTabs > DEFAULT_TAB_LIMIT;
+    timingErrors.length > 0 ||
+    schedulingErrors.length > 0 ||
+    report.issues.some((issue) => issue.fatal);
   return {
     exitCode: failed ? 1 : 0,
     status: failed ? 'failure' : warnings.length ? 'success-with-warnings' : 'success',
@@ -850,7 +938,7 @@ export function fastReportOutcome(report) {
       : report.selection?.filtered
         ? 'filtered'
         : 'full-controlled',
-    coverage: warnings.length ? 'partial' : 'complete-controlled',
+    coverage: warnings.length || noRunnableCases ? 'partial' : 'complete-controlled',
     checks: summary.attempted ? `${report.observations.length} checks recorded` : 'No checks ran',
     warnings,
     errors,
@@ -1441,6 +1529,8 @@ export async function extractFastRuntime(content, actionId) {
         'COMPOSER_TOOL_MENU_OPENER_SELECTORS',
         'COMPOSER_TOOL_ITEM_SELECTOR',
         'COMPOSER_TOOL_MENU_CUE_TOKENS',
+        'WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX',
+        'WORK_SELECTED_TOOL_ICON_TOKENS',
         'SHORTCUT_ICON_TOKENS',
         'DELAYS',
         'buildIconSelector',
@@ -1450,9 +1540,12 @@ export async function extractFastRuntime(content, actionId) {
         'runActionByIcon',
       ].map(variable),
     );
-    extra.push(func('findSelectedComposerToolPill'));
+    extra.push(func('findSelectedComposerToolAction'));
     extra.push(func('runIconToolbarShortcut'));
     extra.push('window.__cspRunComposerToolShortcutByIcon = runComposerToolShortcutByIcon;');
+    extra.push(
+      'window.__cspRunComposerToolAddForFixture = (iconTokenKey) => runActionByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);',
+    );
     if (actionId === 'shortcutKeyStudy') extra.push(func('runStudyShortcut'));
     // Visual feedback is outside this target/keyboard fixture; action logic and delays remain real.
     extra.push('const flashBorder = () => {};');
@@ -1692,6 +1785,7 @@ export async function runFastLive(args) {
       }
     }
     row.endedMs = performance.now() - started;
+    row.durationMs = row.endedMs - row.startedMs;
     report.observations.push(row);
   };
   const focusRuntime = await extractFastRuntime(content, 'shortcutKeyActivateInput');
@@ -1729,6 +1823,7 @@ export async function runFastLive(args) {
   }
   report.timings = { executionMs: performance.now() - started };
   report.summary = summarizeFastReport(report);
+  report.outcome = fastReportOutcome(report);
   const reportingStarted = performance.now();
   await saveFastReport(report, LIVE_RESULT_PATH);
   report.timings.reportingMs = performance.now() - reportingStarted;
@@ -1740,5 +1835,5 @@ export async function runFastLive(args) {
       2,
     ),
   );
-  if (report.observations.some((row) => row.status !== 'pass')) process.exitCode = 1;
+  if (report.outcome.exitCode !== 0) process.exitCode = 1;
 }
