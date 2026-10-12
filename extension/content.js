@@ -3197,6 +3197,7 @@ const clickElementLikeUser = (el) => {
   };
 
   const WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX = 'M10.7997 2.48486';
+  const DEEP_RESEARCH_PROMPT_LINK_HREF = 'app://connector_openai_deep_research';
   const WORK_SELECTED_TOOL_ICON_TOKENS = {
     searchWeb: ['M10 2.125'],
   };
@@ -3226,6 +3227,13 @@ const clickElementLikeUser = (el) => {
     const inlinePills = Array.from(
       composer.querySelectorAll('[data-inline-selection-pill]'),
     ).filter((element) => matchesIcon(element, inlineSelectors));
+    const promptLinkSelections = Array.from(
+      composer.querySelectorAll('[data-prompt-link-href][data-appearance="inline-mention"]'),
+    ).filter(
+      (element) =>
+        element.getAttribute('data-prompt-link-href') === DEEP_RESEARCH_PROMPT_LINK_HREF &&
+        matchesIcon(element, inlineSelectors),
+    );
     const form = composer.closest('form');
     const workButtons = form
       ? Array.from(
@@ -3240,6 +3248,7 @@ const clickElementLikeUser = (el) => {
       : [];
     const selected = [
       ...inlinePills.map((element) => ({ kind: 'inline', element })),
+      ...promptLinkSelections.map((element) => ({ kind: 'inline', element })),
       ...workButtons.map((element) => ({ kind: 'work', element })),
     ];
     if (selected.length > 1) return { kind: 'ambiguous', element: null };

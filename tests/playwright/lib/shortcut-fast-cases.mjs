@@ -1530,6 +1530,7 @@ export async function extractFastRuntime(content, actionId) {
         'COMPOSER_TOOL_ITEM_SELECTOR',
         'COMPOSER_TOOL_MENU_CUE_TOKENS',
         'WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX',
+        'DEEP_RESEARCH_PROMPT_LINK_HREF',
         'WORK_SELECTED_TOOL_ICON_TOKENS',
         'SHORTCUT_ICON_TOKENS',
         'DELAYS',

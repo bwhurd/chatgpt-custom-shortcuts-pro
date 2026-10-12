@@ -399,20 +399,24 @@ if (runnable.length) {
           }, item.actionId === 'shortcutKeyClickStopButton');
         }
         if (item.type === 'menu-cascade') {
-          if (item.actionId === 'shortcutKeyAddPhotosFiles')
-            row.pathScope =
-              'Real Tools menu routing and upload action activation only; native chooser and upload completion require external integration proof.';
           const study = item.actionId === 'shortcutKeyStudy';
+          const deepResearch = item.actionId === 'shortcutKeyDeepResearch';
           const addPhotosFiles = item.actionId === 'shortcutKeyAddPhotosFiles';
           const persistentTool = item.actionId !== 'shortcutKeyAddPhotosFiles';
+          if (addPhotosFiles)
+            row.pathScope =
+              'Per-mode Tools menu routing and action activation only; native file chooser and upload completion require external integration proof.';
           if (study)
             row.pathScope =
               'The Chat fixture exercises Study and its owned query. The controlled Work footer-button simulation verifies shared removal routing; the current live Work menu does not expose Study.';
+          else if (deepResearch)
+            row.pathScope =
+              'Chat uses the observed Deep Research app-link mention; the controlled Work footer-button simulation verifies shared removal routing while live Work does not expose Deep Research.';
           else if (persistentTool)
             row.pathScope =
               'Chat inline-pill and controlled Work footer-button fixtures exercise the extracted shortcut through add, remove, and re-add transitions; live Work availability is verified separately.';
           await page.evaluate(
-            ({ icon, workIcon, study, addPhotosFiles, persistentTool, query }) => {
+            ({ icon, workIcon, study, deepResearch, addPhotosFiles, persistentTool, query }) => {
               window.fixtureToolIcon = icon;
               window.fixtureWorkToolIcon = workIcon || icon;
               document.body.dataset.fixtureMode = 'chat';
@@ -490,13 +494,23 @@ if (runnable.length) {
                       };
                       document.querySelector('#tool-footer').append(selectedButton);
                     } else {
-                      const pill = `<span data-inline-selection-pill ${study ? 'data-system-hint-type="tatertot"' : ''} contenteditable="false">${icon}<span>${study ? 'Study' : 'Web search'}</span></span>`;
-                      if (study) {
+                      if (deepResearch) {
+                        const promptLink = `<span data-prompt-link-href="app://connector_openai_deep_research" data-prompt-link-label="$deep-research" data-appearance="inline-mention" contenteditable="false"><span contenteditable="false">${icon}</span><span>Deep Research</span></span>`;
+                        composer.insertAdjacentHTML('afterbegin', promptLink);
+                      } else if (study) {
+                        const pill = `<span data-inline-selection-pill data-system-hint-type="tatertot" contenteditable="false">${icon}<span>Study</span></span>`;
                         composer.innerHTML = pill;
                         window.studyOwnedQuery = null;
-                      } else composer.insertAdjacentHTML('afterbegin', pill);
+                      } else {
+                        const pill = `<span data-inline-selection-pill contenteditable="false">${icon}<span>Web search</span></span>`;
+                        composer.insertAdjacentHTML('afterbegin', pill);
+                      }
                       composer.addEventListener('input', () => {
-                        if (!composer.querySelector('[data-inline-selection-pill]')) {
+                        if (
+                          !composer.querySelector(
+                            '[data-inline-selection-pill], [data-prompt-link-href="app://connector_openai_deep_research"]',
+                          )
+                        ) {
                           delete composer.dataset.toolEnabled;
                           delete composer.dataset.studyEnabled;
                           delete composer.dataset.systemHintType;
@@ -518,6 +532,7 @@ if (runnable.length) {
               icon: item.fixtureIcon,
               workIcon: item.fixtureWorkSelectedIcon,
               study,
+              deepResearch,
               addPhotosFiles,
               persistentTool,
               query: item.fixtureQuery,
@@ -1197,44 +1212,82 @@ if (runnable.length) {
             );
           } else if (item.type === 'menu-cascade') {
             const study = item.actionId === 'shortcutKeyStudy';
+            const deepResearch = item.actionId === 'shortcutKeyDeepResearch';
             if (item.actionId === 'shortcutKeyAddPhotosFiles') {
-              await page.waitForFunction(() => window.fixtureClicks.includes('tool-opener'), null, {
-                timeout: 2000,
-              });
-              await page.waitForTimeout(2600);
-              assert.deepEqual(
-                await page.evaluate(() => window.fixtureClicks),
-                ['tool-opener'],
-                'Ambiguous Add Photos/Files list-navigation targets must not activate either row',
-              );
-              assert.equal(
-                await page.locator('#composer').getAttribute('data-tool-enabled'),
-                null,
-                'Ambiguous target matches must not trigger a tool action',
-              );
-              await page
-                .locator('#tool-ambiguous-distractor')
-                .evaluate((element) => element.remove());
-              await page.keyboard.press(`Alt+${code}`);
-              assert.equal(
-                fileChooserObserved,
-                false,
-                'The fixture must not open a native file chooser',
-              );
+              const modeProofs = {};
+              for (const mode of ['chat', 'work']) {
+                await page.locator(`#${mode}-mode`).click();
+                await page.evaluate(() => {
+                  document.querySelector('[role="menu"]')?.remove();
+                  document.querySelector('#composer').removeAttribute('data-tool-enabled');
+                  window.fixtureClicks = [];
+                });
+                await page.locator('#composer').click();
+                await page.keyboard.press(`Alt+${code}`);
+                await page.waitForFunction(
+                  () => window.fixtureClicks.includes('tool-opener'),
+                  null,
+                  { timeout: 2000 },
+                );
+                await page.waitForTimeout(2600);
+                assert.deepEqual(
+                  await page.evaluate(() => window.fixtureClicks),
+                  ['tool-opener'],
+                  `${mode} ambiguous Add Photos/Files targets must not activate either row`,
+                );
+                assert.equal(
+                  await page.locator('#composer').getAttribute('data-tool-enabled'),
+                  null,
+                  `${mode} ambiguous target matches must not trigger a tool action`,
+                );
+                await page
+                  .locator('#tool-ambiguous-distractor')
+                  .evaluate((element) => element.remove());
+                await page.keyboard.press(`Alt+${code}`);
+                await page.waitForFunction(
+                  () => document.querySelector('#composer').dataset.toolEnabled === 'true',
+                  null,
+                  { timeout: 2000 },
+                );
+                assert.deepEqual(
+                  await page.evaluate(() => window.fixtureClicks),
+                  ['tool-opener', 'tool-target'],
+                  `${mode} Add Photos/Files must activate only its intended menu row`,
+                );
+                assert.equal(
+                  fileChooserObserved,
+                  false,
+                  'The controlled fixture must not open a native file chooser',
+                );
+                assert.equal(
+                  await page.locator('#composer [data-inline-selection-pill]').count(),
+                  0,
+                  `${mode} Add Photos/Files must not create a persistent tool pill`,
+                );
+                assert.equal(
+                  await page.locator('#tool-footer [data-testid="work-selected-tool"]').count(),
+                  0,
+                  `${mode} Add Photos/Files must not create a persistent Work selection`,
+                );
+                modeProofs[mode] = ['ambiguous-noop', 'action-activated', 'one-shot'];
+              }
+              row.modeProofs = modeProofs;
               row.ambiguityRejectionProof = true;
             }
-            await page.waitForFunction(
-              () => document.querySelector('#composer').dataset.toolEnabled === 'true',
-              null,
-              { timeout: 2000 },
-            );
-            assert.deepEqual(
-              await page.evaluate(() => window.fixtureClicks),
-              item.actionId === 'shortcutKeyStudy'
-                ? ['tool-target']
-                : ['tool-opener', 'tool-target'],
-              'Menu cascade must open Tools then activate only the intended visible item',
-            );
+            if (item.actionId !== 'shortcutKeyAddPhotosFiles') {
+              await page.waitForFunction(
+                () => document.querySelector('#composer').dataset.toolEnabled === 'true',
+                null,
+                { timeout: 2000 },
+              );
+              assert.deepEqual(
+                await page.evaluate(() => window.fixtureClicks),
+                item.actionId === 'shortcutKeyStudy'
+                  ? ['tool-target']
+                  : ['tool-opener', 'tool-target'],
+                'Menu cascade must open Tools then activate only the intended visible item',
+              );
+            }
             if (item.actionId === 'shortcutKeyStudy') {
               const composer = page.locator('#composer');
               assert.equal(
@@ -1286,8 +1339,18 @@ if (runnable.length) {
                   draft.querySelectorAll('[data-inline-selection-pill]').forEach((pill) => {
                     pill.remove();
                   });
+                  draft
+                    .querySelectorAll(
+                      '[data-prompt-link-href="app://connector_openai_deep_research"]',
+                    )
+                    .forEach((mention) => {
+                      mention.remove();
+                    });
                   return {
                     inline: composer.querySelectorAll('[data-inline-selection-pill]').length,
+                    promptLink: composer.querySelectorAll(
+                      '[data-prompt-link-href="app://connector_openai_deep_research"]',
+                    ).length,
                     work: document.querySelectorAll(
                       '#tool-footer [data-testid="work-selected-tool"]',
                     ).length,
@@ -1305,7 +1368,8 @@ if (runnable.length) {
                   mode,
                   'Tool selection must belong to the active fixture mode',
                 );
-                assert.equal(state.inline, mode === 'chat' ? 1 : 0);
+                assert.equal(state.inline, mode === 'chat' && !deepResearch ? 1 : 0);
+                assert.equal(state.promptLink, mode === 'chat' && deepResearch ? 1 : 0);
                 assert.equal(state.work, mode === 'work' ? 1 : 0);
                 assert.equal(state.draft, expectedDraft, 'Tool selection must preserve the draft');
               };
@@ -1426,14 +1490,29 @@ if (runnable.length) {
                   await page
                     .locator('#ambiguous-work-selection')
                     .evaluate((button) => button.remove());
+                } else if (deepResearch) {
+                  const state = await selectionCount(mode);
+                  assert.equal(state.inline, 0);
+                  assert.equal(state.promptLink, 1);
+                  assert.equal(
+                    state.legacyInlineOnlyMatch,
+                    false,
+                    'The former inline-pill-only resolver cannot see the Chat Deep Research app mention',
+                  );
+                  row.deepResearchSelectionProof =
+                    'Chat app-link mention is distinct from inline selection pills';
                 }
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  (selectedMode) =>
+                  ({ selectedMode, deepResearch }) =>
                     selectedMode === 'work'
                       ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
-                      : !document.querySelector('#composer [data-inline-selection-pill]'),
-                  mode,
+                      : deepResearch
+                        ? !document.querySelector(
+                            '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
+                          )
+                        : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch },
                   { timeout: 1000 },
                 );
                 assert.deepEqual(
@@ -1450,22 +1529,30 @@ if (runnable.length) {
                 await page.locator('#composer').click();
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  (selectedMode) =>
+                  ({ selectedMode, deepResearch }) =>
                     selectedMode === 'work'
                       ? !!document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
-                      : !!document.querySelector('#composer [data-inline-selection-pill]'),
-                  mode,
+                      : deepResearch
+                        ? !!document.querySelector(
+                            '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
+                          )
+                        : !!document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch },
                   { timeout: 2000 },
                 );
                 await assertSelected(mode, modeDraft);
                 modeProofs[mode].push('re-added-once');
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  (selectedMode) =>
+                  ({ selectedMode, deepResearch }) =>
                     selectedMode === 'work'
                       ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
-                      : !document.querySelector('#composer [data-inline-selection-pill]'),
-                  mode,
+                      : deepResearch
+                        ? !document.querySelector(
+                            '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
+                          )
+                        : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch },
                   { timeout: 1000 },
                 );
                 modeProofs[mode].push('removed-again');

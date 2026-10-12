@@ -1,0 +1,51 @@
+# Work composer tool toggles
+
+## Outcome and evidence
+
+- [x] Make repeated tool shortcuts remove their selected tool in both Chat and Work, preserving draft content and unrelated selections. Both batches and final acceptance are complete.
+- The initial user-reported repro was Alt+Q toggling Create Image in Chat and adding without removing in Work. CDP confirmed the Chat inline pill versus Work footer-button structure. The final live profile instead binds Alt+Q to Search Web; that binding was preserved and verified separately.
+- Chat uses `[data-inline-selection-pill][data-system-hint-type="picture_v2"]` for Create Image inside the editable textbox. Work uses a native button containing the same `M7 21.005` image icon and a close icon, inside the form's `[data-composer-footer-responsive]`, outside the textbox. Deep Research uses a noneditable app-link mention with `data-prompt-link-href="app://connector_openai_deep_research"` in Chat. Localized labels and generated classes must not become selectors.
+- The original `findSelectedComposerToolPill` searched only inside the editor. `findSelectedComposerToolAction` now recognizes Chat inline pills, the Deep Research app-link mention, and the owning Work footer removal button; Study uses the same resolver before preparing its query.
+- The fast fixture models the real Chat Deep Research app-link mention and Work footer button, and exercises all five named actions in both modes. The extractor includes the resolver's icon, selector, and removal dependencies.
+- Latest user direction requires all five named actions verified in Chat and Work, including mode-specific availability. Current CDP profile bindings are Search Web=`KeyQ` and Add Photos + Files=`F10`; Study, Create Image and Deep Research are unset. Do not modify those bindings. In the live Tools menus inspected on 2026-10-11, Chat shows Add Photos, Create Image, Web Search and Deep Research; Work shows Add Photos, Create Image and Web Search. Study is a query-driven shortcut path, not a default menu row in either mode. Live ChatGPT adds a trailing separator space when a nonempty draft receives a tool marker; the controlled fixture still checks exact draft preservation.
+- Context checked first: [official Work overview](https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex), [upstream inline Search report](https://community.openai.com/t/search-should-be-a-composer-level-toggle-not-an-inline-mention-inserted-at-the-caret/1394560). These explain product context, not the specific removal contract; the live DOM above is authoritative.
+
+## Design and limits
+
+- [x] Reuse one selected-tool resolver for shared tool dispatch and Study's early exit: retain inline-pill removal; additionally match the observed Deep Research app-link mention and the visible, enabled native Work removal button in the active editor's owning form/footer. Identify by verified icon/target structure, exclude menu items/openers, and reject ambiguous matches. Click the native button so ChatGPT owns Work state changes; do not delete footer DOM or manipulate React state.
+- [x] Inspect mode-specific availability and the one-shot boundary before generalizing. Add Photos, Create Image and Web Search appeared in both live menus; Deep Research appeared in Chat but not Work; Study was absent from the default menu in both and remains query-driven in code. Add Photos invokes file selection with no persistent pill; never interpret an attached upload as a toggle target.
+- [x] Preserve existing bindings, Chat behavior, Study query ownership, draft content, other tool selections, and hidden/unavailable-target no-ops. No settings, permissions, manifest, model routing, packaging or deployment changes.
+- Risk: a broad icon search could activate a menu row or a different composer. Keep matching scoped to the active form and prove exclusions. Rapid presses/async menu completion must not duplicate selections; await actual state in tests.
+- Related specs: `specs/0004-model-picker-and-shortcuts-spec.md` and `specs/0006-runtime-scrape-selector-validator-spec.md`. Active audit/quality plans do not own this focused behavior repair.
+
+## Luna Batch 01 - Repair and focused regression
+
+- [x] Objective: support both selected-tool representations and make the fast validator expose this failure. Current source and the earlier CDP capture confirmed the editor pill and footer button boundaries.
+- [x] Change the Work selected-button path in `extension/content.js`; use it from shared tool dispatch and Study's early selected-state check. Keep inline editor deletion; use native footer-button activation; reject ambiguous matches. Add Photos + Files remains one-shot for native removal, so an attached file is never treated as a toggle target.
+- [x] Extend existing persistent-tool cases in both modes using extracted handlers and trusted keys. Each adds, removes, re-adds exactly once, preserves draft text, and removes without reopening Plus. Study consumes only its fixture-owned query and removes without opening Plus when selected.
+- [x] Assert selected DOM and draft contents. Work fixtures include hidden/disabled buttons, wrong icon and out-of-form decoys, plus a duplicate selected-button ambiguity case. The old add-only path is invoked directly in the fixture and shown to duplicate the Work selection; the actual shortcut then removes the single selected button. No duplicate catalogue rows or live-proof claims were added.
+- [x] Keep the Add Photos + Files activation, ambiguity and file-chooser boundaries. `tests/study-composer-capture.test.js` has no dependency on this selected-tool helper; no change to the capture test/collector or report contract was needed.
+- [x] Focused acceptance passed: `npm run test:shortcuts:fast -- --shortcut-action-id shortcutKeyCreateImage --shortcut-action-id shortcutKeySearchWeb --shortcut-action-id shortcutKeyStudy --shortcut-action-id shortcutKeyDeepResearch --shortcut-action-id shortcutKeyAddPhotosFiles` (5/5 passed; partial-coverage warnings retain the existing external/native boundaries).
+- [x] `npx biome check extension/content.js tests/playwright/shortcut-fast-fixture.mjs tests/playwright/lib/shortcut-fast-cases.mjs` passed.
+- [x] Batch result: Chat inline-pill and controlled Work footer-button add/remove/re-add are covered for Search, Study, and Create Image. Add Photos + Files keeps its one-shot file-selection boundary. Batch 02 adds the observed Deep Research app-link mention to the resolver and fixture after live proof exposed that the old pill-only model missed it.
+
+## Luna Batch 02 - Live proof, owning docs and closure
+
+- [x] Objective: verify the shared change and document its supported boundaries.
+- [x] CDP proof used the unpacked extension on `CodexCleanProfile` at port 9333. The actual profile bindings are Search Web=`KeyQ` and Add Photos + Files=`F10`; no settings changed. Chat Alt+Q added and removed Search; Work Alt+Q added and removed the native Search footer button. Create Image round-tripped through the isolated runtime helper in both modes. Deep Research round-tripped in Chat through the isolated helper after the resolver learned its app-link mention; Work does not expose Deep Research. Study is unassigned and absent from both default menus; its query path is covered by trusted-key fixtures in both structural modes. Add Photos + Files opened the native chooser in Chat and Work; each was intercepted with an empty file list and all file inputs remained empty. No message was submitted.
+- [x] Live menu availability was recorded separately: Chat exposes Add Photos, Create Image, Web Search and Deep Research; Work exposes Add Photos, Create Image and Web Search; Study is absent from both default menus. The test also found that ChatGPT adds a trailing separator space when a nonempty Chat draft receives a tool marker. A controlled Search check preserved all non-whitespace content but left that one space after removal; controlled fixtures assert exact draft preservation. The Deep Research add/remove cycle preserved the semantic draft hash.
+- [x] Owning specs 0004 and 0006 document the Chat/Work structures, Deep Research app-link mention, one-shot Add Photos boundary, controlled fixture scope and live availability distinction.
+- [x] Final validation passed: `npm run test:shortcuts:fast` (72/72 checks; 0 failed), `npm run test:shortcuts:contracts`, `npm run check:text`, `npx biome check extension/content.js tests/playwright/shortcut-fast-fixture.mjs tests/playwright/lib/shortcut-fast-cases.mjs`, `git diff --check`, and focused Deep Research fast case (1/1). Existing fast-validator warnings are external/native boundaries; no failures.
+- [x] Acceptance: all five actions have Chat and Work fixture results; live available actions were exercised, unavailable menu actions were recorded, and the Add Photos chooser was intercepted in both modes. No publication or deployment was requested.
+- [x] Rollback remains limited to this workstream's runtime/test/doc hunks. No publication/deployment was performed. Remaining limitation: live Study remains fixture-only because it has no current shortcut binding or default menu row; ChatGPT's live composer may retain one app-inserted trailing separator after a tool toggle.
+
+## Acceptance matrix
+
+| Requirement | Batch | Proof |
+| --- | --- | --- |
+| Chat removes pill and Deep Research mention; Work removes its native selected button | 01, 02 | Trusted fixture round trips and post-fix live result where available |
+| Web Search, Study, Create Image and Deep Research are checked in both modes | 01, 02 | Trusted-key per-mode fixture results plus live availability/result record |
+| Add Photos + Files is checked in both modes without treating uploads as toggles | 01, 02 | Per-mode ambiguity/action/no-pill fixture results plus Chat and Work chooser interception without file selection |
+| Draft and other tools survive; decoys cannot be removed | 01 | DOM/draft assertions and unavailable/wrong-modifier cases |
+| Fast validator catches the original bug; dependent tests stay accurate | 01, 02 | Inline-only mutation fails; extraction, focused and final contract checks pass |
+| Owning docs and final evidence agree | 02 | Spec review, text check and recorded live limitations |
