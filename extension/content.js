@@ -3196,31 +3196,92 @@ const clickElementLikeUser = (el) => {
     smartClick(item);
   };
 
-  function findSelectedComposerToolPill(composer, iconTokens) {
+  const WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX = 'M10.7997 2.48486';
+  const DEEP_RESEARCH_PROMPT_LINK_HREF = 'app://connector_openai_deep_research';
+  const WORK_SELECTED_TOOL_ICON_TOKENS = {
+    searchWeb: ['M10 2.125'],
+  };
+
+  function findSelectedComposerToolAction(
+    composer,
+    iconTokens,
+    workSelectedIconTokens = iconTokens,
+  ) {
     if (!composer) return null;
-    const tokens = Array.isArray(iconTokens) ? iconTokens : [iconTokens];
-    return (
-      Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).find((pill) =>
-        tokens.some((token) => {
+    const buildSelectors = (tokens) =>
+      (Array.isArray(tokens) ? tokens : [tokens])
+        .map((token) => {
           const value = String(token || '');
-          const selector = value.startsWith('img:')
+          return value.startsWith('img:')
             ? `img[src*="${escapeAttributeSelectorFragment(value.slice(4))}"]`
             : buildIconSelector(value);
-          return selector && (pill.matches(selector) || pill.querySelector(selector));
-        }),
-      ) || null
+        })
+        .filter(Boolean);
+    const inlineSelectors = buildSelectors(iconTokens);
+    const workSelectors = buildSelectors(workSelectedIconTokens);
+    if (!inlineSelectors.length && !workSelectors.length) return null;
+    const matchesIcon = (element, selectors) =>
+      selectors.some(
+        (selector) => element.matches(selector) || element.querySelector(selector),
+      );
+    const inlinePills = Array.from(
+      composer.querySelectorAll('[data-inline-selection-pill]'),
+    ).filter((element) => matchesIcon(element, inlineSelectors));
+    const promptLinkSelections = Array.from(
+      composer.querySelectorAll('[data-prompt-link-href][data-appearance="inline-mention"]'),
+    ).filter(
+      (element) =>
+        element.getAttribute('data-prompt-link-href') === DEEP_RESEARCH_PROMPT_LINK_HREF &&
+        matchesIcon(element, inlineSelectors),
     );
+    const form = composer.closest('form');
+    const workButtons = form
+      ? Array.from(
+          form.querySelectorAll('[data-composer-footer-responsive] button'),
+        ).filter(
+          (button) =>
+            isDirectActionVisible(button) &&
+            !button.closest('[role="menu"], [data-list-navigation-item="true"]') &&
+            workSelectors.some((selector) => button.querySelector(selector)) &&
+            button.querySelector(`svg path[d^="${WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX}"]`),
+        )
+      : [];
+    const selected = [
+      ...inlinePills.map((element) => ({ kind: 'inline', element })),
+      ...promptLinkSelections.map((element) => ({ kind: 'inline', element })),
+      ...workButtons.map((element) => ({ kind: 'work', element })),
+    ];
+    if (selected.length > 1) return { kind: 'ambiguous', element: null };
+    return selected[0] || null;
   }
 
-  const runComposerToolShortcutByIcon = async (iconTokens, delays = DELAYS, matchOptions) => {
+  const runComposerToolShortcutByIcon = async (
+    iconTokens,
+    delays = DELAYS,
+    matchOptions,
+    {
+      allowNativeToolRemoval = true,
+      workSelectedIconTokens = iconTokens,
+    } = {},
+  ) => {
     const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
     if (!composer) return;
 
-    const selectedPill = findSelectedComposerToolPill(composer, iconTokens);
-    if (selectedPill) {
+    const selectedAction = findSelectedComposerToolAction(
+      composer,
+      iconTokens,
+      workSelectedIconTokens,
+    );
+    if (selectedAction?.kind === 'ambiguous') return;
+    if (selectedAction?.kind === 'work') {
+      if (!allowNativeToolRemoval) return;
+      smartClick(selectedAction.element);
+      return;
+    }
+    if (selectedAction?.kind === 'inline') {
       const selection = window.getSelection();
       const range = document.createRange();
-      range.selectNode(selectedPill);
+      range.selectNode(selectedAction.element);
       selection.removeAllRanges();
       selection.addRange(range);
       document.execCommand('delete');
@@ -7580,6 +7641,10 @@ const clickElementLikeUser = (el) => {
         SHORTCUT_ICON_TOKENS[iconTokenKey],
         DELAYS,
         matchOptions,
+        {
+          allowNativeToolRemoval: iconTokenKey !== 'addPhotosFiles',
+          workSelectedIconTokens: WORK_SELECTED_TOOL_ICON_TOKENS[iconTokenKey],
+        },
       );
     }
 
@@ -7588,7 +7653,7 @@ const clickElementLikeUser = (el) => {
       if (!composer) return;
 
       let item = findComposerToolItemByIcon(SHORTCUT_ICON_TOKENS.study);
-      if (findSelectedComposerToolPill(composer, SHORTCUT_ICON_TOKENS.study)) {
+      if (findSelectedComposerToolAction(composer, SHORTCUT_ICON_TOKENS.study)) {
         await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS.study);
         return;
       }

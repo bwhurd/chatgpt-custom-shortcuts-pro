@@ -211,6 +211,7 @@ export const FAST_CASES = [
     type: 'menu-cascade',
     fixture: 'composer-tools',
     fixtureIcon: '<svg><path d="M12 2c5.522" /></svg>',
+    fixtureWorkSelectedIcon: '<svg><path d="M10 2.125" /></svg>',
     parallelSafe: true,
   },
   {
@@ -1528,6 +1529,9 @@ export async function extractFastRuntime(content, actionId) {
         'COMPOSER_TOOL_MENU_OPENER_SELECTORS',
         'COMPOSER_TOOL_ITEM_SELECTOR',
         'COMPOSER_TOOL_MENU_CUE_TOKENS',
+        'WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX',
+        'DEEP_RESEARCH_PROMPT_LINK_HREF',
+        'WORK_SELECTED_TOOL_ICON_TOKENS',
         'SHORTCUT_ICON_TOKENS',
         'DELAYS',
         'buildIconSelector',
@@ -1537,9 +1541,12 @@ export async function extractFastRuntime(content, actionId) {
         'runActionByIcon',
       ].map(variable),
     );
-    extra.push(func('findSelectedComposerToolPill'));
+    extra.push(func('findSelectedComposerToolAction'));
     extra.push(func('runIconToolbarShortcut'));
     extra.push('window.__cspRunComposerToolShortcutByIcon = runComposerToolShortcutByIcon;');
+    extra.push(
+      'window.__cspRunComposerToolAddForFixture = (iconTokenKey) => runActionByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);',
+    );
     if (actionId === 'shortcutKeyStudy') extra.push(func('runStudyShortcut'));
     // Visual feedback is outside this target/keyboard fixture; action logic and delays remain real.
     extra.push('const flashBorder = () => {};');
