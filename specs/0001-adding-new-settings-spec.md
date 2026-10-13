@@ -335,6 +335,15 @@ If the setting is meant to disable a feature:
 
 - confirm default value is safe for existing users
 
+### Library Hide Pasted Files runtime contract
+
+- `hidePastedLibraryFilesEnabled` is a `chrome.storage.sync` boolean shared by the popup and the Library content script; its default is `false`.
+- On `/library`, candidates must be file roots marked with `data-library-item` and a `data-library-selection-id` beginning `libfile_`. Preserve the existing NFKC/case-folded filename token matching. If a name cannot be identified unambiguously, leave that item visible.
+- In list view, hide the file row. In grid view, hide the outer `data-masonry-item="file:…"` slot, then temporarily reset the grid parent to row auto-flow and its remaining children to automatic placement. Removing the setting or leaving Library removes every extension-owned marker so native visibility and layout return.
+- Resolve one semantic main root, preferring the app-shell marker and otherwise accepting only one `main`/`[role="main"]`. Resolve Filters from its structural menu button and paired grid/list controls, without generated IDs, localized text, or hashed classes. Insert one focusable, localized eye toggle as the immediate sibling before Filters, with `aria-pressed` reflecting the stored value. Ambiguous structure fails open.
+- Keep result observation disconnected while the setting is off. Reconcile route, toolbar, and result changes with bounded observers/debounced work; do not scan or alter file contents.
+- `npm run test:library-hide-pasted` covers synthetic list/grid, toolbar, route, mutation, storage-sync, and recovery behavior. Include it in `npm run checks`; live verification should cover both views, toggle state/placement, search/filter refresh, persistence, and restoration of the starting view and setting.
+
 ## When to update this file
 
 Update this reference if:

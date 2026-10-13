@@ -7,6 +7,7 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 ---
 
 #### 10.11.2026
+- Fixed: Hide Pasted Files now works in Library list and grid views, with its toggle restored.
 - Fixed: Composer shortcuts can now toggle selected tools off in Work mode and toggle Deep Research off in Chat.
 - Fixed: Cloud Backup now reports an error when Drive rejects a save instead of reporting success.
 - Fixed: Highlight Bold Text stays off when its setting is saved as “false”, and invalid colors no longer break its styling.

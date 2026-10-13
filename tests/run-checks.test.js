@@ -265,6 +265,7 @@ test('installs locked dependencies once, reuses the stamp, and refreshes after l
   assert.equal(third.status, 0, `${third.stdout}\n${third.stderr}`);
   assert.equal(countStage(fixture, 'ci'), 2, 'a changed lock should trigger npm ci');
   assert.equal(countStage(fixture, 'playwright:install'), 3);
+  assert.equal(countStage(fixture, 'test:library-hide-pasted'), 3);
   assert.equal(countStage(fixture, 'test:shortcuts:fast'), 3);
   assert.equal(readReport(fixture).reportMarker, 'third-report');
 });
@@ -281,8 +282,14 @@ test('continues through the shortcut result and preserves failed checks in a fre
 
   const stages = callStages(fixture);
   const codeCheckIndex = stages.indexOf('check');
+  const libraryRegressionIndex = stages.indexOf('test:library-hide-pasted');
   const shortcutIndex = stages.indexOf('test:shortcuts:fast');
-  assert.ok(codeCheckIndex >= 0 && shortcutIndex > codeCheckIndex, stages.join(', '));
+  assert.ok(
+    codeCheckIndex >= 0 &&
+      libraryRegressionIndex > codeCheckIndex &&
+      shortcutIndex > libraryRegressionIndex,
+    stages.join(', '),
+  );
 
   const report = readReport(fixture);
   assert.equal(report.reportMarker, 'fresh-after-code-failure');

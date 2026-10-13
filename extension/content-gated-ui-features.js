@@ -178,10 +178,11 @@
   const STYLE_ID = 'csp-library-hide-pasted-style';
   const CONTROL_ATTR = 'data-csp-library-pasted-toggle';
   const HIDDEN_ATTR = 'data-csp-library-pasted-hidden';
+  const MASONRY_FLOW_ATTR = 'data-csp-library-pasted-masonry-flow';
   const LABEL_KEY = 'label_hide_pasted_library_files';
   const TOOLTIP_KEY = 'tt_hide_pasted_library_files';
-  const TOP_CONTROLS_SELECTOR = '[data-testid="artifacts-surface-top-controls"]';
-  const PAGE_ROOT_SELECTOR = 'main#main';
+  const PAGE_ROOT_SELECTOR =
+    'main[data-app-shell-main-surface="browser"], [role="main"][data-app-shell-main-surface="browser"]';
   const CONTROL_SETTLE_MS = 260;
   const HIDE_FILENAME_TOKENS = Object.freeze([
     'pasted',
@@ -196,26 +197,31 @@
     enabled: false,
     contextInvalidated: false,
     onLibraryRoute: false,
+    pageRoot: null,
     controlRefreshToken: 0,
-    topControlsObserver: null,
-    topControlsObservationRoot: null,
+    controlWriteToken: 0,
+    shellObserver: null,
+    shellObservationRoot: null,
     resultsObserver: null,
     resultsObservationRoot: null,
+    cancelPendingWork: null,
   };
 
-  const debounce =
-    typeof createDebounce === 'function'
-      ? createDebounce
-      : (fn, wait = 80) => {
-          let timer = null;
-          return (...args) => {
-            if (timer) window.clearTimeout(timer);
-            timer = window.setTimeout(() => {
-              timer = null;
-              fn(...args);
-            }, wait);
-          };
-        };
+  const createCancellableDebounce = (fn, wait = 80) => {
+    let timer = null;
+    const schedule = (...args) => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        fn(...args);
+      }, wait);
+    };
+    schedule.cancel = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+    };
+    return schedule;
+  };
 
   const isContextInvalidatedError = (err) =>
     /context invalidated/i.test(String(err?.message || err || '')) ||
@@ -225,15 +231,16 @@
     if (state.contextInvalidated) return;
     state.contextInvalidated = true;
     state.onLibraryRoute = false;
+    state.cancelPendingWork?.();
     console.warn(
       '[CSP] Hide Pasted Files disabled in this tab because the extension was reloaded. Refresh the page to re-enable it.',
       err,
     );
     try {
       state.controlRefreshToken += 1;
-      state.topControlsObserver?.disconnect();
-      state.topControlsObserver = null;
-      state.topControlsObservationRoot = null;
+      state.shellObserver?.disconnect();
+      state.shellObserver = null;
+      state.shellObservationRoot = null;
       state.resultsObserver?.disconnect();
       state.resultsObserver = null;
       state.resultsObservationRoot = null;
@@ -242,6 +249,9 @@
       });
       document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
         el.removeAttribute(HIDDEN_ATTR);
+      });
+      document.querySelectorAll(`[${MASONRY_FLOW_ATTR}]`).forEach((el) => {
+        el.removeAttribute(MASONRY_FLOW_ATTR);
       });
     } catch {}
   };
@@ -296,19 +306,33 @@
     }
   };
 
-  const storageSetSync = (items) => {
-    if (!isExtensionAlive()) return;
+  const storageSetSync = (items, callback = () => {}) => {
+    if (!isExtensionAlive()) {
+      callback(false);
+      return;
+    }
     try {
       chrome.storage.sync.set(items, () => {
-        if (!isExtensionAlive()) return;
-        if (chrome.runtime.lastError && isContextInvalidatedError(chrome.runtime.lastError)) {
-          markContextInvalidated(chrome.runtime.lastError);
+        if (!isExtensionAlive()) {
+          callback(false);
+          return;
         }
+        const error = chrome.runtime.lastError;
+        if (error) {
+          if (isContextInvalidatedError(error)) markContextInvalidated(error);
+          else console.warn('[CSP] Could not save Hide Pasted Files setting.', error);
+          callback(false);
+          return;
+        }
+        callback(true);
       });
     } catch (err) {
       if (isContextInvalidatedError(err)) {
         markContextInvalidated(err);
+      } else {
+        console.warn('[CSP] Could not save Hide Pasted Files setting.', err);
       }
+      callback(false);
     }
   };
 
@@ -331,11 +355,16 @@
     );
   };
 
-  const getPageRoot = () => document.querySelector(PAGE_ROOT_SELECTOR);
+  const getPageRoot = () => {
+    const shellRoots = document.querySelectorAll(PAGE_ROOT_SELECTOR);
+    if (shellRoots.length === 1) return shellRoots[0];
+    if (shellRoots.length > 1) return null;
 
-  const getTopControls = () => document.querySelector(TOP_CONTROLS_SELECTOR);
+    const semanticRoots = new Set(document.querySelectorAll('main, [role="main"]'));
+    return semanticRoots.size === 1 ? semanticRoots.values().next().value : null;
+  };
 
-  const getTopControlsObservationRoot = () => document.body || document.documentElement;
+  const getShellObservationRoot = () => document.body || document.documentElement;
 
   const getControlNode = () => document.querySelector(`[${CONTROL_ATTR}="true"]`);
 
@@ -349,22 +378,35 @@
   };
 
   const getControlAnchor = () => {
-    const topControls = getTopControls();
-    if (!(topControls instanceof Element) || !topControls.isConnected) return null;
+    const pageRoot = getPageRoot();
+    if (!(pageRoot instanceof Element) || !pageRoot.isConnected) return null;
 
-    const actionGroup = findActionGroup(topControls);
-    if (!(actionGroup instanceof Element) || !actionGroup.isConnected) return null;
+    const menuButtons = Array.from(pageRoot.querySelectorAll('button[aria-haspopup="menu"]'));
+    const hasFilterIcon = (button) =>
+      Array.from(button.querySelectorAll('svg use')).some((use) => {
+        const href =
+          use.getAttribute('href') ||
+          use.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
+          '';
+        const fragment = href.slice(href.lastIndexOf('#') + 1);
+        return /^filter(?:-|$)/i.test(fragment);
+      });
+    const preferredButtons = menuButtons.filter(hasFilterIcon);
+    const candidates = preferredButtons.length === 1 ? preferredButtons : menuButtons;
+    const anchors = candidates
+      .map((filterButton) => {
+        const actionGroup = findActionGroup(filterButton, pageRoot);
+        return actionGroup ? { pageRoot, actionGroup, filterButton } : null;
+      })
+      .filter(Boolean);
 
-    const filterButton = actionGroup.querySelector('button[aria-haspopup="menu"]');
-    if (!(filterButton instanceof HTMLElement) || !filterButton.isConnected) return null;
-
-    return { topControls, actionGroup, filterButton };
+    return anchors.length === 1 ? anchors[0] : null;
   };
 
   const sameControlAnchor = (left, right) =>
     !!left &&
     !!right &&
-    left.topControls === right.topControls &&
+    left.pageRoot === right.pageRoot &&
     left.actionGroup === right.actionGroup &&
     left.filterButton === right.filterButton;
 
@@ -443,6 +485,16 @@
 [${HIDDEN_ATTR}] {
   display: none !important;
 }
+
+[${MASONRY_FLOW_ATTR}] {
+  height: auto !important;
+  grid-auto-flow: row !important;
+}
+
+[${MASONRY_FLOW_ATTR}] > [data-masonry-item] {
+  grid-area: auto !important;
+  transform: none !important;
+}
 `;
     (document.head || document.documentElement).appendChild(style);
   };
@@ -466,39 +518,79 @@
   <circle cx="8" cy="8" r="2.1"></circle>
 </svg>`;
 
+  const setAttributeIfChanged = (element, name, value) => {
+    if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+  };
+
   const updateControlState = () => {
     const control = getControlNode();
     if (!(control instanceof Element)) return;
 
     const button = control.querySelector('[data-csp-library-pasted-button="true"]');
     if (button instanceof HTMLButtonElement) {
-      button.setAttribute('aria-label', getTooltipText());
-      button.setAttribute('aria-pressed', state.enabled ? 'true' : 'false');
-      button.setAttribute('title', getTooltipText());
+      setAttributeIfChanged(button, 'aria-label', getTooltipText());
+      setAttributeIfChanged(button, 'aria-pressed', state.enabled ? 'true' : 'false');
+      setAttributeIfChanged(button, 'title', getTooltipText());
     }
 
     const label = control.querySelector('[data-csp-library-pasted-label="true"]');
-    if (label) {
-      label.textContent = getLabelText();
-    }
+    if (label && label.textContent !== getLabelText()) label.textContent = getLabelText();
 
     const icon = control.querySelector('[data-csp-library-pasted-icon="true"]');
     if (icon instanceof HTMLElement) {
-      icon.innerHTML = getIconMarkup(state.enabled);
+      const mode = state.enabled ? 'on' : 'off';
+      if (icon.getAttribute('data-mode') !== mode) {
+        icon.innerHTML = getIconMarkup(state.enabled);
+        setAttributeIfChanged(icon, 'data-mode', mode);
+      }
     }
 
-    control.setAttribute('title', getTooltipText());
+    setAttributeIfChanged(control, 'title', getTooltipText());
   };
 
-  const findActionGroup = (topControls) => {
-    if (!(topControls instanceof Element)) return null;
+  const findActionGroup = (filterButton, pageRoot) => {
+    if (!(filterButton instanceof HTMLElement) || !(pageRoot instanceof Element)) return null;
 
-    return Array.from(topControls.children).find(
-      (child) =>
-        child instanceof Element &&
-        child.querySelector('button[aria-haspopup="menu"]') &&
-        child.querySelector('button[aria-pressed]'),
-    );
+    const iconSymbol = (button) => {
+      for (const use of button.querySelectorAll('svg use')) {
+        const href =
+          use.getAttribute('href') ||
+          use.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
+          '';
+        const fragment = href.slice(href.lastIndexOf('#') + 1);
+        if (fragment) return fragment.toLocaleLowerCase();
+      }
+      return '';
+    };
+    const isGridView = (button) => /^square-grid(?:-|$)/i.test(iconSymbol(button));
+    const isListView = (button) => /^list-bullet(?:-|$)/i.test(iconSymbol(button));
+
+    for (
+      let candidate = filterButton.parentElement;
+      candidate;
+      candidate = candidate.parentElement
+    ) {
+      const menuButtons = Array.from(candidate.querySelectorAll('button[aria-haspopup="menu"]'));
+      if (menuButtons.length !== 1 || menuButtons[0] !== filterButton) {
+        if (candidate === pageRoot) break;
+        continue;
+      }
+
+      const viewButtons = Array.from(candidate.querySelectorAll('button[aria-pressed]')).filter(
+        (button) => !button.closest(`[${CONTROL_ATTR}="true"]`),
+      );
+      if (
+        viewButtons.length === 2 &&
+        viewButtons.some(isGridView) &&
+        viewButtons.some(isListView)
+      ) {
+        return candidate;
+      }
+
+      if (candidate === pageRoot) break;
+    }
+
+    return null;
   };
 
   const createControl = () => {
@@ -511,10 +603,18 @@
     button.className =
       'relative flex h-9 items-center justify-center gap-1.5 rounded-full px-3 transition-colors focus-visible:ring-token-ring focus-visible:ring-2 focus-visible:outline-none';
     button.setAttribute('data-csp-library-pasted-button', 'true');
+    button.setAttribute('aria-pressed', state.enabled ? 'true' : 'false');
     button.addEventListener('click', () => {
+      const previousEnabled = state.enabled;
       const nextEnabled = !state.enabled;
       setEnabled(nextEnabled);
-      storageSetSync({ [STORAGE_KEY]: nextEnabled });
+      const writeToken = (state.controlWriteToken || 0) + 1;
+      state.controlWriteToken = writeToken;
+      storageSetSync({ [STORAGE_KEY]: nextEnabled }, (saved) => {
+        if (!saved && !state.contextInvalidated && state.controlWriteToken === writeToken) {
+          setEnabled(previousEnabled);
+        }
+      });
     });
 
     const icon = document.createElement('span');
@@ -528,7 +628,6 @@
 
     button.append(icon, label);
     wrapper.append(button);
-    updateControlState();
     return wrapper;
   };
 
@@ -555,9 +654,23 @@
 
   const readText = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
 
-  const getBridgeFileRoot = (bridgeButton) =>
-    bridgeButton.closest('[data-page-table-selectable-row="true"]') ||
-    bridgeButton.closest('[role="button"]');
+  const getLibraryItemFilename = (itemRoot) => {
+    const nameCell = itemRoot.querySelector('[data-library-column="name"]');
+    if (nameCell) {
+      const nameButton = nameCell.querySelector('button[aria-label]');
+      const row = nameCell.closest('[role="row"][aria-label]');
+      const filename = nameButton?.getAttribute('aria-label') || row?.getAttribute('aria-label');
+      if (filename) return filename.trim();
+      return readText(nameCell);
+    }
+
+    const openButtons = Array.from(itemRoot.querySelectorAll('button[aria-label]')).filter(
+      (button) => !button.hasAttribute('aria-haspopup') && !button.hasAttribute('role'),
+    );
+    if (openButtons.length !== 1) return '';
+
+    return openButtons[0].getAttribute('aria-label')?.trim() || readText(openButtons[0]);
+  };
 
   const collectLibraryItems = () => {
     const root = getPageRoot();
@@ -567,29 +680,15 @@
     const seen = new Set();
 
     root
-      .querySelectorAll('[data-testid^="artifact-card-title-container-"]')
-      .forEach((titleContainer) => {
-        const button = titleContainer.closest('button[type="button"]');
-        const itemRoot = button?.parentElement;
+      .querySelectorAll('[data-library-item][data-library-selection-id^="libfile_"]')
+      .forEach((itemRoot) => {
         if (!(itemRoot instanceof HTMLElement) || seen.has(itemRoot)) return;
 
         seen.add(itemRoot);
         out.push({
           itemRoot,
-          filename: readText(titleContainer.querySelector('span') || titleContainer),
-        });
-      });
-
-    root
-      .querySelectorAll('button[data-testid^="artifact-checkbox-bridge-file_"]')
-      .forEach((bridgeButton) => {
-        const itemRoot = getBridgeFileRoot(bridgeButton);
-        if (!(itemRoot instanceof HTMLElement) || seen.has(itemRoot)) return;
-
-        seen.add(itemRoot);
-        out.push({
-          itemRoot,
-          filename: readText(itemRoot.querySelector('.text-token-text-primary')),
+          filename: getLibraryItemFilename(itemRoot),
+          isListItem: !!itemRoot.querySelector('[data-library-column="name"]'),
         });
       });
 
@@ -600,6 +699,9 @@
     document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((el) => {
       el.removeAttribute(HIDDEN_ATTR);
     });
+    document.querySelectorAll(`[${MASONRY_FLOW_ATTR}]`).forEach((el) => {
+      el.removeAttribute(MASONRY_FLOW_ATTR);
+    });
   };
 
   const applyLibraryFilter = () => {
@@ -608,32 +710,54 @@
       return;
     }
 
-    if (getControlNode()) {
-      updateControlState();
-    } else {
-      scheduleControlRefresh();
-    }
-
-    const items = collectLibraryItems();
-    if (!items.length) {
-      if (!state.enabled) restoreHiddenItems();
+    if (!state.enabled) {
+      restoreHiddenItems();
       return;
     }
 
-    // Hide/show the existing item nodes instead of rebuilding the Library DOM.
-    items.forEach(({ itemRoot, filename }) => {
-      if (state.enabled && shouldHideFilename(filename)) {
-        itemRoot.setAttribute(HIDDEN_ATTR, '');
+    const items = collectLibraryItems();
+    const hiddenGridParents = new Set();
+    const currentTargets = new Set();
+
+    // Hide existing Library nodes. In grid view, also remove the masonry slot
+    // and temporarily let CSS Grid auto-place the remaining cards.
+    items.forEach(({ itemRoot, filename, isListItem }) => {
+      const isPastedFile = filename && shouldHideFilename(filename);
+      const masonryItem = itemRoot.parentElement?.matches('[data-masonry-item^="file:"]')
+        ? itemRoot.parentElement
+        : null;
+      if (!isListItem && !masonryItem) {
+        itemRoot.removeAttribute(HIDDEN_ATTR);
         return;
       }
 
-      itemRoot.removeAttribute(HIDDEN_ATTR);
+      const target = isListItem ? itemRoot : masonryItem;
+      currentTargets.add(target);
+
+      if (!isPastedFile) {
+        target.removeAttribute(HIDDEN_ATTR);
+        return;
+      }
+
+      target.setAttribute(HIDDEN_ATTR, '');
+      if (masonryItem?.parentElement) hiddenGridParents.add(masonryItem.parentElement);
     });
 
-    if (!state.enabled) restoreHiddenItems();
+    // Clear marks from nodes no longer recognized as files (including items
+    // whose name changed while the setting stayed enabled).
+    document.querySelectorAll(`[${HIDDEN_ATTR}]`).forEach((target) => {
+      if (!currentTargets.has(target)) target.removeAttribute(HIDDEN_ATTR);
+    });
+
+    document.querySelectorAll(`[${MASONRY_FLOW_ATTR}]`).forEach((parent) => {
+      if (!hiddenGridParents.has(parent)) parent.removeAttribute(MASONRY_FLOW_ATTR);
+    });
+    hiddenGridParents.forEach((parent) => {
+      parent.setAttribute(MASONRY_FLOW_ATTR, '');
+    });
   };
 
-  const runControlRefresh = debounce((requestToken) => {
+  const runControlRefresh = createCancellableDebounce((requestToken) => {
     if (!state.onLibraryRoute || requestToken !== state.controlRefreshToken) return;
 
     const anchor = getControlAnchor();
@@ -657,7 +781,7 @@
     runControlRefresh(state.controlRefreshToken);
   };
 
-  const scheduleFilterRefresh = debounce(() => {
+  const scheduleFilterRefresh = createCancellableDebounce(() => {
     if (!state.onLibraryRoute || !state.enabled) return;
     applyLibraryFilter();
     ensureResultsObserver();
@@ -670,85 +794,100 @@
   };
 
   const ensureResultsObserver = () => {
-    if (!state.onLibraryRoute || !state.enabled) return;
+    if (!state.onLibraryRoute || !state.enabled) {
+      teardownResultsObserver();
+      return;
+    }
 
     const root = getPageRoot();
-    if (!(root instanceof Node)) return;
+    if (!(root instanceof Node)) {
+      teardownResultsObserver();
+      return;
+    }
     if (state.resultsObserver && state.resultsObservationRoot === root) return;
 
     teardownResultsObserver();
 
     state.resultsObserver = new MutationObserver((mutations) => {
       if (!state.onLibraryRoute || !state.enabled || !mutations.length) return;
-      scheduleFilterRefresh();
+      const nodeContainsLibraryItem = (node) =>
+        node instanceof Element &&
+        (node.matches('[data-library-item]') ||
+          !!node.closest('[data-library-item]') ||
+          !!node.querySelector('[data-library-item]'));
+      const hasRelevantMutation = mutations.some((mutation) => {
+        const target =
+          mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+        if (target?.closest('[data-library-item]')) return true;
+        if (mutation.type !== 'childList') return false;
+        return [...mutation.addedNodes, ...mutation.removedNodes].some(nodeContainsLibraryItem);
+      });
+      if (hasRelevantMutation) scheduleFilterRefresh();
     });
 
-    state.resultsObserver.observe(root, { childList: true, subtree: true });
+    state.resultsObserver.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['aria-label', 'data-library-selection-id'],
+    });
     state.resultsObservationRoot = root;
   };
 
-  const teardownTopControlsObserver = () => {
-    state.topControlsObserver?.disconnect();
-    state.topControlsObserver = null;
-    state.topControlsObservationRoot = null;
+  const teardownShellObserver = () => {
+    state.shellObserver?.disconnect();
+    state.shellObserver = null;
+    state.shellObservationRoot = null;
   };
 
-  const ensureTopControlsObserver = () => {
+  const ensureShellObserver = () => {
     if (!state.onLibraryRoute) return;
 
-    const root = getTopControlsObservationRoot();
+    const root = getShellObservationRoot();
     if (!(root instanceof Node)) return;
-    if (state.topControlsObserver && state.topControlsObservationRoot === root) return;
+    if (state.shellObserver && state.shellObservationRoot === root) return;
 
-    teardownTopControlsObserver();
+    teardownShellObserver();
 
-    state.topControlsObserver = new MutationObserver((mutations) => {
-      if (!state.onLibraryRoute || !mutations.length) return;
-
-      const nextRoot = getTopControlsObservationRoot();
-      if (nextRoot instanceof Node && nextRoot !== state.topControlsObservationRoot) {
-        ensureTopControlsObserver();
-        if (state.enabled) ensureResultsObserver();
-        scheduleControlRefresh();
+    state.shellObserver = new MutationObserver((mutations) => {
+      if (state.contextInvalidated || !mutations.length) return;
+      if (!isLibraryRoute()) {
+        kickRouteRefresh();
         return;
       }
 
-      const controlMissing = !getControlNode();
-      const controlAnchorPresent = !!getControlAnchor();
-      const touchesTopControls = mutations.some((mutation) => {
-        const target = mutation.target;
-        if (
-          target instanceof Element &&
-          (target.matches(TOP_CONTROLS_SELECTOR) || !!target.closest(TOP_CONTROLS_SELECTOR))
-        ) {
-          return true;
-        }
+      const pageRoot = getPageRoot();
+      if (pageRoot !== state.pageRoot) {
+        kickRouteRefresh();
+        return;
+      }
 
-        return (
-          Array.from(mutation.addedNodes).some(
-            (node) =>
-              node instanceof Element &&
-              (node.matches(TOP_CONTROLS_SELECTOR) || !!node.querySelector(TOP_CONTROLS_SELECTOR)),
-          ) ||
-          Array.from(mutation.removedNodes).some(
-            (node) =>
-              node instanceof Element &&
-              (node.matches(TOP_CONTROLS_SELECTOR) || !!node.querySelector(TOP_CONTROLS_SELECTOR)),
-          )
-        );
-      });
-
-      if ((controlMissing && controlAnchorPresent) || touchesTopControls) scheduleControlRefresh();
+      const anchor = getControlAnchor();
+      const control = getControlNode();
+      if (!anchor) {
+        control?.remove();
+        return;
+      }
+      if (
+        !control ||
+        control.parentElement !== anchor.actionGroup ||
+        control.nextElementSibling !== anchor.filterButton
+      ) {
+        scheduleControlRefresh();
+      }
     });
 
-    state.topControlsObserver.observe(root, { childList: true, subtree: true });
-    state.topControlsObservationRoot = root;
+    state.shellObserver.observe(root, { childList: true, subtree: true });
+    state.shellObservationRoot = root;
   };
 
   const teardownLibraryRoute = () => {
     state.onLibraryRoute = false;
+    state.pageRoot = null;
     state.controlRefreshToken += 1;
-    teardownTopControlsObserver();
+    state.cancelPendingWork?.();
+    teardownShellObserver();
     teardownResultsObserver();
     restoreHiddenItems();
     getControlNode()?.remove();
@@ -762,31 +901,41 @@
     }
 
     state.onLibraryRoute = true;
+    state.pageRoot = getPageRoot();
     ensureStyle();
-    scheduleControlRefresh();
-    ensureTopControlsObserver();
+    ensureShellObserver();
 
     if (state.enabled) {
       applyLibraryFilter();
       ensureResultsObserver();
-      return;
+    } else {
+      teardownResultsObserver();
+      restoreHiddenItems();
     }
 
-    teardownResultsObserver();
-    restoreHiddenItems();
+    const anchor = getControlAnchor();
+    const control = getControlNode();
+    if (!anchor) {
+      control?.remove();
+    } else if (
+      !control ||
+      control.parentElement !== anchor.actionGroup ||
+      control.nextElementSibling !== anchor.filterButton
+    ) {
+      scheduleControlRefresh();
+    }
   };
 
-  const scheduleRouteRefresh = debounce(refreshRouteState, 40);
+  const scheduleRouteRefresh = createCancellableDebounce(refreshRouteState, 40);
+  state.cancelPendingWork = () => {
+    runControlRefresh.cancel();
+    scheduleFilterRefresh.cancel();
+    scheduleRouteRefresh.cancel();
+  };
 
   const kickRouteRefresh = () => {
     if (state.contextInvalidated) return;
     scheduleRouteRefresh();
-    window.requestAnimationFrame?.(() => {
-      window.requestAnimationFrame?.(() => {
-        scheduleRouteRefresh();
-      });
-    });
-    window.setTimeout(scheduleRouteRefresh, 180);
   };
 
   const setEnabled = (enabled) => {
@@ -797,6 +946,7 @@
     if (!state.onLibraryRoute) return;
 
     if (!state.enabled) {
+      scheduleFilterRefresh.cancel();
       teardownResultsObserver();
       restoreHiddenItems();
       return;
@@ -809,29 +959,29 @@
   document.addEventListener(
     'click',
     (event) => {
-      const anchor = event.target.closest?.('a[href]');
-      if (!(anchor instanceof HTMLAnchorElement)) return;
-
-      let targetPath = '';
-      try {
-        targetPath = new URL(anchor.href, location.origin).pathname || '';
-      } catch {
-        return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const navigationControl = target.closest(
+        'nav button, nav a[href], [role="navigation"] button, [role="navigation"] a[href]',
+      );
+      const anchor = target.closest('a[href]');
+      let targetsLibrary = false;
+      if (anchor instanceof HTMLAnchorElement) {
+        try {
+          const targetPath = new URL(anchor.href, location.origin).pathname || '';
+          targetsLibrary = targetPath === '/library' || targetPath.startsWith('/library/');
+        } catch {}
       }
-
-      if (
-        !state.onLibraryRoute &&
-        targetPath !== '/library' &&
-        !targetPath.startsWith('/library/')
-      ) {
-        return;
-      }
+      if (!navigationControl && !targetsLibrary && !state.onLibraryRoute) return;
 
       kickRouteRefresh();
     },
     { capture: true },
   );
 
+  try {
+    window.navigation?.addEventListener('navigate', kickRouteRefresh);
+  } catch {}
   window.addEventListener('popstate', kickRouteRefresh);
   window.addEventListener('hashchange', kickRouteRefresh);
 
@@ -844,6 +994,7 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (!isExtensionAlive()) return;
       if (area !== 'sync' || !(STORAGE_KEY in changes)) return;
+      state.controlWriteToken += 1;
       setEnabled(changes[STORAGE_KEY]?.newValue === true);
       kickRouteRefresh();
     });

@@ -141,6 +141,7 @@ async function main() {
   for (const [name, script] of [
     ['Code and text', 'check'],
     ['Validator regression', 'test:validators'],
+    ['Library hide-pasted regression', 'test:library-hide-pasted'],
     ['ZIP builder required-input guard', 'test:zip-builder'],
     ['Settings wiring', 'validate:keys'],
     ['Shortcut report and inventory contracts', 'test:shortcuts:contracts'],

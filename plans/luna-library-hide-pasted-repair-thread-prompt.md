@@ -1,0 +1,24 @@
+/goal Complete plans/Done-0111-library-hide-pasted-repair-plan.md: repair Hide Pasted Files in ChatGPT Library list and grid views, restore one accessible eye toggle immediately left of Filters, and prove resilient selector/lifecycle behavior and reversible grid layout. Execute as GPT-6-Luna with Max reasoning, one batch per execution turn, keeping the overall goal active across automatic continuations without asking me to say "continue."
+
+Workspace: `C:\Users\bwhurd\Dropbox\CGCSP-Github`.
+
+Read `AGENTS.md`, the exact plan above, `PROJECT_SPEC.md` Validation and tooling posture, and relevant settings ownership in `specs/0001-adding-new-settings-spec.md`. Verify observations against current source/live DOM before editing. Follow the invoked planning handoff's scope; execution now implements it. Use only the smallest direct dependencies. Preserve unrelated changes.
+
+The plan has exactly three batches:
+1. Repair file discovery and grid layout.
+2. Restore toolbar toggle and lifecycle recovery.
+3. Integrate, document, and prove installed behavior.
+
+Complete the earliest unfinished batch, exactly one per execution turn. Record commands, results, proof, and remaining risk in the plan, then yield that turn while leaving the overall goal active for automatic continuation. Use `[ ]` not started, `[~]` incomplete, `[x]` fully proven, and `[!]` concrete blocker. Do not check a batch merely because code was written. After compaction, recover progress from the plan and continue the earliest unfinished batch. Never ask the user to say continue.
+
+Implementation owner is the Library IIFE in `extension/content-gated-ui-features.js`. Existing `main#main`, artifacts toolbar, and artifact item test IDs matched zero on the observed 2026-10-12 page. Both current views have `[data-library-item]`; list has `[data-library-column="name"]`; grid has a unique file-opening button plus an OUTER `[data-masonry-item]` with translated position and a parent with fixed height. Hiding just the inner card leaves layout holes. Use verified semantic anchors, reversible scoped grid auto-placement while filtering, and restore native masonry when disabled. Toolbar Filters contains a `filter-...` SVG fragment alongside grid/list pressed controls. Do not select hashed classes, generated IDs, localized native labels, or the first arbitrary menu.
+
+Preserve `hidePastedLibraryFilesEnabled` sync storage, false default, all existing normalized filename tokens, localized extension labels, popup synchronization, and context-invalidation safety. Control remains present while filtering is off. No result observer/scans while off. Fix self-triggering state writes and recover from button-driven SPA navigation, delayed hydration, root/toolbar/results replacement, added/renamed/reused items. Ambiguous unknown items stay visible. Never reparent React nodes, fetch private backend data, patch history, or add polling/permissions.
+
+Use synthetic sanitized fixtures, loading the current Library IIFE with stubbed extension APIs. New focused command planned: `node --test tests/library-hide-pasted.test.mjs`; supporting commands and integration gates are specified per batch. Run focused tests and required live/browser checks for actual risk. Accurately record failures and skipped/unavailable gates; neither mocked tests nor generic shortcut audits prove current installed Library behavior.
+
+Only the final batch performs the local deployment/reload through the documented unpacked-extension workflow after earlier gates pass. Verify actual extension source path, reload extension and page, and prove list/grid behavior with the user's authenticated Library page. The inspected Brian tab was exposed through the Chrome extension browser provider; a separate CDP browser was not advertised. Discover the current connection rather than hardcoding old tab IDs. If the browser has only a store build, use the documented manual standard Chrome CodexCleanProfile setup without forbidden extension launch flags; do not uninstall or silently replace the user's build. External access unavailable means an explicit incomplete gate.
+
+Restore the original view/setting/viewport after live tests. Do not open file contents, delete/rename user files, or send messages. Keep private file names/IDs/previews out of committed fixtures or evidence. No git push, Web Store publication, version bump, or ZIP build is required. Any newly justified release work must follow repo authorization and release procedures.
+
+Finish only when all three batches, final acceptance matrix, owning docs, required local deployment, and post-reload live proof pass. Then rename the plan to `plans/Done-0111-library-hide-pasted-repair-plan.md`, update this prompt's plan reference, and mark the goal complete. A prepared plan or unavailable external gate is not feature completion.
