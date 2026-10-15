@@ -6,6 +6,9 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 ---
 
+#### 10.15.2026
+- Fixed: Move Top Bar To Bottom no longer darkens the conversation background in light mode.
+
 #### 10.11.2026
 - Fixed: Hide Pasted Files now works in Library list and grid views, with its toggle restored.
 - Fixed: Composer shortcuts can now toggle selected tools off in Work mode and toggle Deep Research off in Chat.

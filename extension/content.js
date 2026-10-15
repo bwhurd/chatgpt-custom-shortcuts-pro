@@ -9046,12 +9046,6 @@ div[data-markdown-copy="exclude"].text-codex-description {
         --app-shell-main-content-frame-top-offset: 0px !important;
       }
 
-      html.csp-bottom-bar-ready main:has(
-          [data-app-shell-main-titlebar="true"] > [data-csp-bottom-native-actions]
-        ) {
-        background-color: transparent !important;
-      }
-
       html.csp-bottom-bar-ready
         [data-app-shell-main-titlebar="true"]:has(> [data-csp-bottom-native-actions]) {
         contain: none !important;

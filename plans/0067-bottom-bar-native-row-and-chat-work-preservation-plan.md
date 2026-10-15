@@ -35,6 +35,13 @@
 - [x] Update native sidebar/New Chat forwarding and reserve the enabled bar's flow footprint with one early settings read; add no polling or layout observer.
 - [x] Update the owning layout contract. The user explicitly requested no validation or testing, so no checks or extension reload were performed for this repair. Earlier plan work remains separately outstanding.
 
+## Light-mode background repair (2026-10-15)
+
+- [x] Inspect the attached conversation: the bottom-bar style makes the main surface transparent, exposing the `rgb(227, 227, 227)` page canvas instead of its native light surface.
+- [x] Remove the main-background override and document native surface ownership.
+- [ ] Reload the installed extension and verify the native conversation background in light and dark modes, including conversation-action visibility.
+- [x] Run `node --check extension/content.js`, `npx biome check extension/content.js`, and scoped `git diff --check`; all pass. Installed verification awaits user reload because browser attachment cannot claim `chrome://extensions`.
+
 ## Done when
 
 ### App-shell crash repair (2026-09-27)
