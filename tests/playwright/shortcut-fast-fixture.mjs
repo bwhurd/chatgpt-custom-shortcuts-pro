@@ -228,7 +228,7 @@ if (runnable.length) {
           await page.evaluate(() => {
             document.body.insertAdjacentHTML(
               'beforeend',
-              '<button type="button" id="share-distractor"><svg><use href="#arrow-up-open-base-light-16"></use></svg>Unrelated</button><div data-testid="app-shell-header-context-menu-surface"><div data-app-shell-header-obstacle="true"><button type="button" id="share-target"><svg><use href="#arrow-up-open-base-light-16"></use></svg>Share</button></div></div>',
+              '<button type="button" id="share-distractor"><svg><use href="#arrow-up-open-base-light-16"></use></svg>Unrelated</button><div data-testid="app-shell-header-context-menu-surface"><div data-app-shell-header-obstacle="true"><button type="button" id="share-target"><svg><use href="#arrow-up-open-base-light-20"></use></svg>Share</button></div></div>',
             );
             window.fixtureClicks = [];
             window.fixtureClipboard = '';
@@ -498,8 +498,18 @@ if (runnable.length) {
                         const promptLink = `<span data-prompt-link-href="app://connector_openai_deep_research" data-prompt-link-label="$deep-research" data-appearance="inline-mention" contenteditable="false"><span contenteditable="false">${icon}</span><span>Deep Research</span></span>`;
                         composer.insertAdjacentHTML('afterbegin', promptLink);
                       } else if (study) {
-                        const pill = `<span data-inline-selection-pill data-system-hint-type="tatertot" contenteditable="false">${icon}<span>Study</span></span>`;
-                        composer.innerHTML = pill;
+                        const selectedButton = document.createElement('button');
+                        selectedButton.type = 'button';
+                        selectedButton.dataset.testid = 'study-selected-tool';
+                        selectedButton.innerHTML = `${icon}<span>Study</span>`;
+                        selectedButton.onclick = () => {
+                          window.fixtureClicks.push('tool-remove');
+                          selectedButton.remove();
+                          delete composer.dataset.studyEnabled;
+                          delete composer.dataset.systemHintType;
+                        };
+                        document.querySelector('#tool-footer').append(selectedButton);
+                        composer.replaceChildren();
                         window.studyOwnedQuery = null;
                       } else {
                         const pill = `<span data-inline-selection-pill contenteditable="false">${icon}<span>Web search</span></span>`;
@@ -1289,30 +1299,27 @@ if (runnable.length) {
               );
             }
             if (item.actionId === 'shortcutKeyStudy') {
-              const composer = page.locator('#composer');
               assert.equal(
-                await composer
+                await page
                   .locator(
-                    `span[data-inline-selection-pill] svg use[href="#${item.fixturePillIconId}"]`,
+                    `#tool-footer [data-testid="study-selected-tool"] svg use[href="#${item.fixturePillIconId}"]`,
                   )
                   .count(),
                 1,
-                'The first trusted shortcut press must add the verified Study pill inside the composer',
+                'The first trusted shortcut press must add the observed Study footer control',
               );
               assert.equal(
-                await page.locator('body [data-inline-selection-pill]').count(),
+                await page.locator('#tool-footer [data-testid="study-selected-tool"]').count(),
                 1,
-                'Only the composer-owned Study pill should be present',
+                'Only one selected Study footer control should be present',
               );
               assert.equal(
-                await composer.evaluate((element) =>
+                await page.locator('#composer').evaluate((element) =>
                   Array.from(element.childNodes)
                     .filter(
                       (node) =>
-                        !(
-                          node.nodeType === Node.ELEMENT_NODE &&
-                          node.matches('[data-inline-selection-pill]')
-                        ),
+                        node.nodeType !== Node.ELEMENT_NODE ||
+                        !node.matches('[data-inline-selection-pill]'),
                     )
                     .map((node) => node.textContent)
                     .join('')
@@ -1354,6 +1361,9 @@ if (runnable.length) {
                     work: document.querySelectorAll(
                       '#tool-footer [data-testid="work-selected-tool"]',
                     ).length,
+                    study: document.querySelectorAll(
+                      '#tool-footer [data-testid="study-selected-tool"]',
+                    ).length,
                     mode: document.body.dataset.fixtureMode,
                     draft: draft.innerText.trim(),
                     legacyInlineOnlyMatch:
@@ -1368,9 +1378,10 @@ if (runnable.length) {
                   mode,
                   'Tool selection must belong to the active fixture mode',
                 );
-                assert.equal(state.inline, mode === 'chat' && !deepResearch ? 1 : 0);
+                assert.equal(state.inline, mode === 'chat' && !deepResearch && !study ? 1 : 0);
                 assert.equal(state.promptLink, mode === 'chat' && deepResearch ? 1 : 0);
                 assert.equal(state.work, mode === 'work' ? 1 : 0);
+                assert.equal(state.study, mode === 'chat' && study ? 1 : 0);
                 assert.equal(state.draft, expectedDraft, 'Tool selection must preserve the draft');
               };
               const expectedDraft = item.actionId === 'shortcutKeyStudy' ? '' : 'Draft';
@@ -1501,23 +1512,42 @@ if (runnable.length) {
                   );
                   row.deepResearchSelectionProof =
                     'Chat app-link mention is distinct from inline selection pills';
+                } else if (study) {
+                  const state = await selectionCount(mode);
+                  assert.equal(state.inline, 0);
+                  assert.equal(state.study, 1);
+                  assert.equal(
+                    state.legacyInlineOnlyMatch,
+                    false,
+                    'The former inline-pill-only resolver cannot see the selected Study footer control',
+                  );
+                  row.studySelectionProof =
+                    'Selected Study footer control is distinct from inline selection pills';
                 }
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  ({ selectedMode, deepResearch }) =>
+                  ({ selectedMode, deepResearch, study }) =>
                     selectedMode === 'work'
                       ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
                       : deepResearch
                         ? !document.querySelector(
                             '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
                           )
-                        : !document.querySelector('#composer [data-inline-selection-pill]'),
-                  { selectedMode: mode, deepResearch },
+                        : study
+                          ? !document.querySelector(
+                              '#tool-footer [data-testid="study-selected-tool"]',
+                            )
+                          : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch, study },
                   { timeout: 1000 },
                 );
                 assert.deepEqual(
                   await page.evaluate(() => window.fixtureClicks),
-                  mode === 'work' ? ['tool-remove'] : modeClicks,
+                  mode === 'work'
+                    ? ['tool-remove']
+                    : study
+                      ? ['tool-target', 'tool-remove']
+                      : modeClicks,
                   'The second press must remove only the selected tool without reopening its menu',
                 );
                 assert.equal(
@@ -1529,30 +1559,38 @@ if (runnable.length) {
                 await page.locator('#composer').click();
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  ({ selectedMode, deepResearch }) =>
+                  ({ selectedMode, deepResearch, study }) =>
                     selectedMode === 'work'
                       ? !!document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
                       : deepResearch
                         ? !!document.querySelector(
                             '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
                           )
-                        : !!document.querySelector('#composer [data-inline-selection-pill]'),
-                  { selectedMode: mode, deepResearch },
+                        : study
+                          ? !!document.querySelector(
+                              '#tool-footer [data-testid="study-selected-tool"]',
+                            )
+                          : !!document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch, study },
                   { timeout: 2000 },
                 );
                 await assertSelected(mode, modeDraft);
                 modeProofs[mode].push('re-added-once');
                 await page.keyboard.press(`Alt+${code}`);
                 await page.waitForFunction(
-                  ({ selectedMode, deepResearch }) =>
+                  ({ selectedMode, deepResearch, study }) =>
                     selectedMode === 'work'
                       ? !document.querySelector('#tool-footer [data-testid="work-selected-tool"]')
                       : deepResearch
                         ? !document.querySelector(
                             '#composer [data-prompt-link-href="app://connector_openai_deep_research"]',
                           )
-                        : !document.querySelector('#composer [data-inline-selection-pill]'),
-                  { selectedMode: mode, deepResearch },
+                        : study
+                          ? !document.querySelector(
+                              '#tool-footer [data-testid="study-selected-tool"]',
+                            )
+                          : !document.querySelector('#composer [data-inline-selection-pill]'),
+                  { selectedMode: mode, deepResearch, study },
                   { timeout: 1000 },
                 );
                 modeProofs[mode].push('removed-again');

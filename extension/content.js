@@ -2260,7 +2260,15 @@ const clickElementLikeUser = (el) => {
 
     for (const codeElement of codeElements) {
       const roleContainer = codeElement.closest?.('[data-message-author-role]');
-      if (roleContainer?.getAttribute?.('data-message-author-role') !== 'assistant') continue;
+      if (roleContainer) {
+        if (roleContainer.getAttribute('data-message-author-role') !== 'assistant') continue;
+      } else if (
+        codeElement
+          .closest?.('[data-markdown-text-style]')
+          ?.getAttribute?.('data-markdown-text-style') !== 'assistant-message'
+      ) {
+        continue;
+      }
 
       const block = getRenderedCodeText(codeElement);
       if (block) blocks.push(block);
@@ -3224,17 +3232,20 @@ const clickElementLikeUser = (el) => {
       selectors.some(
         (selector) => element.matches(selector) || element.querySelector(selector),
       );
+    const form = composer.closest('form');
+    const selectionScope = form || composer;
     const inlinePills = Array.from(
-      composer.querySelectorAll('[data-inline-selection-pill]'),
+      selectionScope.querySelectorAll('[data-inline-selection-pill]'),
     ).filter((element) => matchesIcon(element, inlineSelectors));
     const promptLinkSelections = Array.from(
-      composer.querySelectorAll('[data-prompt-link-href][data-appearance="inline-mention"]'),
+      selectionScope.querySelectorAll(
+        '[data-prompt-link-href][data-appearance="inline-mention"]',
+      ),
     ).filter(
       (element) =>
         element.getAttribute('data-prompt-link-href') === DEEP_RESEARCH_PROMPT_LINK_HREF &&
         matchesIcon(element, inlineSelectors),
     );
-    const form = composer.closest('form');
     const workButtons = form
       ? Array.from(
           form.querySelectorAll('[data-composer-footer-responsive] button'),
@@ -3246,10 +3257,20 @@ const clickElementLikeUser = (el) => {
             button.querySelector(`svg path[d^="${WORK_TOOL_REMOVE_CLOSE_PATH_PREFIX}"]`),
         )
       : [];
+    const footerButtons = form
+      ? Array.from(form.querySelectorAll('[data-composer-footer-responsive] button')).filter(
+          (button) =>
+            !workButtons.includes(button) &&
+            isDirectActionVisible(button) &&
+            !button.closest('[role="menu"], [data-list-navigation-item="true"]') &&
+            inlineSelectors.some((selector) => button.querySelector(selector)),
+        )
+      : [];
     const selected = [
       ...inlinePills.map((element) => ({ kind: 'inline', element })),
       ...promptLinkSelections.map((element) => ({ kind: 'inline', element })),
       ...workButtons.map((element) => ({ kind: 'work', element })),
+      ...footerButtons.map((element) => ({ kind: 'footer', element })),
     ];
     if (selected.length > 1) return { kind: 'ambiguous', element: null };
     return selected[0] || null;
@@ -3273,7 +3294,7 @@ const clickElementLikeUser = (el) => {
       workSelectedIconTokens,
     );
     if (selectedAction?.kind === 'ambiguous') return;
-    if (selectedAction?.kind === 'work') {
+    if (selectedAction?.kind === 'work' || selectedAction?.kind === 'footer') {
       if (!allowNativeToolRemoval) return;
       smartClick(selectedAction.element);
       return;
@@ -7971,7 +7992,8 @@ const clickElementLikeUser = (el) => {
         // Keep native Share activation inside the trusted Alt-key task; the
         // helper's default mode yields and delays before clicking.
         void clickButtonBySelector(
-          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"]), ' +
+          '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-20"]), ' +
+            '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"]), ' +
             '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
           { immediate: true },
         );
@@ -8000,7 +8022,7 @@ const clickElementLikeUser = (el) => {
 
       // If the stored value is KeyboardEvent.code style
       const isCodeStyle =
-        /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
+        /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Backquote|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
           setting,
         );
       if (isCodeStyle) {

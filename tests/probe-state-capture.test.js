@@ -1476,7 +1476,7 @@ test('new probe captures stay scoped to observed controls and satisfy normalized
   captures.push(studyCapture);
 
   const deepResearchDefinition = definitions.find(
-    (definition) => definition.stateId === 'probe-composer-deep-research-search',
+    (definition) => definition.stateId === 'probe-composer-deep-research-menu',
   );
   const deepResearchItem = new FakeHTMLElement({
     outerHTML:
@@ -1745,7 +1745,7 @@ test('New Conversation semantic proof requires the real owned-conversation to bl
   assert.equal(alreadyBlank.status, 'fail');
 });
 
-test('Study semantic proof requires observed inline pill activation and a second-shortcut toggle off', async () => {
+test('Study semantic proof requires the selected control and a second-shortcut toggle off', async () => {
   const { evaluateLiveProbeSemantic } = await coreModule;
   const shortcut = {
     actionId: 'shortcutKeyStudy',
@@ -1758,14 +1758,14 @@ test('Study semantic proof requires observed inline pill activation and a second
     userMessageCount: 0,
     assistantMessageCount: 0,
     composerHasText: true,
-    selectedStudyPillCount: 0,
+    selectedStudyControlCount: 0,
   };
-  const activation = { ...before, selectedStudyPillCount: 1 };
-  const deactivation = { ...before, composerHasText: false, selectedStudyPillCount: 0 };
+  const activation = { ...before, selectedStudyControlCount: 1 };
+  const deactivation = { ...before, composerHasText: false, selectedStudyControlCount: 0 };
   const after = { ...deactivation };
   const actionEvidence = {
-    studyPillActivationSnapshot: activation,
-    studyPillDeactivationSnapshot: deactivation,
+    studySelectionActivationSnapshot: activation,
+    studySelectionDeactivationSnapshot: deactivation,
     studyToggleOffDispatched: true,
   };
 
@@ -1779,13 +1779,13 @@ test('Study semantic proof requires observed inline pill activation and a second
     actionEvidence,
   );
   assert.equal(proof.status, 'pass');
-  assert.equal(proof.proofMethod, 'observed-study-inline-pill-on-and-toggle-off');
-  assert.match(proof.observed, /Study pill count 0 -> 1 -> 0/);
+  assert.equal(proof.proofMethod, 'observed-study-control-on-and-toggle-off');
+  assert.match(proof.observed, /Study selected-control count 0 -> 1 -> 0/);
   assert.doesNotMatch(JSON.stringify(proof), /PRIVATE COMPOSER TEXT/);
 
   for (const { changedActivation, changedDeactivation, changedEvidence, changedAfter } of [
-    { changedActivation: { ...activation, selectedStudyPillCount: 0 } },
-    { changedDeactivation: { ...deactivation, selectedStudyPillCount: 1 } },
+    { changedActivation: { ...activation, selectedStudyControlCount: 0 } },
+    { changedDeactivation: { ...deactivation, selectedStudyControlCount: 1 } },
     { changedEvidence: { ...actionEvidence, studyToggleOffDispatched: false } },
     { changedAfter: { ...after, composerHasText: true } },
     { changedAfter: { ...after, messageCount: 1, userMessageCount: 1 } },
@@ -1801,8 +1801,8 @@ test('Study semantic proof requires observed inline pill activation and a second
       {
         ...actionEvidence,
         ...(changedEvidence || {}),
-        studyPillActivationSnapshot: changedActivation || activation,
-        studyPillDeactivationSnapshot: changedDeactivation || deactivation,
+        studySelectionActivationSnapshot: changedActivation || activation,
+        studySelectionDeactivationSnapshot: changedDeactivation || deactivation,
       },
     );
     assert.equal(failedProof.status, 'fail');
@@ -1822,9 +1822,9 @@ test('supplemental artifacts replace deferred rows and write only to the existin
     ],
     ['probe-composer-study-search', 'composer-study-action', '3i_Probe_ComposerStudySearch.txt'],
     [
-      'probe-composer-deep-research-search',
+      'probe-composer-deep-research-menu',
       'composer-deep-research-action',
-      '3m_Probe_ComposerDeepResearchSearch.txt',
+      '3m_Probe_ComposerDeepResearchMenu.txt',
     ],
     [
       'probe-active-dictation-controls',

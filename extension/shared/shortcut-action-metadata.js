@@ -710,7 +710,7 @@
       ['button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])'],
       {
         matchGroups: [['data-list-navigation-item="true"', 'deep_research_app/icon.png']],
-        uiStateRefs: ['probe-composer-deep-research-search'],
+        uiStateRefs: ['composer-add-files-and-more-menu'],
         notes:
           'The current Deep research menu row uses the observed app icon image inside a list-navigation button; matching it by the structural row and icon path avoids localized text.',
       },
@@ -842,12 +842,19 @@
     bySelectorList(
       'share-chat-button',
       [
+        '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-20"])',
         '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"])',
         '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])',
       ],
       {
-        identifier: 'header-obstacle-icon=#arrow-up-open-base-light-16|legacy-path=M13.3337',
+        identifier:
+          'header-obstacle-icon=#arrow-up-open-base-light-20|#arrow-up-open-base-light-16|legacy-path=M13.3337',
         matchGroups: [
+          [
+            'data-testid="app-shell-header-context-menu-surface"',
+            'data-app-shell-header-obstacle="true"',
+            '#arrow-up-open-base-light-20',
+          ],
           [
             'data-testid="app-shell-header-context-menu-surface"',
             'data-app-shell-header-obstacle="true"',
@@ -861,7 +868,7 @@
         ],
         uiStateRefs: ['topbar-bottom-disabled-header-area'],
         notes:
-          'Share button inside the app-shell header obstacle, identified by the current arrow-up-open SVG symbol with the previous path prefix retained as a compatibility fallback; neither selector depends on a localized accessible name.',
+          'Share button inside the app-shell header obstacle, identified by the observed arrow-up-open 20 or 16 SVG sprite with the previous path prefix retained as a compatibility fallback; neither selector depends on a localized accessible name.',
       },
     ),
     byIconToken(
@@ -1269,7 +1276,9 @@
       targetRefs: ['model-switcher-button', 'model-switcher-menu'],
       uiStateRefs: targetStateRefs('model-switcher-button', 'model-switcher-menu'),
       activationProbe: opensTargetProbe('model-switcher-menu', {
-        notes: 'No-token live probe dispatches the shortcut and asserts that the model menu opens.',
+        uiStateRefs: ['topbar-bottom-disabled-header-area'],
+        notes:
+          'Start from the captured closed-header state, dispatch the shortcut, and assert that the model menu becomes newly visible.',
       }),
     }),
     defineShortcutAction({
@@ -1369,10 +1378,10 @@
       targetRefs: ['composer-plus-button', 'composer-deep-research-action'],
       uiStateRefs: targetStateRefs('composer-plus-button', 'composer-deep-research-action'),
       activationProbe: directMenuTargetProbe('composer-deep-research-action', {
-        setup: 'composer-plus-menu-search-deep-research',
-        uiStateRefs: ['probe-composer-deep-research-search'],
+        setup: 'new-conversation-plus-menu',
+        uiStateRefs: ['composer-add-files-and-more-menu'],
         notes:
-          'Open the plus menu and temporarily type the owned deep research query; capture the target and clean up without submitting.',
+          'Verify Chat mode is selected before opening the plus menu, activate the visible Deep Research app row, and verify the app-link mention in the composer without submitting.',
       }),
     }),
     defineShortcutAction({

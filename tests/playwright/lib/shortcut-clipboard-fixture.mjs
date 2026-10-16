@@ -33,7 +33,7 @@ export async function runClipboardCase(context, content, item, started) {
       row.pathScope =
         'Real message selection, payload serializer and clipboard writer with an in-memory ClipboardItem boundary; native OS clipboard and permissions remain unverified.';
     await page.setContent(
-      '<input id="search"><section data-message-author-role="user"><pre><code>User distractor</code></pre></section><section data-message-author-role="assistant"><pre><code>  one<br>two</code></pre><pre><code>three</code></pre></section><code>Inline distractor</code>',
+      '<input id="search"><section data-message-author-role="user"><pre><code>User distractor</code></pre></section><section data-markdown-text-style="assistant-message"><pre><code>  one<br>two</code></pre><pre><code>three</code></pre></section><code>Inline distractor</code>',
     );
     if (message)
       await page.setContent(
