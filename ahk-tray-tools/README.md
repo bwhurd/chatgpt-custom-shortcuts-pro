@@ -20,11 +20,15 @@ When AI subjects are enabled and a key is available, the helper sends a bounded 
 
 **Push with change note...** asks for optional context before repository changes. Canceling the note prompt ends the operation before staging or committing. A shared process lock prevents duplicate workers. Protected credential/config paths, detached or unmerged states, branch or index drift, failed hooks, and unsafe subjects stop the operation. A rejected push leaves a verified local commit in place for recovery.
 
+Message generation reports **Push pending**; only **Push complete** confirms publication. The helper pushes existing changelog edits along with the other files; it does not generate changelog entries. If the remote tip is missing from local history or the histories have diverged, preflight stops before formatting, staging, message generation, or creating another commit.
+
 The helper records progress and safe outcomes under `_temp-files/tray-git-sync/`:
 
-- `git-sync-status.txt` contains the current or final status.
+- `git-sync-status.<run-token>.txt` contains that tray launch's current or final status. Each launch polls its own file, so a previous run cannot supply a success message. Direct script runs without `-RunToken` use `git-sync-status.txt`.
 - `git-sync.log` contains workflow steps, the final subject, source, and bounded counts/categories. It does not contain the API key, request headers, prompt, diff, or raw API response.
 
 If a run fails, read the status and log, then inspect `git status` and the current branch before retrying. If the log says a commit was preserved after a rejected push, repair the remote/authentication issue and push the existing commit; do not force-push. For a busy status, wait for the active tray worker to finish. API/network failures can fall back to a file-summary subject; invalid or protected inputs stop before commit.
+
+For a remote-history warning, fetch the configured remote, inspect the local and remote commits, and merge the destination branch into the local branch. Resolve any conflicts while preserving both sides, then retry the push. For the usual `main` tracking `origin/main`, this is `git fetch origin`, `git merge origin/main`, then the tray push. A clean retry pushes the existing merged commit without generating another message. A successful AI subject alone does not mean the push succeeded.
 
 The test harness uses only unique temporary repositories, synthetic keys, mocked API responses, and local bare remotes. It refuses the production repository and non-local remotes. Do not test this workflow by pushing scratch commits to GitHub.

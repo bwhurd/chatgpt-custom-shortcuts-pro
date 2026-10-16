@@ -1,5 +1,13 @@
 # Tray Git push: descriptive AI commit subjects
 
+## Follow-up: rejected pushes and stale tray status
+
+- [x] Confirmed local `e4000ae` contains four changelog entries absent from GitHub `main`; GitHub has three other commits, so the histories diverged. The user's approved log read showed AI subject generation succeeded but the final push returned `ERROR`. Tray polling could also read a previous run's final status before the new worker wrote its first step.
+- [x] Give each tray launch a unique status token; keep the worker mutex and existing status kinds, and never consume a prior launch's success. Message-generation progress now explicitly says `Push pending`.
+- [x] Stop before staging/API/commit when the advertised remote tip is absent from local history or is not an ancestor of local HEAD; report that fetching and merging are required.
+- [x] Prove run isolation, remote-only history, divergence, and changelog delivery using synthetic fixtures and local bare remotes. Windows PowerShell 5.1 `tests/tray-git-sync.test.ps1 -Phase Integration` passed 117 assertions. PowerShell fast syntax/analyzer checks passed for both changed scripts; `npm run check:text` and scoped `git diff --check` passed. Biome accepted the scoped command but processed zero supported files. Updated the tray README with recovery instructions.
+- [x] Preserve local and remote commits; prepare the real changelog recovery without force-pushing. Merge `6a7250b` incorporates the three remote commits and retains the entire local file tree. Publish with a normal fast-forward push and confirm the remote commit/changelog afterward; record that live result in the chat. Reload Tray while idle to activate the new per-launch polling. Keep this plan active while the original Batch 03 manual checks remain outstanding.
+
 ## Outcome and status
 
 - [ ] Replace timestamp-only subjects from `Push local to git` with descriptions of the changes being committed. Every newly created tray commit has exactly one nonempty subject, at most **52 characters including spaces**, and no body or trailers.

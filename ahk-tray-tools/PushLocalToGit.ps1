@@ -1,6 +1,7 @@
 param(
     [switch]$RunWorkflow,
-    [switch]$WithChangeNote
+    [switch]$WithChangeNote,
+    [ValidatePattern('^([A-Za-z0-9-]{1,80})?$')][string]$RunToken
 )
 
 . (Join-Path $PSScriptRoot 'GitPushSupport.ps1')
@@ -179,9 +180,25 @@ function Get-GitPushRepositorySnapshot {
     if ($remoteUrl.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace([string]$remoteUrl.Text)) {
         throw 'No configured push remote is available.'
     }
-    $null = Get-GitPushCommandResult -RepositoryRoot $RepositoryRoot -Arguments @(
+    $remoteHeadResult = Get-GitPushCommandResult -RepositoryRoot $RepositoryRoot -Arguments @(
         'ls-remote', '--heads', $remote, ('refs/heads/' + $targetBranch)
     )
+    $remoteHeadText = ([string]$remoteHeadResult.Text).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($remoteHeadText)) {
+        $remoteHead = ($remoteHeadText -split '\s+')[0]
+        if ($remoteHead -notmatch '^[0-9a-f]{40,64}$') {
+            throw 'The remote branch returned an invalid commit identifier.'
+        }
+        if ([string]::IsNullOrEmpty($head)) {
+            throw 'Remote history needs fetching and merging before pushing.'
+        }
+        $ancestorResult = Get-GitPushCommandResult -RepositoryRoot $RepositoryRoot -Arguments @(
+            'merge-base', '--is-ancestor', $remoteHead, $head
+        ) -AllowedExitCodes @(0, 1, 128)
+        if ($ancestorResult.ExitCode -ne 0) {
+            throw 'Remote history needs fetching and merging before pushing.'
+        }
+    }
     return [pscustomobject]@{
         Root = $actualRoot
         Branch = $branch
@@ -336,6 +353,7 @@ function Invoke-GitPushWorkflow {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
         [string]$RunDirectory,
+        [ValidatePattern('^([A-Za-z0-9-]{1,80})?$')][string]$RunToken,
         [string]$SettingsRoot,
         [switch]$PromptForChangeNote,
         [AllowNull()][string]$ChangeNote,
@@ -352,6 +370,9 @@ function Invoke-GitPushWorkflow {
     }
     $RunDirectory = [System.IO.Path]::GetFullPath($RunDirectory)
     $statusPath = Join-Path $RunDirectory 'git-sync-status.txt'
+    if (-not [string]::IsNullOrEmpty($RunToken)) {
+        $statusPath = Join-Path $RunDirectory ('git-sync-status.' + $RunToken + '.txt')
+    }
     $logPath = Join-Path $RunDirectory 'git-sync.log'
     $mutexName = 'Local\CGCSP_TrayGitSync_' + (Get-GitPushRepoId -RepositoryRoot $canonicalRoot)
     $mutex = $null
@@ -467,7 +488,8 @@ function Invoke-GitPushWorkflow {
             if (-not (Test-GitPushCommitSubject -Subject $subject)) {
                 throw 'No safe commit subject was available.'
             }
-            $lastMessage = $selection.SafeStatus + ' Subject: ' + $subject
+            $messageStatus = if ($selection.Source -eq 'ai') { 'AI message ready.' } else { $selection.SafeStatus }
+            $lastMessage = $messageStatus + ' Push pending. Subject: ' + $subject
             Write-GitPushRunStatus -Path $statusPath -State 'STEP' -Message $lastMessage
             Add-GitPushRunLog -Path $logPath -Message $lastMessage
 
@@ -573,6 +595,9 @@ function Invoke-GitPushWorkflow {
                 elseif ($phase -eq 'repository preflight' -and $caughtExceptionMessage -eq 'No configured push remote is available.') {
                     $lastMessage = 'Push stopped: configure the branch upstream or an origin remote.'
                 }
+                elseif ($caughtExceptionMessage -eq 'Remote history needs fetching and merging before pushing.') {
+                    $lastMessage = 'Push stopped: remote history needs fetching and merging. Local changes and commits are preserved.'
+                }
                 else {
                     $lastMessage = 'Push stopped during ' + $phase + '; no force push was attempted.'
                 }
@@ -613,6 +638,6 @@ function Invoke-GitPushWorkflow {
 
 if ($RunWorkflow) {
     $productionRoot = Split-Path -Parent $PSScriptRoot
-    $workflowResult = Invoke-GitPushWorkflow -RepositoryRoot $productionRoot -PromptForChangeNote:$WithChangeNote
+    $workflowResult = Invoke-GitPushWorkflow -RepositoryRoot $productionRoot -PromptForChangeNote:$WithChangeNote -RunToken $RunToken
     exit ([int]$workflowResult.ExitCode)
 }

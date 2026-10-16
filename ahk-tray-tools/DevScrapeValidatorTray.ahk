@@ -251,13 +251,15 @@ SetTrayWorking(tipText) {
 }
 
 StartGitPush(withChangeNote) {
-    global psExe, projectRoot, pushGitPs, pushGitPid, pushGitLastStatus, pushGitInProgress
+    global psExe, projectRoot, pushGitPs, pushGitPid, pushGitLastStatus, pushGitInProgress, pushGitStatusPath
     if (pushGitInProgress) {
         ToastMessage("Git push is already running.", 5000)
         return
     }
 
     noteArgument := withChangeNote ? "-WithChangeNote" : ""
+    runToken := A_NowUTC "-" A_TickCount "-" DllCall("GetCurrentProcessId")
+    pushGitStatusPath := projectRoot "\_temp-files\tray-git-sync\git-sync-status." runToken ".txt"
     pushGitPid := 0
     pushGitLastStatus := ""
     pushGitInProgress := 1
@@ -266,7 +268,7 @@ StartGitPush(withChangeNote) {
     Menu, Tray, Disable, Reload Tray
     Menu, Tray, Disable, Git push settings...
     ToastMessage("Starting local-to-git sync...", 5000)
-    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%pushGitPs%" -RunWorkflow %noteArgument%, %projectRoot%, Hide UseErrorLevel, pushGitPid
+    Run, "%psExe%" -NoProfile -Sta -ExecutionPolicy Bypass -WindowStyle Hidden -File "%pushGitPs%" -RunWorkflow -RunToken "%runToken%" %noteArgument%, %projectRoot%, Hide UseErrorLevel, pushGitPid
     if (ErrorLevel) {
         pushGitInProgress := 0
         Menu, Tray, Enable, Push local to git

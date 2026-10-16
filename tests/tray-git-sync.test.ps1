@@ -642,14 +642,18 @@ function Invoke-IntegrationWorkflow {
         [scriptblock]$ResponseTransport,
         [scriptblock]$NpmRunner,
         [scriptblock]$BeforeCommit,
+        [string]$RunDirectory,
+        [string]$RunToken,
         [AllowNull()][string]$Note
     )
     if ($null -eq $ResponseTransport) { $ResponseTransport = Get-TestMockTransport }
     if ($null -eq $NpmRunner) { $NpmRunner = { param($ScriptName, $RepositoryRoot) Invoke-IntegrationNpmRunner -ScriptName $ScriptName -RepositoryRoot $RepositoryRoot } }
     $settings = [pscustomobject]@{ AiSubjectsEnabled = $true }
     $settingsRoot = Join-Path $FixtureRoot 'synthetic local settings'
-    $runDirectory = Join-Path $FixtureRoot ('run files ' + [guid]::NewGuid().ToString('N'))
-    return Invoke-GitPushWorkflow -RepositoryRoot $Pair.RepositoryRoot -RunDirectory $runDirectory -SettingsRoot $settingsRoot -SettingsOverride $settings -ApiKeyOverride $script:IntegrationSecureKey -ResponseTransport $ResponseTransport -NpmRunner $NpmRunner -BeforeCommit $BeforeCommit -ChangeNote $Note
+    if ([string]::IsNullOrEmpty($RunDirectory)) {
+        $RunDirectory = Join-Path $FixtureRoot ('run files ' + [guid]::NewGuid().ToString('N'))
+    }
+    return Invoke-GitPushWorkflow -RepositoryRoot $Pair.RepositoryRoot -RunDirectory $RunDirectory -RunToken $RunToken -SettingsRoot $settingsRoot -SettingsOverride $settings -ApiKeyOverride $script:IntegrationSecureKey -ResponseTransport $ResponseTransport -NpmRunner $NpmRunner -BeforeCommit $BeforeCommit -ChangeNote $Note
 }
 
 function Get-TestGitBashPath {
@@ -731,12 +735,16 @@ function Invoke-IntegrationPhase {
         Initialize-IntegrationMock -Subject 'Clarify setup guidance'
         $successPath = Join-Path $successPair.RepositoryRoot 'README.md'
         [System.IO.File]::WriteAllText($successPath, ('Clarifies setup and usage.' + [Environment]::NewLine), [System.Text.Encoding]::UTF8)
+        $changelogText = '# Changelog' + [Environment]::NewLine + '- Fixed: synthetic tray fixture.' + [Environment]::NewLine
+        [System.IO.File]::WriteAllText((Join-Path $successPair.RepositoryRoot 'CHANGELOG.md'), $changelogText, (New-Object System.Text.UTF8Encoding($false)))
+        $sharedRunDirectory = Join-Path $FixtureRoot 'shared status files'
         $script:IntegrationNpmCalls = @()
-        $success = Invoke-IntegrationWorkflow -Pair $successPair -FixtureRoot $FixtureRoot -Note 'Clarify root installation guidance'
+        $success = Invoke-IntegrationWorkflow -Pair $successPair -FixtureRoot $FixtureRoot -Note 'Clarify root installation guidance' -RunDirectory $sharedRunDirectory -RunToken 'first-run'
         Assert-True -Condition $success.Success -Message ('staged changes commit and push to the local bare remote: ' + $success.Status)
         Assert-Equal -Expected 1 -Actual $success.RequestCount -Message 'commit-and-push uses one synthetic API request'
         Assert-Equal -Expected 1 -Actual $script:MockCalls -Message 'commit-and-push calls only the mocked transport'
         Assert-Equal -Expected $success.CommitSha -Actual (Get-IntegrationRemoteHead -RemoteRoot $successPair.RemoteRoot) -Message 'the exact verified commit reaches the local destination'
+        Assert-Equal -Expected $changelogText.Trim() -Actual (Invoke-TestGit -RepositoryRoot $successPair.RemoteRoot -Arguments @('show', 'refs/heads/main:CHANGELOG.md')).Trim() -Message 'changelog contents reach the remote in the same verified commit'
         Assert-Equal -Expected $successPair.BaseHead -Actual (Invoke-TestGit -RepositoryRoot $successPair.RepositoryRoot -Arguments @('rev-parse', 'HEAD^')) -Message 'new commit has the captured HEAD as its parent'
         $commitRaw = Get-GitPushCommitRaw -RepositoryRoot $successPair.RepositoryRoot -CommitSha $success.CommitSha
         $commitSeparator = ([string][char]10) + ([string][char]10)
@@ -752,6 +760,7 @@ function Invoke-IntegrationPhase {
         $successLog = Get-Content -LiteralPath $success.LogPath -Raw
         Assert-False -Condition ($successLog.Contains('sk-proj-')) -Message 'run log contains no key material'
         Assert-False -Condition ($successLog.Contains('Authorization')) -Message 'run log contains no authorization header'
+        Assert-True -Condition ($successLog.Contains('AI message ready. Push pending.')) -Message 'message generation is explicitly distinct from push completion'
         Assert-Equal -Expected 0 -Actual (Get-GitPushWorkingTreeStatus -RepositoryRoot $successPair.RepositoryRoot).Length -Message 'clean successful push reports a clean tree'
 
         $cleanPair = New-IntegrationGitPair -FixtureRoot $FixtureRoot -Name 'clean existing head'
@@ -921,11 +930,42 @@ exit 1
 '@
         $null = Install-TestGitHook -RepositoryRoot $rejectedPair.RemoteRoot -HookName 'pre-receive' -Contents $rejectingHook -FixtureRoot $FixtureRoot
         Initialize-IntegrationMock -Subject 'Describe rejected change'
-        $rejected = Invoke-IntegrationWorkflow -Pair $rejectedPair -FixtureRoot $FixtureRoot
+        $rejected = Invoke-IntegrationWorkflow -Pair $rejectedPair -FixtureRoot $FixtureRoot -RunDirectory $sharedRunDirectory -RunToken 'rejected-run'
         Assert-False -Condition $rejected.Success -Message 'bare remote rejection is reported as a failed push'
         Assert-True -Condition ($rejected.CommitSha -ne $rejectedPair.BaseHead) -Message 'rejected push preserves the verified local commit'
         Assert-Equal -Expected $rejectedPair.BaseHead -Actual (Get-IntegrationRemoteHead -RemoteRoot $rejectedPair.RemoteRoot) -Message 'rejected push leaves the remote unchanged'
         Assert-True -Condition ($rejected.Status -match 'preserved') -Message 'rejected push status explains local commit recovery'
+        Assert-True -Condition ($success.StatusPath -ne $rejected.StatusPath) -Message 'separate launches never poll the same status file'
+        Assert-True -Condition ((Get-Content -LiteralPath $success.StatusPath -Raw).StartsWith('OK|')) -Message 'the prior success remains identifiable as a different run'
+        Assert-True -Condition ((Get-Content -LiteralPath $rejected.StatusPath -Raw).StartsWith('ERROR|')) -Message 'the current rejected run publishes its own final error'
+
+        $divergedPair = New-IntegrationGitPair -FixtureRoot $FixtureRoot -Name 'remote history divergence'
+        $baseTree = Invoke-TestGit -RepositoryRoot $divergedPair.RemoteRoot -Arguments @('rev-parse', ($divergedPair.BaseHead + '^{tree}'))
+        $remoteCommit = Invoke-TestGit -RepositoryRoot $divergedPair.RemoteRoot -Arguments @(
+            '-c', 'user.name=Tray Fixture', '-c', 'user.email=tray-fixture@example.invalid',
+            'commit-tree', $baseTree, '-p', $divergedPair.BaseHead, '-m', 'Remote-only fixture commit'
+        )
+        Invoke-TestGit -RepositoryRoot $divergedPair.RemoteRoot -Arguments @('update-ref', 'refs/heads/main', $remoteCommit) | Out-Null
+        Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('commit', '--quiet', '--allow-empty', '-m', 'Local-only fixture commit') | Out-Null
+        $localCommit = Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('rev-parse', 'HEAD')
+        [System.IO.File]::WriteAllText((Join-Path $divergedPair.RepositoryRoot 'CHANGELOG.md'), $changelogText, (New-Object System.Text.UTF8Encoding($false)))
+        Initialize-IntegrationMock -Subject 'Document synthetic changelog repair'
+        $unknownHistory = Invoke-IntegrationWorkflow -Pair $divergedPair -FixtureRoot $FixtureRoot
+        Assert-False -Condition $unknownHistory.Success -Message 'remote history absent from the local object store stops the push'
+        Assert-True -Condition ($unknownHistory.Status -match 'fetching and merging') -Message 'remote history failure explains the required recovery'
+        Assert-Equal -Expected 0 -Actual $script:MockCalls -Message 'unknown remote history stops before API transport'
+        Assert-Equal -Expected 0 -Actual $script:IntegrationNpmCalls.Count -Message 'unknown remote history stops before formatting'
+        Assert-Equal -Expected $localCommit -Actual (Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('rev-parse', 'HEAD')) -Message 'preflight preserves the existing local commit'
+        Assert-Equal -Expected '' -Actual (Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('diff', '--cached', '--name-only')) -Message 'preflight leaves local changelog edits unstaged'
+        Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('fetch', '--quiet', 'origin') | Out-Null
+        $knownDivergence = Invoke-IntegrationWorkflow -Pair $divergedPair -FixtureRoot $FixtureRoot
+        Assert-False -Condition $knownDivergence.Success -Message 'fetched but divergent remote history also stops the push'
+        Assert-True -Condition ($knownDivergence.Status -match 'fetching and merging') -Message 'known divergence has an actionable status'
+        Assert-Equal -Expected $remoteCommit -Actual (Get-IntegrationRemoteHead -RemoteRoot $divergedPair.RemoteRoot) -Message 'preflight never overwrites remote history'
+        Invoke-TestGit -RepositoryRoot $divergedPair.RepositoryRoot -Arguments @('merge', '--quiet', '--no-edit', 'origin/main') | Out-Null
+        $recovered = Invoke-IntegrationWorkflow -Pair $divergedPair -FixtureRoot $FixtureRoot
+        Assert-True -Condition $recovered.Success -Message ('merging remote history allows a normal changelog push: ' + $recovered.Status)
+        Assert-Equal -Expected $changelogText.Trim() -Actual (Invoke-TestGit -RepositoryRoot $divergedPair.RemoteRoot -Arguments @('show', 'refs/heads/main:CHANGELOG.md')).Trim() -Message 'recovery delivers changelog edits without losing remote commits'
 
         $newerEditPair = New-IntegrationGitPair -FixtureRoot $FixtureRoot -Name 'newer worktree edit'
         [System.IO.File]::AppendAllText((Join-Path $newerEditPair.RepositoryRoot 'README.md'), ('Staged snapshot edit.' + [Environment]::NewLine), [System.Text.Encoding]::UTF8)
