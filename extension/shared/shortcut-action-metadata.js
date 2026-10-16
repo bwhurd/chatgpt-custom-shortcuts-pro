@@ -710,7 +710,7 @@
       ['button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])'],
       {
         matchGroups: [['data-list-navigation-item="true"', 'deep_research_app/icon.png']],
-        uiStateRefs: ['composer-add-files-and-more-menu'],
+        uiStateRefs: ['composer-add-files-and-more-menu', 'probe-composer-deep-research-menu'],
         notes:
           'The current Deep research menu row uses the observed app icon image inside a list-navigation button; matching it by the structural row and icon path avoids localized text.',
       },

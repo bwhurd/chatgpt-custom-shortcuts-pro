@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "kind": "captured-token-evidence",
   "origin": "https://chatgpt.com",
-  "capturedAt": "2026-10-16T00:45:06.496Z",
-  "sourceFingerprint": "f0651fb9bb65b1b6e15f5d9eaca3876944da40b92ef2068f51fb33fb0c0a9cc4",
+  "capturedAt": "2026-10-16T01:03:50.545Z",
+  "sourceFingerprint": "c15d3091c8d377d0b36da760c06588891c10e22ab2dce839d52cbf77aeec7b65",
   "capabilities": {
     "schemaVersion": 2,
     "source": "fresh-model-picker-v2",
@@ -123,9 +123,7 @@
       "stateId": "topbar-bottom-disabled-thread-bottom",
       "filename": "1d_TopbarToBottomDisabled_ThreadBottom.txt",
       "status": "captured",
-      "tokens": [
-        "thread-scroll-container"
-      ]
+      "tokens": ["thread-scroll-container"]
     },
     {
       "stateId": "topbar-bottom-disabled-header-area",
@@ -346,28 +344,19 @@
       "stateId": "shortcut-overlay",
       "filename": "2o_ShortcutOverlay_Dialog.txt",
       "status": "captured",
-      "tokens": [
-        "id=\"csp-shortcut-overlay\""
-      ]
+      "tokens": ["id=\"csp-shortcut-overlay\""]
     },
     {
       "stateId": "probe-code-block-content",
       "filename": "3a_Probe_CodeBlockContent.txt",
       "status": "captured",
-      "tokens": [
-        "<code",
-        "<pre"
-      ]
+      "tokens": ["<code", "<pre"]
     },
     {
       "stateId": "probe-codebox-wrap-enabled",
       "filename": "3b_Probe_CodeboxWrapEnabled.txt",
       "status": "captured",
-      "tokens": [
-        "<code",
-        "<pre",
-        "csp-codebox-wrap-enabled"
-      ]
+      "tokens": ["<code", "<pre", "csp-codebox-wrap-enabled"]
     },
     {
       "stateId": "probe-edit-send-button",
@@ -389,11 +378,7 @@
       "stateId": "probe-edit-message-button",
       "filename": "3l_Probe_EditMessageButton.txt",
       "status": "captured",
-      "tokens": [
-        "<button",
-        "M11.7313",
-        "type=\"button\""
-      ]
+      "tokens": ["<button", "M11.7313", "type=\"button\""]
     },
     {
       "stateId": "probe-send-button",
@@ -435,11 +420,7 @@
       "stateId": "probe-temporary-chat",
       "filename": "3f_Probe_TemporaryChat.txt",
       "status": "captured",
-      "tokens": [
-        "#chat-bubble-dashed-light-20",
-        "<button",
-        "type=\"button\""
-      ]
+      "tokens": ["#chat-bubble-dashed-light-20", "<button", "type=\"button\""]
     },
     {
       "stateId": "probe-new-gpt-conversation",
