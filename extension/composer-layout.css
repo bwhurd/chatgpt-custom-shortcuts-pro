@@ -7,6 +7,12 @@ html.csp-bottom-bar-enabled [data-thread-scroll-footer] {
   padding-bottom: 0 !important;
 }
 
+/* The Work composer may be present before the extension bar can mount. */
+html.csp-bottom-bar-enabled
+[data-thread-scroll-footer]:has([data-composer-body]):not(:has(#bottomBarContainer)) {
+  padding-bottom: 20px !important;
+}
+
 /* The hidden disclaimer's wrapper otherwise continues to reserve 32px. */
 [data-thread-scroll-footer] > div:has(> [data-id="hide-this-warning"]) {
   display: none !important;

@@ -218,7 +218,7 @@ export const FAST_CASES = [
     actionId: 'shortcutKeyStudy',
     type: 'menu-cascade',
     fixture: 'composer-tools',
-    fixtureCode: 'KeyS',
+    fixtureCode: 'Backquote',
     fixtureQuery: 'study',
     fixturePillIconId: 'book-open-light-20',
     fixtureIcon: '<svg><use href="#book-open-light-20"></use></svg>',

@@ -958,7 +958,17 @@ async function probeShortcutsOnly() {
     for (const row of liveProbeReport.rows.filter((item) =>
       ['fail', 'skipped', 'environment-fail'].includes(item.status),
     )) {
-      console.log(`${row.status.toUpperCase()}: ${row.actionId} - ${row.reason}`);
+      const studyMetrics =
+        row.actionId === 'shortcutKeyStudy'
+          ? `; proofObserved=${row.semantic?.observed || 'unavailable'}; selectedControls=${row.afterSnapshot?.selectedStudyControlCount ?? 'unavailable'}; footerControls=${row.afterSnapshot?.selectedStudyFooterControlCount ?? 'unavailable'}; pillNodes=${row.afterSnapshot?.inlineSelectionPillCount ?? 'unavailable'}; studyIconUses=${row.afterSnapshot?.studyIconUseCount ?? 'unavailable'}; globalPillNodes=${row.afterSnapshot?.globalStudyPillCount ?? 'unavailable'}; globalStudyIconUses=${row.afterSnapshot?.globalStudyIconUseCount ?? 'unavailable'}; iconAncestors=${JSON.stringify(row.afterSnapshot?.studyIconAncestorPaths || []).slice(0, 520)}; composerHasText=${row.afterSnapshot?.composerHasText ?? 'unavailable'}`
+          : '';
+      const composerSearchCounts =
+        row.actionId === 'shortcutKeyDeepResearch'
+          ? `; targetGroups=${row.studyTargetPresence?.matchedGroups ?? 'unavailable'}/${row.studyTargetPresence?.requiredGroups ?? 'unavailable'}; openPlusButtons=${row.studyTargetPresence?.openPlusButtonCount ?? 'unavailable'}; deepResearchRows=${row.studyTargetPresence?.deepResearchRowCount ?? 'unavailable'}; deepResearchIcons=${row.studyTargetPresence?.deepResearchIconCount ?? 'unavailable'}; visibleListItems=${row.studyTargetPresence?.visibleListNavigationButtonCount ?? 'unavailable'}`
+          : '';
+      console.log(
+        `${row.status.toUpperCase()}: ${row.actionId} - ${row.reason} [route=${row.routingProof?.status || 'not-observed'}; clickObserved=${row.routingProof?.clickObserved === true}; keydownPrevented=${row.routingProof?.keydownDefaultPrevented === true}; proof=${row.semantic?.proofMethod || 'none'}; stage=${row.failureStage || 'none'}${studyMetrics}${composerSearchCounts}]`,
+      );
     }
     console.log(`CDP endpoint: ${cdpEndpoint}`);
     return liveProbeReport;

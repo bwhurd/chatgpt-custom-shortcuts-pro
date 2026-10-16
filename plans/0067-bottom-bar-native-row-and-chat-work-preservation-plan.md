@@ -35,6 +35,12 @@
 - [x] Update native sidebar/New Chat forwarding and reserve the enabled bar's flow footprint with one early settings read; add no polling or layout observer.
 - [x] Update the owning layout contract. The user explicitly requested no validation or testing, so no checks or extension reload were performed for this repair. Earlier plan work remains separately outstanding.
 
+## Work composer clearance fallback (2026-10-15)
+
+- [x] Inspect the referenced Work conversation: its composer exposes `[data-composer-body]`, has no `form[data-chatgpt-composer]` or `#bottomBarContainer`, and the enabled-bar class clears footer padding, leaving no lower gap.
+- [x] Restore 20px at `[data-thread-scroll-footer]` while the composer body is present and `#bottomBarContainer` has not mounted; let the mounted bar replace that fallback.
+- [x] Update the root layout contract and run the focused stylesheet check plus whitespace validation.
+
 ## Light-mode background repair (2026-10-15)
 
 - [x] Inspect the attached conversation: the bottom-bar style makes the main surface transparent, exposing the `rgb(227, 227, 227)` page canvas instead of its native light surface.

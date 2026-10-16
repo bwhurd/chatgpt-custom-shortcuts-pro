@@ -103,7 +103,7 @@ const LIVE_PROBE_CAPTURE_STATE_BY_ACTION = Object.freeze({
   shortcutKeyNewGptConversation: 'probe-new-gpt-conversation',
   shortcutKeyNewConversation: 'probe-blank-chat-work-surface-toggle',
   shortcutKeyStudy: 'probe-composer-study-search',
-  shortcutKeyDeepResearch: 'probe-composer-deep-research-search',
+  shortcutKeyDeepResearch: 'probe-composer-deep-research-menu',
   shortcutKeyCancelDictation: 'probe-active-dictation-controls',
   shortcutKeyToggleDictate: 'probe-blank-chat-dictate-start',
 });
@@ -118,7 +118,7 @@ const LIVE_PROBE_CAPTURE_TARGET_BY_STATE = Object.freeze({
   'probe-new-gpt-conversation': 'new-gpt-conversation-item',
   'probe-blank-chat-work-surface-toggle': 'chat-work-surface-toggle',
   'probe-composer-study-search': 'composer-study-action',
-  'probe-composer-deep-research-search': 'composer-deep-research-action',
+  'probe-composer-deep-research-menu': 'composer-deep-research-action',
   'probe-active-dictation-controls': 'cancel-dictation-button',
   'probe-blank-chat-dictate-start': 'dictate-start-button',
 });
@@ -299,7 +299,7 @@ const AUDIT_OWNED_LIVE_PROBE_CAPTURE_STATES = new Set([
   'probe-stop-button',
   'probe-temporary-chat',
   'probe-composer-study-search',
-  'probe-composer-deep-research-search',
+  'probe-composer-deep-research-menu',
   'probe-active-dictation-controls',
 ]);
 
@@ -326,6 +326,25 @@ const DICTATION_START_BUTTON_SELECTORS = Object.freeze([
   'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#microphone-light-20"])',
   'form[data-thread-find-composer="true"] button:has(svg path[d^="M12.4584 8.96973"])',
   'form[data-chatgpt-composer] button:has(svg path[d^="M12.4584 8.96973"])',
+]);
+const DICTATION_CANCEL_BUTTON_SELECTORS = Object.freeze([
+  'form[data-chatgpt-composer][data-thread-find-composer="true"] button:has(svg use[href$="#xmark-lg-light-20"])',
+  'form[data-thread-find-composer="true"] button:has(svg path[d^="M14.779 4.27903"])',
+  'form[data-chatgpt-composer] button:has(svg path[d^="M14.779 4.27903"])',
+]);
+const DICTATION_ACTION_IDS = new Set(['shortcutKeyToggleDictate', 'shortcutKeyCancelDictation']);
+const BLOCK_NATIVE_ACTIVATION_ACTION_IDS = new Set([
+  'shortcutKeyMoreDotsBranchInNewChat',
+  'shortcutKeyMoreDotsReadAloud',
+  'shortcutKeyRegenerateTryAgain',
+]);
+const SCROLL_ACTIVATION_ACTION_IDS = new Set([
+  'shortcutKeyClickNativeScrollToBottom',
+  'shortcutKeyScrollToTop',
+  'shortcutKeyScrollUpOneMessage',
+  'shortcutKeyScrollDownOneMessage',
+  'shortcutKeyScrollUpTwoMessages',
+  'shortcutKeyScrollDownTwoMessages',
 ]);
 const ACTIVE_DICTATION_CONTROL_SPECS = Object.freeze([
   Object.freeze({
@@ -2420,7 +2439,7 @@ export async function captureSupplementalProbeArtifact(
       'probe-temporary-chat',
       'probe-blank-chat-work-surface-toggle',
       'probe-composer-study-search',
-      'probe-composer-deep-research-search',
+      'probe-composer-deep-research-menu',
       'probe-active-dictation-controls',
       'probe-blank-chat-dictate-start',
     ].includes(definition.stateId) &&
@@ -3139,6 +3158,86 @@ export async function prepareNewConversationProbeState(
     userMessageCount: blankState.userMessageCount,
     assistantMessageCount: blankState.assistantMessageCount,
     composerHasText: blankState.composerHasText,
+  };
+}
+
+async function ensureChatModeForComposerToolProbe(page) {
+  const readMode = () =>
+    page.evaluate(() => {
+      const group = document.querySelector('[role="group"][aria-label="Composer mode"]');
+      if (!(group instanceof HTMLElement)) return { status: 'missing' };
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        );
+      };
+      if (!isVisible(group)) return { status: 'hidden' };
+      const buttons = Array.from(group.querySelectorAll('button[aria-pressed]')).filter(isVisible);
+      const chatButtons = buttons.filter((button) => button.textContent.trim() === 'Chat');
+      const workButtons = buttons.filter((button) => button.textContent.trim() === 'Work');
+      if (chatButtons.length !== 1 || workButtons.length !== 1) {
+        return { status: 'ambiguous', buttonCount: buttons.length };
+      }
+      return {
+        status: 'observed',
+        chatPressed: chatButtons[0].getAttribute('aria-pressed') === 'true',
+        workPressed: workButtons[0].getAttribute('aria-pressed') === 'true',
+      };
+    });
+
+  await page.waitForFunction(
+    () => {
+      const group = document.querySelector('[role="group"][aria-label="Composer mode"]');
+      if (!(group instanceof HTMLElement)) return false;
+      const buttons = Array.from(group.querySelectorAll('button[aria-pressed]'));
+      return (
+        buttons.filter((button) => button.textContent.trim() === 'Chat').length === 1 &&
+        buttons.filter((button) => button.textContent.trim() === 'Work').length === 1
+      );
+    },
+    undefined,
+    { timeout: 15000 },
+  );
+  const before = await readMode();
+  if (before.status !== 'observed') {
+    throw new Error(`Chat mode could not be identified safely (${before.status}).`);
+  }
+  if (before.chatPressed === before.workPressed) {
+    throw new Error('Chat and Work mode selection was ambiguous.');
+  }
+  if (before.chatPressed) {
+    return { ...before, changed: false, proofMethod: 'composer-mode-aria-pressed' };
+  }
+
+  const chatButton = page
+    .getByRole('group', { name: 'Composer mode', exact: true })
+    .getByRole('button', { name: 'Chat', exact: true });
+  if ((await chatButton.count()) !== 1) {
+    throw new Error('The unique Chat mode control was not available for the composer probe.');
+  }
+  await chatButton.click();
+  await page.waitForFunction(
+    () => {
+      const group = document.querySelector('[role="group"][aria-label="Composer mode"]');
+      const chatButton = Array.from(group?.querySelectorAll('button[aria-pressed]') || []).find(
+        (button) => button.textContent.trim() === 'Chat',
+      );
+      return chatButton?.getAttribute('aria-pressed') === 'true';
+    },
+    undefined,
+    { timeout: 10000 },
+  );
+  return {
+    status: 'observed',
+    chatPressed: true,
+    workPressed: false,
+    changed: true,
+    proofMethod: 'composer-mode-aria-pressed',
   };
 }
 
@@ -4480,10 +4579,6 @@ export async function prepareSentUserMessageProbeState(page, fixtureUrl, options
 
 async function prepareDictationActiveProbeState(page, fixtureUrl) {
   const blankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl);
-  await page
-    .context()
-    .grantPermissions(['microphone'], { origin: 'https://chatgpt.com' })
-    .catch(() => {});
   await waitForEnabledButton(page, DICTATION_START_BUTTON_SELECTORS, 15000);
   await clickEnabledButton(page, DICTATION_START_BUTTON_SELECTORS);
   await page.waitForFunction(
@@ -4550,6 +4645,9 @@ export async function prepareComposerStudySearchProbeState(
     scope: `global:${actionId}:blank-home`,
   });
   await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.blank-home-ready');
+  const composerMode = await ensureChatModeForComposerToolProbe(page);
+  if (checkpoint?.currentCase) checkpoint.currentCase.composerMode = composerMode;
+  await persistCheckpoint?.();
   const structurePreparation = await prepareStructurallyBlankComposerForMenu(page);
   if (checkpoint?.currentCase) {
     checkpoint.currentCase.studyComposerStructure = structurePreparation.status;
@@ -4807,6 +4905,21 @@ async function readClipboardPermissionState(page) {
   });
 }
 
+async function readMicrophonePermissionState(page) {
+  try {
+    return await page.evaluate(async () => {
+      if (!navigator.permissions?.query) return 'unknown';
+      try {
+        return (await navigator.permissions.query({ name: 'microphone' })).state;
+      } catch {
+        return 'unknown';
+      }
+    });
+  } catch {
+    return 'unknown';
+  }
+}
+
 function fingerprintClipboardPayload(items) {
   return fingerprintAuditValue(
     items.map((item) =>
@@ -4852,8 +4965,14 @@ async function clearClipboardForProbe(page, session) {
   }
   const origin = new URL(page.url()).origin;
   const permissionState = await readClipboardPermissionState(page);
+  const microphonePermission = await readMicrophonePermissionState(page);
   session.clipboardPermissionBefore = permissionState;
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  session.microphonePermissionBefore = microphonePermission;
+  const grantedPermissions = ['clipboard-read', 'clipboard-write'];
+  // Chromium's origin-scoped override masks other permissions unless preserved.
+  // Carry forward microphone only when the page already reports the user's grant.
+  if (microphonePermission === 'granted') grantedPermissions.push('microphone');
+  await page.context().grantPermissions(grantedPermissions, { origin });
   const items = await captureClipboardPayload(page);
   const originalMetadata = await readClipboardMetadata(page);
   session.clipboardSnapshot = { items, originalMetadata };
@@ -4947,7 +5066,6 @@ async function restoreClipboardAfterProbe(page, session) {
   if (!session.clipboardSnapshot) {
     if (!session.clipboardPermissionBefore) return { status: 'not-needed' };
   }
-  const origin = new URL(page.url()).origin;
   try {
     let contentRestored = true;
     let mimeTypesRestored = true;
@@ -4965,20 +5083,13 @@ async function restoreClipboardAfterProbe(page, session) {
     }
 
     await page.context().clearPermissions();
-    const originallyGranted = [];
-    if (session.clipboardPermissionBefore?.read === 'granted') {
-      originallyGranted.push('clipboard-read');
-    }
-    if (session.clipboardPermissionBefore?.write === 'granted') {
-      originallyGranted.push('clipboard-write');
-    }
-    if (originallyGranted.length) {
-      await page.context().grantPermissions(originallyGranted, { origin });
-    }
     const permissionAfter = await readClipboardPermissionState(page);
     session.clipboardPermissionAfter = permissionAfter;
+    const microphonePermissionAfter = await readMicrophonePermissionState(page);
+    session.microphonePermissionAfter = microphonePermissionAfter;
     const permissionsRestored =
-      JSON.stringify(permissionAfter) === JSON.stringify(session.clipboardPermissionBefore);
+      JSON.stringify(permissionAfter) === JSON.stringify(session.clipboardPermissionBefore) &&
+      microphonePermissionAfter === session.microphonePermissionBefore;
     session.clipboardRestoreStatus =
       contentRestored && mimeTypesRestored && permissionsRestored ? 'clean' : 'partial';
     return {
@@ -4989,6 +5100,8 @@ async function restoreClipboardAfterProbe(page, session) {
       mimeTypes: session.clipboardMimeTypes,
       permissionBefore: session.clipboardPermissionBefore,
       permissionAfter,
+      microphonePermissionBefore: session.microphonePermissionBefore,
+      microphonePermissionAfter,
       error: session.clipboardRestoreError,
     };
   } catch (error) {
@@ -5002,6 +5115,8 @@ async function restoreClipboardAfterProbe(page, session) {
       mimeTypes: session.clipboardMimeTypes,
       permissionBefore: session.clipboardPermissionBefore,
       permissionAfter: session.clipboardPermissionAfter,
+      microphonePermissionBefore: session.microphonePermissionBefore,
+      microphonePermissionAfter: session.microphonePermissionAfter,
       error: session.clipboardRestoreError,
     };
   }
@@ -5037,6 +5152,8 @@ function createCodeboxProbeSession() {
     clipboardRestoreStatus: 'not-needed',
     clipboardPermissionBefore: null,
     clipboardPermissionAfter: null,
+    microphonePermissionBefore: null,
+    microphonePermissionAfter: null,
     clipboardMimeTypes: [],
     clipboardRestoreError: '',
   };
@@ -5394,12 +5511,8 @@ function orderLiveProbeShortcuts(shortcuts) {
 
 export function shouldPreservePreparedProbeState(shortcut) {
   if (shortcut?.activationProbeSetup === 'active-edit-card') return true;
-  if (
-    ['composer-plus-menu-search-study', 'composer-plus-menu-search-deep-research'].includes(
-      shortcut?.activationProbeSetup,
-    )
-  )
-    return true;
+  if (shortcut?.activationProbeSetup === 'new-conversation-plus-menu') return true;
+  if (shortcut?.activationProbeSetup === 'composer-plus-menu-search-study') return true;
   const stateRefs = [
     ...(Array.isArray(shortcut.activationProbeUiStateRefs)
       ? shortcut.activationProbeUiStateRefs
@@ -5492,11 +5605,14 @@ async function installLiveProbeObserver(page, options = {}) {
         };
       };
       const onClick = (event) => {
-        state.clicks.push(describeNode(event.target));
         if (preventDefault) {
           event.preventDefault();
           event.stopImmediatePropagation();
         }
+        state.clicks.push({
+          ...describeNode(event.target),
+          defaultPrevented: event.defaultPrevented,
+        });
       };
       const onSubmit = (event) => {
         state.submits.push(describeNode(event.target));
@@ -5811,7 +5927,50 @@ async function captureTargetPresenceCounts(page, target) {
   }, groups);
 }
 
-async function waitForStudyPillCount(page, expectedCount, timeout = 5000) {
+async function captureComposerSearchTargetCounts(page) {
+  return page.evaluate(() => {
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement) || node.hidden) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return (
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const openPlusButtons = Array.from(
+      document.querySelectorAll(
+        'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"], form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
+      ),
+    ).filter(
+      (button) =>
+        isVisible(button) &&
+        (button.getAttribute('aria-expanded') === 'true' ||
+          button.getAttribute('data-state') === 'open'),
+    );
+    const deepResearchRows = Array.from(
+      document.querySelectorAll(
+        'button[data-list-navigation-item="true"]:has(img[src*="deep_research_app/icon.png"])',
+      ),
+    ).filter(isVisible);
+    const deepResearchIcons = Array.from(
+      document.querySelectorAll('img[src*="deep_research_app/icon.png"]'),
+    ).filter(isVisible);
+    const visibleListItems = Array.from(
+      document.querySelectorAll('button[data-list-navigation-item="true"]'),
+    ).filter(isVisible);
+    return {
+      openPlusButtonCount: openPlusButtons.length,
+      deepResearchRowCount: deepResearchRows.length,
+      deepResearchIconCount: deepResearchIcons.length,
+      visibleListNavigationButtonCount: visibleListItems.length,
+    };
+  });
+}
+
+async function waitForStudySelectionCount(page, expectedCount, timeout = 5000) {
   await page.waitForFunction(
     ({ expectedCount, composerSelectors, studyIconTokens }) => {
       const isVisible = (node) => {
@@ -5829,7 +5988,10 @@ async function waitForStudyPillCount(page, expectedCount, timeout = 5000) {
         .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
         .find(isVisible);
       if (!composer) return false;
-      const pills = Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).filter(
+      const selectionScope = composer.closest('form') || composer;
+      const inlinePills = Array.from(
+        selectionScope.querySelectorAll('[data-inline-selection-pill]'),
+      ).filter(
         (pill) =>
           pill.tagName === 'SPAN' &&
           isVisible(pill) &&
@@ -5838,7 +6000,18 @@ async function waitForStudyPillCount(page, expectedCount, timeout = 5000) {
             return studyIconTokens.some((symbol) => href.endsWith(symbol));
           }),
       );
-      return pills.length === expectedCount;
+      const footerControls = Array.from(
+        selectionScope.querySelectorAll('[data-composer-footer-responsive] button'),
+      ).filter(
+        (button) =>
+          isVisible(button) &&
+          !button.closest('[role="menu"], [data-list-navigation-item="true"]') &&
+          Array.from(button.querySelectorAll('svg use')).some((use) => {
+            const href = String(use.getAttribute('href') || use.getAttribute('xlink:href') || '');
+            return studyIconTokens.some((symbol) => href.endsWith(symbol));
+          }),
+      );
+      return inlinePills.length + footerControls.length === expectedCount;
     },
     {
       expectedCount,
@@ -5912,12 +6085,15 @@ export async function captureLiveProbeSemanticSnapshot(page, target) {
           '#prompt-textarea, [name="prompt-textarea"], [data-testid="composer-input"], [contenteditable="true"][role="textbox"]',
         ),
       ).find(isVisible);
+      const composerSelectionScope = composer?.closest('form') || composer;
       const composerText =
         composer instanceof HTMLInputElement || composer instanceof HTMLTextAreaElement
           ? composer.value
           : composer?.innerText || composer?.textContent || '';
-      const selectedStudyPillCount = composer
-        ? Array.from(composer.querySelectorAll('[data-inline-selection-pill]')).filter(
+      const selectedStudyInlinePillCount = composerSelectionScope
+        ? Array.from(
+            composerSelectionScope.querySelectorAll('[data-inline-selection-pill]'),
+          ).filter(
             (pill) =>
               pill.tagName === 'SPAN' &&
               isVisible(pill) &&
@@ -5931,6 +6107,100 @@ export async function captureLiveProbeSemanticSnapshot(page, target) {
               }),
           ).length
         : 0;
+      const selectedStudyFooterControlCount = composerSelectionScope
+        ? Array.from(
+            composerSelectionScope.querySelectorAll('[data-composer-footer-responsive] button'),
+          ).filter(
+            (button) =>
+              isVisible(button) &&
+              !button.closest('[role="menu"], [data-list-navigation-item="true"]') &&
+              Array.from(button.querySelectorAll('svg use')).some((use) => {
+                const href = String(
+                  use.getAttribute('href') || use.getAttribute('xlink:href') || '',
+                );
+                return ['#book-open-light-20', '#book-open-light-16'].some((symbol) =>
+                  href.endsWith(symbol),
+                );
+              }),
+          ).length
+        : 0;
+      const selectedStudyControlCount =
+        selectedStudyInlinePillCount + selectedStudyFooterControlCount;
+      const inlineSelectionPillCount = composerSelectionScope
+        ? Array.from(
+            composerSelectionScope.querySelectorAll('[data-inline-selection-pill]'),
+          ).filter(isVisible).length
+        : 0;
+      const studyIconUseCount = composerSelectionScope
+        ? Array.from(composerSelectionScope.querySelectorAll('svg use')).filter((use) => {
+            const href = String(use.getAttribute('href') || use.getAttribute('xlink:href') || '');
+            return ['#book-open-light-20', '#book-open-light-16'].some((symbol) =>
+              href.endsWith(symbol),
+            );
+          }).length
+        : 0;
+      const globalStudyPillNodes = Array.from(
+        document.querySelectorAll('[data-inline-selection-pill]'),
+      ).filter(isVisible);
+      const globalStudyIconUseCount = Array.from(document.querySelectorAll('svg use')).filter(
+        (use) => {
+          const href = String(use.getAttribute('href') || use.getAttribute('xlink:href') || '');
+          return ['#book-open-light-20', '#book-open-light-16'].some((symbol) =>
+            href.endsWith(symbol),
+          );
+        },
+      ).length;
+      const studyIconAncestorPaths = composerSelectionScope
+        ? Array.from(composerSelectionScope.querySelectorAll('svg use'))
+            .filter((use) => {
+              const href = String(use.getAttribute('href') || use.getAttribute('xlink:href') || '');
+              return ['#book-open-light-20', '#book-open-light-16'].some((symbol) =>
+                href.endsWith(symbol),
+              );
+            })
+            .slice(0, 3)
+            .map((use) => {
+              const path = [];
+              for (
+                let node = use, depth = 0;
+                node && depth < 7;
+                node = node.parentElement, depth++
+              ) {
+                const attrs = {};
+                for (const name of [
+                  'data-inline-selection-pill',
+                  'data-prompt-link-href',
+                  'data-appearance',
+                  'data-system-hint-type',
+                  'data-testid',
+                  'data-list-navigation-item',
+                  'data-composer-footer-responsive',
+                  'role',
+                  'contenteditable',
+                  'aria-pressed',
+                  'data-state',
+                ]) {
+                  if (node.hasAttribute(name)) attrs[name] = node.getAttribute(name) ?? '';
+                }
+                path.push({ tag: node.tagName.toLowerCase(), attrs });
+              }
+              return path;
+            })
+        : [];
+      const deepResearchMentions = composerSelectionScope
+        ? Array.from(
+            composerSelectionScope.querySelectorAll(
+              '[data-prompt-link-href][data-appearance="inline-mention"]',
+            ),
+          ).filter(
+            (mention) =>
+              mention.getAttribute('data-prompt-link-href') ===
+              'app://connector_openai_deep_research',
+          )
+        : [];
+      const selectedDeepResearchMentionCount = deepResearchMentions.filter((mention) =>
+        mention.querySelector('img[src*="deep_research_app/icon.png"]'),
+      ).length;
       const hashText = (value) => {
         const text = String(value || '');
         let hash = 2166136261;
@@ -6124,7 +6394,16 @@ export async function captureLiveProbeSemanticSnapshot(page, target) {
         messageIds: messages.map((message) => message.id).filter(Boolean),
         composerHasText: Boolean(String(composerText).trim()),
         composerTextHash: hashText(composerText),
-        selectedStudyPillCount,
+        selectedStudyControlCount,
+        selectedStudyInlinePillCount,
+        selectedStudyFooterControlCount,
+        inlineSelectionPillCount,
+        studyIconUseCount,
+        globalStudyPillCount: globalStudyPillNodes.length,
+        globalStudyIconUseCount,
+        studyIconAncestorPaths,
+        deepResearchAppLinkMentionCount: deepResearchMentions.length,
+        selectedDeepResearchMentionCount,
         editableUserMessageCount: document.querySelectorAll(
           [
             '[data-message-author-role="user"] [contenteditable="true"]',
@@ -6432,7 +6711,6 @@ export function evaluateLiveProbeSemantic(
     reason: 'No action-specific semantic postcondition is registered for this shortcut yet.',
   };
   if (!before || !after) return proof;
-  const conversationId = (url) => String(url || '').match(/\/c\/([^/]+)/)?.[1] || '';
   const clipboardMatched = clipboardEvidence === true || clipboardEvidence?.matches === true;
   const targetStateChanged =
     JSON.stringify(before.targetControls) !== JSON.stringify(after.targetControls);
@@ -6605,16 +6883,14 @@ export function evaluateLiveProbeSemantic(
         break;
       case 'shortcutKeyMoreDotsBranchInNewChat':
         matched =
-          Boolean(conversationId(before.url)) &&
-          Boolean(conversationId(after.url)) &&
-          conversationId(before.url) !== conversationId(after.url) &&
-          before.messageCount === after.messageCount &&
-          before.lastUserHash === after.lastUserHash &&
-          before.lastAssistantHash === after.lastAssistantHash;
-        proof.observed = `conversation identity changed=${conversationId(before.url) !== conversationId(after.url)}; message count/context hashes preserved=${before.messageCount === after.messageCount && before.lastUserHash === after.lastUserHash && before.lastAssistantHash === after.lastAssistantHash}`;
+          actionEvidence?.activation?.trustedDispatch === true &&
+          actionEvidence.activation.targetClickObserved === true &&
+          actionEvidence.activation.targetClickDefaultPrevented === true;
+        proof.proofMethod = 'trusted-shortcut-to-blocked-target-click';
+        proof.observed = `trusted shortcut reached Branch target=${actionEvidence?.activation?.targetClickObserved === true}; native navigation blocked=${actionEvidence?.activation?.targetClickDefaultPrevented === true}`;
         proof.reason = matched
           ? ''
-          : 'Branch did not create a new conversation with the same audit-message context.';
+          : 'The trusted shortcut did not reach the Branch target while blocking navigation.';
         break;
       case 'shortcutKeyTemporaryChat':
         matched = targetStateChanged || generalControlStateChanged;
@@ -6635,14 +6911,16 @@ export function evaluateLiveProbeSemantic(
         proof.reason = matched ? '' : 'Dictation did not leave its active state.';
         break;
       case 'shortcutKeyMoreDotsReadAloud':
-        matched = !before.audioPlaying && after.audioPlaying;
-        proof.observed = `audio playing ${before.audioPlaying} -> ${after.audioPlaying}`;
-        proof.reason = matched ? '' : 'Read Aloud did not start audio playback.';
-        break;
       case 'shortcutKeyRegenerateTryAgain':
-        matched = responseChanged;
-        proof.observed = `assistant messages ${before.assistantMessageCount} -> ${after.assistantMessageCount}; response hash changed=${before.lastAssistantHash !== after.lastAssistantHash}`;
-        proof.reason = matched ? '' : 'Regeneration did not produce a new assistant response.';
+        matched =
+          actionEvidence?.activation?.trustedDispatch === true &&
+          actionEvidence.activation.targetClickObserved === true &&
+          actionEvidence.activation.targetClickDefaultPrevented === true;
+        proof.proofMethod = 'trusted-shortcut-to-blocked-target-click';
+        proof.observed = `trusted shortcut reached expected target=${actionEvidence?.activation?.targetClickObserved === true}; native action blocked=${actionEvidence?.activation?.targetClickDefaultPrevented === true}`;
+        proof.reason = matched
+          ? ''
+          : 'The trusted shortcut did not reach its target while blocking the native action.';
         break;
       case 'shortcutKeyCopyLowest':
         matched = clipboardMatched;
@@ -6655,13 +6933,26 @@ export function evaluateLiveProbeSemantic(
       case 'shortcutKeySearchWeb':
       case 'shortcutKeyCreateImage':
       case 'shortcutKeyDeepResearch':
+        if (shortcut.actionId === 'shortcutKeyDeepResearch') {
+          matched =
+            before.deepResearchAppLinkMentionCount === 0 &&
+            before.selectedDeepResearchMentionCount === 0 &&
+            after.deepResearchAppLinkMentionCount === 1 &&
+            after.selectedDeepResearchMentionCount === 1;
+          proof.proofMethod = 'verified-deep-research-app-link-and-icon';
+          proof.observed = `Deep Research app-link mentions ${before.deepResearchAppLinkMentionCount} -> ${after.deepResearchAppLinkMentionCount}; mentions with its icon ${after.selectedDeepResearchMentionCount}`;
+          proof.reason = matched
+            ? ''
+            : 'The Deep Research app-link mention and its icon did not appear in the composer.';
+          break;
+        }
         matched = targetStateChanged || generalControlStateChanged;
         proof.observed = `tool selection/control state changed=${matched}`;
         proof.reason = matched ? '' : 'The composer tool did not enter a selected state.';
         break;
       case 'shortcutKeyStudy': {
-        const activationSnapshot = actionEvidence?.studyPillActivationSnapshot;
-        const deactivationSnapshot = actionEvidence?.studyPillDeactivationSnapshot;
+        const activationSnapshot = actionEvidence?.studySelectionActivationSnapshot;
+        const deactivationSnapshot = actionEvidence?.studySelectionDeactivationSnapshot;
         const stableBlankHome =
           isChatGptRootPageUrl(before.url) &&
           before.url === activationSnapshot?.url &&
@@ -6682,17 +6973,17 @@ export function evaluateLiveProbeSemantic(
         matched =
           stableBlankHome &&
           before.composerHasText === true &&
-          before.selectedStudyPillCount === 0 &&
-          activationSnapshot?.selectedStudyPillCount === 1 &&
+          before.selectedStudyControlCount === 0 &&
+          activationSnapshot?.selectedStudyControlCount === 1 &&
           actionEvidence?.studyToggleOffDispatched === true &&
-          deactivationSnapshot?.selectedStudyPillCount === 0 &&
-          after.selectedStudyPillCount === 0 &&
+          deactivationSnapshot?.selectedStudyControlCount === 0 &&
+          after.selectedStudyControlCount === 0 &&
           !after.composerHasText;
-        proof.proofMethod = 'observed-study-inline-pill-on-and-toggle-off';
-        proof.observed = `Study pill count 0 -> ${activationSnapshot?.selectedStudyPillCount ?? 0} -> ${deactivationSnapshot?.selectedStudyPillCount ?? 0}; second shortcut dispatched=${actionEvidence?.studyToggleOffDispatched === true}; composer empty afterward=${!after.composerHasText}`;
+        proof.proofMethod = 'observed-study-control-on-and-toggle-off';
+        proof.observed = `Study selected-control count 0 -> ${activationSnapshot?.selectedStudyControlCount ?? 0} -> ${deactivationSnapshot?.selectedStudyControlCount ?? 0}; second shortcut dispatched=${actionEvidence?.studyToggleOffDispatched === true}; composer empty afterward=${!after.composerHasText}`;
         proof.reason = matched
           ? ''
-          : 'The Study shortcut did not add the observed inline pill and toggle it off with a second shortcut.';
+          : 'The Study shortcut did not select and clear the observed composer control with a second shortcut.';
         break;
       }
       case 'shortcutKeyAddPhotosFiles':
@@ -6716,7 +7007,7 @@ export function evaluateLiveProbeSemantic(
   return proof;
 }
 
-async function waitForLiveProbeTargetPresence(page, target) {
+async function waitForLiveProbeTargetPresence(page, target, timeout = 5000) {
   const needleGroups = getTargetNeedleGroups(target);
   if (!needleGroups.length) return;
   await page.waitForFunction(
@@ -6725,7 +7016,7 @@ async function waitForLiveProbeTargetPresence(page, target) {
       return groups.some((group) => group.every((needle) => html.includes(needle)));
     },
     needleGroups,
-    { timeout: 5000 },
+    { timeout },
   );
 }
 
@@ -7010,12 +7301,12 @@ const TEMPORARY_LIVE_PROBE_KEY_POOL = Object.freeze([
 ]);
 
 function buildTemporaryShortcutAssignments(shortcuts, activeShortcutCodes = {}) {
-  const usedCodes = new Set();
+  const activeCodes = Object.values(activeShortcutCodes).map(normalizeShortcutCode).filter(Boolean);
+  const usedCodes = new Set(activeCodes);
+  const reservedCodes = new Set(activeCodes);
   for (const shortcut of shortcuts) {
-    const activeCode = normalizeShortcutCode(activeShortcutCodes[shortcut.actionId]);
     const defaultCode = normalizeShortcutCode(shortcut.defaultCode);
-    if (activeCode) usedCodes.add(activeCode);
-    if (defaultCode) usedCodes.add(defaultCode);
+    if (defaultCode) reservedCodes.add(defaultCode);
   }
 
   const assignments = {};
@@ -7024,14 +7315,15 @@ function buildTemporaryShortcutAssignments(shortcuts, activeShortcutCodes = {}) 
     const activeCode = normalizeShortcutCode(activeShortcutCodes[shortcut.actionId]);
     const defaultCode = normalizeShortcutCode(shortcut.defaultCode);
     if (activeCode) continue;
-    if (defaultCode) {
+    if (defaultCode && !usedCodes.has(defaultCode)) {
       assignments[shortcut.actionId] = defaultCode;
       usedCodes.add(defaultCode);
       continue;
     }
     while (
       poolIndex < TEMPORARY_LIVE_PROBE_KEY_POOL.length &&
-      usedCodes.has(TEMPORARY_LIVE_PROBE_KEY_POOL[poolIndex])
+      (usedCodes.has(TEMPORARY_LIVE_PROBE_KEY_POOL[poolIndex]) ||
+        reservedCodes.has(TEMPORARY_LIVE_PROBE_KEY_POOL[poolIndex]))
     ) {
       poolIndex += 1;
     }
@@ -8422,7 +8714,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
     'probe-temporary-chat': 'new-conversation',
     'probe-blank-chat-work-surface-toggle': 'new-conversation',
     'probe-composer-study-search': 'composer-plus-menu-search-study',
-    'probe-composer-deep-research-search': 'composer-plus-menu-search-deep-research',
+    'probe-composer-deep-research-menu': 'new-conversation-plus-menu',
     'probe-active-dictation-controls': 'dictation-active',
     'probe-blank-chat-dictate-start': 'new-conversation',
   });
@@ -8452,7 +8744,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         'probe-temporary-chat',
         'probe-blank-chat-work-surface-toggle',
         'probe-composer-study-search',
-        'probe-composer-deep-research-search',
+        'probe-composer-deep-research-menu',
         'probe-active-dictation-controls',
         'probe-blank-chat-dictate-start',
       ].includes(stateId) &&
@@ -8647,6 +8939,32 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         await persistCheckpoint().catch(() => {});
         continue;
       }
+      if (!prepareCaptureOnly && DICTATION_ACTION_IDS.has(shortcut.actionId)) {
+        const microphonePermission = await page
+          .evaluate(async () => {
+            if (!navigator.permissions?.query) return 'unknown';
+            try {
+              return (await navigator.permissions.query({ name: 'microphone' })).state;
+            } catch {
+              return 'unknown';
+            }
+          })
+          .catch(() => 'unknown');
+        if (microphonePermission !== 'granted') {
+          const reason = `Microphone permission is ${microphonePermission}; dictation activation was not attempted.`;
+          const row = buildSkippedLiveProbeRow(shortcut, 'environment-fail', reason, dispatchCode);
+          rows.push(row);
+          checkpoint.completedCases.push({
+            rowId: `global:${shortcut.actionId}`,
+            actionId: shortcut.actionId,
+            status: row.status,
+            reason: row.reason,
+            completedAt: new Date().toISOString(),
+          });
+          await persistCheckpoint().catch(() => {});
+          continue;
+        }
+      }
 
       const startedAt = Date.now();
       const target = targetById[shortcut.activationProbeExpectedTargetRef];
@@ -8682,6 +9000,7 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         ? lastVerifiedBlankNewChatProvenance
         : null;
       let verifiedAuditConversationSource = false;
+      let restoreViewportSize = null;
       try {
         if (!prepareCaptureOnly && !dispatchCode) {
           const reason = extensionStorageWarning
@@ -8711,6 +9030,17 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         }
         if (!probeStateId && !STATELESS_LIVE_PROBE_SETUPS.includes(shortcut.activationProbeSetup)) {
           throw new Error('Shortcut has no probe scrape state to prepare.');
+        }
+        if (!prepareCaptureOnly && SCROLL_ACTIVATION_ACTION_IDS.has(shortcut.actionId)) {
+          const currentViewportSize = page.viewportSize();
+          if (currentViewportSize && currentViewportSize.height > 450) {
+            restoreViewportSize = currentViewportSize;
+            await page.setViewportSize({
+              width: currentViewportSize.width,
+              height: 450,
+            });
+            await page.waitForTimeout(350);
+          }
         }
 
         trackAuditOwnedConversation(page.url());
@@ -8881,18 +9211,24 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         } else if (shortcut.activationProbeSetup === 'composer-plus-menu') {
           await resetFixturePage(page, fixtureUrl);
           await openComposerPlusMenu(page);
-        } else if (
-          ['composer-plus-menu-search-study', 'composer-plus-menu-search-deep-research'].includes(
-            shortcut.activationProbeSetup,
-          )
-        ) {
+        } else if (shortcut.activationProbeSetup === 'new-conversation-plus-menu') {
+          setupBlankNewChatProvenance = await prepareNewConversationProbeState(page, fixtureUrl, {
+            checkpoint,
+            persistCheckpoint,
+            scope: `global:${shortcut.actionId}:blank-plus-menu`,
+          });
+          const composerMode = await ensureChatModeForComposerToolProbe(page);
+          if (checkpoint?.currentCase) checkpoint.currentCase.composerMode = composerMode;
+          await persistCheckpoint();
+          await openComposerPlusMenu(page);
+        } else if (shortcut.activationProbeSetup === 'composer-plus-menu-search-study') {
           setupBlankNewChatProvenance = await prepareComposerStudySearchProbeState(
             page,
             fixtureUrl,
             {
               checkpoint,
               persistCheckpoint,
-              query: shortcut.actionId === 'shortcutKeyDeepResearch' ? 'deep research' : 'study',
+              query: 'study',
               actionId: shortcut.actionId,
             },
           );
@@ -8912,13 +9248,30 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
             await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.target-presence');
           }
           try {
-            await waitForLiveProbeTargetPresence(page, target);
+            await waitForLiveProbeTargetPresence(
+              page,
+              target,
+              shortcut.actionId === 'shortcutKeyDeepResearch' ? 15000 : 5000,
+            );
           } catch (error) {
-            if (shortcut.actionId === 'shortcutKeyStudy' && checkpoint.currentCase) {
-              checkpoint.currentCase.studyTargetPresence = await captureTargetPresenceCounts(
-                page,
-                target,
-              ).catch(() => ({ requiredGroups: 0, matchedGroups: 0, unavailable: true }));
+            if (
+              ['shortcutKeyStudy', 'shortcutKeyDeepResearch'].includes(shortcut.actionId) &&
+              checkpoint.currentCase
+            ) {
+              const targetPresence = await captureTargetPresenceCounts(page, target).catch(() => ({
+                requiredGroups: 0,
+                matchedGroups: 0,
+                unavailable: true,
+              }));
+              if (shortcut.actionId === 'shortcutKeyDeepResearch') {
+                Object.assign(
+                  targetPresence,
+                  await captureComposerSearchTargetCounts(page).catch(() => ({
+                    unavailable: true,
+                  })),
+                );
+              }
+              checkpoint.currentCase.studyTargetPresence = targetPresence;
               await persistCheckpoint().catch(() => {});
             }
             throw error;
@@ -8983,7 +9336,9 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         checkpoint.currentCase.preActionConversationId =
           page.url().match(/\/c\/([^/]+)/)?.[1] || '';
         await persistCheckpoint();
-        await installLiveProbeObserver(page, { preventDefault: false });
+        await installLiveProbeObserver(page, {
+          preventDefault: BLOCK_NATIVE_ACTIVATION_ACTION_IDS.has(shortcut.actionId),
+        });
         if (!shouldPreservePreparedProbeState(shortcut)) {
           await page.evaluate(() => {
             const active = document.activeElement;
@@ -9060,7 +9415,6 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
         const requiresCommittedResponse = [
           'shortcutKeyClickSendButton',
           'shortcutKeySendEdit',
-          'shortcutKeyRegenerateTryAgain',
         ].includes(shortcut.actionId);
         if (requiresCommittedResponse) {
           if (shortcut.actionId === 'shortcutKeyClickSendButton') {
@@ -9098,6 +9452,28 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           await Promise.race([fileChooserEvent, page.waitForTimeout(1200).then(() => false)]);
         }
         let afterSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
+        if (shortcut.actionId === 'shortcutKeyToggleDictate') {
+          const cancelControlVisible = await page.evaluate((selectors) => {
+            const isVisible = (button) => {
+              if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+              const style = getComputedStyle(button);
+              const rect = button.getBoundingClientRect();
+              return (
+                style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                style.pointerEvents !== 'none' &&
+                rect.width > 0 &&
+                rect.height > 0
+              );
+            };
+            return selectors.some((selector) =>
+              Array.from(document.querySelectorAll(selector)).some(isVisible),
+            );
+          }, DICTATION_CANCEL_BUTTON_SELECTORS);
+          if (cancelControlVisible) {
+            await clickEnabledButton(page, DICTATION_CANCEL_BUTTON_SELECTORS);
+          }
+        }
         let semanticActionEvidence = null;
         if (shortcut.actionId === 'shortcutKeyShare') {
           semanticActionEvidence = {
@@ -9108,37 +9484,37 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           };
         }
         if (shortcut.actionId === 'shortcutKeyStudy') {
-          const studyPillActivationSnapshot = afterSnapshot;
+          const studySelectionActivationSnapshot = afterSnapshot;
           let studyToggleOffDispatched = false;
-          await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.pill-on');
+          await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.control-on');
           try {
-            await waitForStudyPillCount(page, 1);
+            await waitForStudySelectionCount(page, 1);
           } catch {}
           const confirmedActivationSnapshot =
-            studyPillActivationSnapshot.selectedStudyPillCount === 1
-              ? studyPillActivationSnapshot
+            studySelectionActivationSnapshot.selectedStudyControlCount === 1
+              ? studySelectionActivationSnapshot
               : await captureLiveProbeSemanticSnapshot(page, target);
-          if (confirmedActivationSnapshot.selectedStudyPillCount === 1) {
-            await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.pill-off');
-            checkpoint.currentCase.phase = 'study-pill-on-confirmed';
+          if (confirmedActivationSnapshot.selectedStudyControlCount === 1) {
+            await markProbeDiagnosticStage(checkpoint, persistCheckpoint, 'study.control-off');
+            checkpoint.currentCase.phase = 'study-control-on-confirmed';
             await persistCheckpoint();
             try {
               await dispatchShortcutForAction(page, shortcut, dispatchCode);
               studyToggleOffDispatched = true;
-              checkpoint.currentCase.phase = 'study-pill-off-pending';
+              checkpoint.currentCase.phase = 'study-control-off-pending';
               await persistCheckpoint();
-              await waitForStudyPillCount(page, 0);
+              await waitForStudySelectionCount(page, 0);
             } catch {}
           }
           afterSnapshot = await captureLiveProbeSemanticSnapshot(page, target);
           semanticActionEvidence = {
-            studyPillActivationSnapshot: confirmedActivationSnapshot,
-            studyPillDeactivationSnapshot: afterSnapshot,
+            studySelectionActivationSnapshot: confirmedActivationSnapshot,
+            studySelectionDeactivationSnapshot: afterSnapshot,
             studyToggleOffDispatched,
           };
-          checkpoint.currentCase.studyPillCounts = {
-            afterActivation: confirmedActivationSnapshot.selectedStudyPillCount,
-            afterDeactivation: afterSnapshot.selectedStudyPillCount,
+          checkpoint.currentCase.studyControlCounts = {
+            afterActivation: confirmedActivationSnapshot.selectedStudyControlCount,
+            afterDeactivation: afterSnapshot.selectedStudyControlCount,
           };
           await persistCheckpoint();
         }
@@ -9198,6 +9574,22 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
                 !matchingKeydown.metaKey &&
                 !matchingKeydown.shiftKey &&
                 matchingKeydown.defaultPrevented === true,
+            },
+          };
+        }
+        if (BLOCK_NATIVE_ACTIVATION_ACTION_IDS.has(shortcut.actionId)) {
+          semanticActionEvidence = {
+            ...(semanticActionEvidence || {}),
+            activation: {
+              trustedDispatch:
+                matchingKeydown?.isTrusted === true &&
+                matchingKeydown.altKey === true &&
+                !matchingKeydown.ctrlKey &&
+                !matchingKeydown.metaKey &&
+                !matchingKeydown.shiftKey &&
+                matchingKeydown.defaultPrevented === true,
+              targetClickObserved: Boolean(clickMatch),
+              targetClickDefaultPrevented: clickMatch?.defaultPrevented === true,
             },
           };
         }
@@ -9607,6 +9999,10 @@ export async function runLiveShortcutActivationProbes(page, context, options = {
           await cleanupShareToastObserver(page).catch(() => {});
         await cleanupLiveProbeObserver(page);
         await closeOpenMenus(page).catch(() => {});
+        if (restoreViewportSize) {
+          await page.setViewportSize(restoreViewportSize).catch(() => {});
+          await page.waitForTimeout(250).catch(() => {});
+        }
       }
     }
     if (fixedContractsToRun.length) {

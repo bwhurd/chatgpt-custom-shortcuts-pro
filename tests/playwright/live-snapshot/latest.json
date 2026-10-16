@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "kind": "captured-token-evidence",
   "origin": "https://chatgpt.com",
-  "capturedAt": "2026-10-09T09:18:57.325Z",
-  "sourceFingerprint": "09471fa4da6633022c87974b939842df93e23dade105cee90961ca1df797db9c",
+  "capturedAt": "2026-10-16T01:03:50.545Z",
+  "sourceFingerprint": "c15d3091c8d377d0b36da760c06588891c10e22ab2dce839d52cbf77aeec7b65",
   "capabilities": {
     "schemaVersion": 2,
     "source": "fresh-model-picker-v2",
@@ -18,7 +18,9 @@
       "filename": "1a_SideBarCollapsed_body.txt",
       "status": "captured",
       "tokens": [
-        "#arrow-up-open-base-light-16",
+        "#arrow-up-open-base-light-20",
+        "#magnifying-glass-lg-light-16",
+        "#magnifying-glass-lg-light-20",
         "#microphone-light-16\"",
         "#microphone-light-20\"",
         "<a",
@@ -69,7 +71,9 @@
       "filename": "1b_SidebarExpaneded_body.txt",
       "status": "captured",
       "tokens": [
-        "#arrow-up-open-base-light-16",
+        "#arrow-up-open-base-light-20",
+        "#magnifying-glass-lg-light-16",
+        "#magnifying-glass-lg-light-20",
         "#microphone-light-16\"",
         "#microphone-light-20\"",
         "<a",
@@ -126,12 +130,11 @@
       "filename": "1e_TopbarToBottomDisabled_HeaderArea.txt",
       "status": "captured",
       "tokens": [
-        "#arrow-up-open-base-light-16",
+        "#arrow-up-open-base-light-20",
         "<button",
         "<header",
         "M6.33325 1.80763",
         "aria-haspopup=\"menu\"",
-        "aria-pressed=\"false\"",
         "data-app-shell-header-obstacle=\"true\"",
         "data-app-shell-titlebar",
         "data-testid=\"app-shell-header-context-menu-surface\"",
@@ -145,12 +148,11 @@
       "filename": "1e2_NarrowViewport_HeaderArea_StagePopoverSidebarControl.txt",
       "status": "captured",
       "tokens": [
-        "#arrow-up-open-base-light-16",
+        "#arrow-up-open-base-light-20",
         "<button",
         "<header",
         "M6.33325 1.80763",
         "aria-haspopup=\"menu\"",
-        "aria-pressed=\"false\"",
         "data-app-shell-header-obstacle=\"true\"",
         "data-app-shell-titlebar",
         "data-testid=\"app-shell-header-context-menu-surface\"",
@@ -164,6 +166,7 @@
       "filename": "1f_UserTurnWithButtonsExposedOnHover.txt",
       "status": "captured",
       "tokens": [
+        "#arrow-up-open-base-light-20",
         "<button",
         "<code",
         "<pre",
@@ -187,6 +190,7 @@
       "filename": "1g_AgentTurnWithButtons_MultipleThreads_2of2_DidntSearchWeb.txt",
       "status": "captured",
       "tokens": [
+        "#arrow-up-open-base-light-20",
         "<button",
         "<code",
         "<pre",
@@ -210,6 +214,7 @@
       "filename": "1h_AgentTurnWithButtons_SingleThread_SearchedTheWeb.txt",
       "status": "captured",
       "tokens": [
+        "#arrow-up-open-base-light-20",
         "<a",
         "<button",
         "M11.7313",
@@ -456,8 +461,8 @@
       ]
     },
     {
-      "stateId": "probe-composer-deep-research-search",
-      "filename": "3m_Probe_ComposerDeepResearchSearch.txt",
+      "stateId": "probe-composer-deep-research-menu",
+      "filename": "3m_Probe_ComposerDeepResearchMenu.txt",
       "status": "captured",
       "tokens": [
         "<button",

@@ -300,9 +300,9 @@ const DUMP_REGISTRY = Object.freeze([
     capture: { type: 'probe-target', targetRef: 'composer-study-action' },
   },
   {
-    filename: '3m_Probe_ComposerDeepResearchSearch.txt',
-    stateId: 'probe-composer-deep-research-search',
-    label: 'Probe-only searched Deep Research composer menu item',
+    filename: '3m_Probe_ComposerDeepResearchMenu.txt',
+    stateId: 'probe-composer-deep-research-menu',
+    label: 'Probe-only visible Deep Research composer menu item',
     probeOnly: true,
     steps: [],
     capture: { type: 'probe-target', targetRef: 'composer-deep-research-action' },

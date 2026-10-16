@@ -8,6 +8,10 @@ If you don’t want to wait, go to the [CGCSP Git repo](https://github.com/bwhur
 
 #### 10.15.2026
 - Fixed: Move Top Bar To Bottom no longer darkens the conversation background in light mode.
+- Fixed: Share shortcut opens ChatGPT's current sharing control.
+- Fixed: Copy Code includes code blocks in ChatGPT's current response layout.
+- Fixed: Study shortcut works when assigned to the backquote (`) key.
+- Fixed: Composer tool shortcuts recognize selected tools in ChatGPT's current layout and toggle them off.
 
 #### 10.11.2026
 - Fixed: Hide Pasted Files now works in Library list and grid views, with its toggle restored.
