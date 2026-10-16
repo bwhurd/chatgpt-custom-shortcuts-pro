@@ -2390,8 +2390,13 @@ const shareShortcutSource = contentSource.match(
 assert.ok(shareShortcutSource, 'The Share shortcut should activate the current native control');
 assert.match(
   shareShortcutSource,
-  /\[data-testid="app-shell-header-context-menu-surface"\] > \[data-app-shell-header-obstacle="true"\] button:has\(svg use\[href\$="#arrow-up-open-base-light-16"\]\)/,
+  /\[data-testid="app-shell-header-context-menu-surface"\] > \[data-app-shell-header-obstacle="true"\] button:has\(svg use\[href\$="#arrow-up-open-base-light-20"\]\)/,
   'The Share shortcut should match the current header sprite glyph',
+);
+assert.match(
+  shareShortcutSource,
+  /\[data-testid="app-shell-header-context-menu-surface"\] > \[data-app-shell-header-obstacle="true"\] button:has\(svg use\[href\$="#arrow-up-open-base-light-16"\]\)/,
+  'The Share shortcut should retain the 16px header sprite fallback',
 );
 assert.match(
   shareShortcutSource,
@@ -2449,6 +2454,7 @@ class FixtureMouseEvent {
 class FixturePointerEvent extends FixtureMouseEvent {}
 
 const structuralShareSelector =
+  '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-20"]), ' +
   '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg use[href$="#arrow-up-open-base-light-16"]), ' +
   '[data-testid="app-shell-header-context-menu-surface"] > [data-app-shell-header-obstacle="true"] button:has(svg path[d^="M13.3337"])';
 const staleShareButton = new FixtureShareButton();
