@@ -1,4 +1,7 @@
 import shortcutActionMetadata from '../../../extension/shared/shortcut-action-metadata.js';
+import bindings from '../../../extension/shared/shortcut-bindings.js';
+import composerShortcuts from '../../../extension/shortcuts/composer.js';
+import nativeSearch from '../../../extension/shortcuts/search.js';
 
 const SHORTCUT_DEFAULTS_PATTERN = /const shortcutDefaults = \{([\s\S]*?)\n\s*\};/;
 const OPTIONS_DEFAULTS_PATTERN = /const OPTIONS_DEFAULTS = \{([\s\S]*?)\n\};/;
@@ -150,7 +153,7 @@ export function parseOptionsDefaultsFromSource(optionsSource) {
 }
 
 export function parseModelPickerLabelsSource(modelPickerLabelsSource) {
-  const windowObj = {};
+  const windowObj = { CSPShortcutBindings: bindings };
   const factory = new Function('window', String(modelPickerLabelsSource || ''));
   factory(windowObj);
   if (!windowObj.ModelLabels) {
@@ -680,6 +683,17 @@ function buildShortcutRow({
   const labelInfo = resolveShortcutLabel(definition.actionId, settingsSchema, localeMessages);
   const sectionInfo = sectionInfoByActionId[definition.actionId] || null;
   const requiredUiStateRefs = definition.uiStateRefs || [];
+  const productionModule =
+    definition.actionId === nativeSearch.ACTION_ID
+      ? nativeSearch
+      : ['shortcutKeyActivateInput', 'shortcutKeyStudy'].includes(definition.actionId)
+        ? composerShortcuts
+        : null;
+  const moduleRules = productionModule
+    ? (definition.targetRefs || [])
+        .flatMap((targetId) => productionModule.targets[targetId]?.rules || [])
+        .map((rule) => (typeof rule === 'string' ? rule : rule.id))
+    : [];
   const activationProbe = definition.activationProbe || {
     mode: missingMetadata ? 'missing-metadata' : 'missing',
     expectedTargetRef: '',
@@ -691,6 +705,9 @@ function buildShortcutRow({
   };
   return {
     actionId: definition.actionId,
+    owner: productionModule?.OWNER || 'extension/content.js',
+    implementation: productionModule ? 'shared-resolver' : 'legacy',
+    matchingRules: moduleRules,
     label: labelInfo.label,
     labelKey: labelInfo.labelKey,
     defaultCode: Object.hasOwn(defaults, definition.actionId) ? defaults[definition.actionId] : '',

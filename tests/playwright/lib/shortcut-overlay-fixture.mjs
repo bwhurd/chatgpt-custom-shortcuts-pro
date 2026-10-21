@@ -29,6 +29,11 @@ export async function runOverlayCase(context, content, started) {
     page.on('pageerror', (error) => errors.push(error.message));
     await page.setContent('<input id="composer">');
     await page.addScriptTag({
+      path: fileURLToPath(
+        new URL('../../../extension/shared/shortcut-bindings.js', import.meta.url),
+      ),
+    });
+    await page.addScriptTag({
       path: fileURLToPath(new URL('../../../extension/settings-schema.js', import.meta.url)),
     });
     await page.addScriptTag({

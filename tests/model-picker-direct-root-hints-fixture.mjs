@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
 
 const [labelsSource, contentSource] = await Promise.all([
   readFile(new URL('../extension/shared/model-picker-labels.js', import.meta.url), 'utf8'),
   readFile(new URL('../extension/content.js', import.meta.url), 'utf8'),
 ]);
-const labelsContext = { window: {} };
+const labelsContext = { window: { CSPShortcutBindings: bindings } };
 vm.createContext(labelsContext);
 vm.runInContext(labelsSource, labelsContext);
 const { ModelLabels } = labelsContext.window;

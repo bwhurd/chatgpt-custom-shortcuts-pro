@@ -9,7 +9,13 @@ const ACTION = 'shortcutKeySearchConversationHistory';
 const icon = (size) =>
   `<svg width="${size}" height="${size}"><use href="/cdn/assets/icons-fixture.svg#magnifying-glass-lg-light-${size}"></use></svg>`;
 
-export async function runSearchChatsCase(context, content, item, started = performance.now()) {
+export async function runSearchChatsCase(
+  context,
+  content,
+  item,
+  started = performance.now(),
+  options = {},
+) {
   const begin = performance.now();
   const row = {
     actionId: ACTION,
@@ -19,7 +25,7 @@ export async function runSearchChatsCase(context, content, item, started = perfo
     proofScope: 'fixture-keyboard',
     bindingScope: 'isolated Alt+K assignment; installed storage is not read or changed',
     pathScope:
-      'Real extracted listener and Search helpers against October 10 recorded sprites; controlled dialog completion, not current installed ChatGPT acceptance.',
+      'Real dispatcher and authored Search module against October 10 recorded sprites; controlled dialog completion, not current installed ChatGPT acceptance.',
     chord: 'Alt+KeyK',
     startedMs: begin - started,
     variants: [],
@@ -61,7 +67,7 @@ export async function runSearchChatsCase(context, content, item, started = perfo
         });
       });
     });
-    const runtime = await extractFastRuntime(content, ACTION);
+    const runtime = await extractFastRuntime(content, ACTION, options);
     await page.addScriptTag({ content: runtime.source });
     await page.evaluate((action) => {
       window.CSP_SHORTCUTS_EFFECTIVE[action] = 'KeyK';

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
 
 // This fixture starts at the page-level handler; Chrome's browser-menu accelerator is external.
 const [contentSource, optionsStorageSource, popupSource, popupHtmlSource] = await Promise.all([
@@ -270,6 +271,7 @@ const context = {
   MouseEvent: FixtureMouseEvent,
   PointerEvent: FixturePointerEvent,
   window: {
+    CSPShortcutBindings: bindings,
     CSP_SHORTCUTS_EFFECTIVE: shortcutSettings,
     PointerEvent: FixturePointerEvent,
   },

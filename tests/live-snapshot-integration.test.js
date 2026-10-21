@@ -37,8 +37,11 @@ async function createMirror({ narrowInventory = false } = {}) {
 async function installNarrowFixtureInventory(root) {
   const filename = path.join(root, 'extension', 'shared', 'shortcut-action-metadata.js');
   const source = await readFile(filename, 'utf8');
-  const originalReturn = '  return Object.freeze({\n    VALIDATION_MODES,';
-  assert.equal(source.split(originalReturn).length - 1, 1);
+  const returnMatches = [
+    ...source.matchAll(/^[ \t]*return Object\.freeze\(\{\r?\n[ \t]*VALIDATION_MODES,/gm),
+  ];
+  assert.equal(returnMatches.length, 1);
+  const originalReturn = returnMatches[0][0];
   const withFixture = source.replace(
     originalReturn,
     `  const fixtureTargets = Object.freeze(
@@ -69,10 +72,10 @@ async function installNarrowFixtureInventory(root) {
   return Object.freeze({\n    VALIDATION_MODES,`,
   );
   const withNarrowExports = withFixture.replace(
-    '    TARGET_DESCRIPTORS,\n    SHORTCUT_ACTIONS,',
-    '    TARGET_DESCRIPTORS: fixtureTargets,\n    SHORTCUT_ACTIONS: fixtureActions,',
+    /^([ \t]*)TARGET_DESCRIPTORS,\r?\n([ \t]*)SHORTCUT_ACTIONS,/m,
+    '$1TARGET_DESCRIPTORS: fixtureTargets,\n$2SHORTCUT_ACTIONS: fixtureActions,',
   );
-  assert.notEqual(withNarrowExports, source);
+  assert.notEqual(withNarrowExports, withFixture);
   await writeFile(filename, withNarrowExports, 'utf8');
 }
 

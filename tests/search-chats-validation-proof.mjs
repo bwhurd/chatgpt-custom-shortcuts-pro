@@ -6,10 +6,14 @@ import { evaluateLiveProbeSemantic } from './playwright/lib/devscrape-wide-core.
 import { runSearchChatsCase } from './playwright/lib/search-chats-fixture.mjs';
 
 const content = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
+const searchModule = await readFile(
+  new URL('../extension/shortcuts/search.js', import.meta.url),
+  'utf8',
+);
 const item = { actionId: 'shortcutKeySearchConversationHistory', type: 'direct-control' };
 const replaceAction = (body) => {
   const anchor =
-    /shortcutKeySearchConversationHistory: \(\) => \{\s*triggerNativeSearchConversationButton\(\);\s*\}/g;
+    /shortcutKeySearchConversationHistory: \(\) => \{\s*void searchShortcutActions.run\(\);\s*\}/g;
   assert.equal(
     [...content.matchAll(anchor)].length,
     1,
@@ -17,22 +21,29 @@ const replaceAction = (body) => {
   );
   return content.replace(anchor, `shortcutKeySearchConversationHistory: () => { ${body} }`);
 };
-const oldSelectors = content.replace(
-  /^ {4}'button:has\(svg use\[href\$="#magnifying-glass-lg-light-(?:16|20)"\]\)',\r?\n/gm,
-  '',
+const oldSelectors = searchModule.replaceAll('#magnifying-glass-lg-light-', '#missing-search-');
+assert.notEqual(oldSelectors, searchModule, 'Historical mutation must hit actual module');
+const clickStub = searchModule.replace(
+  /function activate\(element\) \{\s*return click\(element\) === true;\s*\}/,
+  'function activate(element) { return true; }',
 );
-assert.notEqual(oldSelectors, content, 'Historical selector mutation must remove current sprites');
-const clickStub = content.replace(
-  /function safeClickSearchConversationButton\(el\) \{[\s\S]*?\n {2}\}/,
-  'function safeClickSearchConversationButton(el) { return true; }',
-);
-assert.notEqual(clickStub, content, 'Click no-op mutation must hit the actual helper');
+assert.notEqual(clickStub, searchModule, 'Click no-op mutation must hit the actual helper');
 
 const cases = [
   { name: 'current-source', source: content, expected: 'pass' },
-  { name: 'historical-missing-sprite-selectors', source: oldSelectors, expected: 'fail' },
+  {
+    name: 'historical-missing-sprite-selectors',
+    source: content,
+    moduleSource: oldSelectors,
+    expected: 'fail',
+  },
   { name: 'handler-does-nothing', source: replaceAction('return true;'), expected: 'fail' },
-  { name: 'click-reports-success-without-opening', source: clickStub, expected: 'fail' },
+  {
+    name: 'click-reports-success-without-opening',
+    source: content,
+    moduleSource: clickStub,
+    expected: 'fail',
+  },
   {
     name: 'wrong-button-activation',
     source: replaceAction('document.getElementById("search-distractor").click();'),
@@ -41,15 +52,13 @@ const cases = [
   {
     name: 'popup-missing-linked-results',
     source: replaceAction(
-      'triggerNativeSearchConversationButton(); document.querySelector("dialog [role=listbox]").removeAttribute("role");',
+      'void searchShortcutActions.run(); document.querySelector("dialog [role=listbox]").removeAttribute("role");',
     ),
     expected: 'fail',
   },
   {
     name: 'duplicate-popups',
-    source: replaceAction(
-      'triggerNativeSearchConversationButton(); triggerNativeSearchConversationButton();',
-    ),
+    source: replaceAction('void searchShortcutActions.run(); void searchShortcutActions.run();'),
     expected: 'fail',
   },
 ];
@@ -116,7 +125,9 @@ try {
   const context = await browser.newContext();
   await context.route('**/*', (route) => route.abort());
   for (const test of cases) {
-    const result = await runSearchChatsCase(context, test.source, item);
+    const result = await runSearchChatsCase(context, test.source, item, undefined, {
+      searchModuleSource: test.moduleSource ?? searchModule,
+    });
     assert.deepEqual(
       result.pageErrors,
       [],

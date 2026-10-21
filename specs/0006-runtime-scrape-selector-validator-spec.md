@@ -64,6 +64,14 @@ Do not merge this work into `tests/validate-keys.js` or `tests/lib/settings-wiri
 
 ## Browser Posture
 
+### Read-only pilot inspection
+
+`npm run playwright:chatgpt:audit-shortcuts -- --inspect-targets --shortcut-action-id shortcutKeySearchConversationHistory --shortcut-action-id shortcutKeyActivateInput --shortcut-action-id shortcutKeyStudy` inspects the already installed content-script world on port 9333 (or explicit `--cdp-endpoint`). It requires one existing ChatGPT page, or an exact `--page-url` selection. It never launches, navigates, injects a replacement runtime, prepares menus, activates actions or changes storage. Reload the unpacked extension and page after shipped changes; the collector rejects missing/stale pilot module signatures.
+
+Results attach to the existing audit JSON and HTML under a read-only inspection section. Exit 0 means all requested targets resolved ready, 1 means a missing/ambiguous target, and 2 means closed-state prerequisites, unavailable/stale runtime or legacy scope. `needs-state` is expected for an unopened/unrendered Study menu. Preparation/activation flags are rejected in this mode. Reports contain structural diagnostics, not conversation text or arbitrary HTML, and never convert readiness into behavioral success.
+
+The fast catalogue retains all actions and appends production owner, shared-resolver/legacy implementation, required states and matching rule IDs. Pilot fixture execution loads exact authored module files; generic helpers and legacy dispatcher/actions still use source extraction. Independent popup/focus/tool assertions remain the success oracle, including all six Search mutations.
+
 - Use standard Chrome, not Chrome for Testing, for the authenticated manual profile used by this workflow.
 - The standard attach profile is `CodexCleanProfile` under the local Chrome user-data root.
 - The standard CDP endpoint is `http://127.0.0.1:9333`.

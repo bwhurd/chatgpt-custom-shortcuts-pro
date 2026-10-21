@@ -29,6 +29,11 @@ This file is the durable project overview for ChatGPT Custom Shortcuts Pro. Use 
 
 - `extension/content.js`
   - main content-world runtime for shortcuts, DOM automation, overlays, copy helpers, UI tweaks, and model actions
+- `extension/shared/shortcut-bindings.js`
+  - passive binding codec shared by popup, portable-settings normalization, model labels and runtime; defaults, conflict policy and keyboard dispatch stay with their existing owners
+- `extension/shortcuts/search.js`, `extension/shortcuts/composer.js`
+  - passive native Search, composer-focus and Study implementations with read-only target diagnostics; content.js supplies shared primitives and registers the existing actions
+  - manifest loads the binding codec before model labels and both action modules before content.js; popup loads the codec before its consumers. New shipped modules are explicit ZIP inputs; development action metadata remains excluded.
 
 ### Popup and shared settings surface
 

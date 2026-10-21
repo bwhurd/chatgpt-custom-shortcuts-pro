@@ -41,6 +41,11 @@ import {
   writeShortcutAuditArtifacts,
 } from './lib/shortcut-audit-artifacts.mjs';
 import {
+  inspectInstalledShortcutTargets,
+  inspectionExitCode,
+  validateInspectionArgs,
+} from './lib/shortcut-target-inspection.mjs';
+import {
   buildSourceSelectorInventory,
   runSourceSelectorAudit,
   writeSourceSelectorReport,
@@ -798,6 +803,43 @@ async function writeAuditArtifactsForRun({
 }
 
 async function auditShortcuts() {
+  if (hasFlag('--inspect-targets')) {
+    validateInspectionArgs(args);
+    const filters = getAuditFilters();
+    const inventory = await buildCurrentShortcutInventory([]);
+    const actionIds = filters.onlyActionIds.length
+      ? filters.onlyActionIds
+      : inventory.shortcuts.map((row) => row.actionId);
+    const endpoint = getCdpEndpoint();
+    const browser = await chromium.connectOverCDP(endpoint);
+    try {
+      const context = browser.contexts()[0];
+      const pages =
+        context?.pages().filter((page) => {
+          try {
+            return (
+              new URL(page.url()).hostname === 'chatgpt.com' &&
+              (!hasFlag('--page-url') || page.url() === getArgValue('--page-url'))
+            );
+          } catch {
+            return false;
+          }
+        }) || [];
+      if (pages.length !== 1)
+        throw new Error(
+          'Inspection requires one existing ChatGPT page; use --page-url to select it. No page was opened.',
+        );
+      const targetInspection = await inspectInstalledShortcutTargets(context, pages[0], actionIds);
+      const result = await writeInventoryOnlyShortcutAuditRun({ ...filters, targetInspection });
+      console.log(`Read-only target inspection: ${result.artifactPaths.jsonPath}`);
+      console.log(`HTML report: ${result.checkReportFiles.htmlPath}`);
+      console.log(JSON.stringify(targetInspection, null, 2));
+      process.exitCode = inspectionExitCode(targetInspection.rows);
+      return result;
+    } finally {
+      await browser.close();
+    }
+  }
   if (hasFlag('--provision-fixtures') && !hasFlag('--fast')) {
     throw new Error('--provision-fixtures requires --fast');
   }

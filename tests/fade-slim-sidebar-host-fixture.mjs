@@ -80,9 +80,23 @@ class TestElement extends TestNode {
     this.styleValues = new Map();
     this.style = {
       pointerEvents: '',
+      getPropertyValue: (name) => this.styleValues.get(name) ?? '',
+      getPropertyPriority: () => '',
       setProperty: (name, value) => this.styleValues.set(name, String(value)),
       removeProperty: (name) => this.styleValues.delete(name),
     };
+  }
+
+  querySelectorAll() {
+    return this.controls ?? [];
+  }
+
+  contains(node) {
+    return node === this || this.controls?.includes(node);
+  }
+
+  closest() {
+    return null;
   }
 
   getAttribute(name) {
@@ -138,6 +152,9 @@ const runTimersTo = (target) => {
   now = target;
 };
 const currentHost = new TestHTMLElement('app-shell-sidebar');
+const railControl = new TestHTMLElement('rail-control');
+railControl.parentElement = currentHost;
+currentHost.controls = [railControl];
 const stageHost = new TestHTMLElement('stage-slideover-sidebar');
 stageHost.setAttribute('data-state', 'open');
 const legacyHost = new TestHTMLElement('stage-sidebar');
@@ -307,7 +324,7 @@ assert.equal(
 );
 runTimersTo(3700);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '0.3',
   'collapsed idle should use configured opacity',
 );
@@ -315,13 +332,13 @@ assert.equal(
 currentHost.hovered = true;
 currentHost.listeners.get('mouseenter')();
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'entering the collapsed host should reveal the rail',
 );
 runTimersTo(now + 5000);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'a steady hover should prevent the idle fade',
 );
@@ -330,7 +347,7 @@ currentHost.hovered = false;
 currentHost.listeners.get('mouseleave')();
 runTimersTo(now + 2500);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '0.3',
   'leaving the collapsed rail should fade to idle',
 );
@@ -338,7 +355,7 @@ assert.equal(
 currentToggle.setAttribute('aria-expanded', 'true');
 observers.at(-1).callback([]);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'expanding the shell should restore full opacity',
 );
@@ -349,7 +366,7 @@ assert.equal(
 );
 runTimersTo(now + 5000);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'expanded idle must never fade the full sidebar',
 );
@@ -357,19 +374,19 @@ assert.equal(
 currentToggle.setAttribute('aria-expanded', 'false');
 observers.at(-1).callback([]);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'collapsing should reveal the rail before idling',
 );
 runTimersTo(now);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '1',
   'collapsed transition should restore the rail',
 );
 runTimersTo(now + 2500);
 assert.equal(
-  currentHost.styleValues.get('opacity'),
+  railControl.styleValues.get('opacity') ?? '1',
   '0.3',
   'the collapsed rail should return to idle opacity',
 );
@@ -379,6 +396,7 @@ assert.equal(
   'collapsed idle should preserve pointer interaction',
 );
 
+assert.equal(currentHost.styleValues.size, 0, 'native sidebar container styles stay untouched');
 console.log(
   'Fade Slim Sidebar fades the collapsed app-shell rail and preserves the expanded sidebar',
 );

@@ -252,6 +252,98 @@ test('popup gates shortcut UI, scrubs both storage and Work inputs, then reopens
   }
 });
 
+test('slim-sidebar opacity retains an older numeric-string preference on popup startup', async () => {
+  const { context, extensionId, serviceWorker, userDataDir } = await launchExtensionProfile();
+  try {
+    await serviceWorker.evaluate(async () =>
+      chrome.storage.sync.set({
+        fadeSlimSidebarEnabled: true,
+        popupSlimSidebarOpacityValue: '0.35',
+      }),
+    );
+    const page = await openPopup(context, extensionId);
+    await expect(page.locator('body')).toHaveAttribute('data-popup-shortcut-state', 'ready');
+    await expect(page.locator('#popupSlimSidebarOpacityValue')).toHaveValue('0.35');
+    expect(
+      await serviceWorker.evaluate(async () =>
+        Number(
+          (await chrome.storage.sync.get('popupSlimSidebarOpacityValue'))
+            .popupSlimSidebarOpacityValue,
+        ),
+      ),
+    ).toBe(0.35);
+    await page.close();
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('international bindings survive capture, reopen and actual settings export/import', async () => {
+  const { context, extensionId, serviceWorker, userDataDir } = await launchExtensionProfile();
+  try {
+    let page = await openPopup(context, extensionId);
+    await expect(page.locator('body')).toHaveAttribute('data-popup-shortcut-state', 'ready');
+    const assignments = [
+      ['shortcutKeySearchConversationHistory', 'IntlBackslash', '<'],
+      ['shortcutKeyActivateInput', 'IntlYen', '¥'],
+    ];
+    for (const [id, code, key] of assignments) {
+      // Synthetic international codes cover capture handling, not physical OS key dispatch.
+      await page.locator(`#${id}`).dispatchEvent('keydown', { code, key, altKey: true });
+      await expect
+        .poll(() =>
+          serviceWorker.evaluate(
+            async (storageKey) => (await chrome.storage.sync.get(storageKey))[storageKey],
+            id,
+          ),
+        )
+        .toBe(code);
+    }
+    await page.close();
+    page = await openPopup(context, extensionId);
+    await expect(page.locator('body')).toHaveAttribute('data-popup-shortcut-state', 'ready');
+    for (const [id, code] of assignments)
+      await expect(page.locator(`#${id}`)).toHaveAttribute('data-key-code', code);
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#btnExportSettings').click();
+    const download = await downloadPromise;
+    const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
+    for (const [id, code] of assignments) expect(exported.data[id]).toBe(code);
+
+    await page.evaluate(
+      async (data) => {
+        for (const id of Object.keys(data)) data[id] = '\u00a0';
+        await chrome.storage.sync.set(data);
+      },
+      Object.fromEntries(assignments.map(([id, code]) => [id, code])),
+    );
+    expect(
+      await page.evaluate(
+        (data) => window.importSettingsObj(data, { skipBrowserConfirm: true }),
+        exported.data,
+      ),
+    ).toBe(true);
+    await page.close();
+    page = await openPopup(context, extensionId);
+    await expect(page.locator('body')).toHaveAttribute('data-popup-shortcut-state', 'ready');
+    for (const [id, code] of assignments) {
+      await expect(page.locator(`#${id}`)).toHaveAttribute('data-key-code', code);
+      expect(
+        await serviceWorker.evaluate(
+          async (storageKey) => (await chrome.storage.sync.get(storageKey))[storageKey],
+          id,
+        ),
+      ).toBe(code);
+    }
+    await page.close();
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test('legacy shared-array migration preserves utility precedence until the full scrub', async () => {
   const { context, extensionId, serviceWorker, userDataDir } = await launchExtensionProfile();
   try {

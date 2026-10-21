@@ -88,7 +88,7 @@ export function extractModelPickerSource(content) {
     const [match] = matches;
     return `const ${content.slice(match.start, match.end)};`;
   };
-  const bridgeSource = `(() => { ${['LETTER_REGEX', 'DIGIT_REGEX', 'DIGIT_NUMPAD_REGEX', 'VALID_CODE_REGEX', 'codeEquals', 'normalizeStoredToCode', 'getSchemaShortcutDefaultCode'].map(variableSource).join('\n')} ${functionSource('charToCode')} window.ShortcutUtils = {codeEquals, normalizeStoredToCode, getSchemaShortcutDefaultCode}; ${['getNativeChatWorkSurfaceRadios', 'rememberNativeChatWorkSurfaceMode', 'getNativeChatWorkSurfaceMode'].map(functionSource).join('\n')} window.getNativeChatWorkSurfaceMode = getNativeChatWorkSurfaceMode; })();`;
+  const bridgeSource = `(() => { ${['codeEquals', 'normalizeStoredToCode', 'getSchemaShortcutDefaultCode'].map(variableSource).join('\n')} ${functionSource('charToCode')} window.ShortcutUtils = {codeEquals, normalizeStoredToCode, getSchemaShortcutDefaultCode}; ${['getNativeChatWorkSurfaceRadios', 'rememberNativeChatWorkSurfaceMode', 'getNativeChatWorkSurfaceMode'].map(functionSource).join('\n')} window.getNativeChatWorkSurfaceMode = getNativeChatWorkSurfaceMode; })();`;
   cached = {
     content,
     source: `${bridgeSource}\n${content.slice(wrapper.start, wrapper.end)};`,
@@ -105,6 +105,7 @@ export async function installModelPickerFixture(
   { storage = {}, deferStorageGet = false } = {},
 ) {
   for (const file of [
+    'shared/shortcut-bindings.js',
     'settings-schema.js',
     'shared/model-picker-labels.js',
     'shared/model-picker-selectors.js',

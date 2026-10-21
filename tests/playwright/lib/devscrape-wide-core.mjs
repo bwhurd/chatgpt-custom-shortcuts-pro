@@ -10579,6 +10579,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
   modelProfile = '',
   modelSlot = null,
   modelActionId = '',
+  targetInspection = null,
 } = {}) {
   const { exports } = await loadDevScrapeWideContract();
   await ensureInspectorCapturesRoot();
@@ -10663,7 +10664,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
   });
   const artifactResult = await writeShortcutAuditArtifacts(
     runDirectory.path,
-    auditReport,
+    targetInspection ? { ...auditReport, targetInspection } : auditReport,
     recoveryReport,
   );
   const checkReport = await buildCheckReport({ folderName: runDirectory.name });
@@ -10675,6 +10676,7 @@ export async function writeInventoryOnlyShortcutAuditRun({
   checkReport.storageRecovery = recoveryReport;
   checkReport.auditPhase = phase;
   checkReport.inventoryOnly = true;
+  if (targetInspection) checkReport.targetInspection = targetInspection;
   const checkReportFiles = await writeCheckReportFiles(checkReport);
   return {
     folderName: runDirectory.name,
@@ -11599,6 +11601,9 @@ export function renderCheckReportHtml(report) {
     'ul{margin:8px 0 0 20px;padding:0;}',
     '</style></head><body>',
     '<h1>ChatGPT Custom Shortcuts Pro Shortcut Audit Report</h1>',
+    report.targetInspection
+      ? `<section><h2>Read-only target inspection</h2><p>Resolution only; no preparation or activation proof.</p><pre>${escapeHtml(JSON.stringify(report.targetInspection, null, 2))}</pre></section>`
+      : '',
     `<p><strong>Report run:</strong> ${escapeHtml(localDateTimeText(report?.generatedAt))}</p>`,
     '<input class="tab-input" id="tab-summary" name="report-tab" type="radio" checked>',
     '<input class="tab-input" id="tab-details" name="report-tab" type="radio">',

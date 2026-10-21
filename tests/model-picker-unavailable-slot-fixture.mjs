@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
 
 const source = await readFile(
   new URL('../extension/shared/model-picker-labels.js', import.meta.url),
   'utf8',
 );
-const context = vm.createContext({ window: {} });
+const context = vm.createContext({ window: { CSPShortcutBindings: bindings } });
 vm.runInContext(source, context);
 const labels = context.window.ModelLabels;
 const codes = Array.from({ length: 15 }, (_, index) => `Digit${index}`);

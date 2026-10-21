@@ -1176,47 +1176,10 @@ function applyVisibilitySettings(data, { source = 'storage-change' } = {}) {
 // Runtime bridge: later IIFEs call this after storage changes update visibility settings.
 window.applyVisibilitySettings = applyVisibilitySettings;
 
-// Runtime bridge: early slim-sidebar fallback controls.
-// The feature IIFE later owns timers/state and overwrites window.flashSlimSidebarBar.
-window.hideSlimSidebarBarInstant = () => {
-  const bar = document.getElementById('stage-sidebar-tiny-bar');
-  if (!bar) return;
-  bar.style.setProperty('transition', 'none', 'important');
-  bar.style.setProperty('opacity', '0', 'important');
-  // force reflow without using void
-  // eslint-disable-next-line no-unused-expressions
-  bar.offsetWidth;
-  setTimeout(() => {
-    if (bar) {
-      bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-    }
-  }, 0);
-};
-
-window.flashSlimSidebarBar = (dur = 2500) => {
-  // Delegate if a stateful slim-sidebar flash implementation was already attached.
-  if (typeof window._flashSlimSidebarBar === 'function') {
-    window._flashSlimSidebarBar(dur);
-    return;
-  }
-  // Fallback before the slim-sidebar feature owns bar state: snap to 1, then fade to idle.
-  const bar = document.getElementById('stage-sidebar-tiny-bar');
-  if (!bar) return;
-  bar.style.setProperty('transition', 'none', 'important');
-  bar.style.setProperty('opacity', '1', 'important');
-  // force reflow without using void
-  // eslint-disable-next-line no-unused-expressions
-  bar.offsetWidth;
-  bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-  setTimeout(() => window.fadeSlimSidebarBarToIdle(), dur);
-};
-
-window.fadeSlimSidebarBarToIdle = () => {
-  const bar = document.getElementById('stage-sidebar-tiny-bar');
-  if (!bar) return;
-  bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
-  bar.style.setProperty('opacity', (window._slimBarIdleOpacity ?? 0.6).toString(), 'important');
-};
+// The fade feature installs these bridges once its state is ready.
+window.hideSlimSidebarBarInstant = () => {};
+window.flashSlimSidebarBar = () => {};
+window.fadeSlimSidebarBarToIdle = () => {};
 
 // Mac Cross-Compatibility Helper
 const MAC_REGEX = /Mac/i;
@@ -1229,44 +1192,9 @@ function isMacPlatform() {
 }
 
 // --- compat helpers to support both legacy chars and new codes ---
-const LETTER_REGEX = /^[A-Z]$/;
-const DIGIT_REGEX = /^[0-9]$/;
 
 function charToCode(ch) {
-  if (!ch) return '';
-  const raw = ch.trim();
-  const upper = raw.toUpperCase();
-  if (LETTER_REGEX.test(upper)) return `Key${upper}`;
-  if (DIGIT_REGEX.test(raw)) return `Digit${raw}`;
-
-  switch (raw) {
-    case '-':
-      return 'Minus';
-    case '=':
-      return 'Equal';
-    case '[':
-      return 'BracketLeft';
-    case ']':
-      return 'BracketRight';
-    case '\\':
-      return 'Backslash';
-    case ';':
-      return 'Semicolon';
-    case "'":
-      return 'Quote';
-    case ',':
-      return 'Comma';
-    case '.':
-      return 'Period';
-    case '/':
-      return 'Slash';
-    case '`':
-      return 'Backquote';
-    case ' ':
-      return 'Space';
-    default:
-      return '';
-  }
+  return window.CSPShortcutBindings.charToCode(ch);
 }
 
 // --- Shortcut normalization helpers (runtime bridge source) -----------------
@@ -1278,9 +1206,6 @@ function charToCode(ch) {
  * @returns {boolean}
  */
 // Precompiled regexes (top-level for performance)
-const DIGIT_NUMPAD_REGEX = /^(Digit|Numpad)([0-9])$/;
-const VALID_CODE_REGEX =
-  /^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash|Backquote|Space)$/;
 
 /**
  * Treat 'DigitX' and 'NumpadX' as equivalent.
@@ -1288,26 +1213,10 @@ const VALID_CODE_REGEX =
  * @param {string} b
  * @returns {boolean}
  */
-const codeEquals = (a, b) => {
-  if (a === b) return true;
-  const A = a?.match(DIGIT_NUMPAD_REGEX);
-  const B = b?.match(DIGIT_NUMPAD_REGEX);
-  return Boolean(A && B && A[2] === B[2]);
-};
+const codeEquals = (a, b) => window.CSPShortcutBindings.equals(a, b);
 
 /** Accepts either a legacy single char ('w') or a code ('KeyW', 'Digit1', 'Numpad1', etc.) in storage. */
-const normalizeStoredToCode = (stored) => {
-  if (!stored) return '';
-  const s = String(stored).trim();
-
-  // Recognized code patterns (keep in sync with charToCode)
-  if (VALID_CODE_REGEX.test(s)) return s;
-
-  // Legacy single-character value
-  if (s.length === 1) return typeof charToCode === 'function' ? charToCode(s) : '';
-
-  return '';
-};
+const normalizeStoredToCode = (stored) => window.CSPShortcutBindings.normalize(stored);
 
 const getSchemaShortcutDefaultCode = (key, fallback = '') => {
   const defaults = window.CSP_SETTINGS_SCHEMA?.shortcuts?.defaultCodeByKey;
@@ -3090,10 +2999,7 @@ const clickElementLikeUser = (el) => {
     );
   }
 
-  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = [
-    'form[data-thread-find-composer="true"] button[data-composer-navigation-target="add-context"]',
-    'form[data-chatgpt-composer] button[data-composer-navigation-target="add-context"]',
-  ];
+  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = window.CSPShortcuts.composer.OPENER_SELECTORS;
   const COMPOSER_TOOL_ITEM_SELECTOR = [
     'button[data-list-navigation-item="true"]',
     'div.__menu-item[tabindex]',
@@ -3132,7 +3038,7 @@ const clickElementLikeUser = (el) => {
 
   const findComposerToolItemByIcon = (
     iconTokens,
-    { itemSelector = COMPOSER_TOOL_ITEM_SELECTOR, rejectAmbiguous = false } = {},
+    { itemSelector = COMPOSER_TOOL_ITEM_SELECTOR, rejectAmbiguous = false, all = false } = {},
   ) => {
     const tokens = Array.isArray(iconTokens) ? iconTokens : [iconTokens];
     const iconSelector = tokens
@@ -3159,6 +3065,7 @@ const clickElementLikeUser = (el) => {
           rect.height > 0
         );
       });
+    if (all) return items;
     if (rejectAmbiguous && items.length > 1) return null;
     items.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
     return items[items.length - 1] || null;
@@ -3283,9 +3190,10 @@ const clickElementLikeUser = (el) => {
     {
       allowNativeToolRemoval = true,
       workSelectedIconTokens = iconTokens,
+      composer: ownedComposer = null,
     } = {},
   ) => {
-    const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
+    const composer = ownedComposer || findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
     if (!composer) return;
 
     const selectedAction = findSelectedComposerToolAction(
@@ -4073,13 +3981,6 @@ const clickElementLikeUser = (el) => {
   const NARROW_SIDEBAR_POPOVER_SELECTORS = [
     'button[data-testid="open-sidebar-button"][aria-controls="stage-popover-sidebar"]',
   ];
-  const SEARCH_CONVERSATION_SELECTORS = [
-    'button:has(svg use[href$="#magnifying-glass-lg-light-16"])',
-    'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
-    'button:has(svg path[d^="M9.16211 2.37976"])',
-    'button:has(svg path[d^="M7.32849 1.91016"])',
-    'button[data-testid="search-conversation-button"]',
-  ];
   const NEW_CHAT_SELECTORS = [
     'button:has(svg path[d^="M8.16675 2.50127"])',
     '[data-app-shell-titlebar] button:has(svg path[d^="M6.33325 1.80763"])',
@@ -4087,12 +3988,7 @@ const clickElementLikeUser = (el) => {
     'button[data-testid="create-new-chat-button"]',
     'button[data-testid="new-chat-button"]',
   ];
-  const COMPOSER_INPUT_SELECTORS = [
-    'form[data-thread-find-composer="true"] div.ProseMirror[contenteditable="true"][role="textbox"]',
-    'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
-  ];
-  const SEARCH_SPRITE_FRAGMENT = '#sidebar-search';
-  const SEARCH_SPRITE_FALLBACK_FRAGMENT = '#ac6d36';
+  const COMPOSER_INPUT_SELECTORS = window.CSPShortcuts.composer.INPUT_SELECTORS;
   const NEW_CHAT_SPRITE_FRAGMENT = '#compose';
   const NEW_CHAT_SPRITE_FALLBACK_FRAGMENT = '#3a5c87';
 
@@ -4134,10 +4030,6 @@ const clickElementLikeUser = (el) => {
     return null;
   }
 
-  function safeClickSearchConversationButton(el) {
-    if (!el || !isDirectActionVisible(el)) return false;
-    return clickElementLikeUser(el);
-  }
 
   function waitForFirstVisibleElement(selectors, timeoutMs = 800) {
     const existing = findFirstVisibleElement(selectors);
@@ -4177,31 +4069,6 @@ const clickElementLikeUser = (el) => {
     return true;
   }
 
-  function findStructuralSearchConversationButton(
-    root = document,
-    isVisible = isDirectActionVisible,
-  ) {
-    const closeSidebarButton = root.querySelector(
-      '#sidebar-header button[data-testid="close-sidebar-button"]',
-    );
-    const expandedSearchButton = closeSidebarButton?.previousElementSibling;
-    if (expandedSearchButton?.matches?.('button') && isVisible(expandedSearchButton)) {
-      return expandedSearchButton;
-    }
-
-    for (const containerSelector of ['#stage-sidebar-tiny-bar', '#stage-popover-sidebar']) {
-      const container = root.querySelector(containerSelector);
-      const newChatButton = container?.querySelector(
-        '[data-testid="create-new-chat-button"]',
-      );
-      const searchButton = newChatButton?.parentElement?.nextElementSibling?.querySelector(
-        'button[data-sidebar-item="true"]',
-      );
-      if (searchButton?.matches?.('button') && isVisible(searchButton)) return searchButton;
-    }
-
-    return null;
-  }
 
   function navigateToNewConversationFallback() {
     if (window.location.pathname === '/') return true;
@@ -4229,22 +4096,6 @@ const clickElementLikeUser = (el) => {
     return navigateToNewConversationFallback();
   }
 
-  async function triggerNativeSearchConversationFromNarrowPopover() {
-    if (!(await openNarrowSidebarPopover(safeClickSearchConversationButton))) return false;
-
-    const direct = await waitForFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
-    if (safeClickSearchConversationButton(direct)) return true;
-
-    const structural = findStructuralSearchConversationButton();
-    if (safeClickSearchConversationButton(structural)) return true;
-
-    const spriteMatch = await waitForFirstVisibleElement([
-      `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"]`,
-      `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FALLBACK_FRAGMENT}"]`,
-    ]);
-    const target = spriteMatch?.closest?.('button[data-sidebar-item="true"]');
-    return safeClickSearchConversationButton(target);
-  }
 
   function triggerNativeNewConversationButton() {
     const direct = findFirstVisibleElement(NEW_CHAT_SELECTORS);
@@ -4383,49 +4234,32 @@ const clickElementLikeUser = (el) => {
     return safeClick(direct);
   }
 
+  const searchShortcutActions = window.CSPShortcuts.search.create({
+    document, click: clickElementLikeUser, isVisible: isDirectActionVisible,
+  });
+  const composerShortcutActions = window.CSPShortcuts.composer.create({
+    document, isVisible: isDirectActionVisible, click: smartClick,
+    findToolItems: (tokens) => findComposerToolItemByIcon(tokens, { all: true }),
+    findSelectedTool: findSelectedComposerToolAction,
+    removeTool: runComposerToolShortcutByIcon,
+    isToolMenuOpen: () => !!findComposerToolItemByIcon(COMPOSER_TOOL_MENU_CUE_TOKENS),
+    waitFor, sleep, delays: DELAYS,
+  });
+  const shortcutTargetInspectors = {
+    shortcutKeySearchConversationHistory: () => searchShortcutActions.inspect().diagnostic,
+    shortcutKeyActivateInput: () => composerShortcutActions.inspect().diagnostic,
+    shortcutKeyStudy: () => composerShortcutActions.inspect('composer-study-action').diagnostic,
+  };
+  window.CSPShortcuts.inspect = (actionId) => shortcutTargetInspectors[actionId]?.() || ({
+    actionId, implementation: 'legacy', status: 'unavailable', reason: 'legacy-resolver',
+  });
+
   function triggerNativeSearchConversationButton() {
-    const direct = findFirstVisibleElement(SEARCH_CONVERSATION_SELECTORS);
-    if (safeClickSearchConversationButton(direct)) return true;
-
-    const structural = findStructuralSearchConversationButton();
-    if (safeClickSearchConversationButton(structural)) return true;
-
-    const spriteMatch = Array.from(
-      document.querySelectorAll(
-        `button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FRAGMENT}"], button[data-sidebar-item="true"] use[href*="${SEARCH_SPRITE_FALLBACK_FRAGMENT}"]`,
-      ),
-    )
-      .map((iconUse) => iconUse.closest('button[data-sidebar-item="true"]'))
-      .find((el) => isDirectActionVisible(el));
-
-    if (safeClickSearchConversationButton(spriteMatch)) return true;
-
-    void triggerNativeSearchConversationFromNarrowPopover();
-    return true;
+    return searchShortcutActions.run();
   }
 
   function triggerDirectComposerActivation() {
-    const input = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
-    if (!(input instanceof HTMLElement)) return false;
-
-    try {
-      input.focus({ preventScroll: true });
-    } catch {
-      input.focus();
-    }
-
-    if (input.isContentEditable) {
-      try {
-        const selection = window.getSelection?.();
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      } catch {}
-    }
-
-    return document.activeElement === input || input.contains(document.activeElement);
+    return composerShortcutActions.focus();
   }
 
   Object.assign(window, {
@@ -7482,7 +7316,7 @@ const clickElementLikeUser = (el) => {
       readAloudMenuItem: ['M9.75122 4.09203C9.75122', '#54f145'],
       regenerateMenuButton: ['#arrows-clockwise-rotate-lg-light-16', 'M14.0219 8.22363'],
       searchWeb: ['M12 2c5.522'],
-      study: ['#book-open-light-20', '#book-open-light-16'],
+      study: window.CSPShortcuts.composer.STUDY_ICON_TOKENS,
       thinkingMenuButton: ['#127a53', '#c9d737'],
     };
 
@@ -7669,48 +7503,8 @@ const clickElementLikeUser = (el) => {
       );
     }
 
-    async function runStudyShortcut() {
-      const composer = findFirstVisibleElement(COMPOSER_INPUT_SELECTORS);
-      if (!composer) return;
-
-      let item = findComposerToolItemByIcon(SHORTCUT_ICON_TOKENS.study);
-      if (findSelectedComposerToolAction(composer, SHORTCUT_ICON_TOKENS.study)) {
-        await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS.study);
-        return;
-      }
-      let queryText = '';
-      let previousHtml = '';
-      if (!item) {
-        const menuOpener = findComposerToolMenuOpener();
-        if (!menuOpener) return;
-
-        if (!findComposerToolItemByIcon(COMPOSER_TOOL_MENU_CUE_TOKENS)) smartClick(menuOpener);
-
-        const selection = window.getSelection();
-        composer.focus();
-        const range = document.createRange();
-        range.selectNodeContents(composer);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-
-        queryText = composer.innerText.trim() ? ' study' : 'study';
-        const previousText = composer.innerText;
-        previousHtml = composer.innerHTML;
-        document.execCommand('insertText', false, queryText);
-        if (composer.innerText === previousText) return;
-
-        item = await waitFor(() => findComposerToolItemByIcon(SHORTCUT_ICON_TOKENS.study), {
-          timeout: Math.min(DELAYS.waitActionItem, 300),
-        });
-        if (!item) {
-          composer.innerHTML = previousHtml;
-          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent' }));
-          return;
-        }
-      }
-
-      await window.__cspRunComposerToolShortcutByIcon(SHORTCUT_ICON_TOKENS.study);
+    function runStudyShortcut() {
+      return composerShortcutActions.study();
     }
 
     function runLegacyThinkingEffortShortcut(optionId) {
@@ -7928,7 +7722,7 @@ const clickElementLikeUser = (el) => {
         void triggerNativeChatWorkToggle();
       },
       shortcutKeySearchConversationHistory: () => {
-        triggerNativeSearchConversationButton();
+        void searchShortcutActions.run();
       },
       shortcutKeyClickNativeScrollToBottom: () => {
         // native scroll to bottom
@@ -8009,34 +7803,7 @@ const clickElementLikeUser = (el) => {
 
     // Robust helper for all shortcut styles, including number keys!
     function matchesShortcutKey(setting, event) {
-      if (!setting || setting === '\u00A0') return false;
-
-      // If it's a single digit, match against key and code for both top-row and numpad
-      if (/^\d$/.test(setting)) {
-        return (
-          event.key === setting ||
-          event.code === `Digit${setting}` ||
-          event.code === `Numpad${setting}`
-        );
-      }
-
-      // If the stored value is KeyboardEvent.code style
-      const isCodeStyle =
-        /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Backquote|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
-          setting,
-        );
-      if (isCodeStyle) {
-        // Special handling for numbers saved as "Digit1", "Numpad1"
-        if (/^Digit(\d)$/.test(setting) || /^Numpad(\d)$/.test(setting)) {
-          const num = setting.match(/\d/)[0];
-          return event.code === setting || event.key === num;
-        }
-        // All other codes
-        return event.code === setting;
-      }
-
-      // Fallback: check event.key, case-insensitive
-      return event.key && event.key.toLowerCase() === setting.toLowerCase();
+      return window.CSPShortcutBindings.matches(setting, event);
     }
 
     function recordShortcutUsage(_actionId) {}
@@ -12915,58 +12682,8 @@ form.w-full[data-type="unified-composer"] {
       }
 
       function displayFromCode(code) {
-        // Handle "cleared" shortcuts: anything falsy, empty string, or nbsp
-        if (!code || code === '' || code === '\u00A0') return '—';
-        if (/^Key([A-Z])$/.test(code)) return code.slice(-1);
-        if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
-        if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
-        if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
-        switch (code) {
-          case 'Minus':
-            return '-';
-          case 'Equal':
-            return '=';
-          case 'BracketLeft':
-            return '[';
-          case 'BracketRight':
-            return ']';
-          case 'Backslash':
-            return '\\';
-          case 'Semicolon':
-            return ';';
-          case 'Quote':
-            return "'";
-          case 'Comma':
-            return ',';
-          case 'Period':
-            return '.';
-          case 'Slash':
-            return '/';
-          case 'Backquote':
-            return '`';
-          case 'Space':
-            return 'Space';
-          case 'Enter':
-            return 'Enter';
-          case 'Escape':
-            return 'Esc';
-          case 'Tab':
-            return 'Tab';
-          case 'Backspace':
-            return 'Bksp';
-          case 'Delete':
-            return 'Del';
-          case 'ArrowLeft':
-            return '←';
-          case 'ArrowRight':
-            return '→';
-          case 'ArrowUp':
-            return '↑';
-          case 'ArrowDown':
-            return '↓';
-          default:
-            return code;
-        }
+        const label = window.CSPShortcutBindings.display(code, { empty: '—' });
+        return /^Key[A-Z]$/.test(window.CSPShortcutBindings.normalize(code)) ? label.toUpperCase() : label;
       }
 
       // Use the global helper to avoid drift/duplication
@@ -16337,6 +16054,8 @@ function resetCollapsedSlimSidebarScroll(host) {
       let refreshListenersAttached = false;
       let pendingFlashAfterAttach = false;
       let settleUntil = 0;
+      const controlStyles = new Map();
+      let controlTransition = 'opacity 0.5s ease-in-out';
 
       const INITIAL_SETTLE_MS = 1200;
       const IDLE_FADE_DELAY_MS = 2500;
@@ -16358,15 +16077,51 @@ function resetCollapsedSlimSidebarScroll(host) {
         return getSettleDelayMs() > 0;
       }
 
-      function resetBarStyles(barEl) {
-        if (!barEl) return;
-        barEl.style.removeProperty('transition');
-        barEl.style.removeProperty('opacity');
-        barEl.style.removeProperty('pointer-events');
+      function restoreControl(control, saved) {
+        for (const name of ['opacity', 'transition', 'pointer-events']) {
+          const original = saved[name];
+          if (original.value) control.style.setProperty(name, original.value, original.priority);
+          else control.style.removeProperty(name);
+        }
+      }
+
+      function resetControlStyles() {
+        for (const [control, saved] of controlStyles) restoreControl(control, saved);
+        controlStyles.clear();
+      }
+
+      function getFadeControls() {
+        const selector = 'button, a[href], [role="button"]';
+        const controls = [...bar.querySelectorAll(selector)].filter(
+          (control) => !control.parentElement?.closest(selector) ||
+            !bar.contains(control.parentElement.closest(selector)),
+        );
+        for (const [control, saved] of controlStyles) {
+          if (!controls.includes(control)) {
+            restoreControl(control, saved);
+            controlStyles.delete(control);
+          }
+        }
+        for (const control of controls) {
+          if (controlStyles.has(control)) continue;
+          const saved = {};
+          for (const name of ['opacity', 'transition', 'pointer-events']) {
+            saved[name] = { value: control.style.getPropertyValue(name), priority: control.style.getPropertyPriority(name) };
+          }
+          const computed = window.getComputedStyle(control);
+          saved.nativeOpacity = Number(computed.opacity);
+          saved.nativeTransition = computed.transition;
+          controlStyles.set(control, saved);
+        }
+        return controls;
+      }
+
+      function setControlTransition(value) {
+        controlTransition = value;
       }
 
       function getIdleOpacity() {
-        return coerceNumberFromStorage(window._slimBarIdleOpacity, 0.0);
+        return Math.max(0, Math.min(1, coerceNumberFromStorage(window._slimBarIdleOpacity, 0.0)));
       }
       function ensureOpacityLoaded() {
         if (window._slimBarOpacityPromise) return window._slimBarOpacityPromise;
@@ -16391,6 +16146,7 @@ function resetCollapsedSlimSidebarScroll(host) {
         classObserver = null;
         clearTimeout(idleTimer);
         idleTimerVersion++;
+        resetControlStyles();
         bar = null;
       }
 
@@ -16419,9 +16175,7 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function stopFeature() {
         disconnectGlobalObservers();
-        const barToReset = bar || document.getElementById('stage-sidebar-tiny-bar');
         detachCurrentBar();
-        resetBarStyles(barToReset);
       }
 
       function overlayIsOpen() {
@@ -16434,34 +16188,47 @@ function resetCollapsedSlimSidebarScroll(host) {
           '.modal, .slideover, .overlay, .DialogOverlay, .MenuOverlay',
           '[data-overlay="true"]',
         ];
-        for (const sel of selectors) {
-          const el = document.querySelector(sel);
-          if (el && hasVisibleComputedStyle(el)) return true;
+        for (const el of document.querySelectorAll(selectors.join(','))) {
+          if (hasVisibleComputedStyle(el)) return true;
         }
         return false;
       }
-      // Overlay detection only needs computed visibility, not viewport or composer bounds.
+      // A child can have visible computed styles while a closed ancestor has no layout.
       function hasVisibleComputedStyle(el) {
-        if (!el) return false;
-        const style = window.getComputedStyle(el);
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+        if (!el?.isConnected) return false;
+        const bounds = el.getBoundingClientRect();
+        if (bounds.width <= 0 || bounds.height <= 0) return false;
+        for (let current = el; current instanceof Element; current = current.parentElement) {
+          if (current.hidden || current.getAttribute('aria-hidden') === 'true' ||
+            current.getAttribute('data-state') === 'closed') return false;
+          const style = window.getComputedStyle(current);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+        }
+        return true;
       }
 
       function setOpacity(value) {
         if (!bar || !isFeatureEnabled()) return;
         if (bar.id === 'app-shell-sidebar' && isSlimSidebarHostOpen(bar)) {
-          bar.style.setProperty('opacity', '1', 'important');
-          bar.style.pointerEvents = '';
+          resetControlStyles();
           return;
         }
-        if (overlayIsOpen()) {
-          bar.style.setProperty('opacity', '0', 'important');
-          bar.style.pointerEvents = 'none';
-          return;
+        const blocked = overlayIsOpen();
+        for (const control of getFadeControls()) {
+          const saved = controlStyles.get(control);
+          const transition = controlTransition === 'none' ? 'none' :
+            [saved.nativeTransition, controlTransition].filter(Boolean).join(', ');
+          control.style.setProperty('transition', transition, 'important');
+          if (!blocked && Number(value) === 1) {
+            if (saved.opacity.value) control.style.setProperty('opacity', saved.opacity.value, saved.opacity.priority);
+            else control.style.removeProperty('opacity');
+          } else {
+            control.style.setProperty('opacity', String(blocked ? 0 : Number(value) * saved.nativeOpacity), 'important');
+          }
+          if (blocked) control.style.setProperty('pointer-events', 'none', 'important');
+          else if (saved['pointer-events'].value) control.style.setProperty('pointer-events', saved['pointer-events'].value, saved['pointer-events'].priority);
+          else control.style.removeProperty('pointer-events');
         }
-        // Don't block pointer-events unless you actually want to!
-        bar.style.setProperty('opacity', value, 'important');
-        bar.style.pointerEvents = '';
       }
 
       function fadeToIdle() {
@@ -16480,15 +16247,18 @@ function resetCollapsedSlimSidebarScroll(host) {
         }
         // If large sidebar is open, instantly set opacity 0
         if (isSlimSidebarHostOpen(getSlimSidebarHost())) {
-          bar.style.setProperty('transition', 'none', 'important');
+          setControlTransition('none');
           setOpacity('0');
           void bar.offsetWidth;
           setTimeout(() => {
-            if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+            if (bar) setControlTransition('opacity 0.5s ease-in-out');
           }, 0);
           return;
         }
-        if (isSettling()) return;
+        if (isSettling()) {
+          setOpacity('1');
+          return;
+        }
         setOpacity(getIdleOpacity().toString());
       }
 
@@ -16526,6 +16296,11 @@ function resetCollapsedSlimSidebarScroll(host) {
 
       function mutationsNeedSlimSidebarRefresh(mutations) {
         for (const mutation of mutations) {
+          if (mutation.type === 'attributes') {
+            if (controlStyles.has(mutation.target) && mutation.attributeName === 'style') continue;
+            if (relevantNodeForSlimSidebarRefresh(mutation.target)) return true;
+          }
+          if (mutation.type === 'childList' && bar?.contains(mutation.target)) return true;
           for (const node of mutation.addedNodes) {
             if (relevantNodeForSlimSidebarRefresh(node)) return true;
           }
@@ -16588,10 +16363,10 @@ function resetCollapsedSlimSidebarScroll(host) {
         hover = hoverTarget.matches(':hover') && !sidebarIsOpen;
         beginSettle();
         // Show instantly, then restore the fade
-        bar.style.setProperty('transition', 'none', 'important');
+        setControlTransition('none');
         setOpacity(sidebarIsOpen ? '0' : '1');
         void bar.offsetWidth;
-        bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+        setControlTransition('opacity 0.5s ease-in-out');
 
         hoverTarget.addEventListener('mouseenter', onEnter, true);
         hoverTarget.addEventListener('mouseleave', onLeave, true);
@@ -16605,7 +16380,7 @@ function resetCollapsedSlimSidebarScroll(host) {
           }
 
           if (isSlimSidebarHostOpen(currentHost)) {
-            bar.style.setProperty('transition', 'none', 'important');
+            setControlTransition('none');
             setOpacity(
               bar === currentHost && bar.id === 'app-shell-sidebar' ? '1' : '0',
             );
@@ -16614,16 +16389,16 @@ function resetCollapsedSlimSidebarScroll(host) {
             idleTimerVersion++;
             void bar.offsetWidth;
             setTimeout(() => {
-              if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+              if (bar) setControlTransition('opacity 0.5s ease-in-out');
             }, 0);
           } else {
             resetCollapsedSlimSidebarScroll(currentHost);
             hover = currentHost.matches(':hover');
-            bar.style.setProperty('transition', 'none', 'important');
+            setControlTransition('none');
             setOpacity('1');
             void bar.offsetWidth;
             setTimeout(() => {
-              if (bar) bar.style.setProperty('transition', 'opacity 0.5s ease-in-out', 'important');
+              if (bar) setControlTransition('opacity 0.5s ease-in-out');
               if (!hover) scheduleIdleFade();
             }, 0);
           }
@@ -16657,7 +16432,10 @@ function resetCollapsedSlimSidebarScroll(host) {
           if (!isFeatureEnabled() || !mutationsNeedSlimSidebarRefresh(mutations)) return;
           scheduleBarRefresh(BAR_REFRESH_DEBOUNCE_MS, { flashIfNew: true });
         });
-        domObserver.observe(observationRoot, { childList: true, subtree: true });
+        domObserver.observe(observationRoot, {
+          childList: true, subtree: true, attributes: true,
+          attributeFilter: ['class', 'style', 'hidden', 'aria-hidden', 'data-state', 'open'],
+        });
         if (!refreshListenersAttached) {
           document.addEventListener('pointerdown', scheduleInteractionRefresh, true);
           document.addEventListener('keydown', scheduleInteractionRefresh, true);
@@ -16709,7 +16487,13 @@ function resetCollapsedSlimSidebarScroll(host) {
         }
       });
 
-      // Feature-owned override for the early runtime bridge above. Keep timing/state local here.
+      // Keep all bridge calls under the same control-only fade owner.
+      window.hideSlimSidebarBarInstant = () => {
+        setControlTransition('none');
+        setOpacity('0');
+        setControlTransition('opacity 0.5s ease-in-out');
+      };
+      window.fadeSlimSidebarBarToIdle = fadeToIdle;
       window.flashSlimSidebarBar = (dur = 2500) => {
         if (!bar || !isFeatureEnabled()) return;
         if (overlayIsOpen()) {
@@ -17053,81 +16837,7 @@ function resetCollapsedSlimSidebarScroll(host) {
 
   // Platform-aware key display
   function displayFromCode(code) {
-    if (!code || code === '' || code === '\u00A0') return '\u00A0';
-
-    const isMac = isMacPlatform();
-
-    if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
-    if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
-    if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
-    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
-
-    const baseMap = {
-      Minus: '-',
-      Equal: '=',
-      BracketLeft: '[',
-      BracketRight: ']',
-      Backslash: '\\',
-      Semicolon: ';',
-      Quote: "'",
-      Comma: ',',
-      Period: '.',
-      Slash: '/',
-      Backquote: '`',
-      Space: 'Space',
-      Enter: 'Enter',
-      Escape: 'Esc',
-      Tab: 'Tab',
-      Backspace: 'Bksp',
-      Delete: 'Del',
-      ArrowLeft: '←',
-      ArrowRight: '→',
-      ArrowUp: '↑',
-      ArrowDown: '↓',
-      IntlBackslash: '\\',
-      IntlYen: '¥',
-      IntlRo: 'ro',
-      Lang1: 'lang1',
-      Lang2: 'lang2',
-      Lang3: 'lang3',
-      Lang4: 'lang4',
-      Lang5: 'lang5',
-      VolumeMute: 'Mute',
-      VolumeDown: 'Vol–',
-      VolumeUp: 'Vol+',
-      MediaPlayPause: 'Play/Pause',
-      MediaTrackNext: 'Next',
-      MediaTrackPrevious: 'Prev',
-    };
-
-    const mods = isMac
-      ? {
-        MetaLeft: '⌘',
-        MetaRight: '⌘',
-        AltLeft: '⌥',
-        AltRight: '⌥',
-        ControlLeft: 'Ctrl',
-        ControlRight: 'Ctrl',
-        ShiftLeft: '⇧',
-        ShiftRight: '⇧',
-        Fn: 'fn',
-      }
-      : {
-        MetaLeft: 'Win',
-        MetaRight: 'Win',
-        AltLeft: 'Alt',
-        AltRight: 'Alt',
-        ControlLeft: 'Ctrl',
-        ControlRight: 'Ctrl',
-        ShiftLeft: 'Shift',
-        ShiftRight: 'Shift',
-        Fn: 'Fn',
-      };
-
-    if (code in baseMap) return baseMap[code];
-    if (code in mods) return mods[code];
-
-    return code.replace(/([a-z])([A-Z])/g, '$1 $2');
+    return window.CSPShortcutBindings.display(code, { isMac: isMacPlatform() });
   }
 
   const isEffortShortcutVisibleInCatalog = (key, catalog) => {

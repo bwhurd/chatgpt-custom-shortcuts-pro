@@ -335,6 +335,13 @@ If the setting is meant to disable a feature:
 
 - confirm default value is safe for existing users
 
+### Slim sidebar fade runtime contract
+
+- `fadeSlimSidebarEnabled` fades only the collapsed rail's buttons and links. Native sidebar container opacity, background and layout remain untouched; the expanded sidebar uses native styles.
+- `popupSlimSidebarOpacityValue` accepts finite numeric values and older numeric strings in [0,1]. Zero is valid; hover restores native control opacity and leaving returns to the selected idle level after the existing delay.
+- Only rendered overlays with visible ancestors suppress the controls. Attribute-only overlay closure restores them through the existing observer, without polling. Disabling or replacing the rail restores each control's original inline opacity, transition and pointer events.
+- Regression owners: `tests/fade-slim-sidebar-host-fixture.mjs`, `tests/fade-slim-sidebar-visibility-fixture.mjs`, and the numeric-string preference case in the existing popup shortcut spec.
+
 ### Library Hide Pasted Files runtime contract
 
 - `hidePastedLibraryFilesEnabled` is a `chrome.storage.sync` boolean shared by the popup and the Library content script; its default is `false`.

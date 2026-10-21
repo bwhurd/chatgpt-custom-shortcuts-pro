@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
 
 const storageSource = await readFile(new URL('../extension/storage.js', import.meta.url), 'utf8');
 const popupSource = await readFile(new URL('../extension/popup.js', import.meta.url), 'utf8');
@@ -29,6 +30,7 @@ const localSettings = {
 const storageContext = vm.createContext({
   OPTIONS_DEFAULTS: Object.fromEntries(Object.keys(localSettings).map((key) => [key, null])),
   window: {
+    CSPShortcutBindings: bindings,
     optionsStorage: {
       getAll: async () => localSettings,
       setAll: async (settings) => settings,

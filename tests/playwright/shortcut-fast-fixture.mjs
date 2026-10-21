@@ -1806,7 +1806,17 @@ if (!report.catalogueOnly) {
 }
 if (args.includes('--catalog-only'))
   for (const row of report.rows)
-    console.log(`${row.rowId}\t${row.status}\t${(row.targetRefs || []).join(',')}`);
+    console.log(
+      [
+        row.rowId,
+        row.status,
+        (row.targetRefs || []).join(','),
+        row.owner,
+        row.implementation || 'legacy',
+        (row.requiredStates || []).join(','),
+        (row.matchingRules || []).join(','),
+      ].join('\t'),
+    );
 console.log(
   JSON.stringify(
     {

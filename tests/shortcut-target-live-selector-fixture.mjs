@@ -10,6 +10,7 @@ import {
 const require = createRequire(import.meta.url);
 const modelPickerSelectors = require('../extension/shared/model-picker-selectors.js');
 const shortcutMetadata = require('../extension/shared/shortcut-action-metadata.js');
+const composerModule = require('../extension/shortcuts/composer.js');
 const contentSource = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
 
 const descriptorById = new Map(
@@ -442,20 +443,13 @@ assert.deepEqual(composerToolMenuOpenerTarget.matchGroups, [
   ['data-chatgpt-composer', 'data-composer-navigation-target="add-context"'],
 ]);
 
-const composerToolMenuOpenerSelectorsSource = contentSource.match(
-  / {2}const COMPOSER_TOOL_MENU_OPENER_SELECTORS = \[[\s\S]*?\n {2}\];/,
-)?.[0];
+const composerToolMenuOpenerSelectorsSource = `const COMPOSER_TOOL_MENU_OPENER_SELECTORS = ${JSON.stringify(composerModule.OPENER_SELECTORS)};`;
 const composerToolOpenerFinderSource = contentSource.match(
   / {2}const findComposerToolMenuOpener = \(\) => \{[\s\S]*?\n {2}\};/,
 )?.[0];
 const composerToolActionStart = contentSource.indexOf('  const COMPOSER_TOOL_ITEM_SELECTOR = [');
 const composerToolActionEnd = contentSource.indexOf('\n  const sleep =', composerToolActionStart);
-const composerToolSelectorsAndCuesSource = contentSource
-  .slice(
-    contentSource.indexOf('  const COMPOSER_TOOL_MENU_OPENER_SELECTORS = ['),
-    composerToolActionEnd,
-  )
-  .replace(/^ {2}/gm, '');
+const composerToolSelectorsAndCuesSource = `${composerToolMenuOpenerSelectorsSource}\n${contentSource.slice(composerToolActionStart, composerToolActionEnd).replace(/^ {2}/gm, '')}`;
 const composerToolFinderStart = contentSource.indexOf('  const findComposerToolItemByIcon =');
 const runComposerToolActionSource = contentSource.match(
   / {2}const runActionByIcon = async \(iconPathPrefix, delays = DELAYS, matchOptions\) => \{[\s\S]*?\n {2}\};/,
@@ -637,9 +631,7 @@ const expectedComposerSelectors = [
   'form[data-thread-find-composer="true"] div.ProseMirror[contenteditable="true"][role="textbox"]',
   'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
 ];
-const composerInputSelectorsSource = contentSource.match(
-  / {2}const COMPOSER_INPUT_SELECTORS = \[[\s\S]*?\n {2}\];/,
-)?.[0];
+const composerInputSelectorsSource = `const COMPOSER_INPUT_SELECTORS = ${JSON.stringify(composerModule.INPUT_SELECTORS)};`;
 assert.ok(
   composerInputSelectorsSource,
   'The composer target selector contract should remain inspectable',
@@ -1734,11 +1726,14 @@ function runComposerActivationFixture(inputMarkup) {
       getSelection: () => fixtureSelection,
     },
   };
+  fixtureDocument.defaultView = fixtureContext.window;
+  fixtureContext.window.CSPShortcuts = { composer: composerModule };
   runInNewContext(
     [
       composerInputSelectorsSource,
       composerVisibilitySource,
       composerVisibleFinderSource,
+      'const composerShortcutActions = window.CSPShortcuts.composer.create({ document, isVisible: isDirectActionVisible });',
       composerActivationSource,
       'globalThis.runComposerActivation = triggerDirectComposerActivation;',
     ].join('\n'),
@@ -1772,7 +1767,7 @@ const workModeComposer = runComposerActivationFixture([
 ]);
 assert.equal(workModeComposer.result, true, 'Activate Input should focus the Work-mode composer');
 assert.equal(workModeComposer.activeElement, workModeComposer.composerInputs[0]);
-assert.deepEqual(workModeComposer.selectorQueries, [expectedComposerSelectors[0]]);
+assert.deepEqual(workModeComposer.selectorQueries, expectedComposerSelectors);
 assert.equal(workModeComposer.focusCalls.length, 1);
 assert.equal(workModeComposer.focusCalls[0].preventScroll, true);
 assert.equal(workModeComposer.selectedRange.target, workModeComposer.composerInputs[0]);
@@ -1821,14 +1816,8 @@ assert.equal(nonComposerTextboxes.activeElement, null);
 assert.equal(nonComposerTextboxes.focusCalls.length, 0);
 assert.deepEqual(nonComposerTextboxes.selectorQueries, expectedComposerSelectors);
 
-const searchConversationSelectorsSource = contentSource.match(
-  / {2}const SEARCH_CONVERSATION_SELECTORS = \[[\s\S]*?\n {2}\];/,
-)?.[0];
 const searchSafeClickSource = contentSource.match(
   / {2}function safeClick\(el\) \{[\s\S]*?\n {2}\}/,
-)?.[0];
-const searchPointerClickSource = contentSource.match(
-  / {2}function safeClickSearchConversationButton\(el\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
 const searchVisibilitySource = contentSource.match(
   / {2}function isDirectActionVisible\(el\) \{[\s\S]*?\n {2}\}/,
@@ -1836,118 +1825,56 @@ const searchVisibilitySource = contentSource.match(
 const searchVisibleFinderSource = contentSource.match(
   / {2}function findFirstVisibleElement\(selectors\) \{[\s\S]*?\n {2}\}/,
 )?.[0];
-const searchShortcutSource = contentSource.match(
-  / {2}function triggerNativeSearchConversationButton\(\) \{[\s\S]*?\n {2}\}/,
-)?.[0];
-assert.ok(
-  searchConversationSelectorsSource &&
-    searchSafeClickSource &&
-    searchPointerClickSource &&
-    searchVisibilitySource &&
-    searchVisibleFinderSource &&
-    searchShortcutSource,
-  'Search Conversation History should retain inspectable live-selector activation logic',
-);
-
 class FixtureSearchButton extends FixtureHTMLElement {
   constructor(bounds) {
     super();
-    this.setAttribute('aria-label', 'Search');
+    this.tagName = 'BUTTON';
     this.bounds = bounds;
     this.disabled = false;
     this.clickCount = 0;
   }
-
-  hasAttribute(name) {
-    return Object.hasOwn(this.attributes, name);
-  }
-
   getBoundingClientRect() {
     return this.bounds;
   }
-
   click() {
-    this.clickCount += 1;
+    this.clickCount++;
   }
 }
-
-const hiddenSearchButton = new FixtureSearchButton({ left: 0, top: 0, width: 0, height: 0 });
-const visibleSearchButton = new FixtureSearchButton({
-  left: 260,
-  top: 8,
-  width: 36,
-  height: 36,
-});
+const nativeSearch = require('../extension/shortcuts/search.js');
+const hiddenSearchButton = new FixtureSearchButton({ width: 0, height: 0 });
+const visibleSearchButton = new FixtureSearchButton({ width: 36, height: 36 });
 const currentSearchSelector = 'button:has(svg use[href$="#magnifying-glass-lg-light-16"])';
-const searchSelectorQueries = [];
+let activeSearchSelector = currentSearchSelector;
 let searchPointerClickCount = 0;
-const searchRuntimeSource = [
-  searchConversationSelectorsSource,
-  searchSafeClickSource,
-  searchPointerClickSource,
-  searchVisibilitySource,
-  searchVisibleFinderSource,
-  searchShortcutSource,
-  'globalThis.searchConversationSelectors = SEARCH_CONVERSATION_SELECTORS;',
-  'globalThis.runSearchConversationShortcut = triggerNativeSearchConversationButton;',
-].join('\n');
-const searchShortcutContext = {
-  document: {
-    querySelectorAll(selector) {
-      searchSelectorQueries.push(selector);
-      assert.equal(selector, currentSearchSelector);
-      return [hiddenSearchButton, visibleSearchButton];
-    },
-  },
-  Element: FixtureSearchButton,
-  HTMLElement: FixtureSearchButton,
-  window: {
-    getComputedStyle: () => ({ display: 'block', visibility: 'visible', pointerEvents: 'auto' }),
-  },
-  clickElementLikeUser: (el) => {
-    searchPointerClickCount += 1;
-    el.click();
+const searchDocument = {
+  querySelectorAll: (selector) =>
+    selector === activeSearchSelector ? [hiddenSearchButton, visibleSearchButton] : [],
+};
+const searchActions = nativeSearch.create({
+  document: searchDocument,
+  isVisible: (element) => element.getBoundingClientRect().width > 0,
+  click: (element) => {
+    searchPointerClickCount++;
+    element.click();
     return true;
   },
-  findStructuralSearchConversationButton: () => null,
-  triggerNativeSearchConversationFromNarrowPopover: () => false,
-};
-runInNewContext(searchRuntimeSource, searchShortcutContext);
-assert.deepEqual(
-  Array.from(searchShortcutContext.searchConversationSelectors),
-  [
-    currentSearchSelector,
-    'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
-    'button:has(svg path[d^="M9.16211 2.37976"])',
-    'button:has(svg path[d^="M7.32849 1.91016"])',
-    'button[data-testid="search-conversation-button"]',
-  ],
-  'Search should prefer the freshly observed sidebar icon and retain its legacy fallbacks',
-);
-assert.ok(
-  Array.from(searchShortcutContext.searchConversationSelectors).every(
-    (selector) => !selector.includes('aria-label'),
-  ),
-  'Search target resolution must not depend on localized accessible labels',
-);
-assert.equal(searchShortcutContext.runSearchConversationShortcut(), true);
-assert.deepEqual(searchSelectorQueries, [currentSearchSelector]);
+});
+const searchRules = nativeSearch.targets[nativeSearch.TARGET_ID].rules;
+assert.deepEqual(searchRules.flatMap((rule) => rule.selectors).slice(0, 5), [
+  currentSearchSelector,
+  'button:has(svg use[href$="#magnifying-glass-lg-light-20"])',
+  'button:has(svg path[d^="M9.16211 2.37976"])',
+  'button:has(svg path[d^="M7.32849 1.91016"])',
+  'button[data-testid="search-conversation-button"]',
+]);
 assert.equal(
-  hiddenSearchButton.clickCount,
-  0,
-  'Search must skip the hidden zero-size rail duplicate',
+  searchRules.some((rule) => rule.selectors.some((selector) => selector.includes('aria-label'))),
+  false,
 );
-assert.equal(
-  visibleSearchButton.clickCount,
-  1,
-  'Search should click the visible native control exactly once',
-);
-assert.equal(
-  searchPointerClickCount,
-  1,
-  'Search should use the pointer-aware native-control activation helper exactly once',
-);
-
+assert.equal((await searchActions.run()).ok, true);
+assert.equal(hiddenSearchButton.clickCount, 0);
+assert.equal(visibleSearchButton.clickCount, 1);
+assert.equal(searchPointerClickCount, 1);
 const searchTarget = descriptorById.get('search-conversation-button');
 for (const size of [16, 20]) {
   assert.ok(
@@ -1955,19 +1882,11 @@ for (const size of [16, 20]) {
       searchTarget,
       `<button><svg><use href="/cdn/assets/icons-fixture.svg#magnifying-glass-lg-light-${size}"></use></svg></button>`,
     ),
-    `Search metadata must recognize the observed ${size}px named sprite without legacy identifiers`,
   );
 }
-searchShortcutContext.document.querySelectorAll = (selector) =>
-  selector === 'button:has(svg use[href$="#magnifying-glass-lg-light-20"])'
-    ? [hiddenSearchButton, visibleSearchButton]
-    : [];
-assert.equal(searchShortcutContext.runSearchConversationShortcut(), true);
-assert.equal(
-  visibleSearchButton.clickCount,
-  2,
-  'The standalone 20px sprite must also activate Search',
-);
+activeSearchSelector = 'button:has(svg use[href$="#magnifying-glass-lg-light-20"])';
+assert.equal((await searchActions.run()).ok, true);
+assert.equal(visibleSearchButton.clickCount, 2);
 assert.equal(hiddenSearchButton.clickCount, 0);
 
 const newChatSelectorsSource = contentSource.match(

@@ -977,149 +977,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Display helper used by chips and hints (platform-aware)
   // Letters are deliberately shown in lowercase for chips and modals.
   function displayFromCode(code) {
-    if (!code || code === '' || code === '\u00A0') return '\u00A0';
-
-    // Robust Mac detection (works in Chrome extensions)
-    const isMac = (() => {
-      const ua = navigator.userAgent || '';
-      const plat = navigator.platform || '';
-      const uaDataPlat = navigator.userAgentData?.platform ?? '';
-      return /Mac/i.test(plat) || /Mac/i.test(ua) || /mac/i.test(uaDataPlat);
-    })();
-
-    // Letters → lowercase
-    if (/^Key([A-Z])$/.test(code)) return code.slice(-1).toLowerCase();
-
-    // Numbers (row + numpad)
-    if (/^Digit([0-9])$/.test(code)) return code.slice(-1);
-    if (/^Numpad([0-9])$/.test(code)) return code.slice(-1);
-
-    // Function keys F1–F24
-    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
-
-    // Punctuation / common physical keys
-    const baseMap = {
-      Minus: '-',
-      Equal: '=',
-      BracketLeft: '[',
-      BracketRight: ']',
-      Backslash: '\\',
-      Semicolon: ';',
-      Quote: "'",
-      Comma: ',',
-      Period: '.',
-      Slash: '/',
-      Backquote: '`',
-
-      // Navigation / whitespace
-      Space: 'Space',
-      Enter: 'Enter',
-      Escape: 'Esc',
-      Tab: 'Tab',
-      Backspace: 'Bksp',
-      Delete: 'Del',
-      ArrowLeft: '←',
-      ArrowRight: '→',
-      ArrowUp: '↑',
-      ArrowDown: '↓',
-
-      // International (safe English approximations)
-      IntlBackslash: '\\',
-      IntlYen: '¥',
-      IntlRo: 'ro',
-      Lang1: 'lang1',
-      Lang2: 'lang2',
-      Lang3: 'lang3',
-      Lang4: 'lang4',
-      Lang5: 'lang5',
-
-      // Media
-      VolumeMute: 'Mute',
-      VolumeDown: 'Vol–',
-      VolumeUp: 'Vol+',
-      MediaPlayPause: 'Play/Pause',
-      MediaTrackNext: 'Next',
-      MediaTrackPrevious: 'Prev',
-    };
-
-    // Modifiers, platform-accurate labels
-    const mods = isMac
-      ? {
-          MetaLeft: '⌘',
-          MetaRight: '⌘',
-          AltLeft: '⌥',
-          AltRight: '⌥',
-          ControlLeft: 'Ctrl',
-          ControlRight: 'Ctrl',
-          ShiftLeft: '⇧',
-          ShiftRight: '⇧',
-          Fn: 'fn',
-        }
-      : {
-          MetaLeft: 'Win',
-          MetaRight: 'Win',
-          AltLeft: 'Alt',
-          AltRight: 'Alt',
-          ControlLeft: 'Ctrl',
-          ControlRight: 'Ctrl',
-          ShiftLeft: 'Shift',
-          ShiftRight: 'Shift',
-          Fn: 'Fn',
-        };
-
-    if (code in baseMap) return baseMap[code];
-    if (code in mods) return mods[code];
-
-    // Fallback: humanize the raw code (e.g., "IntlBackslash" → "Intl Backslash")
-    return code.replace(/([a-z])([A-Z])/g, '$1 $2');
+    const isMac = /Mac/i.test([navigator.userAgent, navigator.platform, navigator.userAgentData?.platform].join(' '));
+    return window.CSPShortcutBindings.display(code, { isMac });
   }
 
   // Treat DigitX and NumpadX as equivalent
   function codeEquals(a, b) {
-    if (a === b) return true;
-    const A = a?.match(/^(Digit|Numpad)([0-9])$/);
-    const B = b?.match(/^(Digit|Numpad)([0-9])$/);
-    const dA = A?.[2];
-    const dB = B?.[2];
-    return dA !== undefined && dA === dB;
+    return window.CSPShortcutBindings.equals(a, b);
   }
 
   // Convert single-character popup input to KeyboardEvent.code
   function charToCode(ch) {
-    if (!ch) return '';
-    const raw = ch.trim();
-    if (!raw) return '';
-    const upper = raw.toUpperCase();
-    if (/^[A-Z]$/.test(upper)) return `Key${upper}`;
-    if (/^[0-9]$/.test(raw)) return `Digit${raw}`;
-    switch (raw) {
-      case '-':
-        return 'Minus';
-      case '=':
-        return 'Equal';
-      case '[':
-        return 'BracketLeft';
-      case ']':
-        return 'BracketRight';
-      case '\\':
-        return 'Backslash';
-      case ';':
-        return 'Semicolon';
-      case "'":
-        return 'Quote';
-      case ',':
-        return 'Comma';
-      case '.':
-        return 'Period';
-      case '/':
-        return 'Slash';
-      case '`':
-        return 'Backquote';
-      case ' ':
-        return 'Space';
-      default:
-        return ''; // unsupported single char here
-    }
+    return window.CSPShortcutBindings.charToCode(ch);
   }
 
   // ---------- Existing helpers (kept) ----------
@@ -1199,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.__savingShortcutGuard[id] = true;
 
     const raw = value == null ? '' : String(value);
-    const valToSave = raw === '' ? '\u00A0' : raw;
+    const valToSave = window.CSPShortcutBindings.normalize(raw, { empty: '\u00A0' });
 
     // helper: clear guard safely
     const clearGuard = () => {
@@ -1261,18 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // normalize to code if needed
-    const isCode =
-      /^(Key|Digit|Numpad|Arrow|F\d{1,2}|Backspace|Enter|Escape|Tab|Space|Slash|Minus|Equal|Bracket|Semicolon|Quote|Comma|Period|Backslash)/i.test(
-        valToSave,
-      );
-    const toCode = (s) =>
-      window.ShortcutUtils?.charToCode
-        ? window.ShortcutUtils.charToCode(s)
-        : typeof charToCode === 'function'
-          ? charToCode(s)
-          : '';
-    const code = isCode ? valToSave : raw.length === 1 ? toCode(raw) : '';
+    const code = window.CSPShortcutBindings.normalize(valToSave);
 
     // STRICT PREFLIGHT REMOVED (handled upstream)
     // We intentionally avoid prompting here to prevent double-modals.
@@ -2978,7 +2836,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // opacity defaults
     popupBottomBarOpacityValue: 0.6, // Default: 0.6
-    popupSlimSidebarOpacityValue: 0, // Default: 0 (fully opaque)
+    popupSlimSidebarOpacityValue: 0, // Default: fully transparent while idle.
 
     // Shortcut toggles
     enableSendWithControlEnterCheckbox: true,
@@ -3658,16 +3516,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-  const normalizePopupShortcutValue = (value) => {
-    if (value == null) return '\u00A0';
-    const code = String(value).trim();
-    if (!code || code === '\u00A0') return '\u00A0';
-    const validCode =
-      /^(?:Key[A-Z]|Digit[0-9]|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|F(?:[1-9]|1[0-9]|2[0-4])|Backspace|Enter|Escape|Tab|Space|Minus|Equal|Bracket(?:Left|Right)|Semicolon|Quote|Comma|Period|Slash|Backslash|Backquote|Delete|Insert|Home|End|Page(?:Up|Down)|CapsLock|NumLock|ScrollLock|PrintScreen|Pause|ContextMenu|Numpad(?:Divide|Multiply|Subtract|Add|Decimal|Enter|Equal)|Volume(?:Mute|Down|Up)|Media(?:PlayPause|TrackNext|TrackPrevious)|Meta(?:Left|Right)|Alt(?:Left|Right)|Control(?:Left|Right)|Shift(?:Left|Right)|Fn)$/;
-    if (validCode.test(code)) return code;
-    const toCode = window.ShortcutUtils?.charToCode || charToCode;
-    return (toCode ? toCode(code) : '') || '\u00A0';
-  };
+  const normalizePopupShortcutValue = (value) => window.CSPShortcutBindings.normalize(value, { empty: '\u00a0' });
 
   const normalizePopupModelPickerCodes = (codes) => {
     const source = Array.isArray(codes) ? codes : [];
@@ -3955,164 +3804,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build a reverse map from display labels → KeyboardEvent.code (once per popup)
     function getReverseMap() {
-      if (window.__revShortcutLabelMap) return window.__revShortcutLabelMap;
-
-      const display = window.ShortcutUtils?.displayFromCode || window.displayFromCode;
-      const codes = [
-        // Letters
-        ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
-        // Top-row digits + numpad digits
-        ...Array.from({ length: 10 }, (_, i) => `Digit${i}`),
-        ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
-        // Function keys
-        ...Array.from({ length: 24 }, (_, i) => `F${i + 1}`),
-        // Punctuation/symbols
-        'Minus',
-        'Equal',
-        'BracketLeft',
-        'BracketRight',
-        'Backslash',
-        'Semicolon',
-        'Quote',
-        'Comma',
-        'Period',
-        'Slash',
-        'Backquote',
-        // Navigation/whitespace/control
-        'Space',
-        'Enter',
-        'Escape',
-        'Tab',
-        'Backspace',
-        'Delete',
-        'Insert',
-        'Home',
-        'End',
-        'PageUp',
-        'PageDown',
-        'ArrowLeft',
-        'ArrowRight',
-        'ArrowUp',
-        'ArrowDown',
-        // Numpad ops
-        'NumpadDivide',
-        'NumpadMultiply',
-        'NumpadSubtract',
-        'NumpadAdd',
-        'NumpadDecimal',
-        'NumpadEnter',
-        'NumpadEqual',
-        // Lock/system/context
-        'CapsLock',
-        'NumLock',
-        'ScrollLock',
-        'PrintScreen',
-        'Pause',
-        'ContextMenu',
-        // International
-        'IntlBackslash',
-        'IntlYen',
-        'IntlRo',
-        'Lang1',
-        'Lang2',
-        'Lang3',
-        'Lang4',
-        'Lang5',
-        // Media (stay consistent with your chips)
-        'VolumeMute',
-        'VolumeDown',
-        'VolumeUp',
-        'MediaPlayPause',
-        'MediaTrackNext',
-        'MediaTrackPrevious',
-        // Modifiers (for label matching; we still ignore as assignments)
-        'MetaLeft',
-        'MetaRight',
-        'AltLeft',
-        'AltRight',
-        'ControlLeft',
-        'ControlRight',
-        'ShiftLeft',
-        'ShiftRight',
-        'Fn',
-      ];
-
-      const exact = Object.create(null);
-      const lower = Object.create(null);
-      const set = new Set(codes);
-
-      // Known synonym labels → codes
-      const synonyms = {
-        Bksp: 'Backspace',
-        Backspace: 'Backspace',
-        Del: 'Delete',
-        Delete: 'Delete',
-        Esc: 'Escape',
-        Enter: 'Enter',
-        '↩': 'Enter',
-        '⎋': 'Escape',
-        '⇥': 'Tab',
-        Tab: 'Tab',
-        Space: 'Space',
-        // Arrows
-        '↑': 'ArrowUp',
-        '↓': 'ArrowDown',
-        '←': 'ArrowLeft',
-        '→': 'ArrowRight',
-        // Paging
-        PgUp: 'PageUp',
-        PgDn: 'PageDown',
-        'Page Up': 'PageUp',
-        'Page Down': 'PageDown',
-        // Navigation
-        Home: 'Home',
-        End: 'End',
-        Insert: 'Insert',
-        // Media and volume
-        Mute: 'VolumeMute',
-        'Vol+': 'VolumeUp',
-        'Vol-': 'VolumeDown',
-        'Vol–': 'VolumeDown',
-        'Play/Pause': 'MediaPlayPause',
-        Next: 'MediaTrackNext',
-        Prev: 'MediaTrackPrevious',
-        // Platform modifiers
-        Win: 'MetaLeft',
-        '⌘': 'MetaLeft',
-        Command: 'MetaLeft',
-        Ctrl: 'ControlLeft',
-        Control: 'ControlLeft',
-        '⌥': 'AltLeft',
-        Alt: 'AltLeft',
-        '⇧': 'ShiftLeft',
-        Shift: 'ShiftLeft',
-        Fn: 'Fn',
-      };
-
-      // Fill from synonyms first (exact + lowercase)
-      Object.keys(synonyms).forEach((label) => {
-        const code = synonyms[label];
-        exact[label] = code;
-        lower[label.toLowerCase()] = code;
-      });
-
-      // Derive from your displayFromCode for canonical labels
-      codes.forEach((c) => {
-        const label = display ? display(c) : '';
-        if (!label || label === '\u00A0') return;
-        if (!exact[label]) exact[label] = c;
-        const lc = label.toLowerCase();
-        if (!lower[lc]) lower[lc] = c;
-      });
-
-      // Also allow raw code names typed directly (e.g., "Insert", "MediaPlayPause")
-      codes.forEach((c) => {
-        if (!exact[c]) exact[c] = c;
-        const lc = c.toLowerCase();
-        if (!lower[lc]) lower[lc] = c;
-      });
-
-      window.__revShortcutLabelMap = { exact, lower, set };
+      window.__revShortcutLabelMap ||= window.CSPShortcutBindings.labelMaps();
       return window.__revShortcutLabelMap;
     }
 
@@ -4399,137 +4091,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Build reverse label map on demand to translate visible labels (↑, Enter, Mute) back to codes
       function getReverseMap() {
-        if (window.__revShortcutLabelMapForExport) return window.__revShortcutLabelMapForExport;
-        const display = window.ShortcutUtils?.displayFromCode || window.displayFromCode;
-        const codes = [
-          ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
-          ...Array.from({ length: 10 }, (_, i) => `Digit${i}`),
-          ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
-          ...Array.from({ length: 24 }, (_, i) => `F${i + 1}`),
-          'Minus',
-          'Equal',
-          'BracketLeft',
-          'BracketRight',
-          'Backslash',
-          'Semicolon',
-          'Quote',
-          'Comma',
-          'Period',
-          'Slash',
-          'Backquote',
-          'Space',
-          'Enter',
-          'Escape',
-          'Tab',
-          'Backspace',
-          'Delete',
-          'Insert',
-          'Home',
-          'End',
-          'PageUp',
-          'PageDown',
-          'ArrowLeft',
-          'ArrowRight',
-          'ArrowUp',
-          'ArrowDown',
-          'NumpadDivide',
-          'NumpadMultiply',
-          'NumpadSubtract',
-          'NumpadAdd',
-          'NumpadDecimal',
-          'NumpadEnter',
-          'NumpadEqual',
-          'CapsLock',
-          'NumLock',
-          'ScrollLock',
-          'PrintScreen',
-          'Pause',
-          'ContextMenu',
-          'IntlBackslash',
-          'IntlYen',
-          'IntlRo',
-          'Lang1',
-          'Lang2',
-          'Lang3',
-          'Lang4',
-          'Lang5',
-          'VolumeMute',
-          'VolumeDown',
-          'VolumeUp',
-          'MediaPlayPause',
-          'MediaTrackNext',
-          'MediaTrackPrevious',
-          'MetaLeft',
-          'MetaRight',
-          'AltLeft',
-          'AltRight',
-          'ControlLeft',
-          'ControlRight',
-          'ShiftLeft',
-          'ShiftRight',
-          'Fn',
-        ];
-        const exact = Object.create(null);
-        const lower = Object.create(null);
-
-        // Known synonyms
-        const synonyms = {
-          Bksp: 'Backspace',
-          Backspace: 'Backspace',
-          Del: 'Delete',
-          Delete: 'Delete',
-          Esc: 'Escape',
-          '⎋': 'Escape',
-          Enter: 'Enter',
-          '↩': 'Enter',
-          '⇥': 'Tab',
-          Tab: 'Tab',
-          Space: 'Space',
-          '↑': 'ArrowUp',
-          '↓': 'ArrowDown',
-          '←': 'ArrowLeft',
-          '→': 'ArrowRight',
-          PgUp: 'PageUp',
-          PgDn: 'PageDown',
-          'Page Up': 'PageUp',
-          'Page Down': 'PageDown',
-          Home: 'Home',
-          End: 'End',
-          Insert: 'Insert',
-          Mute: 'VolumeMute',
-          'Vol+': 'VolumeUp',
-          'Vol-': 'VolumeDown',
-          'Vol–': 'VolumeDown',
-          'Play/Pause': 'MediaPlayPause',
-          Next: 'MediaTrackNext',
-          Prev: 'MediaTrackPrevious',
-          Win: 'MetaLeft',
-          '⌘': 'MetaLeft',
-          Command: 'MetaLeft',
-          Ctrl: 'ControlLeft',
-          Control: 'ControlLeft',
-          '⌥': 'AltLeft',
-          Alt: 'AltLeft',
-          '⇧': 'ShiftLeft',
-          Shift: 'ShiftLeft',
-          Fn: 'Fn',
-        };
-        Object.keys(synonyms).forEach((lbl) => {
-          exact[lbl] = synonyms[lbl];
-          lower[lbl.toLowerCase()] = synonyms[lbl];
-        });
-
-        codes.forEach((c) => {
-          const lbl = display ? display(c) : '';
-          if (lbl && lbl !== '\u00A0') {
-            exact[lbl] ||= c;
-            lower[lbl.toLowerCase()] ||= c;
-          }
-          exact[c] ||= c;
-          lower[c.toLowerCase()] ||= c;
-        });
-
-        window.__revShortcutLabelMapForExport = { exact, lower };
+        window.__revShortcutLabelMapForExport ||= window.CSPShortcutBindings.labelMaps();
         return window.__revShortcutLabelMapForExport;
       }
 
@@ -4799,6 +4361,12 @@ document.addEventListener('DOMContentLoaded', () => {
     'slimSidebar-opacity-tooltip-container',
   );
 
+  function parseSavedSlimSidebarOpacity(value) {
+    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : null;
+  }
+
   function setSlimSidebarOpacityUI(val) {
     slimSidebarSlider.value = val;
     slimSidebarSliderValueDisplay.textContent = Number(val).toFixed(2);
@@ -4813,10 +4381,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (fadeSlimSidebarEnabled) {
     chrome.storage.sync.get(['fadeSlimSidebarEnabled', 'popupSlimSidebarOpacityValue'], (data) => {
       const isEnabled = !!data.fadeSlimSidebarEnabled;
-      let val =
-        typeof data.popupSlimSidebarOpacityValue === 'number'
-          ? data.popupSlimSidebarOpacityValue
-          : null;
+      let val = parseSavedSlimSidebarOpacity(data.popupSlimSidebarOpacityValue);
       fadeSlimSidebarEnabled.checked = isEnabled;
       toggleSlimSidebarOpacityUI(isEnabled);
 
@@ -4845,10 +4410,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isChecked) {
         // Check if value exists—if not, set to 0
         chrome.storage.sync.get('popupSlimSidebarOpacityValue', (data) => {
-          let val =
-            typeof data.popupSlimSidebarOpacityValue === 'number'
-              ? data.popupSlimSidebarOpacityValue
-              : null;
+          let val = parseSavedSlimSidebarOpacity(data.popupSlimSidebarOpacityValue);
           if (val === null) {
             val = 0.0;
             chrome.storage.sync.set({ popupSlimSidebarOpacityValue: val });
@@ -6016,103 +5578,12 @@ enableEditableOpacity(
 
   // Light parser for typed labels/chars → code, reusing your helpers when available
   function parseInputToCode(raw) {
-    const r = (raw || '').trim();
-    if (!r) return '';
-    // Prefer your util
-    let code = window.ShortcutUtils?.charToCode?.(r) || '';
-    // Try reverse map built by your 111 wiring (if present)
-    if (!code && window.__revShortcutLabelMap) {
-      const { exact, lower } = window.__revShortcutLabelMap;
-      code = exact?.[r] || lower?.[r.toLowerCase()] || '';
-    }
-    // Common fallbacks
-    if (!code && /^[A-Za-z]$/.test(r)) return `Key${r.toUpperCase()}`;
-    if (!code && /^[0-9]$/.test(r)) return `Digit${r}`;
-    const alias = {
-      '/': 'Slash',
-      ';': 'Semicolon',
-      ':': 'Semicolon',
-      "'": 'Quote',
-      '"': 'Quote',
-      ',': 'Comma',
-      '.': 'Period',
-      '-': 'Minus',
-      _: 'Minus',
-      '=': 'Equal',
-      '+': 'Equal',
-      '`': 'Backquote',
-      '[': 'BracketLeft',
-      ']': 'BracketRight',
-      '\\': 'Backslash',
-      space: 'Space',
-      Space: 'Space',
-      Enter: 'Enter',
-      Return: 'Enter',
-      Bksp: 'Backspace',
-      Backspace: 'Backspace',
-      Del: 'Delete',
-      Delete: 'Delete',
-      Esc: 'Escape',
-      Escape: 'Escape',
-      Tab: 'Tab',
-      Up: 'ArrowUp',
-      Down: 'ArrowDown',
-      Left: 'ArrowLeft',
-      Right: 'ArrowRight',
-    };
-    return code || alias[r] || alias[r.toLowerCase()] || '';
+    return window.CSPShortcutBindings.fromLabel(raw);
   }
 
   // Normalize a few legacy/edge cases and provide a fallback when e.code is missing/unidentified
   function normalizeCode(e) {
-    const code = e.code && e.code !== 'Unidentified' ? e.code : keyToCode(e.key);
-
-    // Map legacy/alias forms
-    switch (code) {
-      case 'OSLeft':
-        return 'MetaLeft';
-      case 'OSRight':
-        return 'MetaRight';
-      case 'Spacebar':
-        return 'Space';
-      case 'Left':
-        return 'ArrowLeft';
-      case 'Right':
-        return 'ArrowRight';
-      case 'Up':
-        return 'ArrowUp';
-      case 'Down':
-        return 'ArrowDown';
-      case 'Del':
-        return 'Delete';
-      case 'Esc':
-        return 'Escape';
-      default:
-        return code || 'Unidentified';
-    }
-  }
-
-  // Fallback from key -> code for older/odd browsers (best‑effort common cases)
-  function keyToCode(key) {
-    switch (key) {
-      case ' ':
-      case 'Spacebar':
-        return 'Space';
-      case 'Esc':
-        return 'Escape';
-      case 'Del':
-        return 'Delete';
-      case 'Left':
-        return 'ArrowLeft';
-      case 'Right':
-        return 'ArrowRight';
-      case 'Up':
-        return 'ArrowUp';
-      case 'Down':
-        return 'ArrowDown';
-      default:
-        return key || '';
-    }
+    return window.CSPShortcutBindings.normalize(e.code) || window.CSPShortcutBindings.fromLabel(e.key) || 'Unidentified';
   }
 
   function onKeyDown(e) {

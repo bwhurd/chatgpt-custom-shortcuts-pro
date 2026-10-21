@@ -635,32 +635,7 @@
   // Backward-compatible default for callers that have not yet selected a profile.
   const defaultKeyCodes = () => defaultKeyCodesForProfile(MODEL_PICKER_PROFILE_LATEST);
 
-  const normalizeShortcutCollisionCode = (value) => {
-    const code = String(value || '').trim();
-    if (!code || code === '\u00A0') return '';
-    const numpadDigit = code.match(/^Numpad([0-9])$/);
-    if (numpadDigit) return `Digit${numpadDigit[1]}`;
-    if (/^[a-z]$/i.test(code)) return `Key${code.toUpperCase()}`;
-    if (/^[0-9]$/.test(code)) return `Digit${code}`;
-    const legacyCodeByCharacter = {
-      '-': 'Minus',
-      '=': 'Equal',
-      '[': 'BracketLeft',
-      ']': 'BracketRight',
-      '\\': 'Backslash',
-      ';': 'Semicolon',
-      "'": 'Quote',
-      ',': 'Comma',
-      '.': 'Period',
-      '/': 'Slash',
-      '`': 'Backquote',
-      '↑': 'ArrowUp',
-      '↓': 'ArrowDown',
-      '←': 'ArrowLeft',
-      '→': 'ArrowRight',
-    };
-    return legacyCodeByCharacter[code] || code;
-  };
+  const normalizeShortcutCollisionCode = (value) => window.CSPShortcutBindings.collisionCode(value);
   const normalizeShortcutModifier = (value) =>
     /^(?:ctrl|control|cmd|meta)/i.test(String(value || 'alt')) ? 'ctrl' : 'alt';
 
@@ -695,7 +670,7 @@
     }
 
     orderedSlots.forEach((slot) => {
-      const code = typeof source[slot] === 'string' ? source[slot] : '';
+      const code = window.CSPShortcutBindings.normalize(source[slot]);
       const collisionCode = normalizeShortcutCollisionCode(code);
       if (!collisionCode || claimedCodes.has(collisionCode)) return;
 

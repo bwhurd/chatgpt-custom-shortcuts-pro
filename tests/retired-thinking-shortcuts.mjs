@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
+import composerShortcuts from '../extension/shortcuts/composer.js';
+import nativeSearch from '../extension/shortcuts/search.js';
 
 const readExtensionFile = (path) =>
   readFile(new URL(`../extension/${path}`, import.meta.url), 'utf8');
@@ -44,7 +47,7 @@ for (const key of retiredKeys) {
   }
 }
 
-const modelLabelsContext = vm.createContext({ window: {} });
+const modelLabelsContext = vm.createContext({ window: { CSPShortcutBindings: bindings } });
 vm.runInContext(modelLabels, modelLabelsContext, {
   filename: 'extension/shared/model-picker-labels.js',
 });
@@ -73,7 +76,9 @@ for (const retiredKey of ['shortcutKeyThinkingStandard', 'shortcutKeyThinkingExt
   );
 }
 
-const metadataContext = vm.createContext({});
+const metadataContext = vm.createContext({
+  CSPShortcuts: { search: nativeSearch, composer: composerShortcuts },
+});
 vm.runInContext(metadata, metadataContext, {
   filename: 'extension/shared/shortcut-action-metadata.js',
 });

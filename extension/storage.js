@@ -21,7 +21,21 @@
     const out = {};
     for (const k of OPTION_KEYS) {
       if (OPTION_KEYS_EXCLUDE.has(k)) continue;
-      if (k in obj) out[k] = obj[k];
+      if (!(k in obj)) continue;
+      if (
+        k.startsWith('shortcutKey') ||
+        k === 'selectThenCopy' ||
+        k === 'selectThenCopyAllMessages'
+      ) {
+        out[k] = window.CSPShortcutBindings.normalize(obj[k], { empty: '\u00a0' });
+      } else if (
+        ['modelPickerKeyCodes', 'modelPickerKeyCodesLatest', 'modelPickerKeyCodesLegacy'].includes(
+          k,
+        )
+      ) {
+        if (Array.isArray(obj[k]))
+          out[k] = obj[k].map((code) => window.CSPShortcutBindings.normalize(code));
+      } else out[k] = obj[k];
     }
     return out;
   };

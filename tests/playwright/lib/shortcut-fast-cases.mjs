@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
+import composerShortcuts from '../../../extension/shortcuts/composer.js';
 import {
   buildCurrentShortcutInventory,
   loadDevScrapeWideContract,
@@ -451,7 +452,9 @@ export async function loadFastCatalogue() {
             ? 'not-run'
             : 'deferred',
       admitted: admitted.has(item.actionId),
-      owner: 'extension/content.js',
+      owner: item.owner,
+      implementation: item.implementation,
+      matchingRules: item.matchingRules,
       deferCategory:
         !admitted.has(item.actionId) && item.validationMode !== 'not-applicable'
           ? DEFERRED_FAMILIES.find((family) => family.ids.includes(item.actionId))?.category
@@ -1018,7 +1021,15 @@ export function summarizeFastReport(report) {
 // Source-derived slices follow the existing Edit dispatch fixture. Acorn avoids
 // fragile function-body regexes and runs only for behavioral (not catalogue) work.
 let parsedSource;
-export async function extractFastRuntime(content, actionId) {
+export async function extractFastRuntime(content, actionId, { searchModuleSource } = {}) {
+  const composerSource = await readFile(
+    new URL('../../../extension/shortcuts/composer.js', import.meta.url),
+    'utf8',
+  );
+  const bindingsSource = await readFile(
+    new URL('../../../extension/shared/shortcut-bindings.js', import.meta.url),
+    'utf8',
+  );
   if (parsedSource?.content !== content) {
     const { parse } = await import('acorn');
     // Recheck after the import await: parallel cases may have populated the cache.
@@ -1110,11 +1121,9 @@ export async function extractFastRuntime(content, actionId) {
     const [codeEquals] = codeEqualsMatches;
     return {
       source: [
+        bindingsSource,
         variable('getSchemaShortcutDefaultCode'),
         variable('hasUsableShortcutSetting'),
-        variable('LETTER_REGEX'),
-        variable('DIGIT_REGEX'),
-        variable('DIGIT_NUMPAD_REGEX'),
         func('charToCode'),
         `const ${content.slice(codeEquals.start, codeEquals.end)};`,
         `${content.slice(wrapper.start, wrapper.end)};`,
@@ -1383,18 +1392,13 @@ export async function extractFastRuntime(content, actionId) {
   }
   if (actionId === 'shortcutKeySearchConversationHistory') {
     extra.push(
-      variable('SEARCH_CONVERSATION_SELECTORS'),
-      variable('NARROW_SIDEBAR_POPOVER_SELECTORS'),
-      variable('SEARCH_SPRITE_FRAGMENT'),
-      variable('SEARCH_SPRITE_FALLBACK_FRAGMENT'),
+      searchModuleSource ??
+        (await readFile(
+          new URL('../../../extension/shortcuts/search.js', import.meta.url),
+          'utf8',
+        )),
       variable('clickElementLikeUser'),
-      func('safeClick'),
-      func('safeClickSearchConversationButton'),
-      func('findStructuralSearchConversationButton'),
-      func('waitForFirstVisibleElement'),
-      func('openNarrowSidebarPopover'),
-      func('triggerNativeSearchConversationFromNarrowPopover'),
-      func('triggerNativeSearchConversationButton'),
+      variable('searchShortcutActions'),
     );
   }
   if (FAST_CASES.find((item) => item.actionId === actionId)?.type.startsWith('scroll-')) {
@@ -1547,7 +1551,8 @@ export async function extractFastRuntime(content, actionId) {
     extra.push(
       'window.__cspRunComposerToolAddForFixture = (iconTokenKey) => runActionByIcon(SHORTCUT_ICON_TOKENS[iconTokenKey]);',
     );
-    if (actionId === 'shortcutKeyStudy') extra.push(func('runStudyShortcut'));
+    if (actionId === 'shortcutKeyStudy')
+      extra.push(variable('composerShortcutActions'), func('runStudyShortcut'));
     // Visual feedback is outside this target/keyboard fixture; action logic and delays remain real.
     extra.push('const flashBorder = () => {};');
   }
@@ -1579,18 +1584,21 @@ export async function extractFastRuntime(content, actionId) {
     );
   }
   const source = [
+    bindingsSource,
+    composerSource,
     `const isMac = false; ${isControl ? variable('keyFunctionMappingCtrl') : 'const keyFunctionMappingCtrl = {}; '}`,
     functions.map(func).join('\n'),
     declarations.join('\n'),
     extra.join('\n'),
+    actionId === 'shortcutKeyStudy'
+      ? ''
+      : 'const composerShortcutActions = window.CSPShortcuts.composer.create({ document, isVisible: isDirectActionVisible });',
     `const shortcuts = Object.fromEntries(Object.keys(shortcutDefaults).map(key => [key, '\\u00a0'])); shortcuts[${JSON.stringify(actionId)}] = ${JSON.stringify(FAST_CASES.find((item) => item.actionId === actionId)?.fixtureCode) || `shortcutDefaults[${JSON.stringify(actionId)}]`}; window.CSP_SHORTCUTS_EFFECTIVE = shortcuts;`,
     `const altShortcutActions = {${property ? content.slice(property.start, property.end) : ''}};`,
     variable('ALT_SHORTCUT_ACTION_KEYS'),
     `${content.slice(listeners[0].start, listeners[0].end)};`,
   ].join('\n');
-  const selectors = named('COMPOSER_INPUT_SELECTORS', 'VariableDeclarator').init.elements.map(
-    (node) => node.value,
-  );
+  const selectors = [...composerShortcuts.INPUT_SELECTORS];
   return { source, selectors, activationSource: func('triggerDirectComposerActivation') };
 }
 

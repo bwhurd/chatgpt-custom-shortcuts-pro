@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import bindings from '../extension/shared/shortcut-bindings.js';
 
 const labelsSource = await readFile(
   new URL('../extension/shared/model-picker-labels.js', import.meta.url),
@@ -76,7 +77,7 @@ assert.match(
   'popup model names should initialize from the Chat/legacy profile',
 );
 
-const labelsContext = { window: {} };
+const labelsContext = { window: { CSPShortcutBindings: bindings } };
 vm.createContext(labelsContext);
 vm.runInContext(labelsSource, labelsContext, {
   filename: 'extension/shared/model-picker-labels.js',

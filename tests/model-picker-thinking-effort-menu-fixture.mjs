@@ -1,3 +1,4 @@
+import '../extension/shared/shortcut-bindings.js';
 import assert from 'node:assert/strict';
 import * as cheerio from 'cheerio';
 import modelPickerSelectors from '../extension/shared/model-picker-selectors.js';
